@@ -12,6 +12,7 @@ BINARY_NAME="nauterm"
 DIST_DIR="${DIST_DIR:-dist}"
 CLEAN_DIST="${CLEAN_DIST:-1}"
 ICON_SOURCE="linux/runner/resources/nauterm.png"
+ICON_GENERATED_PNG_DIR="assets/icons/generated/png"
 
 PUBSPEC_VERSION="$(awk '/^version: / { print $2; exit }' pubspec.yaml)"
 VERSION="${PUBSPEC_VERSION%%+*}"
@@ -110,19 +111,35 @@ create_desktop_file() {
 [Desktop Entry]
 Type=Application
 Name=$APP_NAME
-Comment=SSH client with a Rust native layer
+Comment=A modern, cross-platform terminal and remote access workspace built for greater control, transparency, and performance.
 Exec=$BINARY_NAME
 Icon=$APP_ID
 Categories=Network;RemoteAccess;TerminalEmulator;
 Terminal=false
-StartupWMClass=$APP_NAME
+# Must match the WM_CLASS the running window actually reports (derived by GTK
+# from the binary basename). If it does not match, GNOME shows the running
+# window as an unrelated entry with the default icon and the process name.
+StartupWMClass=$BINARY_NAME
 EOF
 }
 
 install_icon() {
   local root="$1"
-  install -Dm644 "$ICON_SOURCE" \
-    "$root/usr/share/icons/hicolor/512x512/apps/$APP_ID.png"
+  local size png installed=0
+  for size in 16 24 32 48 64 128 256 512; do
+    png="$ICON_GENERATED_PNG_DIR/app_icon_$size.png"
+    [ -f "$png" ] || continue
+    install -Dm644 "$png" \
+      "$root/usr/share/icons/hicolor/${size}x${size}/apps/$APP_ID.png"
+    installed=1
+  done
+  # Fallback when generated PNGs are unavailable: use the prepared 512px icon.
+  if [ "$installed" -eq 0 ]; then
+    install -Dm644 "$ICON_SOURCE" \
+      "$root/usr/share/icons/hicolor/512x512/apps/$APP_ID.png"
+  fi
+  # pixmaps is also scanned by appimagetool and many desktop environments.
+  install -Dm644 "$ICON_SOURCE" "$root/usr/share/pixmaps/$APP_ID.png"
 }
 
 PKG_ROOT="$DIST_DIR/package-root"
@@ -137,7 +154,7 @@ COMMON_FPM_ARGS=(
   --name "$BINARY_NAME"
   --version "$VERSION"
   --iteration "$BUILD_NUMBER"
-  --description "A Flutter SSH client with a Rust native layer."
+  --description "A modern, cross-platform terminal and remote access workspace built for greater control, transparency, and performance."
   --license "Proprietary"
   --maintainer "Nauterm"
   --category "net"
@@ -152,7 +169,8 @@ FPM_PACKAGE_PATHS=(
   "opt/$BINARY_NAME"
   "usr/bin/$BINARY_NAME"
   "usr/share/applications/$APP_ID.desktop"
-  "usr/share/icons/hicolor/512x512/apps/$APP_ID.png"
+  "usr/share/icons"
+  "usr/share/pixmaps"
 )
 
 fpm "${COMMON_FPM_ARGS[@]}" \
@@ -181,7 +199,9 @@ cp -a "$BUNDLE_DIR/." "$APPDIR/usr/lib/$BINARY_NAME/"
 create_desktop_file "$APPDIR/$APP_ID.desktop"
 cp "$APPDIR/$APP_ID.desktop" "$APPDIR/usr/share/applications/$APP_ID.desktop"
 install_icon "$APPDIR"
-cp "$ICON_SOURCE" "$APPDIR/$APP_ID.png"
+# Intentionally do NOT inject a top-level icon or .DirIcon: an unintegrated
+# AppImage is expected to show the default file-manager icon. The icon for the
+# integrated desktop entry is supplied below via --icon-file.
 
 cat > "$APPDIR/AppRun" <<EOF
 #!/usr/bin/env sh
@@ -223,7 +243,7 @@ OUTPUT="$APPIMAGE_PATH" \
   --appdir "$APPDIR" \
   --executable "$APPDIR/usr/lib/$BINARY_NAME/$BINARY_NAME" \
   --desktop-file "$APPDIR/$APP_ID.desktop" \
-  --icon-file "$APPDIR/$APP_ID.png" \
+  --icon-file "$APPDIR/usr/share/pixmaps/$APP_ID.png" \
   --output appimage
 
 chmod 0755 "$APPIMAGE_PATH"
