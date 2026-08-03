@@ -23,6 +23,7 @@ TARGETS = {
     ("linux", "x86_64"): ("linux-x86_64", "libnauterm_mosh_ffi.so"),
     ("linux", "arm64"): ("linux-arm64", "libnauterm_mosh_ffi.so"),
     ("windows", "x86_64"): ("windows-x86_64", "nauterm_mosh_ffi.dll"),
+    ("windows", "arm64"): ("windows-arm64", "nauterm_mosh_ffi.dll"),
 }
 
 
@@ -65,6 +66,7 @@ def extract_library(archive_path: Path, library: str) -> bytes:
 
 
 def atomic_write(path: Path, data: bytes, mode: int) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
     temporary_path = path.with_name(f".{path.name}.tmp")
     temporary_path.write_bytes(data)
     temporary_path.chmod(mode)

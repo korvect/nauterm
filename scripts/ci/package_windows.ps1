@@ -1,12 +1,22 @@
+[CmdletBinding()]
+param(
+  [string]$Arch = "x86_64"
+)
+
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $true
 
-$Arch = "x86_64"
 $AppName = "Nauterm"
 $BinaryName = "nauterm"
 $DistDir = if ($env:DIST_DIR) { $env:DIST_DIR } else { "dist" }
 $CleanDist = if ($env:CLEAN_DIST) { $env:CLEAN_DIST } else { "1" }
-$ReleaseDir = "build\windows\x64\runner\Release"
+
+# Derive arch-specific paths/targets from $Arch (x86_64 | arm64).
+$CargoTriple = if ($Arch -eq "arm64") { "aarch64-pc-windows-msvc" } else { "x86_64-pc-windows-msvc" }
+$FlutterArch = if ($Arch -eq "arm64") { "arm64" } else { "x64" }
+$FlutterBuildBase = if ($Arch -eq "arm64") { "build\windows\arm64" } else { "build\windows\x64" }
+$ReleaseDir = Join-Path $FlutterBuildBase "runner\Release"
+$InnoArch = if ($Arch -eq "arm64") { "arm64" } else { "x64compatible" }
 $MoshLibDir = if ($env:NAUTERM_MOSH_LIB_DIR) { $env:NAUTERM_MOSH_LIB_DIR } else { $null }
 $DefaultMoshRepo = Join-Path (Resolve-Path ".").Path "..\nauterm-mosh"
 $MoshRepoDir = if ($env:NAUTERM_MOSH_REPO_DIR) { $env:NAUTERM_MOSH_REPO_DIR } else { $DefaultMoshRepo }
@@ -19,8 +29,8 @@ $NumericVersion = ($Version -split '-', 2)[0]
 $PubspecBuildNumber = if ($VersionParts.Count -gt 1) { $VersionParts[1] } else { "1" }
 $BuildNumber = if ($env:NAUTERM_BUILD_NUMBER) { $env:NAUTERM_BUILD_NUMBER } else { $PubspecBuildNumber }
 
-if ($env:PROCESSOR_ARCHITECTURE -notin @("AMD64", "x86_64")) {
-  throw "Windows x86_64 packaging requires an x86_64 host; current host is $env:PROCESSOR_ARCHITECTURE."
+if ($env:PROCESSOR_ARCHITECTURE -notin @("AMD64", "x86_64", "ARM64")) {
+  throw "Windows $Arch packaging requires an $Arch host (AMD64/x86_64 for x86_64, ARM64 for arm64); current host is $($env:PROCESSOR_ARCHITECTURE)."
 }
 
 if ($BuildNumber -notmatch '^[0-9]+$' -or [int64]$BuildNumber -lt 1 -or [int64]$BuildNumber -gt 65535) {
@@ -64,23 +74,23 @@ function Find-NativeDll {
   $candidates = @(
     (Join-Path $ReleaseDir $DllName),
     "native\$CrateDir\target\release\$DllName",
-    "native\$CrateDir\target\x86_64-pc-windows-msvc\release\$DllName",
+    "native\$CrateDir\target\$CargoTriple\release\$DllName",
     "target\release\$DllName",
-    "target\x86_64-pc-windows-msvc\release\$DllName",
-    "build\windows\x64\native_assets\windows\$DllName"
+    "target\$CargoTriple\release\$DllName",
+    "$FlutterBuildBase\native_assets\windows\$DllName"
   )
   if ($CargoTargetDir) {
     $candidates += (Join-Path $CargoTargetDir "release\$DllName")
-    $candidates += (Join-Path $CargoTargetDir "x86_64-pc-windows-msvc\release\$DllName")
+    $candidates += (Join-Path $CargoTargetDir "$CargoTriple\release\$DllName")
   }
   if ($env:CARGO_TARGET_DIR) {
     $candidates += (Join-Path $env:CARGO_TARGET_DIR "release\$DllName")
-    $candidates += (Join-Path $env:CARGO_TARGET_DIR "x86_64-pc-windows-msvc\release\$DllName")
+    $candidates += (Join-Path $env:CARGO_TARGET_DIR "$CargoTriple\release\$DllName")
   }
   if ($ExtraRoot) {
     $candidates += (Join-Path $ExtraRoot $DllName)
     $candidates += (Join-Path $ExtraRoot "target\release\$DllName")
-    $candidates += (Join-Path $ExtraRoot "target\x86_64-pc-windows-msvc\release\$DllName")
+    $candidates += (Join-Path $ExtraRoot "target\$CargoTriple\release\$DllName")
   }
 
   foreach ($candidate in $candidates) {
@@ -89,7 +99,7 @@ function Find-NativeDll {
     }
   }
 
-  $searchRoots = @("native\$CrateDir\target", "target", "build\windows\x64")
+  $searchRoots = @("native\$CrateDir\target", "target", $FlutterBuildBase)
   if ($CargoTargetDir) {
     $searchRoots += $CargoTargetDir
   }
@@ -121,7 +131,7 @@ function Write-NativeDllDiagnostics {
     [string]$ExtraRoot
   )
 
-  $roots = @("native\$CrateDir\target", "target", "build\windows\x64")
+  $roots = @("native\$CrateDir\target", "target", $FlutterBuildBase)
   if ($CargoTargetDir) {
     $roots += $CargoTargetDir
   }
@@ -207,6 +217,55 @@ if ($env:OPENSSL_DIR) {
     }
 }
 
+# ---------------------------------------------------------------------------
+# Bundle the Microsoft Visual C++ runtime (app-local) so the app starts on
+# machines without the matching VC++ Redistributable. arm64 Windows rarely ships
+# it, and even x64 can be missing it on a clean install — copying the DLLs next
+# to the exe makes both the portable zip (green package) and the Inno installer
+# self-contained.
+#
+# vcruntime140_1.dll is x64-only (it backs the /await resumable exception
+# handling); the arm64 VC++ Redistributable does not ship it, so it is omitted
+# from the arm64 bundle to avoid a spurious "missing DLL" copy warning.
+# ---------------------------------------------------------------------------
+$VcArch = if ($Arch -eq "arm64") { "arm64" } else { "x64" }
+$VcDllNames = if ($Arch -eq "arm64") {
+  @("vcruntime140.dll", "msvcp140.dll")
+} else {
+  @("vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll")
+}
+$VcSearchDirs = @(
+  "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Redist\MSVC\$VcArch\Microsoft.VC143.CRT",
+  "C:\Program Files\Microsoft Visual Studio\2022\Professional\VC\Redist\MSVC\$VcArch\Microsoft.VC143.CRT",
+  "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Redist\MSVC\$VcArch\Microsoft.VC143.CRT",
+  "C:\Windows\System32"
+)
+$VcCrtDir = $null
+foreach ($dir in $VcSearchDirs) {
+  if (Test-Path (Join-Path $dir "vcruntime140.dll")) {
+    $VcCrtDir = $dir
+    break
+  }
+}
+if ($null -eq $VcCrtDir) {
+  $VcCrtDir = Get-ChildItem -Path "C:\Program Files\Microsoft Visual Studio\2022\*\VC\Redist\MSVC\*\$VcArch\Microsoft.VC143.CRT" -Directory -ErrorAction SilentlyContinue |
+    Where-Object { Test-Path (Join-Path $_.FullName "vcruntime140.dll") } |
+    Select-Object -First 1 -ExpandProperty FullName
+}
+if ($null -eq $VcCrtDir) {
+  Write-Warning "VC++ runtime ($VcArch) not found on this machine; the package will rely on the target system's VC++ Redistributable being installed."
+} else {
+  foreach ($dll in $VcDllNames) {
+    $src = Join-Path $VcCrtDir $dll
+    if (Test-Path $src) {
+      Copy-Item $src (Join-Path $ReleaseDir $dll) -Force
+      Write-Host "Bundled VC++ runtime ($VcArch): $dll"
+    } else {
+      Write-Warning "VC++ runtime DLL missing in $VcCrtDir : $dll"
+    }
+  }
+}
+
 $NativeDll = Find-NativeDll -CargoTargetDir $CargoTargetDir -DllName "nauterm_ffi.dll" -CrateDir "nauterm_ffi" -ExtraRoot ""
 if ($null -eq $NativeDll) {
   Write-NativeDllDiagnostics -CargoTargetDir $CargoTargetDir -DllName "nauterm_ffi.dll" -CrateDir "nauterm_ffi" -ExtraRoot ""
@@ -246,8 +305,8 @@ VersionInfoVersion=$NumericVersion.$BuildNumber
 AppPublisher=Nauterm
 DefaultDirName={autopf}\$AppName
 DefaultGroupName=$AppName
-ArchitecturesAllowed=x64compatible
-ArchitecturesInstallIn64BitMode=x64compatible
+ArchitecturesAllowed=$InnoArch
+ArchitecturesInstallIn64BitMode=$InnoArch
 Compression=lzma2
 SolidCompression=yes
 CloseApplications=yes

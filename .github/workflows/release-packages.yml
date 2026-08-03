@@ -60,6 +60,7 @@ jobs:
       linux_enabled: ${{ steps.select.outputs.linux_enabled }}
       linux_matrix: ${{ steps.select.outputs.linux_matrix }}
       windows_enabled: ${{ steps.select.outputs.windows_enabled }}
+      windows_matrix: ${{ steps.select.outputs.windows_matrix }}
     steps:
       - name: Verify release build configuration
         run: |
@@ -83,7 +84,7 @@ jobs:
 
           macos_include=()
           linux_include=()
-          windows_enabled=false
+          windows_include=()
 
           wants_platform() {
             [ "$REQUESTED_PLATFORM" = "all" ] || [ "$REQUESTED_PLATFORM" = "$1" ]
@@ -111,7 +112,11 @@ jobs:
           fi
 
           if wants_platform windows && wants_arch x86_64; then
-            windows_enabled=true
+            windows_include+=('{"arch":"x86_64","runner":"windows-2025","mosh_lib_dir":"third_party/nauterm_mosh_ffi/windows-x86_64"}')
+          fi
+
+          if wants_platform windows && wants_arch arm64; then
+            windows_include+=('{"arch":"arm64","runner":"windows-11-arm","mosh_lib_dir":"third_party/nauterm_mosh_ffi/windows-arm64"}')
           fi
 
           join_json_array() {
@@ -129,11 +134,14 @@ jobs:
 
           macos_matrix="$(join_json_array "${macos_include[@]}")"
           linux_matrix="$(join_json_array "${linux_include[@]}")"
+          windows_matrix="$(join_json_array "${windows_include[@]}")"
 
           macos_enabled=false
           linux_enabled=false
+          windows_enabled=false
           [ "${#macos_include[@]}" -gt 0 ] && macos_enabled=true
           [ "${#linux_include[@]}" -gt 0 ] && linux_enabled=true
+          [ "${#windows_include[@]}" -gt 0 ] && windows_enabled=true
 
           if [ "$macos_enabled" != true ] && [ "$linux_enabled" != true ] && [ "$windows_enabled" != true ]; then
             echo "No builds match platform=$REQUESTED_PLATFORM arch=$REQUESTED_ARCH" >&2
@@ -146,6 +154,7 @@ jobs:
             echo "linux_enabled=$linux_enabled"
             echo "linux_matrix=$linux_matrix"
             echo "windows_enabled=$windows_enabled"
+            echo "windows_matrix=$windows_matrix"
           } >> "$GITHUB_OUTPUT"
 
   macos:
@@ -312,11 +321,14 @@ jobs:
           retention-days: ${{ github.event_name == 'push' && 1 || 7 }}
 
   windows:
-    name: Windows x86_64
+    name: Windows ${{ matrix.arch }}
     needs: select-builds
     if: needs.select-builds.outputs.windows_enabled == 'true'
-    runs-on: windows-2025
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
+    strategy:
+      fail-fast: true
+      matrix: ${{ fromJSON(needs.select-builds.outputs.windows_matrix) }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
@@ -327,19 +339,60 @@ jobs:
           "value=$version" >> $env:GITHUB_OUTPUT
 
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        if: matrix.arch == 'x86_64'
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
+
+      # Flutter has no arm64 Windows SDK bundle (flutter-action installs the
+      # x86_64 SDK, which cannot produce arm64 binaries). `git clone` +
+      # bin/flutter self-bootstraps the per-arch Dart SDK and windows-arm64
+      # engine, so the build runs natively on windows-11-arm.
+      - name: Install Flutter (arm64-native via git clone)
+        if: matrix.arch == 'arm64'
+        shell: bash
+        run: |
+          git clone --depth 1 --branch "${FLUTTER_VERSION}" https://github.com/flutter/flutter.git "C:/flutter-sdk"
+          echo "C:/flutter-sdk/bin" >> "$GITHUB_PATH"
+          "C:/flutter-sdk/bin/flutter" --version
 
       - name: Install pinned Rust toolchain
         shell: pwsh
         run: |
           rustup toolchain install $env:RUST_TOOLCHAIN --profile minimal
           rustup default $env:RUST_TOOLCHAIN
+          if ("${{ matrix.arch }}" -eq "arm64") {
+            rustup target add aarch64-pc-windows-msvc
+          }
 
-      - name: Install and configure Windows OpenSSL
+      - name: Install and configure Windows OpenSSL (x86_64)
+        if: matrix.arch == 'x86_64'
         shell: pwsh
         run: ./scripts/ci/setup_windows_openssl.ps1
+
+      # arm64 OpenSSL: the choco `openssl` package is x64-only, so install the
+      # matching-version arm64 prebuilt from slproweb (the same source as the
+      # x86_64 build uses). CMake's find_library searches lib/VC/arm64/MD.
+      - name: Install Windows OpenSSL (arm64)
+        if: matrix.arch == 'arm64'
+        shell: pwsh
+        run: |
+          $version = "4.0.1"
+          $url = "https://slproweb.com/download/Win64ARMOpenSSL-$($version.Replace('.', '_')).exe"
+          $installer = "$env:TEMP\Win64ARMOpenSSL.exe"
+          Write-Host "Downloading $url"
+          Invoke-WebRequest -Uri $url -OutFile $installer -UseBasicParsing
+          Write-Host "Installing arm64 OpenSSL $version"
+          Start-Process -Wait -FilePath $installer -ArgumentList "/VERYSILENT", "/DIR=C:\OpenSSL-Win-arm64"
+          $opensslDir = "C:\OpenSSL-Win-arm64"
+          $opensslLibDir = Join-Path $opensslDir "lib\VC\arm64\MD"
+          if (-not (Test-Path (Join-Path $opensslLibDir "libcrypto.lib"))) {
+            throw "arm64 OpenSSL libcrypto.lib not found at $opensslLibDir"
+          }
+          Add-Content -Path $env:GITHUB_ENV -Value "OPENSSL_DIR=$opensslDir"
+          Add-Content -Path $env:GITHUB_ENV -Value "OPENSSL_INCLUDE_DIR=$(Join-Path $opensslDir 'include')"
+          Add-Content -Path $env:GITHUB_ENV -Value "OPENSSL_LIB_DIR=$opensslLibDir"
+          Add-Content -Path $env:GITHUB_ENV -Value "LIB=$opensslLibDir;$env:LIB"
 
       - name: Resolve Flutter dependencies
         run: flutter pub get
@@ -361,15 +414,15 @@ jobs:
         shell: bash
         env:
           NAUTERM_SKIP_PUB_GET: "1"
-          NAUTERM_MOSH_LIB_DIR: ${{ github.workspace }}/third_party/nauterm_mosh_ffi/windows-x86_64
+          NAUTERM_MOSH_LIB_DIR: ${{ github.workspace }}/${{ matrix.mosh_lib_dir }}
           NAUTERM_GOOGLE_CLIENT_SECRET: ${{ secrets.NAUTERM_GOOGLE_CLIENT_SECRET }}
           NAUTERM_POSTHOG_API_KEY: ${{ vars.NAUTERM_POSTHOG_API_KEY }}
           NAUTERM_POSTHOG_HOST: ${{ vars.NAUTERM_POSTHOG_HOST }}
-        run: make package-windows-x86_64
+        run: make package-windows-${{ matrix.arch }}
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: nauterm-${{ steps.version.outputs.value }}-windows-x86_64
+          name: nauterm-${{ steps.version.outputs.value }}-windows-${{ matrix.arch }}
           path: |
             dist/*-setup.exe
             dist/*.zip

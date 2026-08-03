@@ -45,7 +45,8 @@ help:
 	@printf '%s\n' '  make package-macos-x86_64    Build macOS .app.zip and .dmg for x86_64 runner'
 	@printf '%s\n' '  make package-linux-x86_64    Build Linux AppImage, deb, rpm for x86_64'
 	@printf '%s\n' '  make package-linux-arm64     Build Linux AppImage, deb, rpm for arm64 runner'
-	@printf '%s\n' '  make package-windows-x86_64  Build Windows x86_64 zip'
+	@printf '%s\n' '  make package-windows-x86_64  Build Windows x86_64 zip
+  make package-windows-arm64   Build Windows arm64 zip'
 	@printf '%s\n' ''
 	@printf '%s\n' 'Variables:'
 	@printf '%s\n' '  DIST_DIR=dist                Package output directory'
@@ -157,8 +158,11 @@ package-linux-arm64: package-linux-arm64-bundle
 package-linux-arm64-bundle:
 	DIST_DIR="$(DIST_DIR)" CLEAN_DIST="$(CLEAN_DIST)" bash scripts/ci/package_linux.sh arm64 arm64 aarch64 aarch64
 
-.PHONY: package-windows package-windows-x86_64
+.PHONY: package-windows package-windows-x86_64 package-windows-arm64
 package-windows: package-windows-x86_64
 
 package-windows-x86_64:
-	DIST_DIR="$(DIST_DIR)" CLEAN_DIST="$(CLEAN_DIST)" pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/package_windows.ps1
+	DIST_DIR="$(DIST_DIR)" CLEAN_DIST="$(CLEAN_DIST)" pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/package_windows.ps1 -Arch x86_64
+
+package-windows-arm64:
+	DIST_DIR="$(DIST_DIR)" CLEAN_DIST="$(CLEAN_DIST)" pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/package_windows.ps1 -Arch arm64
