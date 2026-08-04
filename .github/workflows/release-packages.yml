@@ -96,27 +96,27 @@ jobs:
 
           if wants_platform macos; then
             if wants_arch x86_64; then
-              macos_include+=('{"arch":"x86_64","runner":"macos-26-intel","mosh_lib_dir":"third_party/nauterm_mosh_ffi/macos-x86_64"}')
+              macos_include+=('{"arch":"x86_64","runner":"macos-26-intel"}')
             fi
             if wants_arch arm64; then
-              macos_include+=('{"arch":"arm64","runner":"macos-26","mosh_lib_dir":"third_party/nauterm_mosh_ffi/macos-arm64"}')
+              macos_include+=('{"arch":"arm64","runner":"macos-26"}')
             fi
           fi
 
           if wants_platform linux && wants_arch x86_64; then
-            linux_include+=('{"arch":"x86_64","runner":"ubuntu-24.04","deb_arch":"amd64","rpm_arch":"x86_64","appimage_arch":"x86_64","mosh_lib_dir":"third_party/nauterm_mosh_ffi/linux-x86_64"}')
+            linux_include+=('{"arch":"x86_64","runner":"ubuntu-24.04","deb_arch":"amd64","rpm_arch":"x86_64","appimage_arch":"x86_64"}')
           fi
 
           if wants_platform linux && wants_arch arm64; then
-            linux_include+=('{"arch":"arm64","runner":"ubuntu-24.04-arm","deb_arch":"arm64","rpm_arch":"aarch64","appimage_arch":"aarch64","mosh_lib_dir":"third_party/nauterm_mosh_ffi/linux-arm64"}')
+            linux_include+=('{"arch":"arm64","runner":"ubuntu-24.04-arm","deb_arch":"arm64","rpm_arch":"aarch64","appimage_arch":"aarch64"}')
           fi
 
           if wants_platform windows && wants_arch x86_64; then
-            windows_include+=('{"arch":"x86_64","runner":"windows-2025","mosh_lib_dir":"third_party/nauterm_mosh_ffi/windows-x86_64"}')
+            windows_include+=('{"arch":"x86_64","runner":"windows-2025"}')
           fi
 
           if wants_platform windows && wants_arch arm64; then
-            windows_include+=('{"arch":"arm64","runner":"windows-11-arm","mosh_lib_dir":"third_party/nauterm_mosh_ffi/windows-arm64"}')
+            windows_include+=('{"arch":"arm64","runner":"windows-11-arm"}')
           fi
 
           join_json_array() {
@@ -205,7 +205,6 @@ jobs:
       - name: Build macOS packages
         env:
           NAUTERM_SKIP_PUB_GET: "1"
-          NAUTERM_MOSH_LIB_DIR: ${{ github.workspace }}/${{ matrix.mosh_lib_dir }}
           NAUTERM_GOOGLE_CLIENT_SECRET: ${{ secrets.NAUTERM_GOOGLE_CLIENT_SECRET }}
           NAUTERM_POSTHOG_API_KEY: ${{ vars.NAUTERM_POSTHOG_API_KEY }}
           NAUTERM_POSTHOG_HOST: ${{ vars.NAUTERM_POSTHOG_HOST }}
@@ -304,7 +303,6 @@ jobs:
       - name: Build Linux packages
         env:
           NAUTERM_SKIP_PUB_GET: "1"
-          NAUTERM_MOSH_LIB_DIR: ${{ github.workspace }}/${{ matrix.mosh_lib_dir }}
           NAUTERM_GOOGLE_CLIENT_SECRET: ${{ secrets.NAUTERM_GOOGLE_CLIENT_SECRET }}
           NAUTERM_POSTHOG_API_KEY: ${{ vars.NAUTERM_POSTHOG_API_KEY }}
           NAUTERM_POSTHOG_HOST: ${{ vars.NAUTERM_POSTHOG_HOST }}
@@ -414,7 +412,6 @@ jobs:
         shell: bash
         env:
           NAUTERM_SKIP_PUB_GET: "1"
-          NAUTERM_MOSH_LIB_DIR: ${{ github.workspace }}/${{ matrix.mosh_lib_dir }}
           NAUTERM_GOOGLE_CLIENT_SECRET: ${{ secrets.NAUTERM_GOOGLE_CLIENT_SECRET }}
           NAUTERM_POSTHOG_API_KEY: ${{ vars.NAUTERM_POSTHOG_API_KEY }}
           NAUTERM_POSTHOG_HOST: ${{ vars.NAUTERM_POSTHOG_HOST }}
