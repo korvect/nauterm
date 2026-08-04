@@ -72,6 +72,12 @@ if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
   unset DEVELOPMENT_TEAM
 fi
 
+if [ -z "${NAUTERM_MOSH_LIB_DIR:-}" ]; then
+  NAUTERM_MOSH_LIB_DIR="third_party/nauterm_mosh_ffi/macos-$ARCH"
+fi
+NAUTERM_MOSH_LIB_DIR="$(cd "$NAUTERM_MOSH_LIB_DIR" && pwd)"
+export NAUTERM_MOSH_LIB_DIR
+
 if [ -n "${NAUTERM_MOSH_LIB_DIR:-}" ]; then
   MOSH_LIBRARY="$NAUTERM_MOSH_LIB_DIR/libnauterm_mosh_ffi.dylib"
   if [ ! -f "$MOSH_LIBRARY" ]; then
