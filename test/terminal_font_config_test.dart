@@ -61,25 +61,22 @@ void main() {
     expect(font.textStyle().locale, const Locale('zh', 'CN'));
   });
 
-  test(
-    'the generic monospace family resolves to a concrete platform font',
-    () {
-      const font = TerminalFontConfig();
+  test('the generic monospace family resolves to a concrete platform font', () {
+    const font = TerminalFontConfig();
 
-      expect(
-        font.resolvedFamily(windows: true, linux: false, macos: false),
-        'Consolas',
-      );
-      expect(
-        font.resolvedFamily(windows: false, linux: true, macos: false),
-        'DejaVu Sans Mono',
-      );
-      expect(
-        font.resolvedFamily(windows: false, linux: false, macos: true),
-        'Menlo',
-      );
-    },
-  );
+    expect(
+      font.resolvedFamily(windows: true, linux: false, macos: false),
+      'Consolas',
+    );
+    expect(
+      font.resolvedFamily(windows: false, linux: true, macos: false),
+      'DejaVu Sans Mono',
+    );
+    expect(
+      font.resolvedFamily(windows: false, linux: false, macos: true),
+      'Menlo',
+    );
+  });
 
   test('a custom family is never overridden by the platform default', () {
     const font = TerminalFontConfig(family: 'JetBrains Mono');
