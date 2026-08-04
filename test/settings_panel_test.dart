@@ -543,10 +543,7 @@ void main() {
 
     expect(find.text('01'), findsNothing);
     expect(find.byIcon(Icons.check_rounded), findsOneWidget);
-    expect(
-      find.text(Platform.isWindows ? 'Consolas' : 'System Monospace'),
-      findsWidgets,
-    );
+    expect(find.text(terminalFontConfig.resolvedFamily()), findsWidgets);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pump();

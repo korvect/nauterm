@@ -7,6 +7,10 @@ const List<String> fallbackMonospaceFontFamilies = [
   'Fira Code',
   'Source Code Pro',
   'Consolas',
+  'DejaVu Sans Mono',
+  'Noto Sans Mono',
+  'Liberation Mono',
+  'Ubuntu Mono',
   'Courier New',
 ];
 
@@ -87,7 +91,16 @@ bool isLikelyTerminalFontFamily(String familyName) {
 
 String? preferredMonospaceFontFamily(List<String> families) {
   if (families.isEmpty) return null;
-  const preferredFamilies = ['Cascadia Mono', 'Consolas'];
+  const preferredFamilies = [
+    'Cascadia Mono',
+    'Consolas',
+    'JetBrains Mono',
+    'Fira Code',
+    'DejaVu Sans Mono',
+    'Noto Sans Mono',
+    'Ubuntu Mono',
+    'Liberation Mono',
+  ];
   for (final preferred in preferredFamilies) {
     for (final family in families) {
       if (family.toLowerCase() == preferred.toLowerCase()) {

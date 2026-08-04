@@ -676,22 +676,58 @@ class TerminalFontConfig {
     );
   }
 
-  String resolvedFamily({bool? windows}) {
-    if ((windows ?? Platform.isWindows) &&
-        family.trim().toLowerCase() == 'monospace') {
+  /// Resolves the generic 'monospace' placeholder to a concrete font that
+  /// ships with each supported desktop platform. Flutter's engine does not
+  /// reliably map the bare 'monospace' family name to an actual monospaced
+  /// font on every platform (notably Windows, where no such generic alias
+  /// exists, and Linux, where resolution depends on the desktop's fontconfig
+  /// setup), so a real, broadly available family is used instead.
+  String resolvedFamily({bool? windows, bool? linux, bool? macos}) {
+    if (family.trim().toLowerCase() != 'monospace') {
+      return family;
+    }
+    if (windows ?? Platform.isWindows) {
       return 'Consolas';
+    }
+    if (linux ?? Platform.isLinux) {
+      return 'DejaVu Sans Mono';
+    }
+    if (macos ?? Platform.isMacOS) {
+      return 'Menlo';
     }
     return family;
   }
 
+  /// Fonts commonly bundled by desktop platforms, used as a last-resort
+  /// fallback chain so the terminal still renders with a monospaced font
+  /// (instead of silently falling back to a proportional UI font) when the
+  /// configured family or the resolved platform default is not installed.
+  static const List<String> _platformFallbackFamilies = [
+    'Consolas',
+    'Menlo',
+    'DejaVu Sans Mono',
+    'Noto Sans Mono',
+    'Liberation Mono',
+    'Courier New',
+  ];
+
   List<String> resolvedFallback() {
-    final configuredCjkFamily = cjkFamily?.trim();
-    if (configuredCjkFamily == null ||
-        configuredCjkFamily.isEmpty ||
-        configuredCjkFamily.toLowerCase() == family.toLowerCase()) {
-      return const [];
+    final fallback = <String>[];
+    final seen = <String>{family.trim().toLowerCase()};
+
+    void addIfNew(String? candidate) {
+      final trimmed = candidate?.trim() ?? '';
+      if (trimmed.isEmpty || !seen.add(trimmed.toLowerCase())) {
+        return;
+      }
+      fallback.add(trimmed);
     }
-    return [configuredCjkFamily];
+
+    addIfNew(cjkFamily);
+    for (final candidate in _platformFallbackFamilies) {
+      addIfNew(candidate);
+    }
+    return List.unmodifiable(fallback);
   }
 
   Locale resolvedLocale({AppLanguage? language, Locale? systemLocale}) {

@@ -412,9 +412,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
   bool _includeTerminalSelection = aiAssistantConfig.includeTerminalSelection;
   bool _includeRecentTerminalOutput =
       aiAssistantConfig.includeRecentTerminalOutput;
-  String _fontFamily = Platform.isWindows
-      ? terminalFontConfig.resolvedFamily()
-      : terminalFontConfig.family;
+  String _fontFamily = terminalFontConfig.resolvedFamily();
   String _cjkFontFamily = terminalFontConfig.cjkFamily ?? '';
   List<String> _monospaceFontFamilies = fallbackMonospaceFontFamilies;
   List<String> _systemFontFamilies = fallbackMonospaceFontFamilies;
@@ -582,7 +580,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
       _monospaceFontFamilies = monospaceFamilies;
       _systemFontFamilies = families[1];
     });
-    if (Platform.isWindows &&
+    if ((Platform.isWindows || Platform.isLinux) &&
         terminalFontConfig.family.trim().toLowerCase() == 'monospace' &&
         monospaceFamilies.isNotEmpty) {
       _updateTerminalFont(
@@ -1414,9 +1412,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
             ? defaultTerminalTheme
             : TerminalTheme.fromJson(defaults.customThemeJson!);
         terminalCustomTheme = _customTheme;
-        _fontFamily = Platform.isWindows
-            ? defaults.font.resolvedFamily()
-            : defaults.font.family;
+        _fontFamily = defaults.font.resolvedFamily();
         _cjkFontFamily = defaults.font.cjkFamily ?? '';
         _fontSize = defaults.font.size.toStringAsFixed(0);
         terminalFontConfig = defaults.font;

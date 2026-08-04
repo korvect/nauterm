@@ -14,6 +14,7 @@ import 'app/third_party_licenses.dart';
 import 'data/nauterm_config_store.dart';
 import 'data/nauterm_data_store.dart';
 import 'data/nauterm_paths.dart';
+import 'terminal/system_font_catalog.dart';
 import 'terminal/terminal_config.dart';
 import 'terminal/terminal_ffi.dart';
 import 'window/native_windowing.dart';
@@ -54,6 +55,38 @@ Future<void> main() async {
   NautermLog.info('application', 'Application UI mounted.');
   unawaited(_logApplicationMetadata());
   unawaited(initAnalytics());
+  unawaited(_resolveDefaultTerminalFontIfNeeded(paths));
+}
+
+/// On platforms where the generic 'monospace' family is not reliably
+/// resolved to a proper monospaced font by the Flutter engine (Linux) or
+/// does not exist at all (Windows), auto-select a real system monospace
+/// font the first time the app runs with the bundled default.
+Future<void> _resolveDefaultTerminalFontIfNeeded(NautermPaths paths) async {
+  if (!(Platform.isLinux || Platform.isWindows)) {
+    return;
+  }
+  if (terminalFontConfig.family.trim().toLowerCase() != 'monospace') {
+    return;
+  }
+  try {
+    final families = await loadMonospaceFontFamilies();
+    if (families.isEmpty) {
+      return;
+    }
+    final preferred = preferredMonospaceFontFamily(families) ?? families.first;
+    terminalFontConfig = terminalFontConfig.copyWith(family: preferred);
+    await NautermConfigStore(
+      paths,
+    ).saveRuntimeSettings(currentNautermRuntimeSettings());
+  } on Object catch (error, stackTrace) {
+    NautermLog.warning(
+      'application',
+      'Failed to auto-detect a default terminal font.',
+      error: error,
+      stackTrace: stackTrace,
+    );
+  }
 }
 
 void _installUnhandledErrorLogging() {

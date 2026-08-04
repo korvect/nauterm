@@ -297,7 +297,6 @@ Widget _buildSettingsExternalEditorSelect(_SettingsPanelState state) {
 
 Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
   final fontOptions = [
-    if (!Platform.isWindows) 'monospace',
     ...state._monospaceFontFamilies.where(
       (family) => family.trim().toLowerCase() != 'monospace',
     ),
