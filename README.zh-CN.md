@@ -75,6 +75,15 @@ AI 功能目前处于 Alpha 阶段，只有用户配置服务后才会启用。
 
 Nauterm 当前仅支持桌面平台，不支持 Android、iOS 和 Web 构建。
 
+## 路线图
+
+- [ ] 基于 libghostty-vt 的终端仿真后端（`libghostty-vt`）
+- [ ] SFTP 多线程、分片、可断点续传的传输
+- [ ] 预测回显
+- [ ] 重启后恢复会话与窗口
+- [ ] 从 Tabby 导入主机
+- [ ] 构建统一的 Capability Registry，通过 MCP 面向外部 Agent 及内部 AI 助手开放
+
 ## 安装
 
 从 [GitHub 最新版本](https://github.com/korvect/nauterm/releases/latest) 下载对应平台的软件包。每个标签版本都包含 `SHA256SUMS.txt`，可用于验证下载的构建产物。

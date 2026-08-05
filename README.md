@@ -98,6 +98,15 @@ configured by the user.
 Nauterm is currently a desktop application. Android, iOS, and web builds are
 not supported.
 
+## Roadmap
+
+- [ ] Ghostty terminal emulation backend (`libghostty-vt`)
+- [ ] SFTP multithreaded, chunked transfer with resume
+- [ ] Predictive local echo
+- [ ] Session and window restoration after restart
+- [ ] Import hosts from Tabby
+- [ ] Unified Capability Registry exposed via MCP to external agents and the built-in AI assistant
+
 ## Installation
 
 Download the package for your platform from the
