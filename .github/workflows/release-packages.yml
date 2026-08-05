@@ -391,6 +391,11 @@ jobs:
           Add-Content -Path $env:GITHUB_ENV -Value "OPENSSL_INCLUDE_DIR=$(Join-Path $opensslDir 'include')"
           Add-Content -Path $env:GITHUB_ENV -Value "OPENSSL_LIB_DIR=$opensslLibDir"
           Add-Content -Path $env:GITHUB_ENV -Value "LIB=$opensslLibDir;$env:LIB"
+          # Runtime DLLs (libcrypto-3-arm64.dll) live in OpenSSL's bin dir;
+          # nauterm_ffi links OpenSSL (via rusqlite's bundled-sqlcipher), so the
+          # test executable needs them on PATH or it fails with
+          # STATUS_DLL_NOT_FOUND (0xc0000135).
+          Add-Content -Path $env:GITHUB_PATH -Value "C:\OpenSSL-Win-arm64\bin"
 
       - name: Resolve Flutter dependencies
         run: flutter pub get
