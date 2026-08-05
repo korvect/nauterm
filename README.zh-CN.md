@@ -70,8 +70,8 @@ AI 功能目前处于 Alpha 阶段，只有用户配置服务后才会启用。
 | 平台 | 架构 | 发布格式 |
 | --- | --- | --- |
 | macOS | Apple Silicon、Intel | DMG、应用 ZIP |
-| Linux | x86_64 | AppImage（`.tar.gz`）、DEB、RPM |
-| Windows | x86_64 | Inno Setup 安装程序、便携 ZIP |
+| Linux | x86_64、arm64 | AppImage（`.tar.gz`）、DEB、RPM |
+| Windows | x86_64、arm64 | Inno Setup 安装程序、便携 ZIP |
 
 Nauterm 当前仅支持桌面平台，不支持 Android、iOS 和 Web 构建。
 

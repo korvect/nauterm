@@ -92,8 +92,8 @@ configured by the user.
 | Platform | Architectures | Release formats |
 | --- | --- | --- |
 | macOS | Apple Silicon, Intel | DMG, application ZIP |
-| Linux | x86_64 | AppImage (`.tar.gz`), DEB, RPM |
-| Windows | x86_64 | Inno Setup installer, portable ZIP |
+| Linux | x86_64, arm64 | AppImage (`.tar.gz`), DEB, RPM |
+| Windows | x86_64, arm64 | Inno Setup installer, portable ZIP |
 
 Nauterm is currently a desktop application. Android, iOS, and web builds are
 not supported.
