@@ -30,29 +30,38 @@ class _HostEnvironmentNavigationField extends StatelessWidget {
         hasContent: hasVariables,
         height: size.inputHeight,
         onTap: onPressed,
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                summary,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: _text,
-                  fontSize: size.inputFontSize,
-                  fontWeight: NautermFontWeights.regular,
-                  height: size.inputLineHeight,
-                  letterSpacing: 0,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final showSuffix =
+                constraints.maxWidth >=
+                _workspaceFieldAffixWidth + _workspaceSelectAffixGap;
+            return Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    summary,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: _text,
+                      fontSize: size.inputFontSize,
+                      fontWeight: NautermFontWeights.regular,
+                      height: size.inputLineHeight,
+                      letterSpacing: 0,
+                    ),
+                  ),
                 ),
-              ),
-            ),
-            SizedBox(width: _workspaceSelectAffixGap),
-            _WorkspaceSelectSuffixButton(
-              icon: Icons.chevron_right_rounded,
-              width: _workspaceFieldAffixWidth,
-              onPressed: onPressed,
-            ),
-          ],
+                if (showSuffix) ...[
+                  SizedBox(width: _workspaceSelectAffixGap),
+                  _WorkspaceSelectSuffixButton(
+                    icon: Icons.chevron_right_rounded,
+                    width: _workspaceFieldAffixWidth,
+                    onPressed: onPressed,
+                  ),
+                ],
+              ],
+            );
+          },
         ),
       ),
     );
