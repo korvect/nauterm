@@ -104,7 +104,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
     ValueChanged<int> onCreated,
   ) {
     _pushEditor(
-      _SnippetEditorRequest(initialDescription: initialName),
+      _SnippetEditorRequest(initialScript: initialName),
       onSaved: (saved) {
         if (saved case _SnippetItem(id: final id)) {
           onCreated(id);
