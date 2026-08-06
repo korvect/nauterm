@@ -415,13 +415,19 @@ class _TerminalComposer extends StatelessWidget {
                               ? CrossAxisAlignment.start
                               : CrossAxisAlignment.center,
                           children: [
-                            Text(
-                              r'$',
-                              style: textStyle.copyWith(
-                                color: theme.primary.accent,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
+                            sensitive
+                                ? Icon(
+                                    LucideIcons.lock,
+                                    size: textStyle.fontSize,
+                                    color: theme.primary.accent,
+                                  )
+                                : Text(
+                                    r'$',
+                                    style: textStyle.copyWith(
+                                      color: theme.primary.accent,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Focus(
