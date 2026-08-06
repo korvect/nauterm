@@ -130,6 +130,7 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
         onCreateGroup: (parentId) => _createGroup(parentId),
         onCreateHost: (groupId) => _createHost(groupId),
         onImportHosts: _importHosts,
+        onExportHosts: _exportHosts,
         onCreateKey: _createKey,
         onGenerateKey: _generateKey,
         onCreateIdentity: _createIdentity,

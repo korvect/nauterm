@@ -7,6 +7,7 @@ class _HostsToolbar extends StatelessWidget {
     required this.onCreateHost,
     required this.onCreateGroup,
     required this.onImportHosts,
+    required this.onExportHosts,
     required this.onOpenLocalTerminal,
     required this.onOpenSerialTerminal,
     required this.sortOrder,
@@ -23,6 +24,7 @@ class _HostsToolbar extends StatelessWidget {
   final VoidCallback onCreateHost;
   final VoidCallback? onCreateGroup;
   final VoidCallback onImportHosts;
+  final VoidCallback onExportHosts;
   final VoidCallback onOpenLocalTerminal;
   final VoidCallback onOpenSerialTerminal;
   final _WorkspaceSortOrder sortOrder;
@@ -57,6 +59,11 @@ class _HostsToolbar extends StatelessWidget {
                     label: 'Import…',
                     icon: Icons.file_download_outlined,
                   ),
+                  const NautermContextMenuAction<_HostCreateAction>(
+                    value: _HostCreateAction.export,
+                    label: 'Export…',
+                    icon: Icons.file_upload_outlined,
+                  ),
                 ],
                 onSelected: (selected) {
                   switch (selected) {
@@ -64,6 +71,8 @@ class _HostsToolbar extends StatelessWidget {
                       onCreateGroup?.call();
                     case _HostCreateAction.import:
                       onImportHosts();
+                    case _HostCreateAction.export:
+                      onExportHosts();
                   }
                 },
                 triggerBuilder: (openMenu) => _ToolbarSplitButton(
@@ -107,7 +116,7 @@ class _HostsToolbar extends StatelessWidget {
   }
 }
 
-enum _HostCreateAction { group, import }
+enum _HostCreateAction { group, import, export }
 
 class _HostTagFilterButton extends StatefulWidget {
   const _HostTagFilterButton({

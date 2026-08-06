@@ -1,3 +1,5 @@
+import 'nauterm_data_store.dart';
+
 enum HostImportSource { csv, openSsh, putty, mobaXterm, secureCrt }
 
 enum HostImportKeyKind { privateKey, publicKey, keyPair }
@@ -471,3 +473,85 @@ String _unquote(String input) {
 }
 
 String? _nullIfEmpty(String value) => value.isEmpty ? null : value;
+
+/// Serializes hosts to the same CSV layout consumed by [parseHostCsv], so an
+/// exported file can be re-imported losslessly.
+String buildHostCsv(
+  List<HostEntry> hosts,
+  List<HostGroup> groups,
+  List<TagEntry> tags,
+) {
+  const headers = [
+    'Label',
+    'Hostname/IP',
+    'Protocol',
+    'Port',
+    'Username',
+    'Password',
+    'Groups',
+    'Tags',
+  ];
+  final byId = {
+    for (final group in groups)
+      if (group.id != null) group.id!: group,
+  };
+  final tagByUuid = {
+    for (final tag in tags)
+      if (tag.uuid != null) tag.uuid!: tag,
+  };
+  final rows = <List<String>>[headers];
+  for (final host in hosts) {
+    if (host.type == NautermHostType.local) continue;
+    final isTelnet = host.telnetEnabled;
+    final tagNames = [
+      for (final uuid in host.tagUuids)
+        if (tagByUuid[uuid] case final tag?) tag.name,
+    ];
+    rows.add([
+      host.name,
+      host.host ?? '',
+      isTelnet ? 'telnet' : 'ssh',
+      host.port?.toString() ?? '',
+      isTelnet ? host.telnetUsername ?? '' : host.username ?? '',
+      isTelnet ? host.telnetPassword ?? '' : host.password ?? '',
+      _exportGroupPath(byId, host.groupId),
+      tagNames.join(','),
+    ]);
+  }
+  return _writeHostCsv(rows);
+}
+
+String _exportGroupPath(Map<int, HostGroup> byId, int? groupId) {
+  if (groupId == null) return '';
+  final names = <String>[];
+  final seen = <int>{};
+  var current = byId[groupId];
+  while (current != null && current.id != null && seen.add(current.id!)) {
+    names.insert(0, current.name);
+    final parentId = current.parentId;
+    current = parentId == null ? null : byId[parentId];
+  }
+  return names.join('/');
+}
+
+String _writeHostCsv(List<List<String>> rows) {
+  final buffer = StringBuffer();
+  for (var rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+    if (rowIndex > 0) buffer.write('\r\n');
+    buffer.write(
+      [for (final field in rows[rowIndex]) _csvField(field)].join(','),
+    );
+  }
+  return buffer.toString();
+}
+
+String _csvField(String value) {
+  if (value.isEmpty) return '';
+  final needsQuote =
+      value.contains(',') ||
+      value.contains('"') ||
+      value.contains('\n') ||
+      value.contains('\r');
+  if (!needsQuote) return value;
+  return '"${value.replaceAll('"', '""')}"';
+}

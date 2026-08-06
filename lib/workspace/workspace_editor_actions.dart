@@ -297,6 +297,43 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
     );
   }
 
+  Future<void> _exportHosts() async {
+    final store = _dataStore;
+    if (store == null) {
+      _showWorkspaceMessage('Database is not ready.');
+      return;
+    }
+    final hosts = store.listHosts();
+    if (hosts.isEmpty) {
+      _showWorkspaceMessage('No hosts to export.');
+      return;
+    }
+    final groups = store.listGroups();
+    final tags = store.listTags();
+    final csv = buildHostCsv(hosts, groups, tags);
+    final location = await getSaveLocation(
+      acceptedTypeGroups: [
+        XTypeGroup(label: 'CSV file', extensions: ['csv']),
+      ],
+      initialDirectory: await _terminalLogExportInitialDirectory(),
+      suggestedName: 'nauterm-hosts',
+    );
+    if (location == null || location.path.trim().isEmpty) return;
+    final path = location.path.toLowerCase().endsWith('.csv')
+        ? location.path
+        : '${location.path}.csv';
+    try {
+      await io.File(path).writeAsString(csv, encoding: utf8, flush: true);
+      if (mounted) {
+        _showWorkspaceMessage('Exported ${hosts.length} hosts to CSV.');
+      }
+    } on Object catch (error) {
+      if (mounted) {
+        _showWorkspaceMessage('Failed to export hosts: $error');
+      }
+    }
+  }
+
   Future<HostImportBundle?> _loadHostImportSource(
     HostImportSource source,
   ) async {

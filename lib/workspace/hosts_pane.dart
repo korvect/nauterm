@@ -9,6 +9,7 @@ class _HostsPane extends StatefulWidget {
     required this.onCreateHost,
     required this.onCreateGroup,
     required this.onImportHosts,
+    required this.onExportHosts,
     required this.onGroupContextAction,
     required this.onGroupContextActions,
     required this.onHostContextAction,
@@ -29,6 +30,7 @@ class _HostsPane extends StatefulWidget {
   final ValueChanged<int?> onCreateHost;
   final ValueChanged<int?> onCreateGroup;
   final VoidCallback onImportHosts;
+  final VoidCallback onExportHosts;
   final _WorkspaceContextAction<_GroupItem> onGroupContextAction;
   final _WorkspaceContextActions<_GroupItem> onGroupContextActions;
   final _WorkspaceContextAction<_HostItem> onHostContextAction;
@@ -196,6 +198,7 @@ class _HostsPaneState extends State<_HostsPane> {
                         ? () => widget.onCreateGroup(currentGroupId)
                         : null,
                     onImportHosts: widget.onImportHosts,
+                    onExportHosts: widget.onExportHosts,
                     onOpenLocalTerminal: widget.onOpenLocalTerminal,
                     onOpenSerialTerminal: widget.onOpenSerialTerminal,
                     sortOrder: _sortOrder,
