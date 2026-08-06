@@ -93,6 +93,23 @@ Nauterm 当前仅支持桌面平台，不支持 Android、iOS 和 Web 构建。
 
 ## 安装
 
+### macOS（Homebrew）
+
+```sh
+brew install --cask korvect/nauterm/nauterm
+```
+
+也可以先添加 tap：
+
+```sh
+brew tap korvect/nauterm
+brew install --cask nauterm
+```
+
+升级和卸载分别使用 `brew upgrade --cask nauterm` 和 `brew uninstall --cask nauterm`。通过 Homebrew 安装后，请继续使用 Homebrew 升级，以保证已安装版本与 cask 保持一致。
+
+### 手动下载
+
 从 [GitHub 最新版本](https://github.com/korvect/nauterm/releases/latest) 下载对应平台的软件包。每个标签版本都包含 `SHA256SUMS.txt`，可用于验证下载的构建产物。
 
 AppImage 使用 `.tar.gz` 压缩包发布，以便在下载后保留可执行权限；使用前请先解压。

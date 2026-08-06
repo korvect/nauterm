@@ -116,6 +116,26 @@ not supported.
 
 ## Installation
 
+### macOS (Homebrew)
+
+```sh
+brew install --cask korvect/nauterm/nauterm
+```
+
+Or add the tap first:
+
+```sh
+brew tap korvect/nauterm
+brew install --cask nauterm
+```
+
+Upgrade and remove the cask with `brew upgrade --cask nauterm` and
+`brew uninstall --cask nauterm`. Keep using Homebrew for upgrades when Nauterm
+was installed this way, so the installed version stays consistent with the
+cask.
+
+### Manual download
+
 Download the package for your platform from the
 [latest GitHub release](https://github.com/korvect/nauterm/releases/latest).
 Every tagged release includes a `SHA256SUMS.txt` file for verifying downloaded
