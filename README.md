@@ -87,6 +87,13 @@ and is not affiliated with or endorsed by Termius.
 The AI functionality is an alpha feature and is disabled until a provider is
 configured by the user.
 
+## Screenshots
+
+![Nauterm](assets/screenshots/hosts.png)
+![Nauterm](assets/screenshots/terminal.png)
+![Nauterm](assets/screenshots/sftp.png)
+![Nauterm](assets/screenshots/workspace.png)
+
 ## Platform support
 
 | Platform | Architectures | Release formats |

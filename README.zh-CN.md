@@ -65,6 +65,13 @@ Nauterm 受到 Termius 精致远程访问体验的启发，目标是为重视透
 
 AI 功能目前处于 Alpha 阶段，只有用户配置服务后才会启用。
 
+## 截图
+
+![Nauterm](assets/screenshots/hosts.png)
+![Nauterm](assets/screenshots/terminal.png)
+![Nauterm](assets/screenshots/sftp.png)
+![Nauterm](assets/screenshots/workspace.png)
+
 ## 平台支持
 
 | 平台 | 架构 | 发布格式 |
