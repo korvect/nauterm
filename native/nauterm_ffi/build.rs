@@ -15,12 +15,12 @@ fn main() {
         return;
     }
 
+    let cargo_out_dir = PathBuf::from(env::var_os("OUT_DIR").unwrap());
     if let Some(lib_dir) = env::var_os("NAUTERM_GHOSTTY_VT_LIB_DIR") {
-        link_ghostty(Path::new(&lib_dir));
+        link_ghostty(Path::new(&lib_dir), &cargo_out_dir);
         return;
     }
 
-    let cargo_out_dir = PathBuf::from(env::var_os("OUT_DIR").unwrap());
     let ghostty_root = match env::var_os("NAUTERM_GHOSTTY_SOURCE_DIR") {
         Some(source_dir) => {
             let source_dir = PathBuf::from(source_dir);
@@ -81,7 +81,7 @@ fn main() {
         "cargo:rerun-if-changed={}",
         ghostty_root.join("include/ghostty/vt.h").display()
     );
-    link_ghostty(&out_dir.join("lib"));
+    link_ghostty(&out_dir.join("lib"), &cargo_out_dir);
 }
 
 fn verify_zig_version(zig: &std::ffi::OsStr) {
@@ -157,20 +157,23 @@ fn zig_target(target: &str) -> &'static str {
         "x86_64-apple-darwin" => "x86_64-macos",
         "aarch64-unknown-linux-gnu" => "aarch64-linux-gnu",
         "x86_64-unknown-linux-gnu" => "x86_64-linux-gnu",
-        // The Windows release jobs run natively on the target architecture.
-        // Let Zig resolve the installed MSVC SDK/toolchain instead of treating
-        // it as a cross build with an incomplete SDK environment.
-        "aarch64-pc-windows-msvc" | "x86_64-pc-windows-msvc" => "native-native-msvc",
+        // Keep the target explicit instead of using native-native-msvc. This
+        // avoids host CPU detection in Zig on the Windows ARM runner while
+        // still using the runner's native ARM64 MSVC SDK.
+        "aarch64-pc-windows-msvc" => "aarch64-windows-msvc",
+        "x86_64-pc-windows-msvc" => "x86_64-windows-msvc",
         other => panic!("unsupported libghostty-vt target: {other}"),
     }
 }
 
-fn link_ghostty(lib_dir: &Path) {
-    let archive = if env::var("TARGET").unwrap_or_default().contains("windows") {
-        lib_dir.join("ghostty-vt-static.lib")
-    } else {
-        lib_dir.join("libghostty-vt.a")
-    };
+fn link_ghostty(lib_dir: &Path, cargo_out_dir: &Path) {
+    let target = env::var("TARGET").unwrap_or_default();
+    if target.contains("windows") {
+        link_ghostty_windows(lib_dir, cargo_out_dir);
+        return;
+    }
+
+    let archive = lib_dir.join("libghostty-vt.a");
     if !archive.is_file() {
         panic!(
             "libghostty-vt static archive not found: {}",
@@ -182,4 +185,64 @@ fn link_ghostty(lib_dir: &Path) {
     // library, which can leave libnauterm_ffi with an unintended @rpath
     // dependency even when a static link kind is requested.
     println!("cargo:rustc-link-arg={}", archive.display());
+}
+
+fn link_ghostty_windows(lib_dir: &Path, cargo_out_dir: &Path) {
+    let dll = [
+        lib_dir.join("ghostty-vt.dll"),
+        lib_dir
+            .parent()
+            .unwrap_or(lib_dir)
+            .join("bin")
+            .join("ghostty-vt.dll"),
+    ]
+    .into_iter()
+    .find(|candidate| candidate.is_file())
+    .unwrap_or_else(|| {
+        panic!(
+            "libghostty-vt runtime DLL not found beside {} or in its sibling bin directory",
+            lib_dir.display()
+        )
+    });
+
+    // Keep Zig's compiler runtime inside ghostty-vt.dll. Linking the static
+    // archive into Rust on Windows puts Zig compiler_rt and Rust
+    // compiler_builtins in the same image, where MSVC rejects conflicting
+    // weak extern defaults (LNK1227 on ARM64). The Rust extern block uses
+    // raw-dylib so rustc generates a clean import library directly from the
+    // C declarations instead of consuming Zig's CRT-affecting import library.
+    stage_windows_runtime_dll(&dll, cargo_out_dir);
+}
+
+fn stage_windows_runtime_dll(dll: &Path, cargo_out_dir: &Path) {
+    // OUT_DIR is <cargo-target>/<profile>/build/<package-hash>/out. Cargo test
+    // executes binaries from <profile>/deps, while Flutter and the packaging
+    // scripts load nauterm_ffi from <profile>. Put the dependency in both
+    // locations so every build mode uses Windows' normal adjacent-DLL lookup.
+    let profile_dir = cargo_out_dir
+        .parent()
+        .and_then(Path::parent)
+        .and_then(Path::parent)
+        .unwrap_or_else(|| {
+            panic!(
+                "unable to resolve Cargo profile directory from OUT_DIR={}",
+                cargo_out_dir.display()
+            )
+        });
+    for destination_dir in [profile_dir.to_path_buf(), profile_dir.join("deps")] {
+        std::fs::create_dir_all(&destination_dir).unwrap_or_else(|error| {
+            panic!(
+                "failed to create Ghostty runtime directory {}: {error}",
+                destination_dir.display()
+            )
+        });
+        let destination = destination_dir.join("ghostty-vt.dll");
+        std::fs::copy(dll, &destination).unwrap_or_else(|error| {
+            panic!(
+                "failed to stage {} at {}: {error}",
+                dll.display(),
+                destination.display()
+            )
+        });
+    }
 }

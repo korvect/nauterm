@@ -33,6 +33,16 @@ if ($env:PROCESSOR_ARCHITECTURE -notin @("AMD64", "x86_64", "ARM64")) {
   throw "Windows $Arch packaging requires an $Arch host (AMD64/x86_64 for x86_64, ARM64 for arm64); current host is $($env:PROCESSOR_ARCHITECTURE)."
 }
 
+$MsvcLinker = Get-Command link.exe -All -ErrorAction SilentlyContinue |
+  Where-Object { $_.Path -like "*\Microsoft Visual Studio\*\VC\Tools\MSVC\*\bin\*\link.exe" } |
+  Select-Object -First 1
+if ($null -eq $MsvcLinker) {
+  throw "MSVC link.exe was not found in PATH. Run this script from a Visual Studio developer environment."
+}
+$CargoLinkerEnv = "CARGO_TARGET_$($CargoTriple.ToUpperInvariant().Replace('-', '_'))_LINKER"
+Set-Item -Path "Env:$CargoLinkerEnv" -Value $MsvcLinker.Path
+Write-Host "Using MSVC linker: $($MsvcLinker.Path)"
+
 if ($BuildNumber -notmatch '^[0-9]+$' -or [int64]$BuildNumber -lt 1 -or [int64]$BuildNumber -gt 65535) {
   throw "Build number must be an integer from 1 through 65535: $BuildNumber"
 }
@@ -275,6 +285,17 @@ if ($null -eq $NativeDll) {
 $BundledDll = Join-Path $ReleaseDir "nauterm_ffi.dll"
 if ((Resolve-Path $NativeDll).Path -ne (Resolve-Path $BundledDll -ErrorAction SilentlyContinue).Path) {
   Copy-Item $NativeDll $BundledDll -Force
+}
+
+$GhosttyDll = Find-NativeDll -CargoTargetDir $CargoTargetDir -DllName "ghostty-vt.dll" -CrateDir "nauterm_ffi" -ExtraRoot ""
+if ($null -eq $GhosttyDll) {
+  Write-NativeDllDiagnostics -CargoTargetDir $CargoTargetDir -DllName "ghostty-vt.dll" -CrateDir "nauterm_ffi" -ExtraRoot ""
+  throw "Expected Ghostty runtime DLL not found: ghostty-vt.dll"
+}
+
+$BundledGhosttyDll = Join-Path $ReleaseDir "ghostty-vt.dll"
+if ((Resolve-Path $GhosttyDll).Path -ne (Resolve-Path $BundledGhosttyDll -ErrorAction SilentlyContinue).Path) {
+  Copy-Item $GhosttyDll $BundledGhosttyDll -Force
 }
 
 $MoshDllRoot = if ($MoshLibDir) { $MoshLibDir } else { $MoshRepoDir }

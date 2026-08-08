@@ -340,12 +340,67 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+        if: matrix.arch == 'x86_64'
         with:
           version: ${{ env.ZIG_VERSION }}
 
+      # Zig 0.16.0's native Windows ARM64 compiler exits with 0xc0000005 while
+      # compiling Ghostty. Run the pinned x86_64 host compiler through Windows
+      # ARM emulation; build.rs still targets aarch64-windows-msvc explicitly.
+      - name: Install x86_64 Zig host compiler (arm64)
+        if: matrix.arch == 'arm64'
+        shell: pwsh
+        run: |
+          $version = "${{ env.ZIG_VERSION }}"
+          if ($version -ne "0.16.0") {
+            throw "Update the pinned x86_64 Zig checksum for version $version"
+          }
+          $package = "zig-x86_64-windows-$version"
+          $archive = Join-Path $env:RUNNER_TEMP "$package.zip"
+          $url = "https://ziglang.org/download/$version/$package.zip"
+          Invoke-WebRequest -Uri $url -OutFile $archive -UseBasicParsing
+
+          $expectedSha256 = "68659eb5f1e4eb1437a722f1dd889c5a322c9954607f5edcf337bc3684a75a7e"
+          $actualSha256 = (Get-FileHash -Path $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualSha256 -ne $expectedSha256) {
+            throw "Zig archive checksum mismatch: expected $expectedSha256, got $actualSha256"
+          }
+
+          Expand-Archive -Path $archive -DestinationPath $env:RUNNER_TEMP -Force
+          $zigDir = Join-Path $env:RUNNER_TEMP $package
+          $zigExe = Join-Path $zigDir "zig.exe"
+          if (-not (Test-Path $zigExe)) {
+            throw "Zig executable not found: $zigExe"
+          }
+
+          # Zig 0.16.0's Windows SelfInfo code casts an opaque procedure
+          # pointer to an ARM64 function pointer without asserting its higher
+          # alignment. Apply the compiler diagnostic's required @alignCast to
+          # this pinned, checksum-verified standard library.
+          $selfInfo = Join-Path $zigDir "lib\std\debug\SelfInfo\Windows.zig"
+          $source = [IO.File]::ReadAllText($selfInfo)
+          $before = '@ptrCast(try si.loadNtdllProc(@tagName(proc)))'
+          $after = '@ptrCast(@alignCast(try si.loadNtdllProc(@tagName(proc))))'
+          $matches = ([regex]::Matches($source, [regex]::Escape($before))).Count
+          if ($matches -ne 1) {
+            throw "Expected one Zig SelfInfo alignment patch target, found $matches"
+          }
+          [IO.File]::WriteAllText(
+            $selfInfo,
+            $source.Replace($before, $after),
+            [Text.UTF8Encoding]::new($false)
+          )
+
+          Add-Content -Path $env:GITHUB_PATH -Value $zigDir
+          Add-Content -Path $env:GITHUB_ENV -Value "NAUTERM_ZIG=$zigExe"
+          & $zigExe version
+
       - uses: ilammy/msvc-dev-cmd@7defe9254715b088f12dddd9942945a3d75cdad5 # v1.9.0
         with:
-          arch: ${{ matrix.arch == 'arm64' && 'amd64_arm64' || 'amd64' }}
+          # The arm64 release job runs on a native windows-11-arm runner.
+          # amd64_arm64 is an x64-hosted cross toolset and does not provide
+          # the native ARM64 MSVC environment Zig needs on that runner.
+          arch: ${{ matrix.arch == 'arm64' && 'arm64' || 'amd64' }}
 
       - id: version
         shell: pwsh
@@ -428,16 +483,16 @@ jobs:
 
       - name: Install Windows packaging dependencies
         shell: pwsh
-        run: choco install make innosetup -y --no-progress
+        run: choco install innosetup -y --no-progress
 
       - name: Build Windows package
-        shell: bash
+        shell: pwsh
         env:
           NAUTERM_SKIP_PUB_GET: "1"
           NAUTERM_GOOGLE_CLIENT_SECRET: ${{ secrets.NAUTERM_GOOGLE_CLIENT_SECRET }}
           NAUTERM_POSTHOG_API_KEY: ${{ vars.NAUTERM_POSTHOG_API_KEY }}
           NAUTERM_POSTHOG_HOST: ${{ vars.NAUTERM_POSTHOG_HOST }}
-        run: make package-windows-${{ matrix.arch }}
+        run: ./scripts/ci/package_windows.ps1 -Arch '${{ matrix.arch }}'
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

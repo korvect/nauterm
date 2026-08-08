@@ -405,6 +405,7 @@ struct GhosttySysImage {
     data_len: usize,
 }
 
+#[cfg_attr(windows, link(name = "ghostty-vt", kind = "raw-dylib"))]
 unsafe extern "C" {
     fn ghostty_sys_set(option: c_int, value: *const c_void) -> c_int;
     fn ghostty_alloc(allocator: *const c_void, len: usize) -> *mut u8;
