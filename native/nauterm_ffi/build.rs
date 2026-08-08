@@ -46,6 +46,7 @@ fn main() {
         .current_dir(&ghostty_root)
         .args([
             "build",
+            "--verbose",
             "-Demit-lib-vt=true",
             "-Demit-xcframework=false",
             "-Doptimize=ReleaseFast",
@@ -65,7 +66,10 @@ fn main() {
         if !stderr.trim().is_empty() {
             eprintln!("Zig stderr:\n{stderr}");
         }
-        panic!("Zig failed to build libghostty-vt for {zig_target}");
+        panic!(
+            "Zig failed to build libghostty-vt for {zig_target} ({})",
+            output.status
+        );
     }
 
     println!("cargo:rerun-if-changed={}", build_zig.display());
@@ -153,8 +157,10 @@ fn zig_target(target: &str) -> &'static str {
         "x86_64-apple-darwin" => "x86_64-macos",
         "aarch64-unknown-linux-gnu" => "aarch64-linux-gnu",
         "x86_64-unknown-linux-gnu" => "x86_64-linux-gnu",
-        "aarch64-pc-windows-msvc" => "aarch64-windows-msvc",
-        "x86_64-pc-windows-msvc" => "x86_64-windows-msvc",
+        // The Windows release jobs run natively on the target architecture.
+        // Let Zig resolve the installed MSVC SDK/toolchain instead of treating
+        // it as a cross build with an incomplete SDK environment.
+        "aarch64-pc-windows-msvc" | "x86_64-pc-windows-msvc" => "native-native-msvc",
         other => panic!("unsupported libghostty-vt target: {other}"),
     }
 }
