@@ -492,6 +492,8 @@
   "settings.terminal.cursorShape.description": "Cursor appearance in the terminal.",
   "settings.terminal.emulation.label": "Emulation Type",
   "settings.terminal.emulation.description": "Controls color and feature support for the session.",
+  "settings.terminal.emulator.label": "Emulation Engine",
+  "settings.terminal.emulator.description": "Selects the emulation engine used by new terminal sessions.",
   "settings.terminal.font.summary": "Primary and CJK font families, size, weight, and ligatures.",
   "settings.terminal.general.summary": "TERM emulation and scrollback settings.",
   "settings.terminal.interaction.summary": "Command composer, autocomplete, and multiple tabs.",

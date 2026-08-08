@@ -37,6 +37,7 @@ pub(crate) fn prepare_sessions_for_runtime_shutdown() {
 pub extern "C" fn nauterm_session_create_local_configured(
     columns: u32,
     rows: u32,
+    emulator_backend: u32,
     scrollback_lines: u32,
     terminal_type: *const c_char,
     color_term: u32,
@@ -52,6 +53,7 @@ pub extern "C" fn nauterm_session_create_local_configured(
 ) -> SessionId {
     guard(0, || {
         let options = terminal_options_from_args(
+            emulator_backend,
             scrollback_lines,
             terminal_type,
             color_term,
@@ -77,6 +79,7 @@ pub extern "C" fn nauterm_session_create_local_configured(
 pub extern "C" fn nauterm_session_create_command_configured(
     columns: u32,
     rows: u32,
+    emulator_backend: u32,
     scrollback_lines: u32,
     terminal_type: *const c_char,
     color_term: u32,
@@ -97,6 +100,7 @@ pub extern "C" fn nauterm_session_create_command_configured(
             return 0;
         };
         let mut options = terminal_options_from_args(
+            emulator_backend,
             scrollback_lines,
             terminal_type,
             color_term,
@@ -126,6 +130,7 @@ pub extern "C" fn nauterm_session_create_command_configured(
 pub extern "C" fn nauterm_session_create_ssh_configured(
     columns: u32,
     rows: u32,
+    emulator_backend: u32,
     scrollback_lines: u32,
     terminal_type: *const c_char,
     color_term: u32,
@@ -150,6 +155,7 @@ pub extern "C" fn nauterm_session_create_ssh_configured(
 ) -> SessionId {
     guard(0, || {
         let options = terminal_options_from_args(
+            emulator_backend,
             scrollback_lines,
             terminal_type,
             color_term,
@@ -198,6 +204,7 @@ pub extern "C" fn nauterm_session_create_ssh_configured(
 pub extern "C" fn nauterm_session_create_mosh_configured(
     columns: u32,
     rows: u32,
+    emulator_backend: u32,
     scrollback_lines: u32,
     terminal_type: *const c_char,
     color_term: u32,
@@ -221,6 +228,7 @@ pub extern "C" fn nauterm_session_create_mosh_configured(
 ) -> SessionId {
     guard(0, || {
         let options = terminal_options_from_args(
+            emulator_backend,
             scrollback_lines,
             terminal_type,
             color_term,
@@ -358,6 +366,7 @@ pub extern "C" fn nauterm_session_reconnect_mosh(
 pub extern "C" fn nauterm_session_create_telnet_configured(
     columns: u32,
     rows: u32,
+    emulator_backend: u32,
     scrollback_lines: u32,
     terminal_type: *const c_char,
     color_term: u32,
@@ -374,6 +383,7 @@ pub extern "C" fn nauterm_session_create_telnet_configured(
 ) -> SessionId {
     guard(0, || {
         let options = terminal_options_from_args(
+            emulator_backend,
             scrollback_lines,
             terminal_type,
             color_term,
@@ -406,6 +416,7 @@ pub extern "C" fn nauterm_session_create_telnet_configured(
 pub extern "C" fn nauterm_session_create_serial_configured(
     columns: u32,
     rows: u32,
+    emulator_backend: u32,
     scrollback_lines: u32,
     terminal_type: *const c_char,
     color_term: u32,
@@ -424,6 +435,7 @@ pub extern "C" fn nauterm_session_create_serial_configured(
 ) -> SessionId {
     guard(0, || {
         let options = terminal_options_from_args(
+            emulator_backend,
             scrollback_lines,
             terminal_type,
             color_term,
@@ -474,10 +486,22 @@ pub extern "C" fn nauterm_session_close(session_id: SessionId) -> bool {
 }
 
 #[no_mangle]
-pub extern "C" fn nauterm_session_resize(session_id: SessionId, columns: u32, rows: u32) -> bool {
+pub extern "C" fn nauterm_session_resize(
+    session_id: SessionId,
+    columns: u32,
+    rows: u32,
+    cell_width_px: u32,
+    cell_height_px: u32,
+) -> bool {
     guard(false, || {
         with_session_manager(false, |manager| {
-            manager.resize(session_id, columns as usize, rows as usize)
+            manager.resize(
+                session_id,
+                columns as usize,
+                rows as usize,
+                cell_width_px,
+                cell_height_px,
+            )
         })
     })
 }

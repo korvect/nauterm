@@ -2590,7 +2590,7 @@ class _ExitingTerminalDriver implements TerminalDriver {
   TerminalSnapshot get snapshot => currentSnapshot;
 
   @override
-  void resize(int columns, int rows) {}
+  void resize(int columns, int rows, {int cellWidth = 1, int cellHeight = 1}) {}
 
   @override
   void write(String data) {}

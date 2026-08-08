@@ -107,7 +107,7 @@ not supported.
 
 ## Roadmap
 
-- [ ] Ghostty terminal emulation backend (`libghostty-vt`)
+- [x] Ghostty terminal emulation backend (`libghostty-vt`)
 - [ ] SFTP multithreaded, chunked transfer with resume
 - [ ] Predictive local echo
 - [ ] Session and window restoration after restart
@@ -206,6 +206,7 @@ not send these events.
 
 - Flutter `3.44.6`
 - Rust `1.97.0` with `rustfmt` and `clippy`
+- Zig `0.16.0` for the pinned `libghostty-vt` build
 - Git, CMake, and the native desktop toolchain for the target platform
 - Platform dependencies required by Flutter desktop
 
@@ -219,7 +220,7 @@ sudo apt install pkg-config libdbus-1-dev
 Clone the repository and resolve Flutter dependencies:
 
 ```sh
-git clone https://github.com/korvect/nauterm.git
+git clone --recurse-submodules https://github.com/korvect/nauterm.git
 cd nauterm
 flutter pub get
 ```
@@ -340,11 +341,13 @@ a GitHub release.
 | `test/` | Flutter unit and widget tests |
 | `test_integration/` | Cross-platform terminal and native integration tests |
 
-The native terminal engine uses `alacritty_terminal` for emulation. Rust owns
-PTY and transport work, then exposes snapshots and commands to Dart through a
-small FFI boundary. The Mosh implementation is maintained in the separately
-versioned `nauterm-mosh` repository; this repository pins its source revision
-and verifies the bundled library checksums and ABI.
+The native terminal layer supports both `alacritty_terminal` and the pinned
+`libghostty-vt` submodule. Every session owns its selected emulator inside a
+dedicated single-thread actor; Dart communicates with it through a small FFI
+boundary. Ghostty sessions additionally render Kitty Graphics Protocol images.
+The Mosh implementation is maintained in the separately versioned
+`nauterm-mosh` repository; this repository pins its source revision and
+verifies the bundled library checksums and ABI.
 
 ## Acknowledgements
 
@@ -354,6 +357,8 @@ Nauterm would not be possible without these excellent open-source projects:
   desktop integration for Flutter
 - [alacritty_terminal](https://github.com/alacritty/alacritty) — terminal
   emulation
+- [libghostty-vt](https://github.com/ghostty-org/ghostty) — optional terminal
+  emulation with Kitty graphics support
 - [lucide_icons_flutter](https://github.com/vqh2602/lucide-flutter-main) —
   Lucide icons for Flutter
 - [flutter_markdown_plus](https://github.com/foresightmobile/flutter_markdown_plus)

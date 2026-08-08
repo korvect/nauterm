@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
@@ -993,7 +994,9 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
   final GlobalKey _scrollbarKey = GlobalKey();
   double _lastLayoutWidth = 0;
   double _lastLayoutHeight = 0;
-  ({int columns, int rows})? _pendingResize;
+  int _lastCellWidth = 0;
+  int _lastCellHeight = 0;
+  ({int columns, int rows, int cellWidth, int cellHeight})? _pendingResize;
   bool _resizeScheduled = false;
   int _lastCursorColumn = -1;
   int _lastCursorRow = -1;
@@ -1033,6 +1036,9 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
   DateTime? _lastTapTime;
   int _tapCount = 0;
   double _scrollLineRemainder = 0;
+  final Map<int, ui.Image> _graphicImageCache = {};
+  final Set<int> _graphicImageDecodes = {};
+  Set<int> _visibleGraphicGenerations = const {};
 
   TerminalConfig get _config => widget.config ?? widget.controller.config;
   EdgeInsets get _padding => widget.padding ?? terminalPadding;
@@ -1057,6 +1063,8 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
     if (oldWidget.controller != widget.controller) {
       _lastLayoutWidth = 0;
       _lastLayoutHeight = 0;
+      _lastCellWidth = 0;
+      _lastCellHeight = 0;
     }
     if (!oldWidget.readOnly && widget.readOnly) {
       _closeTextInputConnection();
@@ -1079,6 +1087,9 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
     _searchFocusNode.dispose();
     _cursorBlinkTimer?.cancel();
     _selectionAutoScrollTimer?.cancel();
+    for (final image in _graphicImageCache.values) {
+      image.dispose();
+    }
     super.dispose();
   }
 
@@ -1141,7 +1152,13 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
                     1,
                     drawableHeight ~/ metrics.cellSize.height,
                   );
-                  _scheduleResize(columns, rows, drawableWidth, drawableHeight);
+                  _scheduleResize(
+                    columns,
+                    rows,
+                    drawableWidth,
+                    drawableHeight,
+                    metrics,
+                  );
 
                   return Stack(
                     fit: StackFit.expand,
@@ -1152,6 +1169,7 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
                           animation: widget.controller,
                           builder: (context, _) {
                             final snapshot = widget.controller.snapshot;
+                            _synchronizeGraphicImages(snapshot);
                             final cursor = snapshot.cursor;
                             _scheduleTextInputGeometryUpdate(metrics, padding);
                             if (cursor.column != _lastCursorColumn ||
@@ -1182,6 +1200,9 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
                                 theme: widget.theme,
                                 weight: _config.font.weight,
                                 boldWeight: _config.font.boldWeight,
+                                graphicImages: Map.unmodifiable(
+                                  _graphicImageCache,
+                                ),
                               ),
                               size: Size.infinite,
                             );
@@ -1247,6 +1268,64 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
         ),
       ),
     );
+  }
+
+  void _synchronizeGraphicImages(TerminalSnapshot snapshot) {
+    final visible = snapshot.graphicImages
+        .map((image) => image.generation)
+        .toSet();
+    _visibleGraphicGenerations = visible;
+    final removed = _graphicImageCache.keys
+        .where((generation) => !visible.contains(generation))
+        .toList(growable: false);
+    for (final generation in removed) {
+      _graphicImageCache.remove(generation)?.dispose();
+    }
+    for (final image in snapshot.graphicImages) {
+      if (_graphicImageCache.containsKey(image.generation) ||
+          !_graphicImageDecodes.add(image.generation) ||
+          image.rgba.length != image.width * image.height * 4) {
+        continue;
+      }
+      unawaited(_decodeGraphicImage(image));
+    }
+  }
+
+  Future<void> _decodeGraphicImage(TerminalGraphicImage graphic) async {
+    ui.ImmutableBuffer? buffer;
+    ui.ImageDescriptor? descriptor;
+    ui.Codec? codec;
+    try {
+      buffer = await ui.ImmutableBuffer.fromUint8List(graphic.rgba);
+      descriptor = ui.ImageDescriptor.raw(
+        buffer,
+        width: graphic.width,
+        height: graphic.height,
+        pixelFormat: ui.PixelFormat.rgba8888,
+      );
+      codec = await descriptor.instantiateCodec();
+      final frame = await codec.getNextFrame();
+      if (!mounted ||
+          !_visibleGraphicGenerations.contains(graphic.generation)) {
+        frame.image.dispose();
+        return;
+      }
+      _graphicImageCache.remove(graphic.generation)?.dispose();
+      _graphicImageCache[graphic.generation] = frame.image;
+      setState(() {});
+    } catch (error, stackTrace) {
+      NautermLog.warning(
+        'terminal',
+        'Unable to decode terminal graphic image.',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    } finally {
+      _graphicImageDecodes.remove(graphic.generation);
+      codec?.dispose();
+      descriptor?.dispose();
+      buffer?.dispose();
+    }
   }
 
   Widget _buildMoshNetworkStatus() {
@@ -1899,13 +1978,31 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
     };
   }
 
-  void _scheduleResize(int columns, int rows, double width, double height) {
-    if (width == _lastLayoutWidth && height == _lastLayoutHeight) {
+  void _scheduleResize(
+    int columns,
+    int rows,
+    double width,
+    double height,
+    TerminalMetrics metrics,
+  ) {
+    final cellWidth = metrics.cellSize.width.round().clamp(1, 0xffffffff);
+    final cellHeight = metrics.cellSize.height.round().clamp(1, 0xffffffff);
+    if (width == _lastLayoutWidth &&
+        height == _lastLayoutHeight &&
+        cellWidth == _lastCellWidth &&
+        cellHeight == _lastCellHeight) {
       return;
     }
     _lastLayoutWidth = width;
     _lastLayoutHeight = height;
-    _pendingResize = (columns: columns, rows: rows);
+    _lastCellWidth = cellWidth;
+    _lastCellHeight = cellHeight;
+    _pendingResize = (
+      columns: columns,
+      rows: rows,
+      cellWidth: cellWidth,
+      cellHeight: cellHeight,
+    );
     if (_resizeScheduled) {
       return;
     }
@@ -1919,7 +2016,12 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
         return;
       }
       _clearSelection();
-      widget.controller.resize(resize.columns, resize.rows);
+      widget.controller.resize(
+        resize.columns,
+        resize.rows,
+        cellWidth: resize.cellWidth,
+        cellHeight: resize.cellHeight,
+      );
     });
   }
 

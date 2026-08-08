@@ -492,6 +492,8 @@
   "settings.terminal.cursorShape.description": "终端中的光标外观。",
   "settings.terminal.emulation.label": "仿真类型",
   "settings.terminal.emulation.description": "控制会话的颜色和功能支持。",
+  "settings.terminal.emulator.label": "仿真引擎",
+  "settings.terminal.emulator.description": "选择新终端会话使用的仿真引擎。",
   "settings.terminal.font.summary": "主字体与 CJK 字体、大小、字重和连字。",
   "settings.terminal.general.summary": "TERM 仿真和回滚设置。",
   "settings.terminal.interaction.summary": "命令编辑器、自动补全和多标签页。",

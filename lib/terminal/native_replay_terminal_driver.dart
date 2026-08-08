@@ -15,6 +15,7 @@ class NativeReplayTerminalDriver implements TerminalDriver {
       handle = bindings.createTerminalConfigured(
         columns,
         rows,
+        config.emulatorBackend.nativeValue,
         config.scrollbackLines,
         terminalType,
         _colorTermToNative(config.emulation.colorTerm),
@@ -75,11 +76,11 @@ class NativeReplayTerminalDriver implements TerminalDriver {
   }
 
   @override
-  void resize(int columns, int rows) {
+  void resize(int columns, int rows, {int cellWidth = 1, int cellHeight = 1}) {
     if (_handle == nullptr) {
       return;
     }
-    _bindings.terminalResize(_handle, columns, rows);
+    _bindings.terminalResize(_handle, columns, rows, cellWidth, cellHeight);
   }
 
   @override

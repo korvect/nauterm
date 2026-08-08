@@ -23,7 +23,65 @@ final class _NativeTerminalCell extends Struct {
   external int hyperlinkLength;
 }
 
+final class _NativeTerminalGraphicImage extends Struct {
+  @Uint32()
+  external int id;
+
+  @Uint64()
+  external int generation;
+
+  @Uint32()
+  external int width;
+
+  @Uint32()
+  external int height;
+
+  @IntPtr()
+  external int dataOffset;
+
+  @IntPtr()
+  external int dataLength;
+}
+
+final class _NativeTerminalGraphicPlacement extends Struct {
+  @Uint32()
+  external int imageId;
+
+  @Uint32()
+  external int placementId;
+
+  @Int32()
+  external int zIndex;
+
+  @Int32()
+  external int viewportColumn;
+
+  @Int32()
+  external int viewportRow;
+
+  @Uint32()
+  external int columns;
+
+  @Uint32()
+  external int rows;
+
+  @Uint32()
+  external int sourceX;
+
+  @Uint32()
+  external int sourceY;
+
+  @Uint32()
+  external int sourceWidth;
+
+  @Uint32()
+  external int sourceHeight;
+}
+
 final class _NativeTerminalSnapshot extends Struct {
+  @Uint32()
+  external int emulatorBackend;
+
   @Uint32()
   external int columns;
 
@@ -87,12 +145,28 @@ final class _NativeTerminalSnapshot extends Struct {
   external int hyperlinkTextLength;
 
   external Pointer<Uint8> hyperlinkText;
+
+  @IntPtr()
+  external int graphicImagesLength;
+
+  external Pointer<_NativeTerminalGraphicImage> graphicImages;
+
+  @IntPtr()
+  external int graphicPlacementsLength;
+
+  external Pointer<_NativeTerminalGraphicPlacement> graphicPlacements;
+
+  @IntPtr()
+  external int graphicDataLength;
+
+  external Pointer<Uint8> graphicData;
 }
 
 typedef _CreateLocalSessionConfiguredNative =
     Uint64 Function(
       Uint32 columns,
       Uint32 rows,
+      Uint32 emulatorBackend,
       Uint32 scrollbackLines,
       Pointer<Utf8> terminalType,
       Uint32 colorTerm,
@@ -110,6 +184,7 @@ typedef _CreateLocalSessionConfiguredDart =
     int Function(
       int columns,
       int rows,
+      int emulatorBackend,
       int scrollbackLines,
       Pointer<Utf8> terminalType,
       int colorTerm,
@@ -128,6 +203,7 @@ typedef _CreateCommandSessionConfiguredNative =
     Uint64 Function(
       Uint32 columns,
       Uint32 rows,
+      Uint32 emulatorBackend,
       Uint32 scrollbackLines,
       Pointer<Utf8> terminalType,
       Uint32 colorTerm,
@@ -146,6 +222,7 @@ typedef _CreateCommandSessionConfiguredDart =
     int Function(
       int columns,
       int rows,
+      int emulatorBackend,
       int scrollbackLines,
       Pointer<Utf8> terminalType,
       int colorTerm,
@@ -165,6 +242,7 @@ typedef _CreateSshSessionConfiguredNative =
     Uint64 Function(
       Uint32 columns,
       Uint32 rows,
+      Uint32 emulatorBackend,
       Uint32 scrollbackLines,
       Pointer<Utf8> terminalType,
       Uint32 colorTerm,
@@ -191,6 +269,7 @@ typedef _CreateSshSessionConfiguredDart =
     int Function(
       int columns,
       int rows,
+      int emulatorBackend,
       int scrollbackLines,
       Pointer<Utf8> terminalType,
       int colorTerm,
@@ -218,6 +297,7 @@ typedef _CreateMoshSessionConfiguredNative =
     Uint64 Function(
       Uint32 columns,
       Uint32 rows,
+      Uint32 emulatorBackend,
       Uint32 scrollbackLines,
       Pointer<Utf8> terminalType,
       Uint32 colorTerm,
@@ -243,6 +323,7 @@ typedef _CreateMoshSessionConfiguredDart =
     int Function(
       int columns,
       int rows,
+      int emulatorBackend,
       int scrollbackLines,
       Pointer<Utf8> terminalType,
       int colorTerm,
@@ -329,6 +410,7 @@ typedef _CreateTelnetSessionConfiguredNative =
     Uint64 Function(
       Uint32 columns,
       Uint32 rows,
+      Uint32 emulatorBackend,
       Uint32 scrollbackLines,
       Pointer<Utf8> terminalType,
       Uint32 colorTerm,
@@ -347,6 +429,7 @@ typedef _CreateTelnetSessionConfiguredDart =
     int Function(
       int columns,
       int rows,
+      int emulatorBackend,
       int scrollbackLines,
       Pointer<Utf8> terminalType,
       int colorTerm,
@@ -366,6 +449,7 @@ typedef _CreateSerialSessionConfiguredNative =
     Uint64 Function(
       Uint32 columns,
       Uint32 rows,
+      Uint32 emulatorBackend,
       Uint32 scrollbackLines,
       Pointer<Utf8> terminalType,
       Uint32 colorTerm,
@@ -386,6 +470,7 @@ typedef _CreateSerialSessionConfiguredDart =
     int Function(
       int columns,
       int rows,
+      int emulatorBackend,
       int scrollbackLines,
       Pointer<Utf8> terminalType,
       int colorTerm,
@@ -407,6 +492,7 @@ typedef _CreateTerminalConfiguredNative =
     Pointer<Void> Function(
       Uint32 columns,
       Uint32 rows,
+      Uint32 emulatorBackend,
       Uint32 scrollbackLines,
       Pointer<Utf8> terminalType,
       Uint32 colorTerm,
@@ -421,6 +507,7 @@ typedef _CreateTerminalConfiguredDart =
     Pointer<Void> Function(
       int columns,
       int rows,
+      int emulatorBackend,
       int scrollbackLines,
       Pointer<Utf8> terminalType,
       int colorTerm,
@@ -463,9 +550,21 @@ typedef _CaptureReaderCloseNative = Void Function(Uint64);
 typedef _CaptureReaderCloseDart = void Function(int);
 
 typedef _ResizeSessionNative =
-    Bool Function(Uint64 sessionId, Uint32 columns, Uint32 rows);
+    Bool Function(
+      Uint64 sessionId,
+      Uint32 columns,
+      Uint32 rows,
+      Uint32 cellWidth,
+      Uint32 cellHeight,
+    );
 typedef _ResizeSessionDart =
-    bool Function(int sessionId, int columns, int rows);
+    bool Function(
+      int sessionId,
+      int columns,
+      int rows,
+      int cellWidth,
+      int cellHeight,
+    );
 
 typedef _NotifyNetworkChangedNative = Bool Function(Uint64 sessionId);
 typedef _NotifyNetworkChangedDart = bool Function(int sessionId);
@@ -567,9 +666,21 @@ typedef _ClipboardNative = Pointer<Utf8> Function(Uint64 sessionId);
 typedef _ClipboardDart = Pointer<Utf8> Function(int sessionId);
 
 typedef _TerminalResizeNative =
-    Void Function(Pointer<Void> handle, Uint32 columns, Uint32 rows);
+    Void Function(
+      Pointer<Void> handle,
+      Uint32 columns,
+      Uint32 rows,
+      Uint32 cellWidth,
+      Uint32 cellHeight,
+    );
 typedef _TerminalResizeDart =
-    void Function(Pointer<Void> handle, int columns, int rows);
+    void Function(
+      Pointer<Void> handle,
+      int columns,
+      int rows,
+      int cellWidth,
+      int cellHeight,
+    );
 
 typedef _TerminalScrollLinesNative =
     Bool Function(Pointer<Void> handle, Int32 lines);

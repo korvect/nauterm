@@ -106,6 +106,7 @@ class NativeTerminalDriver implements TerminalDriver {
       sessionId = bindings.createLocalSessionConfigured(
         columns,
         rows,
+        config.emulatorBackend.nativeValue,
         config.scrollbackLines,
         terminalType,
         _colorTermToNative(config.emulation.colorTerm),
@@ -166,6 +167,7 @@ class NativeTerminalDriver implements TerminalDriver {
       sessionId = bindings.createCommandSessionConfigured(
         columns,
         rows,
+        config.emulatorBackend.nativeValue,
         config.scrollbackLines,
         terminalType,
         _colorTermToNative(config.emulation.colorTerm),
@@ -238,6 +240,7 @@ class NativeTerminalDriver implements TerminalDriver {
       sessionId = bindings.createSshSessionConfigured(
         columns,
         rows,
+        config.emulatorBackend.nativeValue,
         config.scrollbackLines,
         terminalType,
         _colorTermToNative(config.emulation.colorTerm),
@@ -332,6 +335,7 @@ class NativeTerminalDriver implements TerminalDriver {
       sessionId = bindings.createMoshSessionConfigured(
         columns,
         rows,
+        config.emulatorBackend.nativeValue,
         config.scrollbackLines,
         terminalType,
         _colorTermToNative(config.emulation.colorTerm),
@@ -514,6 +518,7 @@ class NativeTerminalDriver implements TerminalDriver {
       sessionId = bindings.createTelnetSessionConfigured(
         columns,
         rows,
+        config.emulatorBackend.nativeValue,
         config.scrollbackLines,
         terminalType,
         _colorTermToNative(config.emulation.colorTerm),
@@ -561,6 +566,7 @@ class NativeTerminalDriver implements TerminalDriver {
       sessionId = bindings.createSerialSessionConfigured(
         columns,
         rows,
+        config.emulatorBackend.nativeValue,
         config.scrollbackLines,
         terminalType,
         _colorTermToNative(config.emulation.colorTerm),
@@ -643,11 +649,11 @@ class NativeTerminalDriver implements TerminalDriver {
   }
 
   @override
-  void resize(int columns, int rows) {
+  void resize(int columns, int rows, {int cellWidth = 1, int cellHeight = 1}) {
     if (_sessionId == 0) {
       return;
     }
-    _bindings.resize(_sessionId, columns, rows);
+    _bindings.resize(_sessionId, columns, rows, cellWidth, cellHeight);
   }
 
   bool notifyNetworkChanged() {
@@ -997,8 +1003,12 @@ class NativeTerminalDriver implements TerminalDriver {
         hyperlink: hyperlink,
       );
     }, growable: false);
+    final graphics = _graphicsFromNative(native);
 
     return TerminalSnapshot(
+      emulatorBackend: _emulatorBackendFromNative(native.emulatorBackend),
+      graphicImages: graphics.$1,
+      graphicPlacements: graphics.$2,
       columns: native.columns,
       rows: native.rows,
       historyLines: native.historyLines,

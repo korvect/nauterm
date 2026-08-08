@@ -13,6 +13,7 @@ import 'package:nauterm/settings/github_device_flow.dart';
 import 'package:nauterm/settings/settings_panel.dart';
 import 'package:nauterm/terminal/system_shells.dart';
 import 'package:nauterm/terminal/terminal_config.dart';
+import 'package:nauterm/terminal/terminal_models.dart';
 import 'package:nauterm/window/native_windowing.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -752,6 +753,49 @@ void main() {
 
     expect(terminalShellPath, isNull);
     expect(find.text(defaultLabel), findsOneWidget);
+  });
+
+  testWidgets('terminal emulator selector applies to new sessions', (
+    WidgetTester tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1000, 820);
+    final originalBackend = terminalEmulatorBackend;
+    addTearDown(() {
+      tester.view.resetDevicePixelRatio();
+      tester.view.resetPhysicalSize();
+      terminalEmulatorBackend = originalBackend;
+    });
+    terminalEmulatorBackend = TerminalEmulatorBackend.alacritty;
+
+    await tester.pumpWidget(
+      const MaterialApp(home: SettingsPanel(detectExternalEditors: false)),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('settings-nav-terminal')));
+    await tester.pump();
+
+    final select = find.byKey(
+      const ValueKey('settings-terminal-emulator-select'),
+    );
+    await tester.scrollUntilVisible(
+      select,
+      300,
+      scrollable: find
+          .descendant(
+            of: find.byKey(const ValueKey('settings-terminal-scroll-view')),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    await Scrollable.ensureVisible(tester.element(select), alignment: 0.5);
+    await tester.pump();
+    await tester.tap(select);
+    await tester.pump();
+    await tester.tap(find.text('Ghostty').last);
+    await tester.pump();
+
+    expect(terminalEmulatorBackend, TerminalEmulatorBackend.ghostty);
   });
 
   testWidgets('settings select menu follows its field while scrolling', (

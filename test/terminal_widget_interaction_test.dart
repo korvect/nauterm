@@ -1885,7 +1885,7 @@ class _SnapshotDriver implements TerminalDriver {
   bool poll() => false;
 
   @override
-  void resize(int columns, int rows) {
+  void resize(int columns, int rows, {int cellWidth = 1, int cellHeight = 1}) {
     _snapshot = TerminalSnapshot.blank(
       columns: columns,
       rows: rows,

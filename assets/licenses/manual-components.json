@@ -3,6 +3,10 @@
     {
       "packages": ["Sparkle 2.9.4"],
       "license": "assets/licenses/manual/sparkle-LICENSE"
+    },
+    {
+      "packages": ["libghostty-vt 1.3.2-dev"],
+      "license": "assets/licenses/manual/ghostty-LICENSE"
     }
   ]
 }

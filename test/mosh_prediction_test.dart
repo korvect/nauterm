@@ -277,7 +277,7 @@ class _PredictionDriver implements TerminalDriver {
   void reset() {}
 
   @override
-  void resize(int columns, int rows) {}
+  void resize(int columns, int rows, {int cellWidth = 1, int cellHeight = 1}) {}
 
   @override
   bool cancelOutputSuppression() => false;

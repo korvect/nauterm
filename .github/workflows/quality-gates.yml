@@ -25,6 +25,7 @@ permissions:
 env:
   FLUTTER_VERSION: 3.44.6
   RUST_TOOLCHAIN: 1.97.0
+  ZIG_VERSION: 0.16.0
   CARGO_TERM_COLOR: always
 
 jobs:
@@ -34,6 +35,10 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
 
       - name: Install Linux native build dependencies
         run: |
@@ -139,6 +144,10 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
 
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:

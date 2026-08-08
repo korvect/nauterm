@@ -8,8 +8,10 @@ publish = false
 crate-type = ["cdylib", "rlib"]
 
 [features]
+default = ["terminal-ghostty"]
 integration-tests = []
 test-credential-store = []
+terminal-ghostty = []
 
 [dependencies]
 aes-gcm = "0.10"
@@ -21,6 +23,7 @@ keyring = { version = "3", features = ["apple-native", "windows-native", "sync-s
 libc = "0.2"
 libloading = "0.8"
 polling = "3"
+png = "0.18"
 opendal = { version = "0.57", default-features = false, features = [
     "executors-tokio",
     "layers-retry",

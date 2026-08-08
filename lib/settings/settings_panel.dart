@@ -389,6 +389,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
   String _sshKeepaliveIntervalSeconds = terminalSshKeepaliveIntervalSeconds
       .toString();
   TerminalType _emulationType = terminalEmulationType;
+  TerminalEmulatorBackend _emulatorBackend = terminalEmulatorBackend;
   String? _themeId = terminalThemeId;
   TerminalTheme _customTheme = terminalCustomTheme;
   List<StoredTerminalTheme>? _allThemes;
@@ -666,6 +667,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
         _sshKeepaliveIntervalSecondsController.text =
             _sshKeepaliveIntervalSeconds;
         _emulationType = settings.emulationType;
+        _emulatorBackend = settings.emulatorBackend;
         _themeId = settings.themeId;
         if (settings.customThemeJson != null) {
           _customTheme = TerminalTheme.fromJson(settings.customThemeJson!);
@@ -1406,6 +1408,8 @@ class _SettingsPanelState extends State<SettingsPanel> {
             _sshKeepaliveIntervalSeconds;
         _emulationType = defaults.emulationType;
         terminalEmulationType = defaults.emulationType;
+        _emulatorBackend = defaults.emulatorBackend;
+        terminalEmulatorBackend = defaults.emulatorBackend;
         _themeId = defaults.themeId;
         terminalThemeId = defaults.themeId;
         _customTheme = defaults.customThemeJson == null

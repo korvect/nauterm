@@ -31,6 +31,7 @@ pub(super) fn string_to_c_ptr(value: String) -> *mut c_char {
 // stable and avoid sharing Rust struct layout with Dart.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn terminal_options_from_args(
+    emulator_backend: u32,
     scrollback_lines: u32,
     terminal_type: *const c_char,
     color_term: u32,
@@ -45,6 +46,7 @@ pub(super) fn terminal_options_from_args(
     environment: *const c_char,
 ) -> TerminalOptions {
     TerminalOptions {
+        emulator_backend: crate::terminal::TerminalEmulatorBackend::from_u32(emulator_backend),
         scrollback_lines: normalize_scrollback_lines(scrollback_lines),
         terminal_type: terminal_type_from_ptr(terminal_type),
         color_term: ColorTerm::from_u32(color_term),
