@@ -42,7 +42,7 @@ fn main() {
     let target = env::var("TARGET").expect("Cargo TARGET is required");
     let zig_target = zig_target(&target);
     let out_dir = cargo_out_dir.join("ghostty-vt");
-    let status = Command::new(&zig)
+    let output = Command::new(&zig)
         .current_dir(&ghostty_root)
         .args([
             "build",
@@ -53,9 +53,18 @@ fn main() {
             "--prefix",
         ])
         .arg(&out_dir)
-        .status()
+        .output()
         .expect("failed to execute Zig while building libghostty-vt");
-    if !status.success() {
+    if !output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        eprintln!("Zig failed to build libghostty-vt for {zig_target}.");
+        if !stdout.trim().is_empty() {
+            eprintln!("Zig stdout:\n{stdout}");
+        }
+        if !stderr.trim().is_empty() {
+            eprintln!("Zig stderr:\n{stderr}");
+        }
         panic!("Zig failed to build libghostty-vt for {zig_target}");
     }
 

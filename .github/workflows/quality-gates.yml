@@ -149,6 +149,13 @@ jobs:
         with:
           version: ${{ env.ZIG_VERSION }}
 
+      - name: Configure Windows MSVC environment for Zig
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          NAUTERM_WINDOWS_ARCH: x86_64
+        run: ./scripts/ci/setup_windows_msvc.ps1
+
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}

@@ -343,6 +343,12 @@ jobs:
         with:
           version: ${{ env.ZIG_VERSION }}
 
+      - name: Configure Windows MSVC environment for Zig
+        shell: pwsh
+        env:
+          NAUTERM_WINDOWS_ARCH: ${{ matrix.arch }}
+        run: ./scripts/ci/setup_windows_msvc.ps1
+
       - id: version
         shell: pwsh
         run: |
