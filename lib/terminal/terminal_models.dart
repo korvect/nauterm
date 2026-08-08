@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
 import 'terminal_theme.dart';
@@ -18,6 +20,18 @@ const int terminalFlagDottedUnderline = 0x2000;
 const int terminalFlagDashedUnderline = 0x4000;
 
 enum TerminalCursorShape { block, underline, beam, hollowBlock }
+
+enum TerminalEmulatorBackend {
+  alacritty,
+  ghostty;
+
+  static TerminalEmulatorBackend fromString(String? value) => switch (value) {
+    'ghostty' => TerminalEmulatorBackend.ghostty,
+    _ => TerminalEmulatorBackend.alacritty,
+  };
+
+  int get nativeValue => index;
+}
 
 enum SerialParity { none, even, odd }
 
@@ -401,6 +415,9 @@ class TerminalSnapshot {
     required this.cells,
     required this.cursor,
     required this.keyboardMode,
+    this.emulatorBackend = TerminalEmulatorBackend.alacritty,
+    this.graphicImages = const [],
+    this.graphicPlacements = const [],
     this.historyLines = 0,
     this.displayOffset = 0,
     this.title = '',
@@ -449,6 +466,9 @@ class TerminalSnapshot {
   final List<TerminalCell> cells;
   final TerminalCursor cursor;
   final TerminalKeyboardMode keyboardMode;
+  final TerminalEmulatorBackend emulatorBackend;
+  final List<TerminalGraphicImage> graphicImages;
+  final List<TerminalGraphicPlacement> graphicPlacements;
   final bool inputEchoEnabled;
   final String clipboardText;
   final int bellCount;
@@ -460,6 +480,9 @@ class TerminalSnapshot {
       cells: cells,
       cursor: cursor,
       keyboardMode: keyboardMode,
+      emulatorBackend: emulatorBackend,
+      graphicImages: graphicImages,
+      graphicPlacements: graphicPlacements,
       historyLines: historyLines,
       displayOffset: displayOffset,
       title: title,
@@ -476,6 +499,52 @@ class TerminalSnapshot {
 
     return cells[row * columns + column];
   }
+}
+
+@immutable
+class TerminalGraphicImage {
+  const TerminalGraphicImage({
+    required this.id,
+    required this.generation,
+    required this.width,
+    required this.height,
+    required this.rgba,
+  });
+
+  final int id;
+  final int generation;
+  final int width;
+  final int height;
+  final Uint8List rgba;
+}
+
+@immutable
+class TerminalGraphicPlacement {
+  const TerminalGraphicPlacement({
+    required this.imageId,
+    required this.placementId,
+    required this.zIndex,
+    required this.viewportColumn,
+    required this.viewportRow,
+    required this.columns,
+    required this.rows,
+    required this.sourceX,
+    required this.sourceY,
+    required this.sourceWidth,
+    required this.sourceHeight,
+  });
+
+  final int imageId;
+  final int placementId;
+  final int zIndex;
+  final int viewportColumn;
+  final int viewportRow;
+  final int columns;
+  final int rows;
+  final int sourceX;
+  final int sourceY;
+  final int sourceWidth;
+  final int sourceHeight;
 }
 
 TerminalConnectionEventKind _connectionEventKindFromWire(String? value) {

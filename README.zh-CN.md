@@ -84,7 +84,7 @@ Nauterm 当前仅支持桌面平台，不支持 Android、iOS 和 Web 构建。
 
 ## 路线图
 
-- [ ] 基于 libghostty-vt 的终端仿真后端（`libghostty-vt`）
+- [x] 基于 libghostty-vt 的终端仿真后端（`libghostty-vt`）
 - [ ] SFTP 多线程、分片、可断点续传的传输
 - [ ] 预测回显
 - [ ] 重启后恢复会话与窗口
@@ -156,6 +156,7 @@ Nauterm 的设计目标是避免以明文保存凭据和同步数据：
 
 - Flutter `3.44.6`
 - Rust `1.97.0`，并安装 `rustfmt` 和 `clippy`
+- Zig `0.16.0`，用于构建固定版本的 `libghostty-vt`
 - Git、CMake 以及目标平台的原生桌面工具链
 - Flutter 桌面开发所需的平台依赖
 
@@ -168,7 +169,7 @@ sudo apt install pkg-config libdbus-1-dev
 克隆仓库并解析 Flutter 依赖：
 
 ```sh
-git clone https://github.com/korvect/nauterm.git
+git clone --recurse-submodules https://github.com/korvect/nauterm.git
 cd nauterm
 flutter pub get
 ```
@@ -276,7 +277,7 @@ cargo test \
 | `test/` | Flutter 单元测试和 Widget 测试 |
 | `test_integration/` | 跨平台终端和原生集成测试 |
 
-原生终端引擎使用 `alacritty_terminal` 进行终端仿真。Rust 负责 PTY 和传输工作，再通过精简的 FFI 边界向 Dart 提供快照和命令。Mosh 实现在独立版本管理的 `nauterm-mosh` 仓库中维护；本仓库会固定其源码版本，并验证随附库的校验和与 ABI。
+原生终端层同时支持 `alacritty_terminal` 和固定版本的 `libghostty-vt` 子模块。每个会话都在专属单线程 actor 内独占所选择的仿真引擎，Dart 通过精简的 FFI 边界与其通信；Ghostty 会话还支持渲染 Kitty Graphics Protocol 图像。Mosh 实现在独立版本管理的 `nauterm-mosh` 仓库中维护；本仓库会固定其源码版本，并验证随附库的校验和与 ABI。
 
 ## 致谢
 
@@ -284,6 +285,7 @@ cargo test \
 
 - [NativeAPI](https://github.com/libnativeapi/nativeapi-flutter) — Flutter 原生桌面集成
 - [alacritty_terminal](https://github.com/alacritty/alacritty) — 终端仿真
+- [libghostty-vt](https://github.com/ghostty-org/ghostty) — 可选终端仿真与 Kitty 图像支持
 - [lucide_icons_flutter](https://github.com/vqh2602/lucide-flutter-main) — Flutter Lucide 图标
 - [flutter_markdown_plus](https://github.com/foresightmobile/flutter_markdown_plus) — Flutter Markdown 渲染
 - [Russh](https://github.com/warp-tech/russh) — Rust SSH 协议实现

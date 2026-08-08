@@ -791,15 +791,11 @@ class TerminalController extends ChangeNotifier {
     _disposeListeners.remove(listener);
   }
 
-  void resize(int columns, int rows) {
+  void resize(int columns, int rows, {int cellWidth = 1, int cellHeight = 1}) {
     if (_disposed) {
       return;
     }
-    if (_snapshot.columns == columns && _snapshot.rows == rows) {
-      return;
-    }
-
-    _driver.resize(columns, rows);
+    _driver.resize(columns, rows, cellWidth: cellWidth, cellHeight: cellHeight);
     _refresh();
   }
 

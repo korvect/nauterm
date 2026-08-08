@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use std::sync::mpsc::{self, SyncSender};
+use std::thread::{self, JoinHandle};
 
 use crate::mosh::{MoshServerCommand, MoshSessionTransport};
 use crate::pty::WakeupCallback;
@@ -6,8 +8,9 @@ use crate::serial::{SerialConfig, SerialTransport};
 use crate::ssh::{HostKeyTrustMode, ShellHistoryReceiver, SshProxyConfig, SshTransport};
 use crate::telnet::TelnetTransport;
 use crate::terminal::{
-    TerminalCommandBlock, TerminalEngine, TerminalGeometry, TerminalOptions,
-    TerminalSearchDirection, TerminalSearchResult, TerminalSnapshot,
+    TerminalCommandBlock, TerminalEmulator, TerminalEmulatorBackend, TerminalEngine,
+    TerminalGeometry, TerminalOptions, TerminalSearchDirection, TerminalSearchResult,
+    TerminalSnapshot,
 };
 
 pub type SessionId = u64;
@@ -102,11 +105,95 @@ impl SessionEvent {
 
 pub struct SessionManager {
     next_id: SessionId,
-    sessions: HashMap<SessionId, TerminalSession>,
+    sessions: HashMap<SessionId, TerminalSessionActor>,
+}
+
+const SESSION_ACTOR_QUEUE_CAPACITY: usize = 256;
+
+type TerminalSessionWork = Box<dyn FnOnce(&mut TerminalSession) + Send + 'static>;
+
+enum TerminalSessionMessage {
+    Run(TerminalSessionWork),
+    Shutdown,
+}
+
+/// Owns a terminal session on one dedicated OS thread.
+///
+/// The handle is safe to move between FFI caller threads, while the terminal
+/// emulator, its borrowed render state, and all ordering-sensitive session
+/// state never leave the actor thread.
+struct TerminalSessionActor {
+    sender: SyncSender<TerminalSessionMessage>,
+    worker: Option<JoinHandle<()>>,
+}
+
+impl TerminalSessionActor {
+    fn spawn(factory: impl FnOnce() -> Option<TerminalSession> + Send + 'static) -> Option<Self> {
+        let (sender, receiver) =
+            mpsc::sync_channel::<TerminalSessionMessage>(SESSION_ACTOR_QUEUE_CAPACITY);
+        let (ready_sender, ready_receiver) = mpsc::sync_channel(1);
+        let worker = thread::Builder::new()
+            .name("nauterm-terminal-session".to_owned())
+            .spawn(move || {
+                let Some(mut session) = factory() else {
+                    let _ = ready_sender.send(false);
+                    return;
+                };
+                if ready_sender.send(true).is_err() {
+                    return;
+                }
+                while let Ok(message) = receiver.recv() {
+                    match message {
+                        TerminalSessionMessage::Run(work) => work(&mut session),
+                        TerminalSessionMessage::Shutdown => break,
+                    }
+                }
+                session.engine.set_wakeup_callback(None);
+                session.transport.set_wakeup_callback(None);
+                session.wakeup = None;
+                session.clear_pending_output_for_close();
+            })
+            .ok()?;
+
+        if ready_receiver.recv().ok() != Some(true) {
+            let _ = worker.join();
+            return None;
+        }
+        Some(Self {
+            sender,
+            worker: Some(worker),
+        })
+    }
+
+    fn call<R: Send + 'static>(
+        &self,
+        work: impl FnOnce(&mut TerminalSession) -> R + Send + 'static,
+    ) -> Option<R> {
+        let (reply_sender, reply_receiver) = mpsc::sync_channel(1);
+        self.sender
+            .send(TerminalSessionMessage::Run(Box::new(move |session| {
+                let _ = reply_sender.send(work(session));
+            })))
+            .ok()?;
+        reply_receiver.recv().ok()
+    }
+
+    fn shutdown(&mut self) {
+        let _ = self.sender.send(TerminalSessionMessage::Shutdown);
+        if let Some(worker) = self.worker.take() {
+            let _ = worker.join();
+        }
+    }
+}
+
+impl Drop for TerminalSessionActor {
+    fn drop(&mut self) {
+        self.shutdown();
+    }
 }
 
 struct TerminalSession {
-    engine: TerminalEngine,
+    engine: Box<dyn TerminalEmulator>,
     transport: SessionTransport,
     options: TerminalOptions,
     events: Vec<SessionEvent>,
@@ -133,7 +220,7 @@ impl Default for MoshAlternateScreenTracker {
 }
 
 impl MoshAlternateScreenTracker {
-    fn write_update(&mut self, engine: &mut TerminalEngine, output: &[u8]) {
+    fn write_update(&mut self, engine: &mut dyn TerminalEmulator, output: &[u8]) {
         // mosh-server consumes application smcup/rmcup sequences. Recreate the
         // local screen boundary only for modes interactive full-screen apps use.
         let normalized;
@@ -190,7 +277,7 @@ impl MoshAlternateScreenTracker {
         }
     }
 
-    fn restore(&mut self, engine: &mut TerminalEngine) {
+    fn restore(&mut self, engine: &mut dyn TerminalEmulator) {
         if self.active {
             engine.write_bytes(b"\x1b[?1049l");
             self.active = false;
@@ -390,12 +477,17 @@ impl SessionManager {
         rows: usize,
         options: TerminalOptions,
     ) -> Option<SessionId> {
-        let mut engine = TerminalEngine::new_with_options(columns, rows, options.clone());
-        if !engine.start_local_pty() {
-            return None;
-        }
-
-        Some(self.insert(engine, SessionTransport::Local, options))
+        let id = self.insert_new(
+            columns,
+            rows,
+            SessionTransport::Local,
+            options,
+            Vec::new(),
+            None,
+            false,
+            true,
+        );
+        (id != 0).then_some(id)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -417,9 +509,6 @@ impl SessionManager {
         encoding: &str,
     ) -> SessionId {
         let geometry = TerminalGeometry::new(columns, rows);
-        let mut engine =
-            TerminalEngine::new_with_options(geometry.columns, geometry.rows, options.clone());
-
         match SshTransport::connect(
             geometry,
             options.clone(),
@@ -435,15 +524,29 @@ impl SessionManager {
             ssh_keepalive_interval_seconds,
             encoding,
         ) {
-            Ok(ssh) => self.insert(engine, SessionTransport::Ssh(ssh), options),
-            Err(error) => {
-                engine.write_bytes(
+            Ok(ssh) => self.insert_new(
+                geometry.columns,
+                geometry.rows,
+                SessionTransport::Ssh(ssh),
+                options,
+                Vec::new(),
+                None,
+                false,
+                false,
+            ),
+            Err(error) => self.insert_new(
+                geometry.columns,
+                geometry.rows,
+                SessionTransport::Disconnected,
+                options,
+                Vec::new(),
+                Some(
                     format!("SSH session {username}@{host}:{port}\r\nFailed to start SSH transport: {error}\r\n")
-                        .as_bytes(),
-                );
-                engine.mark_exited();
-                self.insert(engine, SessionTransport::Disconnected, options)
-            }
+                        .into_bytes(),
+                ),
+                true,
+                false,
+            ),
         }
     }
 
@@ -465,8 +568,6 @@ impl SessionManager {
         server_command: MoshServerCommand,
     ) -> SessionId {
         let geometry = TerminalGeometry::new(columns, rows);
-        let mut engine =
-            TerminalEngine::new_with_options(geometry.columns, geometry.rows, options.clone());
         match MoshSessionTransport::connect(
             &options,
             geometry,
@@ -481,7 +582,16 @@ impl SessionManager {
             proxy,
             server_command,
         ) {
-            Ok(mosh) => self.insert(engine, SessionTransport::Mosh(mosh), options),
+            Ok(mosh) => self.insert_new(
+                geometry.columns,
+                geometry.rows,
+                SessionTransport::Mosh(mosh),
+                options,
+                Vec::new(),
+                None,
+                false,
+                false,
+            ),
             Err(error) => {
                 let mut initial_events = error.events;
                 if initial_events.is_empty() {
@@ -494,12 +604,15 @@ impl SessionManager {
                         .with_username(username),
                     );
                 }
-                engine.mark_exited();
-                self.insert_with_events(
-                    engine,
+                self.insert_new(
+                    geometry.columns,
+                    geometry.rows,
                     SessionTransport::Disconnected,
                     options,
                     initial_events,
+                    None,
+                    true,
+                    false,
                 )
             }
         }
@@ -513,15 +626,15 @@ impl SessionManager {
         serial_port: &str,
         config: SerialConfig,
     ) -> SessionId {
-        let mut engine = TerminalEngine::new_with_options(columns, rows, options.clone());
         let start_event = SessionEvent::new(
             "connect_start",
             format!("Opening serial port {serial_port} at {}.", config.summary()),
         )
         .with_serial(serial_port, config.baud_rate);
         match SerialTransport::open(serial_port, config) {
-            Ok(serial) => self.insert_with_events(
-                engine,
+            Ok(serial) => self.insert_new(
+                columns,
+                rows,
                 SessionTransport::Serial(serial),
                 options,
                 vec![
@@ -532,20 +645,24 @@ impl SessionManager {
                     )
                     .with_serial(serial_port, config.baud_rate),
                 ],
+                None,
+                false,
+                false,
             ),
-            Err(error) => {
-                engine.mark_exited();
-                self.insert_with_events(
-                    engine,
-                    SessionTransport::Disconnected,
-                    options,
-                    vec![
-                        start_event,
-                        SessionEvent::new("error", error.to_string())
-                            .with_serial(serial_port, config.baud_rate),
-                    ],
-                )
-            }
+            Err(error) => self.insert_new(
+                columns,
+                rows,
+                SessionTransport::Disconnected,
+                options,
+                vec![
+                    start_event,
+                    SessionEvent::new("error", error.to_string())
+                        .with_serial(serial_port, config.baud_rate),
+                ],
+                None,
+                true,
+                false,
+            ),
         }
     }
 
@@ -559,20 +676,32 @@ impl SessionManager {
         encoding: &str,
     ) -> SessionId {
         let geometry = TerminalGeometry::new(columns, rows);
-        let mut engine =
-            TerminalEngine::new_with_options(geometry.columns, geometry.rows, options.clone());
         match TelnetTransport::connect(geometry, options.clone(), host, port, encoding) {
-            Ok(telnet) => self.insert(engine, SessionTransport::Telnet(telnet), options),
-            Err(error) => {
-                engine.write_bytes(
+            Ok(telnet) => self.insert_new(
+                geometry.columns,
+                geometry.rows,
+                SessionTransport::Telnet(telnet),
+                options,
+                Vec::new(),
+                None,
+                false,
+                false,
+            ),
+            Err(error) => self.insert_new(
+                geometry.columns,
+                geometry.rows,
+                SessionTransport::Disconnected,
+                options,
+                Vec::new(),
+                Some(
                     format!(
                         "Telnet session {host}:{port}\r\nFailed to start Telnet transport: {error}\r\n"
                     )
-                    .as_bytes(),
-                );
-                engine.mark_exited();
-                self.insert(engine, SessionTransport::Disconnected, options)
-            }
+                    .into_bytes(),
+                ),
+                true,
+                false,
+            ),
         }
     }
 
@@ -585,13 +714,15 @@ impl SessionManager {
         baud_rate: u32,
         message: impl Into<String>,
     ) -> SessionId {
-        let mut engine = TerminalEngine::new_with_options(columns, rows, options.clone());
-        engine.mark_exited();
-        self.insert_with_events(
-            engine,
+        self.insert_new(
+            columns,
+            rows,
             SessionTransport::Disconnected,
             options,
             vec![SessionEvent::new("error", message).with_serial(serial_port, baud_rate)],
+            None,
+            true,
+            false,
         )
     }
 
@@ -611,44 +742,58 @@ impl SessionManager {
         ssh_keepalive_interval_seconds: u32,
         encoding: &str,
     ) -> bool {
-        let Some(session) = self.sessions.get_mut(&id) else {
+        let Some(actor) = self.sessions.get(&id) else {
             return false;
         };
-        let snapshot = session.engine.snapshot();
-        let geometry = TerminalGeometry::new(snapshot.columns, snapshot.rows);
-        session.transport.set_wakeup_callback(None);
-        session.events.clear();
-        match SshTransport::connect(
-            geometry,
-            session.options.clone(),
-            host,
-            port,
-            username,
-            password,
-            private_key,
-            passphrase,
-            known_hosts_path,
-            host_key_trust_mode,
-            proxy,
-            ssh_keepalive_interval_seconds,
-            encoding,
-        ) {
-            Ok(mut ssh) => {
-                ssh.set_wakeup_callback(session.wakeup);
-                session.transport = SessionTransport::Ssh(ssh);
-                session.engine.mark_running();
-            }
-            Err(error) => {
-                session.transport = SessionTransport::Disconnected;
-                session.engine.mark_exited();
-                session.events.push(
-                    SessionEvent::new("error", format!("Failed to restart SSH transport: {error}"))
-                        .with_host_port(host, port)
-                        .with_username(username),
-                );
-            }
-        }
-        true
+        let host = host.to_owned();
+        let username = username.to_owned();
+        let password = password.map(str::to_owned);
+        let private_key = private_key.map(str::to_owned);
+        let passphrase = passphrase.map(str::to_owned);
+        let known_hosts_path = known_hosts_path.map(str::to_owned);
+        let encoding = encoding.to_owned();
+        actor
+            .call(move |session| {
+                let snapshot = session.engine.snapshot();
+                let geometry = TerminalGeometry::new(snapshot.columns, snapshot.rows);
+                session.transport.set_wakeup_callback(None);
+                session.events.clear();
+                match SshTransport::connect(
+                    geometry,
+                    session.options.clone(),
+                    &host,
+                    port,
+                    &username,
+                    password.as_deref(),
+                    private_key.as_deref(),
+                    passphrase.as_deref(),
+                    known_hosts_path.as_deref(),
+                    host_key_trust_mode,
+                    proxy,
+                    ssh_keepalive_interval_seconds,
+                    &encoding,
+                ) {
+                    Ok(mut ssh) => {
+                        ssh.set_wakeup_callback(session.wakeup);
+                        session.transport = SessionTransport::Ssh(ssh);
+                        session.engine.mark_running();
+                    }
+                    Err(error) => {
+                        session.transport = SessionTransport::Disconnected;
+                        session.engine.mark_exited();
+                        session.events.push(
+                            SessionEvent::new(
+                                "error",
+                                format!("Failed to restart SSH transport: {error}"),
+                            )
+                            .with_host_port(&host, port)
+                            .with_username(&username),
+                        );
+                    }
+                }
+                true
+            })
+            .unwrap_or(false)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -666,133 +811,170 @@ impl SessionManager {
         proxy: Option<SshProxyConfig>,
         server_command: MoshServerCommand,
     ) -> bool {
-        let Some(session) = self.sessions.get_mut(&id) else {
+        let Some(actor) = self.sessions.get(&id) else {
             return false;
         };
-        let snapshot = session.engine.snapshot();
-        let geometry = TerminalGeometry::new(snapshot.columns, snapshot.rows);
-        session.transport.set_wakeup_callback(None);
-        session.events.clear();
-        match MoshSessionTransport::connect(
-            &session.options,
-            geometry,
-            host,
-            port,
-            username,
-            password,
-            private_key,
-            passphrase,
-            known_hosts_path,
-            host_key_trust_mode,
-            proxy,
-            server_command,
-        ) {
-            Ok(mut mosh) => {
-                mosh.set_wakeup_callback(session.wakeup);
-                session.transport = SessionTransport::Mosh(mosh);
-                session.mosh_screen = MoshAlternateScreenTracker::default();
-                session.engine.mark_running();
-            }
-            Err(error) => {
-                session.transport = SessionTransport::Disconnected;
-                session.engine.mark_exited();
-                if error.events.is_empty() {
-                    session.events.push(
-                        SessionEvent::new(
-                            "error",
-                            format!("Failed to restart Mosh transport: {}", error.message),
-                        )
-                        .with_host_port(host, port)
-                        .with_username(username),
-                    );
-                } else {
-                    for event in error.events {
-                        session.events.push(event);
+        let host = host.to_owned();
+        let username = username.to_owned();
+        let password = password.map(str::to_owned);
+        let private_key = private_key.map(str::to_owned);
+        let passphrase = passphrase.map(str::to_owned);
+        let known_hosts_path = known_hosts_path.map(str::to_owned);
+        actor
+            .call(move |session| {
+                let snapshot = session.engine.snapshot();
+                let geometry = TerminalGeometry::new(snapshot.columns, snapshot.rows);
+                session.transport.set_wakeup_callback(None);
+                session.events.clear();
+                match MoshSessionTransport::connect(
+                    &session.options,
+                    geometry,
+                    &host,
+                    port,
+                    &username,
+                    password.as_deref(),
+                    private_key.as_deref(),
+                    passphrase.as_deref(),
+                    known_hosts_path.as_deref(),
+                    host_key_trust_mode,
+                    proxy,
+                    server_command,
+                ) {
+                    Ok(mut mosh) => {
+                        mosh.set_wakeup_callback(session.wakeup);
+                        session.transport = SessionTransport::Mosh(mosh);
+                        session.mosh_screen = MoshAlternateScreenTracker::default();
+                        session.engine.mark_running();
+                    }
+                    Err(error) => {
+                        session.transport = SessionTransport::Disconnected;
+                        session.engine.mark_exited();
+                        if error.events.is_empty() {
+                            session.events.push(
+                                SessionEvent::new(
+                                    "error",
+                                    format!("Failed to restart Mosh transport: {}", error.message),
+                                )
+                                .with_host_port(&host, port)
+                                .with_username(&username),
+                            );
+                        } else {
+                            session.events.extend(error.events);
+                        }
                     }
                 }
-            }
-        }
-        true
+                true
+            })
+            .unwrap_or(false)
     }
 
     pub fn close(&mut self, id: SessionId) -> bool {
-        let Some(mut session) = self.sessions.remove(&id) else {
+        let Some(mut actor) = self.sessions.remove(&id) else {
             return false;
         };
-
-        session.engine.set_wakeup_callback(None);
-        session.transport.set_wakeup_callback(None);
-        session.wakeup = None;
-        session.clear_pending_output_for_close();
+        actor.shutdown();
         true
     }
 
-    pub fn resize(&mut self, id: SessionId, columns: usize, rows: usize) -> bool {
-        let Some(session) = self.sessions.get_mut(&id) else {
+    pub fn resize(
+        &mut self,
+        id: SessionId,
+        columns: usize,
+        rows: usize,
+        cell_width_px: u32,
+        cell_height_px: u32,
+    ) -> bool {
+        let Some(actor) = self.sessions.get(&id) else {
             return false;
         };
-
-        let geometry = TerminalGeometry::new(columns, rows);
-        session.engine.resize(geometry.columns, geometry.rows);
-        session.transport.resize(geometry);
-        if matches!(&session.transport, SessionTransport::Mosh(_)) {
-            session.mosh_screen.note_resize();
-        }
-        true
+        actor
+            .call(move |session| {
+                let geometry = TerminalGeometry::new(columns, rows);
+                session.engine.resize(
+                    geometry.columns,
+                    geometry.rows,
+                    cell_width_px,
+                    cell_height_px,
+                );
+                session.transport.resize(geometry);
+                if matches!(&session.transport, SessionTransport::Mosh(_)) {
+                    session.mosh_screen.note_resize();
+                }
+                true
+            })
+            .unwrap_or(false)
     }
 
     pub fn notify_network_changed(&mut self, id: SessionId) -> bool {
-        let Some(session) = self.sessions.get_mut(&id) else {
+        let Some(actor) = self.sessions.get(&id) else {
             return false;
         };
-        session.transport.notify_network_changed()
+        actor
+            .call(|session| session.transport.notify_network_changed())
+            .unwrap_or(false)
     }
 
     pub fn exit_alternate_screen(&mut self, id: SessionId) -> bool {
-        let Some(session) = self.sessions.get_mut(&id) else {
+        let Some(actor) = self.sessions.get(&id) else {
             return false;
         };
-        if !session.engine.is_alt_screen() {
-            return false;
-        }
-        session.engine.write_bytes(b"\x1b[?1049l");
-        true
+        actor
+            .call(|session| {
+                if !session.engine.is_alt_screen() {
+                    return false;
+                }
+                session.engine.write_bytes(b"\x1b[?1049l");
+                true
+            })
+            .unwrap_or(false)
     }
 
     pub fn scroll_lines(&mut self, id: SessionId, lines: i32) -> bool {
-        let Some(session) = self.sessions.get_mut(&id) else {
+        let Some(actor) = self.sessions.get(&id) else {
             return false;
         };
-
-        session.engine.scroll_lines(lines);
-        true
+        actor
+            .call(move |session| {
+                session.engine.scroll_lines(lines);
+                true
+            })
+            .unwrap_or(false)
     }
 
     pub fn scroll_page_up(&mut self, id: SessionId) -> bool {
-        let Some(session) = self.sessions.get_mut(&id) else {
+        let Some(actor) = self.sessions.get(&id) else {
             return false;
         };
-
-        session.engine.scroll_page_up();
-        true
+        actor
+            .call(|session| {
+                session.engine.scroll_page_up();
+                true
+            })
+            .unwrap_or(false)
     }
 
     pub fn scroll_page_down(&mut self, id: SessionId) -> bool {
-        let Some(session) = self.sessions.get_mut(&id) else {
+        let Some(actor) = self.sessions.get(&id) else {
             return false;
         };
-
-        session.engine.scroll_page_down();
-        true
+        actor
+            .call(|session| {
+                session.engine.scroll_page_down();
+                true
+            })
+            .unwrap_or(false)
     }
 
     pub fn scroll_to_bottom(&mut self, id: SessionId) -> bool {
-        let Some(session) = self.sessions.get_mut(&id) else {
+        let Some(actor) = self.sessions.get(&id) else {
             return false;
         };
-
-        session.engine.scroll_to_bottom();
-        true
+        actor
+            .call(|session| {
+                session.engine.scroll_to_bottom();
+                true
+            })
+            .unwrap_or(false)
     }
 
     pub fn search(
@@ -803,84 +985,95 @@ impl SessionManager {
         origin_row: usize,
         origin_column: usize,
     ) -> TerminalSearchResult {
-        let Some(session) = self.sessions.get_mut(&id) else {
+        let Some(actor) = self.sessions.get(&id) else {
             return TerminalSearchResult::not_found(0, 0);
         };
-
-        session
-            .engine
-            .search(query, direction, origin_row, origin_column)
+        let query = query.to_owned();
+        actor
+            .call(move |session| {
+                session
+                    .engine
+                    .search(&query, direction, origin_row, origin_column)
+            })
+            .unwrap_or_else(|| TerminalSearchResult::not_found(0, 0))
     }
 
     pub fn selection_text(&self, id: SessionId, start: i64, end: i64) -> Option<String> {
         self.sessions
-            .get(&id)
-            .map(|session| session.engine.selection_text(start, end))
+            .get(&id)?
+            .call(move |session| session.engine.selection_text(start, end))
     }
 
     pub fn command_block_at(&self, id: SessionId, offset: i64) -> Option<TerminalCommandBlock> {
         self.sessions
-            .get(&id)
-            .and_then(|session| session.engine.command_block_at(offset))
+            .get(&id)?
+            .call(move |session| session.engine.command_block_at(offset))
+            .flatten()
     }
 
     pub fn set_wakeup_callback(&mut self, id: SessionId, callback: Option<WakeupCallback>) -> bool {
-        let Some(session) = self.sessions.get_mut(&id) else {
+        let Some(actor) = self.sessions.get(&id) else {
             return false;
         };
-
-        session.engine.set_wakeup_callback(callback);
-        session.transport.set_wakeup_callback(callback);
-        session.wakeup = callback;
-        true
+        actor
+            .call(move |session| {
+                session.engine.set_wakeup_callback(callback);
+                session.transport.set_wakeup_callback(callback);
+                session.wakeup = callback;
+                true
+            })
+            .unwrap_or(false)
     }
 
     pub fn prepare_runtime_shutdown(&mut self) {
-        for session in self.sessions.values_mut() {
-            session.engine.set_wakeup_callback(None);
-            session.transport.set_wakeup_callback(None);
-            session.wakeup = None;
+        for actor in self.sessions.values_mut() {
+            actor.shutdown();
         }
         self.sessions.clear();
     }
 
     pub fn poll(&mut self, id: SessionId) -> bool {
-        let Some(session) = self.sessions.get_mut(&id) else {
+        let Some(actor) = self.sessions.get(&id) else {
             return false;
         };
-
-        session.poll()
+        actor.call(TerminalSession::poll).unwrap_or(false)
     }
 
     pub fn is_exited(&self, id: SessionId) -> bool {
         self.sessions
             .get(&id)
-            .map(|session| session.engine.is_exited())
+            .and_then(|actor| actor.call(|session| session.engine.is_exited()))
             .unwrap_or(true)
     }
 
     pub fn write_bytes(&mut self, id: SessionId, bytes: &[u8]) -> bool {
-        let Some(session) = self.sessions.get_mut(&id) else {
+        let Some(actor) = self.sessions.get(&id) else {
             return false;
         };
-
-        session.engine.write_bytes(bytes);
-        session.flush_terminal_writes();
-        true
+        let bytes = bytes.to_vec();
+        actor
+            .call(move |session| {
+                session.engine.write_bytes(&bytes);
+                session.flush_terminal_writes();
+                true
+            })
+            .unwrap_or(false)
     }
 
     pub fn request_ssh_shell_history(
         &mut self,
         id: SessionId,
     ) -> Result<ShellHistoryReceiver, String> {
-        let session = self
+        let actor = self
             .sessions
-            .get_mut(&id)
+            .get(&id)
             .ok_or_else(|| "terminal session was not found".to_owned())?;
-        match &mut session.transport {
-            SessionTransport::Ssh(ssh) => ssh.request_shell_history(),
-            _ => Err("terminal session is not an SSH connection".to_owned()),
-        }
+        actor
+            .call(|session| match &mut session.transport {
+                SessionTransport::Ssh(ssh) => ssh.request_shell_history(),
+                _ => Err("terminal session is not an SSH connection".to_owned()),
+            })
+            .unwrap_or_else(|| Err("terminal session actor stopped".to_owned()))
     }
 
     pub fn send_input_bytes(&mut self, id: SessionId, bytes: &[u8]) -> bool {
@@ -888,94 +1081,104 @@ impl SessionManager {
     }
 
     pub fn send_input_bytes_status(&mut self, id: SessionId, bytes: &[u8]) -> u32 {
-        let Some(session) = self.sessions.get_mut(&id) else {
+        let Some(actor) = self.sessions.get(&id) else {
             return INPUT_STATUS_CLOSED;
         };
         if bytes.is_empty() {
             return INPUT_STATUS_INVALID;
         }
-
-        match &mut session.transport {
-            SessionTransport::Local => {
-                if session.engine.send_input_bytes(bytes) {
-                    INPUT_STATUS_ACCEPTED
-                } else {
-                    INPUT_STATUS_CLOSED
+        let bytes = bytes.to_vec();
+        actor
+            .call(move |session| match &mut session.transport {
+                SessionTransport::Local => {
+                    if session.engine.send_input_bytes(&bytes) {
+                        INPUT_STATUS_ACCEPTED
+                    } else {
+                        INPUT_STATUS_CLOSED
+                    }
                 }
-            }
-            SessionTransport::Ssh(ssh) => {
-                if ssh.queue_input(bytes) {
-                    INPUT_STATUS_ACCEPTED
-                } else {
-                    INPUT_STATUS_CLOSED
+                SessionTransport::Ssh(ssh) => {
+                    if ssh.queue_input(&bytes) {
+                        INPUT_STATUS_ACCEPTED
+                    } else {
+                        INPUT_STATUS_CLOSED
+                    }
                 }
-            }
-            SessionTransport::Mosh(mosh) => mosh.queue_input_status(bytes),
-            SessionTransport::Telnet(telnet) => {
-                if telnet.queue_input(bytes) {
-                    INPUT_STATUS_ACCEPTED
-                } else {
-                    INPUT_STATUS_CLOSED
+                SessionTransport::Mosh(mosh) => mosh.queue_input_status(&bytes),
+                SessionTransport::Telnet(telnet) => {
+                    if telnet.queue_input(&bytes) {
+                        INPUT_STATUS_ACCEPTED
+                    } else {
+                        INPUT_STATUS_CLOSED
+                    }
                 }
-            }
-            SessionTransport::Serial(serial) => {
-                if serial.queue_input(bytes) {
-                    INPUT_STATUS_ACCEPTED
-                } else {
-                    INPUT_STATUS_CLOSED
+                SessionTransport::Serial(serial) => {
+                    if serial.queue_input(&bytes) {
+                        INPUT_STATUS_ACCEPTED
+                    } else {
+                        INPUT_STATUS_CLOSED
+                    }
                 }
-            }
-            SessionTransport::Disconnected => INPUT_STATUS_CLOSED,
-        }
+                SessionTransport::Disconnected => INPUT_STATUS_CLOSED,
+            })
+            .unwrap_or(INPUT_STATUS_CLOSED)
     }
 
     pub fn snapshot(&self, id: SessionId) -> Option<TerminalSnapshot> {
         self.sessions
-            .get(&id)
-            .map(|session| session.engine.snapshot())
+            .get(&id)?
+            .call(|session| session.engine.snapshot())
     }
 
     pub fn clipboard(&self, id: SessionId) -> Option<String> {
         self.sessions
-            .get(&id)
-            .map(|session| session.engine.clipboard())
+            .get(&id)?
+            .call(|session| session.engine.clipboard())
     }
 
     pub fn bell_count(&self, id: SessionId) -> Option<u64> {
         self.sessions
-            .get(&id)
-            .map(|session| session.engine.bell_count())
+            .get(&id)?
+            .call(|session| session.engine.bell_count())
     }
 
     pub fn drain_events(&mut self, id: SessionId) -> Vec<SessionEvent> {
         self.sessions
-            .get_mut(&id)
-            .map(|session| session.events.drain(..).collect())
+            .get(&id)
+            .and_then(|actor| actor.call(|session| session.events.drain(..).collect()))
             .unwrap_or_default()
     }
 
     pub fn drain_output_capture(&mut self, id: SessionId) -> Vec<u8> {
         self.sessions
-            .get_mut(&id)
-            .map(|session| session.engine.drain_output_capture())
+            .get(&id)
+            .and_then(|actor| actor.call(|session| session.engine.drain_output_capture()))
             .unwrap_or_default()
     }
 
     pub fn suppress_output_until(&mut self, id: SessionId, marker: &[u8]) -> bool {
+        let marker = marker.to_vec();
         self.sessions
-            .get_mut(&id)
-            .map(|session| session.engine.suppress_output_until(marker))
+            .get(&id)
+            .and_then(|actor| {
+                actor.call(move |session| session.engine.suppress_output_until(&marker))
+            })
             .unwrap_or(false)
     }
 
     pub fn cancel_output_suppression(&mut self, id: SessionId) -> bool {
-        let Some(session) = self.sessions.get_mut(&id) else {
+        let Some(actor) = self.sessions.get(&id) else {
             return false;
         };
-        session.engine.cancel_output_suppression();
-        true
+        actor
+            .call(|session| {
+                session.engine.cancel_output_suppression();
+                true
+            })
+            .unwrap_or(false)
     }
 
+    #[cfg(test)]
     fn insert(
         &mut self,
         engine: TerminalEngine,
@@ -985,6 +1188,7 @@ impl SessionManager {
         self.insert_with_events(engine, transport, options, Vec::new())
     }
 
+    #[cfg(test)]
     fn insert_with_events(
         &mut self,
         engine: TerminalEngine,
@@ -994,18 +1198,88 @@ impl SessionManager {
     ) -> SessionId {
         let id = self.next_id;
         self.next_id = self.next_id.saturating_add(1).max(1);
-        self.sessions.insert(
-            id,
-            TerminalSession {
-                engine,
+        let actor = TerminalSessionActor::spawn(move || {
+            Some(TerminalSession {
+                engine: Box::new(engine),
                 transport,
                 options,
                 events,
                 mosh_screen: MoshAlternateScreenTracker::default(),
                 wakeup: None,
-            },
-        );
-        id
+            })
+        });
+        if let Some(actor) = actor {
+            self.sessions.insert(id, actor);
+            id
+        } else {
+            0
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn insert_new(
+        &mut self,
+        columns: usize,
+        rows: usize,
+        transport: SessionTransport,
+        options: TerminalOptions,
+        events: Vec<SessionEvent>,
+        initial_output: Option<Vec<u8>>,
+        mark_exited: bool,
+        start_local_pty: bool,
+    ) -> SessionId {
+        let id = self.next_id;
+        self.next_id = self.next_id.saturating_add(1).max(1);
+        let actor_options = options.clone();
+        let actor = TerminalSessionActor::spawn(move || {
+            let mut engine = create_terminal_emulator(columns, rows, actor_options.clone()).ok()?;
+            if start_local_pty && !engine.start_local_pty() {
+                return None;
+            }
+            if let Some(output) = initial_output {
+                engine.write_bytes(&output);
+            }
+            if mark_exited {
+                engine.mark_exited();
+            }
+            Some(TerminalSession {
+                engine,
+                transport,
+                options: actor_options,
+                events,
+                mosh_screen: MoshAlternateScreenTracker::default(),
+                wakeup: None,
+            })
+        });
+        if let Some(actor) = actor {
+            self.sessions.insert(id, actor);
+            id
+        } else {
+            0
+        }
+    }
+}
+
+pub(crate) fn create_terminal_emulator(
+    columns: usize,
+    rows: usize,
+    options: TerminalOptions,
+) -> Result<Box<dyn TerminalEmulator>, String> {
+    match options.emulator_backend {
+        TerminalEmulatorBackend::Alacritty => Ok(Box::new(TerminalEngine::new_with_options(
+            columns, rows, options,
+        ))),
+        TerminalEmulatorBackend::Ghostty => {
+            #[cfg(feature = "terminal-ghostty")]
+            {
+                crate::ghostty_terminal::GhosttyTerminalEngine::new(columns, rows, options)
+                    .map(|engine| Box::new(engine) as Box<dyn TerminalEmulator>)
+            }
+            #[cfg(not(feature = "terminal-ghostty"))]
+            {
+                Err("Ghostty terminal support is not available in this build".to_owned())
+            }
+        }
     }
 }
 
@@ -1052,7 +1326,7 @@ impl TerminalSession {
             if let SessionTransport::Mosh(mosh) = &mut self.transport {
                 for batch in mosh_batches {
                     self.mosh_screen
-                        .write_update(&mut self.engine, &batch.output);
+                        .write_update(self.engine.as_mut(), &batch.output);
                     if mosh.commit_screen(batch.state_num) {
                         self.events.push(
                             SessionEvent::new(
@@ -1068,7 +1342,7 @@ impl TerminalSession {
         self.flush_terminal_writes();
         if exited {
             if matches!(&self.transport, SessionTransport::Mosh(_)) {
-                self.mosh_screen.restore(&mut self.engine);
+                self.mosh_screen.restore(self.engine.as_mut());
             }
             self.transport = SessionTransport::Disconnected;
             self.engine.mark_exited();
@@ -1480,6 +1754,27 @@ mod tests {
 
         assert!(!tracker.active);
         assert!(!engine.is_alt_screen());
+    }
+
+    #[cfg(feature = "terminal-ghostty")]
+    #[test]
+    fn session_actor_constructs_and_owns_the_selected_ghostty_backend() {
+        let mut manager = SessionManager::default();
+        let id = manager.create_serial_error(
+            8,
+            2,
+            TerminalOptions {
+                emulator_backend: TerminalEmulatorBackend::Ghostty,
+                ..TerminalOptions::default()
+            },
+            "unavailable",
+            9600,
+            "test transport error",
+        );
+        assert_ne!(id, 0);
+        let snapshot = manager.snapshot(id).unwrap();
+        assert_eq!(snapshot.emulator_backend, TerminalEmulatorBackend::Ghostty);
+        assert!(manager.close(id));
     }
 
     fn terminal_snapshot_text(snapshot: &TerminalSnapshot) -> String {

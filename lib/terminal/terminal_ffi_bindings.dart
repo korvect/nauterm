@@ -629,8 +629,12 @@ TerminalSnapshot _snapshotFromNative(_NativeTerminalSnapshot native) {
       hyperlink: hyperlink,
     );
   }, growable: false);
+  final graphics = _graphicsFromNative(native);
 
   return TerminalSnapshot(
+    emulatorBackend: _emulatorBackendFromNative(native.emulatorBackend),
+    graphicImages: graphics.$1,
+    graphicPlacements: graphics.$2,
     columns: native.columns,
     rows: native.rows,
     historyLines: native.historyLines,
@@ -651,6 +655,58 @@ TerminalSnapshot _snapshotFromNative(_NativeTerminalSnapshot native) {
     inputEchoEnabled: native.inputEchoEnabled != 0,
   );
 }
+
+(List<TerminalGraphicImage>, List<TerminalGraphicPlacement>)
+_graphicsFromNative(_NativeTerminalSnapshot native) {
+  final data = native.graphicDataLength == 0
+      ? Uint8List(0)
+      : native.graphicData.asTypedList(native.graphicDataLength);
+  final images = List<TerminalGraphicImage>.generate(
+    native.graphicImagesLength,
+    (index) {
+      final image = (native.graphicImages + index).ref;
+      final start = image.dataOffset;
+      final end = start + image.dataLength;
+      final rgba = start >= 0 && end >= start && end <= data.length
+          ? Uint8List.fromList(Uint8List.sublistView(data, start, end))
+          : Uint8List(0);
+      return TerminalGraphicImage(
+        id: image.id,
+        generation: image.generation,
+        width: image.width,
+        height: image.height,
+        rgba: rgba,
+      );
+    },
+    growable: false,
+  );
+  final placements = List<TerminalGraphicPlacement>.generate(
+    native.graphicPlacementsLength,
+    (index) {
+      final placement = (native.graphicPlacements + index).ref;
+      return TerminalGraphicPlacement(
+        imageId: placement.imageId,
+        placementId: placement.placementId,
+        zIndex: placement.zIndex,
+        viewportColumn: placement.viewportColumn,
+        viewportRow: placement.viewportRow,
+        columns: placement.columns,
+        rows: placement.rows,
+        sourceX: placement.sourceX,
+        sourceY: placement.sourceY,
+        sourceWidth: placement.sourceWidth,
+        sourceHeight: placement.sourceHeight,
+      );
+    },
+    growable: false,
+  );
+  return (images, placements);
+}
+
+TerminalEmulatorBackend _emulatorBackendFromNative(int value) =>
+    value >= 0 && value < TerminalEmulatorBackend.values.length
+    ? TerminalEmulatorBackend.values[value]
+    : TerminalEmulatorBackend.alacritty;
 
 Uint8List _hexDecode(String value) {
   final length = value.length;

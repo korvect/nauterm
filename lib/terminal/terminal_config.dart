@@ -22,6 +22,8 @@ bool terminalScrollbarEnabled = true;
 int terminalScrollbackLines = 10000;
 int terminalSshKeepaliveIntervalSeconds = 20;
 TerminalType terminalEmulationType = TerminalType.xterm256Color;
+TerminalEmulatorBackend terminalEmulatorBackend =
+    TerminalEmulatorBackend.alacritty;
 String? terminalThemeId;
 TerminalTheme terminalCustomTheme = defaultTerminalTheme;
 
@@ -407,6 +409,7 @@ class NautermRuntimeSettings {
     this.scrollbackLines = 10000,
     this.sshKeepaliveIntervalSeconds = 20,
     this.emulationType = TerminalType.xterm256Color,
+    this.emulatorBackend = TerminalEmulatorBackend.alacritty,
     this.themeId,
     this.customThemeJson,
     this.cursor = const TerminalCursorConfig(),
@@ -434,6 +437,7 @@ class NautermRuntimeSettings {
   final int scrollbackLines;
   final int sshKeepaliveIntervalSeconds;
   final TerminalType emulationType;
+  final TerminalEmulatorBackend emulatorBackend;
   final String? themeId;
   final Map<String, Object?>? customThemeJson;
   final TerminalCursorConfig cursor;
@@ -454,6 +458,7 @@ void applyNautermRuntimeSettings(NautermRuntimeSettings settings) {
   terminalScrollbackLines = settings.scrollbackLines;
   terminalSshKeepaliveIntervalSeconds = settings.sshKeepaliveIntervalSeconds;
   terminalEmulationType = settings.emulationType;
+  terminalEmulatorBackend = settings.emulatorBackend;
   terminalThemeId = settings.themeId;
   terminalCustomTheme = settings.customThemeJson != null
       ? TerminalTheme.fromJson(settings.customThemeJson!)
@@ -509,6 +514,7 @@ NautermRuntimeSettings currentNautermRuntimeSettings() {
     scrollbackLines: terminalScrollbackLines,
     sshKeepaliveIntervalSeconds: terminalSshKeepaliveIntervalSeconds,
     emulationType: terminalEmulationType,
+    emulatorBackend: terminalEmulatorBackend,
     themeId: terminalThemeId,
     customThemeJson: terminalCustomTheme.toJson(),
     cursor: TerminalCursorConfig(
@@ -546,6 +552,7 @@ TerminalConfig currentTerminalConfig() {
     scrollbackLines: terminalScrollbackLines,
     sshKeepaliveIntervalSeconds: terminalSshKeepaliveIntervalSeconds,
     emulation: TerminalEmulationConfig(type: terminalEmulationType),
+    emulatorBackend: terminalEmulatorBackend,
     moshPredictionMode: terminalMoshPredictionMode,
     osc52Mode: terminalOsc52Mode,
   );
@@ -556,6 +563,7 @@ class TerminalConfig {
   const TerminalConfig({
     this.font = const TerminalFontConfig(),
     this.emulation = const TerminalEmulationConfig(),
+    this.emulatorBackend = TerminalEmulatorBackend.alacritty,
     this.cursor = const TerminalCursorConfig(),
     this.keyboard = const TerminalKeyboardConfig(),
     this.composer = const TerminalComposerConfig(),
@@ -570,6 +578,7 @@ class TerminalConfig {
   TerminalConfig copyWith({
     TerminalFontConfig? font,
     TerminalEmulationConfig? emulation,
+    TerminalEmulatorBackend? emulatorBackend,
     TerminalCursorConfig? cursor,
     TerminalKeyboardConfig? keyboard,
     TerminalComposerConfig? composer,
@@ -583,6 +592,7 @@ class TerminalConfig {
     return TerminalConfig(
       font: font ?? this.font,
       emulation: emulation ?? this.emulation,
+      emulatorBackend: emulatorBackend ?? this.emulatorBackend,
       cursor: cursor ?? this.cursor,
       keyboard: keyboard ?? this.keyboard,
       composer: composer ?? this.composer,
@@ -598,6 +608,7 @@ class TerminalConfig {
 
   final TerminalFontConfig font;
   final TerminalEmulationConfig emulation;
+  final TerminalEmulatorBackend emulatorBackend;
   final TerminalCursorConfig cursor;
   final TerminalKeyboardConfig keyboard;
   final TerminalComposerConfig composer;

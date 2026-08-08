@@ -56,6 +56,7 @@ pub struct TerminalEnvironmentVariable {
 
 #[derive(Clone, Debug)]
 pub struct TerminalOptions {
+    pub emulator_backend: TerminalEmulatorBackend,
     pub scrollback_lines: usize,
     pub terminal_type: TerminalType,
     pub color_term: ColorTerm,
@@ -72,6 +73,7 @@ pub struct TerminalOptions {
 impl Default for TerminalOptions {
     fn default() -> Self {
         Self {
+            emulator_backend: TerminalEmulatorBackend::Alacritty,
             scrollback_lines: DEFAULT_SCROLLBACK_LINES,
             terminal_type: TerminalType::Xterm256Color,
             color_term: ColorTerm::Truecolor,
@@ -83,6 +85,29 @@ impl Default for TerminalOptions {
             command: None,
             environment: Vec::new(),
             default_colors: TerminalDefaultColors::default(),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum TerminalEmulatorBackend {
+    #[default]
+    Alacritty,
+    Ghostty,
+}
+
+impl TerminalEmulatorBackend {
+    pub fn from_u32(value: u32) -> Self {
+        match value {
+            1 => Self::Ghostty,
+            _ => Self::Alacritty,
+        }
+    }
+
+    pub fn as_u32(self) -> u32 {
+        match self {
+            Self::Alacritty => 0,
+            Self::Ghostty => 1,
         }
     }
 }
@@ -194,6 +219,28 @@ impl TerminalDefaultColors {
             258 => self.cursor,
             _ => self.foreground,
         }
+    }
+
+    pub(crate) fn foreground_u32(self) -> u32 {
+        rgb_to_u32(self.foreground)
+    }
+
+    pub(crate) fn background_u32(self) -> u32 {
+        rgb_to_u32(self.background)
+    }
+
+    pub(crate) fn cursor_u32(self) -> u32 {
+        rgb_to_u32(self.cursor)
+    }
+
+    pub(crate) fn palette_u32(self) -> [u32; 256] {
+        std::array::from_fn(|index| rgb_to_u32(self.color_for_index(index)))
+    }
+}
+
+impl TerminalOptions {
+    pub(crate) fn cursor_shape_u32(&self) -> u32 {
+        cursor_shape_to_u32(self.cursor_shape)
     }
 }
 
@@ -344,7 +391,9 @@ struct OutputSuppression {
     pending: Vec<u8>,
 }
 
+#[derive(Clone)]
 pub struct TerminalSnapshot {
+    pub emulator_backend: TerminalEmulatorBackend,
     pub columns: usize,
     pub rows: usize,
     pub history_lines: usize,
@@ -363,6 +412,33 @@ pub struct TerminalSnapshot {
     pub cells: Vec<FfiTerminalCell>,
     pub text: Vec<u8>,
     pub hyperlink_text: Vec<u8>,
+    pub graphic_images: Vec<TerminalGraphicImage>,
+    pub graphic_placements: Vec<TerminalGraphicPlacement>,
+}
+
+#[derive(Clone, Debug)]
+pub struct TerminalGraphicImage {
+    pub id: u32,
+    pub generation: u64,
+    pub width: u32,
+    pub height: u32,
+    /// Decoded RGBA8888 pixels.
+    pub rgba: Vec<u8>,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct TerminalGraphicPlacement {
+    pub image_id: u32,
+    pub placement_id: u32,
+    pub z_index: i32,
+    pub viewport_column: i32,
+    pub viewport_row: i32,
+    pub columns: u32,
+    pub rows: u32,
+    pub source_x: u32,
+    pub source_y: u32,
+    pub source_width: u32,
+    pub source_height: u32,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -426,6 +502,48 @@ impl TerminalSearchResult {
     }
 }
 
+/// Backend-neutral terminal emulation contract.
+///
+/// Implementations deliberately do not require `Send` or `Sync`: a terminal
+/// and every borrowed handle derived from it are owned by one session actor
+/// thread for their full lifetime.
+pub trait TerminalEmulator {
+    fn resize(&mut self, columns: usize, rows: usize, cell_width_px: u32, cell_height_px: u32);
+    fn is_alt_screen(&self) -> bool;
+    fn scroll_lines(&mut self, lines: i32);
+    fn scroll_page_up(&mut self);
+    fn scroll_page_down(&mut self);
+    fn scroll_to_bottom(&mut self);
+    fn search(
+        &mut self,
+        query: &str,
+        direction: TerminalSearchDirection,
+        origin_row: usize,
+        origin_column: usize,
+    ) -> TerminalSearchResult;
+    fn start_local_pty(&mut self) -> bool;
+    fn set_wakeup_callback(&mut self, callback: Option<WakeupCallback>);
+    fn send_input_bytes(&mut self, bytes: &[u8]) -> bool;
+    fn pump_local_pty(&mut self) -> bool;
+    fn is_exited(&self) -> bool;
+    fn set_input_echo_enabled(&mut self, enabled: bool);
+    fn mark_exited(&mut self);
+    fn mark_running(&mut self);
+    fn drain_transport_writes(&mut self) -> Vec<String>;
+    fn drain_output_capture(&mut self) -> Vec<u8>;
+    fn suppress_output_until(&mut self, marker: &[u8]) -> bool;
+    fn cancel_output_suppression(&mut self);
+    fn clear_pending_output_for_close(&mut self);
+    fn write_bytes(&mut self, bytes: &[u8]);
+    fn write_bytes_without_capture(&mut self, bytes: &[u8]);
+    fn snapshot(&self) -> TerminalSnapshot;
+    fn plain_text(&self) -> String;
+    fn selection_text(&self, start: i64, end: i64) -> String;
+    fn command_block_at(&self, offset: i64) -> Option<TerminalCommandBlock>;
+    fn clipboard(&self) -> String;
+    fn bell_count(&self) -> u64;
+}
+
 #[derive(Clone, Debug)]
 struct ExportCell {
     text: String,
@@ -442,6 +560,7 @@ struct NormalizedCells {
 }
 
 impl TerminalEngine {
+    #[allow(dead_code)]
     pub fn new(columns: usize, rows: usize) -> Self {
         Self::new_with_options(columns, rows, TerminalOptions::default())
     }
@@ -630,6 +749,7 @@ impl TerminalEngine {
         }
     }
 
+    #[allow(dead_code)]
     pub fn send_input_char(&mut self, character: char) -> bool {
         let Some(pty) = &mut self.pty else {
             return false;
@@ -737,17 +857,23 @@ impl TerminalEngine {
         }
     }
 
+    #[allow(dead_code)]
     pub fn write_char(&mut self, character: char) {
         let mut buffer = [0; 4];
         self.write_bytes(character.encode_utf8(&mut buffer).as_bytes());
     }
 
     pub fn write_bytes(&mut self, bytes: &[u8]) {
+        let _ = self.write_bytes_and_return_visible(bytes);
+    }
+
+    pub(crate) fn write_bytes_and_return_visible(&mut self, bytes: &[u8]) -> Vec<u8> {
         self.output_capture.extend_from_slice(bytes);
         let visible = self.filter_suppressed_output(bytes);
         if !visible.is_empty() {
             self.write_bytes_without_capture(&visible);
         }
+        visible
     }
 
     fn filter_suppressed_output(&mut self, bytes: &[u8]) -> Vec<u8> {
@@ -971,6 +1097,7 @@ impl TerminalEngine {
         let bell_count = self.events.bell_count();
 
         TerminalSnapshot {
+            emulator_backend: TerminalEmulatorBackend::Alacritty,
             columns,
             rows,
             history_lines,
@@ -989,6 +1116,8 @@ impl TerminalEngine {
             cells,
             text,
             hyperlink_text,
+            graphic_images: Vec::new(),
+            graphic_placements: Vec::new(),
         }
     }
 
@@ -1205,6 +1334,126 @@ impl TerminalEngine {
         for write in self.events.drain_pty_writes() {
             pty.queue_input(write.as_bytes());
         }
+    }
+}
+
+impl TerminalEmulator for TerminalEngine {
+    fn resize(&mut self, columns: usize, rows: usize, _cell_width_px: u32, _cell_height_px: u32) {
+        TerminalEngine::resize(self, columns, rows);
+    }
+
+    fn is_alt_screen(&self) -> bool {
+        TerminalEngine::is_alt_screen(self)
+    }
+
+    fn scroll_lines(&mut self, lines: i32) {
+        TerminalEngine::scroll_lines(self, lines);
+    }
+
+    fn scroll_page_up(&mut self) {
+        TerminalEngine::scroll_page_up(self);
+    }
+
+    fn scroll_page_down(&mut self) {
+        TerminalEngine::scroll_page_down(self);
+    }
+
+    fn scroll_to_bottom(&mut self) {
+        TerminalEngine::scroll_to_bottom(self);
+    }
+
+    fn search(
+        &mut self,
+        query: &str,
+        direction: TerminalSearchDirection,
+        origin_row: usize,
+        origin_column: usize,
+    ) -> TerminalSearchResult {
+        TerminalEngine::search(self, query, direction, origin_row, origin_column)
+    }
+
+    fn start_local_pty(&mut self) -> bool {
+        TerminalEngine::start_local_pty(self)
+    }
+
+    fn set_wakeup_callback(&mut self, callback: Option<WakeupCallback>) {
+        TerminalEngine::set_wakeup_callback(self, callback);
+    }
+
+    fn send_input_bytes(&mut self, bytes: &[u8]) -> bool {
+        TerminalEngine::send_input_bytes(self, bytes)
+    }
+
+    fn pump_local_pty(&mut self) -> bool {
+        TerminalEngine::pump_local_pty(self)
+    }
+
+    fn is_exited(&self) -> bool {
+        TerminalEngine::is_exited(self)
+    }
+
+    fn set_input_echo_enabled(&mut self, enabled: bool) {
+        TerminalEngine::set_input_echo_enabled(self, enabled);
+    }
+
+    fn mark_exited(&mut self) {
+        TerminalEngine::mark_exited(self);
+    }
+
+    fn mark_running(&mut self) {
+        TerminalEngine::mark_running(self);
+    }
+
+    fn drain_transport_writes(&mut self) -> Vec<String> {
+        TerminalEngine::drain_transport_writes(self)
+    }
+
+    fn drain_output_capture(&mut self) -> Vec<u8> {
+        TerminalEngine::drain_output_capture(self)
+    }
+
+    fn suppress_output_until(&mut self, marker: &[u8]) -> bool {
+        TerminalEngine::suppress_output_until(self, marker)
+    }
+
+    fn cancel_output_suppression(&mut self) {
+        TerminalEngine::cancel_output_suppression(self);
+    }
+
+    fn clear_pending_output_for_close(&mut self) {
+        TerminalEngine::clear_pending_output_for_close(self);
+    }
+
+    fn write_bytes(&mut self, bytes: &[u8]) {
+        TerminalEngine::write_bytes(self, bytes);
+    }
+
+    fn write_bytes_without_capture(&mut self, bytes: &[u8]) {
+        TerminalEngine::write_bytes_without_capture(self, bytes);
+    }
+
+    fn snapshot(&self) -> TerminalSnapshot {
+        TerminalEngine::snapshot(self)
+    }
+
+    fn plain_text(&self) -> String {
+        TerminalEngine::plain_text(self)
+    }
+
+    fn selection_text(&self, start: i64, end: i64) -> String {
+        TerminalEngine::selection_text(self, start, end)
+    }
+
+    fn command_block_at(&self, offset: i64) -> Option<TerminalCommandBlock> {
+        TerminalEngine::command_block_at(self, offset)
+    }
+
+    fn clipboard(&self) -> String {
+        TerminalEngine::clipboard(self)
+    }
+
+    fn bell_count(&self) -> u64 {
+        TerminalEngine::bell_count(self)
     }
 }
 

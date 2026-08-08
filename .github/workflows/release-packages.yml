@@ -30,6 +30,7 @@ permissions:
 env:
   FLUTTER_VERSION: 3.44.6
   RUST_TOOLCHAIN: 1.97.0
+  ZIG_VERSION: 0.16.0
   NAUTERM_BUILD_NUMBER: ${{ github.run_number }}
   NAUTERM_UPDATE_REPOSITORY: ${{ vars.NAUTERM_UPDATE_REPOSITORY || github.repository }}
   NAUTERM_GITHUB_CLIENT_ID: ${{ vars.NAUTERM_GITHUB_CLIENT_ID }}
@@ -169,6 +170,10 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+
       - id: version
         run: |
           echo "value=$(awk '/^version: / { split($2, parts, "+"); print parts[1]; exit }' pubspec.yaml)" >> "$GITHUB_OUTPUT"
@@ -238,6 +243,10 @@ jobs:
       matrix: ${{ fromJSON(needs.select-builds.outputs.linux_matrix) }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
 
       - id: version
         run: |
@@ -329,6 +338,10 @@ jobs:
       matrix: ${{ fromJSON(needs.select-builds.outputs.windows_matrix) }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
 
       - id: version
         shell: pwsh

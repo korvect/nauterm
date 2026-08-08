@@ -44,6 +44,8 @@ class TerminalMetrics {
   }
 }
 
+enum _TerminalGraphicLayer { belowBackground, belowText, aboveText }
+
 class TerminalPainter extends CustomPainter {
   TerminalPainter({
     required this.snapshot,
@@ -61,6 +63,7 @@ class TerminalPainter extends CustomPainter {
     this.predictedText = '',
     this.weight = 400,
     this.boldWeight = 700,
+    this.graphicImages = const {},
   });
 
   final TerminalSnapshot snapshot;
@@ -78,6 +81,7 @@ class TerminalPainter extends CustomPainter {
   final String predictedText;
   final int weight;
   final int boldWeight;
+  final Map<int, ui.Image> graphicImages;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -90,11 +94,29 @@ class TerminalPainter extends CustomPainter {
       ..drawRect(viewport, Paint()..color = theme.primary.background);
 
     final cursorRect = _cursorRect(cellWidth, cellHeight);
+    _paintGraphics(
+      canvas,
+      cellWidth,
+      cellHeight,
+      _TerminalGraphicLayer.belowBackground,
+    );
     _paintCellBackgrounds(canvas, cellWidth, cellHeight);
+    _paintGraphics(
+      canvas,
+      cellWidth,
+      cellHeight,
+      _TerminalGraphicLayer.belowText,
+    );
     _paintSelectionBackgrounds(canvas, cellWidth, cellHeight);
     _paintBlockCursorFill(canvas, cursorRect);
     _paintText(canvas, cellWidth, cellHeight);
     _paintCellDecorations(canvas, cellWidth, cellHeight);
+    _paintGraphics(
+      canvas,
+      cellWidth,
+      cellHeight,
+      _TerminalGraphicLayer.aboveText,
+    );
     _paintPredictedText(canvas, cellWidth, cellHeight);
     _paintImeComposingText(canvas, cellWidth, cellHeight);
     _paintCursor(canvas, cellWidth, cellHeight);
@@ -102,6 +124,66 @@ class TerminalPainter extends CustomPainter {
       _paintCommandBlockFocus(canvas, cellWidth, cellHeight);
     }
     _paintOpenTargetUnderline(canvas, cellWidth, cellHeight);
+  }
+
+  void _paintGraphics(
+    Canvas canvas,
+    double cellWidth,
+    double cellHeight,
+    _TerminalGraphicLayer layer,
+  ) {
+    if (snapshot.graphicPlacements.isEmpty || graphicImages.isEmpty) {
+      return;
+    }
+    final imagesById = {
+      for (final image in snapshot.graphicImages) image.id: image,
+    };
+    for (final placement in snapshot.graphicPlacements) {
+      final placementLayer = placement.zIndex < -0x40000000
+          ? _TerminalGraphicLayer.belowBackground
+          : placement.zIndex < 0
+          ? _TerminalGraphicLayer.belowText
+          : _TerminalGraphicLayer.aboveText;
+      if (placementLayer != layer) continue;
+      final metadata = imagesById[placement.imageId];
+      if (metadata == null) continue;
+      final image = graphicImages[metadata.generation];
+      if (image == null) continue;
+      final sourceWidth = placement.sourceWidth == 0
+          ? metadata.width
+          : placement.sourceWidth;
+      final sourceHeight = placement.sourceHeight == 0
+          ? metadata.height
+          : placement.sourceHeight;
+      final source =
+          Rect.fromLTWH(
+            placement.sourceX.toDouble(),
+            placement.sourceY.toDouble(),
+            sourceWidth.toDouble(),
+            sourceHeight.toDouble(),
+          ).intersect(
+            Rect.fromLTWH(
+              0,
+              0,
+              metadata.width.toDouble(),
+              metadata.height.toDouble(),
+            ),
+          );
+      if (source.isEmpty) continue;
+      final destination = Rect.fromLTWH(
+        placement.viewportColumn * cellWidth,
+        placement.viewportRow * cellHeight,
+        placement.columns * cellWidth,
+        placement.rows * cellHeight,
+      );
+      if (destination.isEmpty) continue;
+      canvas.drawImageRect(
+        image,
+        source,
+        destination,
+        Paint()..filterQuality = FilterQuality.medium,
+      );
+    }
   }
 
   void _paintOpenTargetUnderline(
@@ -441,18 +523,6 @@ class TerminalPainter extends CustomPainter {
           () =>
               style.resolve(textStyle, weight: weight, boldWeight: boldWeight),
         );
-        final cellSpan = cell.wideChar ? 2 : 1;
-        final clipRightColumn = math.min(columns, column + cellSpan);
-
-        canvas.save();
-        canvas.clipRect(
-          Rect.fromLTWH(
-            column * cellWidth,
-            row * cellHeight,
-            (clipRightColumn - column) * cellWidth,
-            cellHeight,
-          ),
-        );
         painter
           ..text = TextSpan(text: text, style: resolvedStyle)
           ..layout();
@@ -460,7 +530,6 @@ class TerminalPainter extends CustomPainter {
           canvas,
           Offset(column * cellWidth, row * cellHeight + metrics.textOffset.dy),
         );
-        canvas.restore();
       }
 
       canvas.restore();
@@ -914,7 +983,8 @@ class TerminalPainter extends CustomPainter {
         oldDelegate.metrics.underlineY != metrics.underlineY ||
         oldDelegate.metrics.strikeoutY != metrics.strikeoutY ||
         oldDelegate.weight != weight ||
-        oldDelegate.boldWeight != boldWeight;
+        oldDelegate.boldWeight != boldWeight ||
+        oldDelegate.graphicImages != graphicImages;
   }
 }
 

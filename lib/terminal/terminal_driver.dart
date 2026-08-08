@@ -41,7 +41,7 @@ abstract interface class TerminalDriver {
 
   bool get isExited;
 
-  void resize(int columns, int rows);
+  void resize(int columns, int rows, {int cellWidth = 1, int cellHeight = 1});
 
   void write(String data);
 
@@ -124,7 +124,7 @@ class MemoryTerminalDriver implements TerminalDriver {
   bool get isExited => false;
 
   @override
-  void resize(int columns, int rows) {
+  void resize(int columns, int rows, {int cellWidth = 1, int cellHeight = 1}) {
     final nextColumns = math.max(2, columns);
     final nextRows = math.max(1, rows);
     if (nextColumns == _columns && nextRows == _rows) {

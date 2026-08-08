@@ -10,12 +10,38 @@ import 'package:nauterm/data/nauterm_config_store.dart';
 import 'package:nauterm/data/nauterm_config.dart';
 import 'package:nauterm/data/nauterm_paths.dart';
 import 'package:nauterm/terminal/terminal_config.dart';
+import 'package:nauterm/terminal/terminal_models.dart';
 import 'package:nauterm/terminal/terminal_recording_config.dart';
 import 'package:nauterm/terminal/terminal_theme.dart';
 
 void main() {
   test('automatic sync defaults to three days', () {
     expect(const NautermSyncConfig().interval, 3 * 24 * 60 * 60 * 1000);
+  });
+
+  test('terminal emulation engine round trips through schema version 1', () {
+    final config = NautermConfig.fromJson(const {
+      'schemaVersion': 1,
+      'terminal': {'emulationEngine': 'ghostty'},
+    });
+    expect(config.terminal.emulationEngine, TerminalEmulatorBackend.ghostty);
+    expect(
+      (config.toJson()['terminal'] as Map<String, Object?>)['emulationEngine'],
+      'ghostty',
+    );
+    expect(
+      NautermConfig.fromJson(const {
+        'schemaVersion': 1,
+      }).terminal.emulationEngine,
+      TerminalEmulatorBackend.alacritty,
+    );
+    expect(
+      NautermConfig.fromJson(const {
+        'schemaVersion': 1,
+        'terminal': {'emulator': 'ghostty'},
+      }).terminal.emulationEngine,
+      TerminalEmulatorBackend.alacritty,
+    );
   });
 
   test('selects the platform default config asset', () {

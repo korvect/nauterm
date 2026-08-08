@@ -194,6 +194,7 @@ class NautermTerminalConfig {
   const NautermTerminalConfig({
     this.shellPath,
     this.emulation = TerminalType.xterm256Color,
+    this.emulationEngine = TerminalEmulatorBackend.alacritty,
     this.appearance = const NautermTerminalAppearanceConfig(),
     this.behavior = const NautermTerminalBehaviorConfig(),
     this.features = const NautermTerminalFeaturesConfig(),
@@ -202,6 +203,7 @@ class NautermTerminalConfig {
 
   final String? shellPath;
   final TerminalType emulation;
+  final TerminalEmulatorBackend emulationEngine;
   final NautermTerminalAppearanceConfig appearance;
   final NautermTerminalBehaviorConfig behavior;
   final NautermTerminalFeaturesConfig features;
@@ -213,6 +215,9 @@ class NautermTerminalConfig {
     return NautermTerminalConfig(
       shellPath: shellPath == null || shellPath.isEmpty ? null : shellPath,
       emulation: _terminalType(json['emulation']),
+      emulationEngine: TerminalEmulatorBackend.fromString(
+        json['emulationEngine'] as String?,
+      ),
       appearance: NautermTerminalAppearanceConfig.fromJson(json['appearance']),
       behavior: NautermTerminalBehaviorConfig.fromJson(json['behavior']),
       features: NautermTerminalFeaturesConfig.fromJson(json['features']),
@@ -226,6 +231,7 @@ class NautermTerminalConfig {
     return NautermTerminalConfig(
       shellPath: shellPath,
       emulation: emulation,
+      emulationEngine: emulationEngine,
       appearance: appearance ?? this.appearance,
       behavior: behavior,
       features: features,
@@ -236,6 +242,7 @@ class NautermTerminalConfig {
   Map<String, Object?> toJson() => <String, Object?>{
     'shellPath': shellPath,
     'emulation': emulation.term,
+    'emulationEngine': emulationEngine.name,
     'appearance': appearance.toJson(),
     'behavior': behavior.toJson(),
     'features': features.toJson(),

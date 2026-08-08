@@ -577,6 +577,32 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
                 ),
                 SizedBox(height: 18),
                 _SettingsRow(
+                  localizationKey: 'settings.terminal.emulator',
+                  title: 'Emulation Engine',
+                  subtitle:
+                      'Selects the emulation engine used by new terminal sessions.',
+                  trailing: _SettingsSelect(
+                    key: const ValueKey('settings-terminal-emulator-select'),
+                    label: 'Emulation Engine',
+                    showLabel: false,
+                    value: state._emulatorBackend.name,
+                    values: TerminalEmulatorBackend.values
+                        .map((backend) => backend.name)
+                        .toList(growable: false),
+                    format: (value) => switch (value) {
+                      'ghostty' => 'Ghostty',
+                      _ => 'Alacritty',
+                    },
+                    onChanged: (value) {
+                      final backend = TerminalEmulatorBackend.fromString(value);
+                      state._mutate(() => state._emulatorBackend = backend);
+                      terminalEmulatorBackend = backend;
+                      state._persistRuntimeSettings();
+                    },
+                  ),
+                ),
+                SizedBox(height: 18),
+                _SettingsRow(
                   localizationKey: 'settings.terminal.emulation',
                   title: 'Emulation Type',
                   subtitle:

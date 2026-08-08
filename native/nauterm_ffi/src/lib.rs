@@ -3,6 +3,8 @@ mod cloud_sync;
 mod crypto;
 mod database;
 mod ffi;
+#[cfg(feature = "terminal-ghostty")]
+mod ghostty_terminal;
 mod github_gist_sync;
 mod github_sync;
 mod mosh;

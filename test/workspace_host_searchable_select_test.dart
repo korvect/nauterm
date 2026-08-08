@@ -626,10 +626,7 @@ void main() {
 
     expect(find.text('New Snippet'), findsOneWidget);
     expect(
-      tester
-          .widget<TextField>(_textFieldForLabel('Description'))
-          .controller!
-          .text,
+      tester.widget<TextField>(_textFieldForLabel('Script *')).controller!.text,
       'Deploy app',
     );
     await tester.tap(find.byTooltip('Close'));

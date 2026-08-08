@@ -71,6 +71,7 @@ class NautermConfigStore {
       scrollbackLines: terminal.behavior.scrollbackLines,
       sshKeepaliveIntervalSeconds: config.ssh.keepaliveInterval ~/ 1000,
       emulationType: terminal.emulation,
+      emulatorBackend: terminal.emulationEngine,
       themeId: terminal.appearance.themeId,
       customThemeJson: terminal.appearance.customThemeJson,
       cursor: terminal.appearance.cursor,
@@ -97,6 +98,7 @@ class NautermConfigStore {
         terminal: NautermTerminalConfig(
           shellPath: settings.shellPath,
           emulation: settings.emulationType,
+          emulationEngine: settings.emulatorBackend,
           appearance: NautermTerminalAppearanceConfig(
             themeId: settings.themeId,
             customThemeJson: settings.customThemeJson,
