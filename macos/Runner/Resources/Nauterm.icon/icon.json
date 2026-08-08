@@ -1,55 +1,32 @@
 {
-  "fill" : "automatic",
+  "fill" : {
+    "automatic-gradient" : "extended-srgb:0.00000,0.53333,1.00000,1.00000"
+  },
   "groups" : [
     {
-      "hidden" : false,
       "layers" : [
         {
-          "blend-mode" : "normal",
-          "fill" : "none",
-          "glass" : true,
-          "hidden" : false,
           "image-name" : "Frame 2.png",
           "name" : "Frame 2"
         },
         {
-          "glass" : false,
-          "hidden" : false,
-          "image-name" : "Frame 1.png",
-          "name" : "Frame 1"
-        },
-        {
-          "glass" : false,
-          "hidden" : false,
           "image-name" : "Frame 3.png",
           "name" : "Frame 3"
         },
         {
-          "hidden" : false,
-          "image-name" : "Frame 4.png",
-          "name" : "Frame 4"
+          "image-name" : "Frame 1.png",
+          "name" : "Frame 1"
         }
       ],
+      "lighting" : "individual",
       "shadow" : {
         "kind" : "neutral",
-        "opacity" : 0.6
+        "opacity" : 0.5
       },
+      "specular" : true,
       "translucency" : {
-        "enabled" : true,
-        "value" : 0.2
-      }
-    },
-    {
-      "layers" : [
-
-      ],
-      "shadow" : {
-        "kind" : "neutral",
-        "opacity" : 0.6
-      },
-      "translucency" : {
-        "enabled" : true,
-        "value" : 0.2
+        "enabled" : false,
+        "value" : 0.5
       }
     }
   ],
