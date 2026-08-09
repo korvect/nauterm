@@ -438,6 +438,9 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
                                     onExportKeyToHost: (key) {
                                       _exportKey(_mapKey(key));
                                     },
+                                    onExportKeyToFile: (key) {
+                                      unawaited(_exportKeyToFile(key));
+                                    },
                                     onDeleteKey: (key) {
                                       () async {
                                         await _deleteKey(_mapKey(key));

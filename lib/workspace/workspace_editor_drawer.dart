@@ -201,6 +201,7 @@ class _WorkspaceEditorDrawer extends StatelessWidget {
     required this.onSaveKey,
     required this.onDuplicateKey,
     required this.onExportKeyToHost,
+    required this.onExportKeyToFile,
     required this.onDeleteKey,
     required this.onSaveIdentity,
     required this.onDuplicateIdentity,
@@ -254,6 +255,7 @@ class _WorkspaceEditorDrawer extends StatelessWidget {
   final _SaveKey onSaveKey;
   final ValueChanged<KeyEntry> onDuplicateKey;
   final ValueChanged<KeyEntry> onExportKeyToHost;
+  final ValueChanged<KeyEntry> onExportKeyToFile;
   final ValueChanged<KeyEntry> onDeleteKey;
   final _SaveIdentity onSaveIdentity;
   final ValueChanged<IdentityEntry> onDuplicateIdentity;
@@ -334,6 +336,7 @@ class _WorkspaceEditorDrawer extends StatelessWidget {
         onSave: onSaveKey,
         onDuplicate: onDuplicateKey,
         onExportToHost: onExportKeyToHost,
+        onExportToFile: onExportKeyToFile,
         onDelete: onDeleteKey,
       ),
       _KeyExportEditorRequest() => _KeyExportEditorContent(
@@ -881,6 +884,14 @@ class _EditorShellMenuAction {
     return _EditorShellMenuAction(
       label: 'Export to Host',
       icon: Icons.upload_rounded,
+      onSelected: onSelected,
+    );
+  }
+
+  factory _EditorShellMenuAction.exportToFile(VoidCallback onSelected) {
+    return _EditorShellMenuAction(
+      label: 'Export to File',
+      icon: Icons.save_alt_rounded,
       onSelected: onSelected,
     );
   }

@@ -884,6 +884,138 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
     _openEditor(_KeyExportEditorRequest(key: existing));
   }
 
+  Future<void> _exportKeyToFile(KeyEntry key) async {
+    final materials = <String, String>{
+      '': ?_emptyToNull(key.privateKey),
+      '.pub': ?_emptyToNull(key.publicKey),
+      '-cert.pub': ?_emptyToNull(key.certificate),
+    };
+    if (materials.isEmpty) {
+      _showWorkspaceMessage('No key material is available to export.');
+      return;
+    }
+
+    try {
+      final initialDirectory = await _prepareSshKeyExportDirectory();
+      final directoryPath = await _runExclusiveFilePicker(
+        () => getDirectoryPath(
+          initialDirectory: initialDirectory,
+          confirmButtonText: 'Export',
+        ),
+      );
+      if (directoryPath == null || directoryPath.trim().isEmpty) {
+        return;
+      }
+
+      final directory = io.Directory(directoryPath.trim());
+      final basePath = await _availableSshKeyBasePath(
+        directory,
+        _suggestedSshKeyFilename(key.name),
+        materials.keys,
+      );
+      final outputs = <io.File>[];
+      for (final entry in materials.entries) {
+        final output = io.File('$basePath${entry.key}');
+        final contents = entry.value.endsWith('\n')
+            ? entry.value
+            : '${entry.value}\n';
+        await output.writeAsString(contents, encoding: utf8, flush: true);
+        if (io.Platform.isMacOS || io.Platform.isLinux) {
+          await _setSshExportFileMode(
+            output,
+            entry.key.isEmpty ? '600' : '644',
+          );
+        }
+        outputs.add(output);
+      }
+      if (mounted) {
+        _showWorkspaceMessage(
+          'Exported ${outputs.length} key ${outputs.length == 1 ? 'file' : 'files'} to ${directory.path}.',
+        );
+      }
+    } on Object catch (error) {
+      if (mounted) {
+        _showWorkspaceMessage('Failed to export key: $error');
+      }
+    }
+  }
+
+  Future<String> _availableSshKeyBasePath(
+    io.Directory directory,
+    String filename,
+    Iterable<String> suffixes,
+  ) async {
+    var attempt = 1;
+    while (true) {
+      final suffix = attempt == 1 ? '' : '-$attempt';
+      final basePath =
+          '${directory.path}${io.Platform.pathSeparator}$filename$suffix';
+      var available = true;
+      for (final extension in suffixes) {
+        if (await io.File('$basePath$extension').exists()) {
+          available = false;
+          break;
+        }
+      }
+      if (available) {
+        return basePath;
+      }
+      attempt++;
+    }
+  }
+
+  Future<void> _setSshExportFileMode(io.File file, String mode) async {
+    final result = await io.Process.run('/bin/chmod', [mode, file.path]);
+    if (result.exitCode == 0) {
+      return;
+    }
+    final detail = result.stderr.toString().trim();
+    throw io.FileSystemException(
+      detail.isEmpty ? 'Unable to set key file permissions.' : detail,
+      file.path,
+    );
+  }
+
+  Future<String?> _prepareSshKeyExportDirectory() async {
+    final home = io.Platform.isWindows
+        ? io.Platform.environment['USERPROFILE'] ??
+              io.Platform.environment['HOME']
+        : io.Platform.environment['HOME'] ??
+              io.Platform.environment['USERPROFILE'];
+    if (home == null || home.trim().isEmpty) {
+      return null;
+    }
+
+    final directory = io.Directory(
+      '${home.trim()}${io.Platform.pathSeparator}.ssh',
+    );
+    try {
+      await directory.create(recursive: true);
+      if (io.Platform.isMacOS || io.Platform.isLinux) {
+        await io.Process.run('/bin/chmod', ['700', directory.path]);
+      }
+      return directory.path;
+    } on Object {
+      return home.trim();
+    }
+  }
+
+  String _suggestedSshKeyFilename(String name) {
+    var filename = name
+        .trim()
+        .replaceAll(RegExp(r'(?:-cert\.pub|\.pub)$', caseSensitive: false), '')
+        .replaceAll(RegExp(r'[\\/:*?"<>|\x00-\x1f]+'), '-')
+        .replaceAll(RegExp(r'\s+'), '-')
+        .replaceAll(RegExp(r'^\.+|[. -]+$'), '');
+    if (RegExp(
+      r'^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$',
+      caseSensitive: false,
+    ).hasMatch(filename)) {
+      filename = '_$filename';
+    }
+    return filename.isEmpty ? 'id_key' : filename;
+  }
+
   Future<void> _exportKeyToHost(KeyEntry key, _KeyExportDraft draft) async {
     final publicKey = _emptyToNull(key.publicKey);
     if (publicKey == null) {
@@ -1769,6 +1901,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       case _ContextMenuActionId.newHostInGroup:
       case _ContextMenuActionId.copySshCommand:
       case _ContextMenuActionId.exportToHost:
+      case _ContextMenuActionId.exportToFile:
         break;
     }
   }
@@ -1957,6 +2090,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       case _ContextMenuActionId.newHostInGroup:
       case _ContextMenuActionId.copySshCommand:
       case _ContextMenuActionId.exportToHost:
+      case _ContextMenuActionId.exportToFile:
         break;
     }
   }
@@ -1996,6 +2130,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       case _ContextMenuActionId.newHostInGroup:
       case _ContextMenuActionId.copySshCommand:
       case _ContextMenuActionId.exportToHost:
+      case _ContextMenuActionId.exportToFile:
         break;
     }
   }
@@ -2464,6 +2599,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       case _ContextMenuActionId.convertToHost:
       case _ContextMenuActionId.copySshCommand:
       case _ContextMenuActionId.exportToHost:
+      case _ContextMenuActionId.exportToFile:
         break;
     }
   }
@@ -2501,6 +2637,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       case _ContextMenuActionId.newHostInGroup:
       case _ContextMenuActionId.copySshCommand:
       case _ContextMenuActionId.exportToHost:
+      case _ContextMenuActionId.exportToFile:
         break;
     }
   }
@@ -2578,6 +2715,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       case _ContextMenuActionId.newHostInGroup:
       case _ContextMenuActionId.copySshCommand:
       case _ContextMenuActionId.exportToHost:
+      case _ContextMenuActionId.exportToFile:
         break;
     }
   }
@@ -2662,6 +2800,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       case _ContextMenuActionId.newHostInGroup:
       case _ContextMenuActionId.run:
       case _ContextMenuActionId.exportToHost:
+      case _ContextMenuActionId.exportToFile:
         break;
     }
   }
@@ -2908,6 +3047,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       case _ContextMenuActionId.newHostInGroup:
       case _ContextMenuActionId.copySshCommand:
       case _ContextMenuActionId.exportToHost:
+      case _ContextMenuActionId.exportToFile:
         break;
     }
   }
@@ -3169,6 +3309,7 @@ if (\$dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
       case _ContextMenuActionId.newHostInGroup:
       case _ContextMenuActionId.copySshCommand:
       case _ContextMenuActionId.exportToHost:
+      case _ContextMenuActionId.exportToFile:
         break;
     }
   }
@@ -3212,6 +3353,14 @@ if (\$dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
         break;
       case _ContextMenuActionId.exportToHost:
         _exportKey(item);
+        break;
+      case _ContextMenuActionId.exportToFile:
+        final key = _dataStore?.getKey(item.id);
+        if (key == null) {
+          _showWorkspaceMessage('Key is not available.');
+          break;
+        }
+        unawaited(_exportKeyToFile(key));
         break;
       case _ContextMenuActionId.delete:
         unawaited(_deleteKey(item));
@@ -3311,6 +3460,7 @@ if (\$dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
       case _ContextMenuActionId.newHostInGroup:
       case _ContextMenuActionId.copySshCommand:
       case _ContextMenuActionId.exportToHost:
+      case _ContextMenuActionId.exportToFile:
         break;
     }
   }
@@ -3374,6 +3524,7 @@ if (\$dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
       case _ContextMenuActionId.newHostInGroup:
       case _ContextMenuActionId.copySshCommand:
       case _ContextMenuActionId.exportToHost:
+      case _ContextMenuActionId.exportToFile:
         break;
     }
   }
@@ -3504,6 +3655,7 @@ if (\$dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
       case _ContextMenuActionId.newHostInGroup:
       case _ContextMenuActionId.copySshCommand:
       case _ContextMenuActionId.exportToHost:
+      case _ContextMenuActionId.exportToFile:
         break;
     }
   }
@@ -3541,6 +3693,7 @@ if (\$dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
       case _ContextMenuActionId.newHostInGroup:
       case _ContextMenuActionId.copySshCommand:
       case _ContextMenuActionId.exportToHost:
+      case _ContextMenuActionId.exportToFile:
         break;
     }
   }

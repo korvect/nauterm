@@ -445,6 +445,7 @@ class _KeyEditorContent extends StatefulWidget {
     required this.onSave,
     required this.onDuplicate,
     required this.onExportToHost,
+    required this.onExportToFile,
     required this.onDelete,
   });
 
@@ -453,6 +454,7 @@ class _KeyEditorContent extends StatefulWidget {
   final _SaveKey onSave;
   final ValueChanged<KeyEntry> onDuplicate;
   final ValueChanged<KeyEntry> onExportToHost;
+  final ValueChanged<KeyEntry> onExportToFile;
   final ValueChanged<KeyEntry> onDelete;
 
   @override
@@ -846,6 +848,9 @@ class _KeyEditorContentState extends State<_KeyEditorContent> {
           : [
               _EditorShellMenuAction.exportToHost(
                 () => widget.onExportToHost(initial!),
+              ),
+              _EditorShellMenuAction.exportToFile(
+                () => widget.onExportToFile(initial!),
               ),
               _EditorShellMenuAction.duplicate(
                 () => widget.onDuplicate(initial!),

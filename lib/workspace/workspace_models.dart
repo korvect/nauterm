@@ -867,6 +867,7 @@ enum _ContextMenuActionId {
   newHostInGroup,
   copySshCommand,
   exportToHost,
+  exportToFile,
   delete,
 }
 
@@ -1177,6 +1178,12 @@ const List<Object> _keyMenuRows = [
     label: 'Export to Host',
     localizationKey: 'workspace.label.exportToHost',
     id: _ContextMenuActionId.exportToHost,
+  ),
+  _ContextMenuAction(
+    icon: Icons.save_alt_rounded,
+    label: 'Export to File',
+    localizationKey: 'workspace.label.exportToFile',
+    id: _ContextMenuActionId.exportToFile,
   ),
   _ContextMenuAction(
     icon: LucideIcons.pencil,
