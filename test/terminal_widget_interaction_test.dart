@@ -412,8 +412,40 @@ void main() {
     );
     await tester.pump();
 
-    expect(driver.scrolledLines, isNot(0));
+    expect(driver.scrolledLines, lessThan(0));
     expect(outerController.offset, 0);
+  });
+
+  testWidgets('terminal wheel reports the natural scroll direction to apps', (
+    tester,
+  ) async {
+    final inputs = <String>[];
+    final driver = _SnapshotDriver(
+      TerminalSnapshot.blank(
+        columns: 80,
+        rows: 8,
+        keyboardMode: const TerminalKeyboardMode(
+          mouseReportClick: true,
+          sgrMouse: true,
+        ),
+      ),
+    );
+    final controller = TerminalController(driver: driver, onInput: inputs.add);
+    addTearDown(controller.dispose);
+    await _pumpTerminal(tester, controller);
+
+    await tester.sendEventToBinding(
+      PointerScrollEvent(
+        position: tester.getCenter(
+          find.byKey(const ValueKey('terminal-renderer-region')),
+        ),
+        scrollDelta: const Offset(0, 20),
+      ),
+    );
+    await tester.pump();
+
+    expect(inputs, hasLength(1));
+    expect(inputs.single, startsWith('\x1b[<65;'));
   });
 
   testWidgets('mouse selection copies selected terminal text', (tester) async {
@@ -750,7 +782,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(driver.snapshot.displayOffset, greaterThan(0));
+    expect(driver.snapshot.displayOffset, greaterThan(10));
     expect(_terminalPainter(tester).selection, selectionBefore);
   });
 

@@ -1390,7 +1390,10 @@ impl TerminalEmulator for GhosttyTerminalEngine {
     }
 
     fn scroll_lines(&mut self, lines: i32) {
-        self.scroll(SCROLL_VIEWPORT_DELTA, lines as isize);
+        // TerminalEmulator defines positive lines as scrolling up into
+        // history, while libghostty-vt's viewport delta uses the opposite
+        // direction.
+        self.scroll(SCROLL_VIEWPORT_DELTA, -(lines as isize));
     }
 
     fn scroll_page_up(&mut self) {
@@ -2685,6 +2688,13 @@ mod tests {
         terminal.write_bytes(b"one\r\ntwo\r\nthree\r\nfour");
         let bottom = terminal.snapshot();
         assert!(bottom.history_lines >= 2);
+        assert_eq!(bottom.display_offset, 0);
+
+        terminal.scroll_lines(1);
+        assert!(terminal.snapshot().display_offset > 0);
+        terminal.scroll_lines(-1);
+        assert_eq!(terminal.snapshot().display_offset, 0);
+
         terminal.scroll_page_up();
         assert!(terminal.snapshot().display_offset > 0);
         terminal.scroll_to_bottom();
