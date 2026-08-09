@@ -1094,7 +1094,12 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
   }
 
   void _handleConfigChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    if (!terminalSelectCommandBlockOnClick && _commandBlockSelection != null) {
+      _setCommandBlockSelection(null, block: null);
+      return;
+    }
+    setState(() {});
   }
 
   @override
@@ -2409,7 +2414,8 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
     if (anchor != null &&
         tapCount == 1 &&
         !didSelectText &&
-        !suppressCommandBlock) {
+        !suppressCommandBlock &&
+        terminalSelectCommandBlockOnClick) {
       final block = widget.controller.commandBlockAt(position);
       if (block != null && block.selection == previousCommandBlock) {
         _setCommandBlockSelection(null, block: null);

@@ -829,6 +829,27 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
                 ),
                 SizedBox(height: 18),
                 _SettingsRow(
+                  localizationKey:
+                      'settings.terminal.selectCommandBlockOnClick',
+                  title: 'Select Command Block on Click',
+                  subtitle:
+                      'Click a command or its output to select the block.',
+                  trailing: _SettingsSwitch(
+                    key: const ValueKey(
+                      'settings-terminal-select-command-block-on-click-switch',
+                    ),
+                    value: state._selectCommandBlockOnClick,
+                    onChanged: (value) {
+                      state._mutate(
+                        () => state._selectCommandBlockOnClick = value,
+                      );
+                      terminalSelectCommandBlockOnClick = value;
+                      state._persistRuntimeSettings();
+                    },
+                  ),
+                ),
+                SizedBox(height: 18),
+                _SettingsRow(
                   localizationKey: 'settings.terminal.composer',
                   title: 'Composer',
                   subtitle: 'Show the command input bar below the terminal.',

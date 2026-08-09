@@ -44,6 +44,15 @@ void main() {
     );
   });
 
+  test('selecting a command block on click defaults to enabled', () {
+    expect(
+      NautermConfig.fromJson(const {
+        'schemaVersion': 1,
+      }).terminal.behavior.selectCommandBlockOnClick,
+      isTrue,
+    );
+  });
+
   test('selects the platform default config asset', () {
     expect(
       NautermConfigStore.defaultConfigAssetPath(TargetPlatform.macOS),
@@ -276,6 +285,7 @@ void main() {
     await store.saveRuntimeSettings(
       const NautermRuntimeSettings(
         copyOnSelect: true,
+        selectCommandBlockOnClick: false,
         font: TerminalFontConfig(
           family: 'JetBrains Mono',
           cjkFamily: 'Sarasa Mono SC',
@@ -328,6 +338,7 @@ void main() {
 
     final loaded = await store.loadRuntimeSettings();
     expect(loaded.copyOnSelect, isTrue);
+    expect(loaded.selectCommandBlockOnClick, isFalse);
     expect(loaded.font.family, 'JetBrains Mono');
     expect(loaded.font.cjkFamily, 'Sarasa Mono SC');
     expect(loaded.font.size, 15);
@@ -372,6 +383,7 @@ void main() {
     expect(persistedFont['cjkFamily'], 'Sarasa Mono SC');
     expect((terminal['appearance'] as Map)['scrollbar'], isFalse);
     expect((terminal['behavior'] as Map)['copyOnSelect'], isTrue);
+    expect((terminal['behavior'] as Map)['selectCommandBlockOnClick'], isFalse);
     expect((terminal['features'] as Map)['autocomplete'], isTrue);
     expect((terminal['input'] as Map)['useOptionAsMetaKey'], isFalse);
     expect((json['tabs'] as Map)['confirmOnClose'], isTrue);

@@ -253,8 +253,8 @@ const _settingsSearchEntries = <_SettingsSearchEntry>[
     page: _SettingsPage.terminal,
     section: 'terminal-interaction',
     title: 'Composer',
-    subtitle: 'Command composer, autocomplete, and multiple tabs.',
-    keywords: 'input suggestions multi tab',
+    subtitle: 'Selection, command blocks, composer, and multiple tabs.',
+    keywords: 'input suggestions selection click command block multi tab',
   ),
   _SettingsSearchEntry(
     page: _SettingsPage.terminal,
@@ -382,6 +382,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
   AppThemeMode _applicationTheme = appThemeMode;
   AppLanguage _applicationLanguage = appLanguage;
   bool _copyOnSelect = terminalCopyOnSelect;
+  bool _selectCommandBlockOnClick = terminalSelectCommandBlockOnClick;
   bool _composerEnabled = terminalComposerEnabled;
   bool _multiTabEnabled = terminalMultiTabEnabled;
   bool _scrollbarEnabled = terminalScrollbarEnabled;
@@ -664,6 +665,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
         _aiProviders = allProviders;
         _selectedAiProviderIndex = activeIndex >= 0 ? activeIndex : 0;
         _copyOnSelect = settings.copyOnSelect;
+        _selectCommandBlockOnClick = settings.selectCommandBlockOnClick;
         _applicationLanguage = settings.appLanguage;
         _composerEnabled = settings.composerEnabled;
         _multiTabEnabled = settings.multiTabEnabled;
@@ -1400,6 +1402,8 @@ class _SettingsPanelState extends State<SettingsPanel> {
       if (pages.contains(_SettingsPage.terminal)) {
         _copyOnSelect = defaults.copyOnSelect;
         terminalCopyOnSelect = defaults.copyOnSelect;
+        _selectCommandBlockOnClick = defaults.selectCommandBlockOnClick;
+        terminalSelectCommandBlockOnClick = defaults.selectCommandBlockOnClick;
         _composerEnabled = defaults.composerEnabled;
         terminalComposerEnabled = defaults.composerEnabled;
         terminalAutocompleteEnabled = defaults.autocompleteEnabled;

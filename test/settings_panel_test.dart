@@ -381,6 +381,21 @@ void main() {
       find.byKey(const ValueKey('settings-terminal-scroll-view')),
       findsOneWidget,
     );
+    final selectCommandBlockOnClickSwitch = find.byKey(
+      const ValueKey('settings-terminal-select-command-block-on-click-switch'),
+    );
+    await tester.scrollUntilVisible(
+      selectCommandBlockOnClickSwitch,
+      300,
+      scrollable: find
+          .descendant(
+            of: find.byKey(const ValueKey('settings-terminal-scroll-view')),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    expect(find.text('Select Command Block on Click'), findsOneWidget);
+    expect(selectCommandBlockOnClickSwitch, findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
   });

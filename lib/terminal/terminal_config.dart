@@ -15,6 +15,7 @@ const TerminalConfig defaultTerminalConfig = TerminalConfig();
 const int maxSshKeepaliveIntervalSeconds = 0xffffffff;
 
 bool terminalCopyOnSelect = false;
+bool terminalSelectCommandBlockOnClick = true;
 bool terminalComposerEnabled = true;
 bool terminalAutocompleteEnabled = false;
 bool terminalMultiTabEnabled = false;
@@ -422,6 +423,7 @@ class NautermRuntimeSettings {
     required this.copyOnSelect,
     required this.font,
     required this.keyboard,
+    this.selectCommandBlockOnClick = true,
     this.shortcuts = const TerminalShortcutConfig(),
     this.sftp = const SftpConfig(),
     this.aiAssistant = const AiAssistantConfig(),
@@ -449,6 +451,7 @@ class NautermRuntimeSettings {
   });
 
   final bool copyOnSelect;
+  final bool selectCommandBlockOnClick;
   final TerminalFontConfig font;
   final TerminalKeyboardConfig keyboard;
   final TerminalShortcutConfig shortcuts;
@@ -479,6 +482,7 @@ class NautermRuntimeSettings {
 
 void applyNautermRuntimeSettings(NautermRuntimeSettings settings) {
   terminalCopyOnSelect = settings.copyOnSelect;
+  terminalSelectCommandBlockOnClick = settings.selectCommandBlockOnClick;
   terminalComposerEnabled = settings.composerEnabled;
   terminalAutocompleteEnabled = settings.autocompleteEnabled;
   terminalMultiTabEnabled = settings.multiTabEnabled;
@@ -523,6 +527,7 @@ void applyNautermRuntimeSettings(NautermRuntimeSettings settings) {
 NautermRuntimeSettings currentNautermRuntimeSettings() {
   return NautermRuntimeSettings(
     copyOnSelect: terminalCopyOnSelect,
+    selectCommandBlockOnClick: terminalSelectCommandBlockOnClick,
     font: terminalFontConfig,
     keyboard: terminalKeyboardConfig,
     shortcuts: terminalShortcutConfig,

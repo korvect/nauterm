@@ -24,6 +24,7 @@ void main() {
   setUp(() {
     clipboardText = '';
     terminalAutocompleteEnabled = false;
+    terminalSelectCommandBlockOnClick = true;
     terminalScrollbarEnabled = true;
     terminalShortcutConfig = const TerminalShortcutConfig();
     binding.defaultBinaryMessenger.setMockMethodCallHandler(
@@ -501,6 +502,32 @@ void main() {
     await tester.tapAt(outputPosition, kind: PointerDeviceKind.mouse);
     await tester.pump();
     expect(_terminalPainter(tester).commandBlockSelection, isNull);
+  });
+
+  testWidgets('selecting a command block on click can be disabled', (
+    tester,
+  ) async {
+    final previous = terminalSelectCommandBlockOnClick;
+    terminalSelectCommandBlockOnClick = false;
+    addTearDown(() => terminalSelectCommandBlockOnClick = previous);
+    final driver = MemoryTerminalDriver(columns: 80, rows: 8);
+    final controller = TerminalController(driver: driver);
+    addTearDown(controller.dispose);
+    await _pumpTerminal(tester, controller, autofocusTerminal: true);
+    controller.write('user@host:~\$ ls\r\noutput');
+    await tester.pump();
+
+    final metrics = TerminalMetrics.measure(
+      defaultTerminalConfig.font.textStyle(),
+    );
+    await tester.tapAt(
+      _cellCenter(metrics, column: 2, row: 1),
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pump();
+
+    expect(_terminalPainter(tester).commandBlockSelection, isNull);
+    expect(controller.selectedCommandBlock, isNull);
   });
 
   testWidgets('click returning from composer only focuses the terminal', (

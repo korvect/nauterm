@@ -56,6 +56,7 @@ class NautermConfigStore {
     final terminal = config.terminal;
     return NautermRuntimeSettings(
       copyOnSelect: terminal.behavior.copyOnSelect,
+      selectCommandBlockOnClick: terminal.behavior.selectCommandBlockOnClick,
       font: terminal.appearance.font,
       keyboard: terminal.input,
       shortcuts: config.shortcuts,
@@ -110,6 +111,7 @@ class NautermConfigStore {
           ),
           behavior: NautermTerminalBehaviorConfig(
             copyOnSelect: settings.copyOnSelect,
+            selectCommandBlockOnClick: settings.selectCommandBlockOnClick,
             scrollbackLines: settings.scrollbackLines,
           ),
           features: NautermTerminalFeaturesConfig(
