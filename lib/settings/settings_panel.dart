@@ -254,7 +254,8 @@ const _settingsSearchEntries = <_SettingsSearchEntry>[
     section: 'terminal-interaction',
     title: 'Composer',
     subtitle: 'Selection, command blocks, composer, and multiple tabs.',
-    keywords: 'input suggestions selection click command block multi tab',
+    keywords:
+        'input suggestions autocomplete selection click command block multi tab',
   ),
   _SettingsSearchEntry(
     page: _SettingsPage.terminal,
