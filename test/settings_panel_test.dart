@@ -397,7 +397,8 @@ void main() {
     await tester.pumpAndSettle();
 
     final field = find.byKey(const ValueKey('settings-sftp-ssh-editor-input'));
-    await tester.ensureVisible(field);
+    await Scrollable.ensureVisible(tester.element(field), alignment: 0.5);
+    await tester.pumpAndSettle();
     await tester.enterText(
       find.descendant(of: field, matching: find.byType(EditableText)),
       '1234567890',
@@ -413,7 +414,9 @@ void main() {
       Offset(rect.right - 4, rect.center.dy),
       kind: PointerDeviceKind.mouse,
     );
+    await tester.pump();
     await gesture.moveTo(Offset(rect.left + 4, rect.center.dy));
+    await tester.pump();
     await gesture.up();
     await tester.pump();
 
