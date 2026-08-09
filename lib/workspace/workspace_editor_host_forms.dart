@@ -1853,6 +1853,7 @@ class _HostEditorContentState extends State<_HostEditorContent> {
             _WorkspaceInput(
               controller: _nameController,
               label: tr('common.label.name', fallback: 'Name'),
+              isRequired: true,
               errorText: _nameError,
               autofocus: isLocal,
             ),
@@ -2428,11 +2429,8 @@ String _suggestHostName({
   String compose(String username, String port) {
     final user = username.trim();
     final normalizedPort = port.trim();
-    return [
-      if (user.isNotEmpty) user,
-      address,
-      if (normalizedPort.isNotEmpty) normalizedPort,
-    ].join(':');
+    final target = user.isEmpty ? address : '$user@$address';
+    return normalizedPort.isEmpty ? target : '$target:$normalizedPort';
   }
 
   if (sshEnabled) {

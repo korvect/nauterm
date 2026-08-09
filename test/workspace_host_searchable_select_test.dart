@@ -79,7 +79,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 250));
 
-    final nameDecorator = _decoratorForLabel('Name');
+    final nameDecorator = _decoratorForLabel('Name *');
     final typeDecorator = _decoratorForLabel('Type');
     final parentGroupDecorator = _decoratorForLabel('Parent group');
     expect(tester.getSize(nameDecorator).height, 40);
@@ -91,7 +91,7 @@ void main() {
       tester.getRect(typeDecorator).top - tester.getRect(nameDecorator).bottom,
       10,
     );
-    final nameContainerRect = _containerRectForLabel(tester, 'Name');
+    final nameContainerRect = _containerRectForLabel(tester, 'Name *');
     final parentGroupContainerRect = _containerRectForLabel(
       tester,
       'Parent group',
@@ -111,7 +111,7 @@ void main() {
       19,
     );
 
-    final nameField = _textFieldForLabel('Name');
+    final nameField = _textFieldForLabel('Name *');
     expect(tester.widget<TextField>(nameField).style?.fontSize, 14);
     expect(tester.widget<TextField>(nameField).textAlignVertical, isNull);
     expect(
@@ -267,7 +267,7 @@ void main() {
     expect(find.text('New Group'), findsNothing);
     expect(find.text('New Host'), findsOneWidget);
     expect(
-      tester.widget<TextField>(_textFieldForLabel('Name')).controller!.text,
+      tester.widget<TextField>(_textFieldForLabel('Name *')).controller!.text,
       'host-draft',
     );
 
@@ -287,7 +287,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 250));
 
-    final nameField = _textFieldForLabel('Name');
+    final nameField = _textFieldForLabel('Name *');
     await tester.tap(nameField);
     await tester.enterText(nameField, 'filled-host-name');
     await tester.sendKeyEvent(LogicalKeyboardKey.tab);
@@ -351,7 +351,7 @@ void main() {
         .controller!;
     await tester.enterText(host, 'server.example.com');
     await tester.pump();
-    final name = _textFieldForLabel('Name');
+    final name = _textFieldForLabel('Name *');
     final nameController = tester.widget<TextField>(name).controller!;
     expect(nameController.text, 'server.example.com:22');
     await _scrollEditorFieldIntoView(tester, 'Username');
@@ -359,7 +359,7 @@ void main() {
     await tester.enterText(username, 'admin');
     await tester.pump();
 
-    expect(nameController.text, 'admin:server.example.com:22');
+    expect(nameController.text, 'admin@server.example.com:22');
 
     nameController.text = 'Production';
     hostController.text = 'other.example.com';
@@ -372,7 +372,7 @@ void main() {
 
     portController.text = '2200';
     await tester.pump();
-    expect(nameController.text, 'admin:other.example.com:2200');
+    expect(nameController.text, 'admin@other.example.com:2200');
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -740,7 +740,7 @@ void main() {
     await tester.tap(find.text('New host'));
     await tester.pump(const Duration(milliseconds: 250));
 
-    await tester.enterText(_textFieldForLabel('Name'), 'host-draft');
+    await tester.enterText(_textFieldForLabel('Name *'), 'host-draft');
     await tester.tap(_sidebarSectionFinder('Keychain'));
     await tester.pump(const Duration(milliseconds: 250));
 
@@ -754,7 +754,7 @@ void main() {
 
     expect(find.text('New Host'), findsOneWidget);
     expect(
-      tester.widget<TextField>(_textFieldForLabel('Name')).controller!.text,
+      tester.widget<TextField>(_textFieldForLabel('Name *')).controller!.text,
       'host-draft',
     );
 
