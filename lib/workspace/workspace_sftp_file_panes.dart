@@ -759,7 +759,7 @@ class _SftpPathBar extends StatelessWidget {
         return Container(
           height: 46,
           color: _card,
-          padding: const EdgeInsets.fromLTRB(10, 0, 14, 8),
+          padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
           child: Row(
             children: [
               _SftpPathNavButton(
