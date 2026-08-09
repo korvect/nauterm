@@ -4,7 +4,8 @@ use std::process::Command;
 
 const REQUIRED_ZIG_VERSION: &str = "0.16.0";
 const GHOSTTY_REPOSITORY: &str = "https://github.com/ghostty-org/ghostty.git";
-const GHOSTTY_COMMIT: &str = "2602886144c7e95099c9e2ba07f181c69e7276f3";
+const GHOSTTY_COMMIT: &str = "f64f4aca2c29b554d111b36c3d946a9bddd159ff";
+const GHOSTTY_VERSION: &str = "1.3.2-dev";
 
 fn main() {
     println!("cargo:rerun-if-env-changed=NAUTERM_ZIG");
@@ -50,6 +51,7 @@ fn main() {
             "-Demit-lib-vt=true",
             "-Demit-xcframework=false",
             "-Doptimize=ReleaseFast",
+            &format!("-Dversion-string={GHOSTTY_VERSION}"),
             &format!("-Dtarget={zig_target}"),
             "--prefix",
         ])
