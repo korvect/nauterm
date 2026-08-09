@@ -137,7 +137,7 @@ void main() {
     await tester.pump();
 
     expect(
-      find.byKey(const ValueKey('workspace-field-error:Rule name *')),
+      find.byKey(const ValueKey('workspace-field-error:Rule name')),
       findsNothing,
     );
 
@@ -145,24 +145,24 @@ void main() {
     await tester.pump();
 
     expect(
-      find.byKey(const ValueKey('workspace-field-error:Rule name *')),
+      find.byKey(const ValueKey('workspace-field-error:Rule name')),
       findsOneWidget,
     );
     expect(
-      find.byKey(const ValueKey('workspace-field-error:Local port number *')),
+      find.byKey(const ValueKey('workspace-field-error:Local port number')),
       findsOneWidget,
     );
     expect(
-      find.byKey(const ValueKey('workspace-field-error:Intermediate host *')),
+      find.byKey(const ValueKey('workspace-field-error:Intermediate host')),
       findsOneWidget,
     );
     expect(
-      find.byKey(const ValueKey('workspace-field-error:Destination address *')),
+      find.byKey(const ValueKey('workspace-field-error:Destination address')),
       findsOneWidget,
     );
     expect(
       find.byKey(
-        const ValueKey('workspace-field-error:Destination port number *'),
+        const ValueKey('workspace-field-error:Destination port number'),
       ),
       findsOneWidget,
     );
@@ -182,7 +182,7 @@ void main() {
       isTrue,
     );
     expect(
-      find.byKey(const ValueKey('workspace-field-error:Local port number *')),
+      find.byKey(const ValueKey('workspace-field-error:Local port number')),
       findsOneWidget,
     );
 
@@ -198,7 +198,7 @@ void main() {
 
     expect(tester.widget<TextField>(ruleNameField).focusNode?.hasFocus, isTrue);
     expect(
-      find.byKey(const ValueKey('workspace-field-error:Rule name *')),
+      find.byKey(const ValueKey('workspace-field-error:Rule name')),
       findsNothing,
     );
 

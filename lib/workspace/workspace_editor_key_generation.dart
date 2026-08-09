@@ -871,8 +871,8 @@ class _KeyEditorContentState extends State<_KeyEditorContent> {
               SizedBox(height: _workspaceFormFieldGap),
               _WorkspaceInput(
                 controller: _privateController,
-                label:
-                    '${tr('common.label.privateKey', fallback: 'Private key')} *',
+                label: tr('common.label.privateKey', fallback: 'Private key'),
+                isRequired: true,
                 errorText: _privateKeyError,
                 minLines: 4,
                 maxLines: 8,
@@ -936,8 +936,8 @@ class _KeyEditorContentState extends State<_KeyEditorContent> {
               else
                 _WorkspaceInput(
                   controller: _privateController,
-                  label:
-                      '${tr('common.label.privateKey', fallback: 'Private key')} *',
+                  label: tr('common.label.privateKey', fallback: 'Private key'),
+                  isRequired: true,
                   errorText: _privateKeyError,
                   minLines: 4,
                   maxLines: 8,

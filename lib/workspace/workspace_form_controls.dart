@@ -549,6 +549,7 @@ class _WorkspaceInput extends StatelessWidget {
     required this.label,
     this.hintText,
     this.size,
+    this.isRequired = false,
     this.floatingLabel = true,
     this.autofocus = false,
     this.obscureText = false,
@@ -568,6 +569,7 @@ class _WorkspaceInput extends StatelessWidget {
   final String label;
   final String? hintText;
   final _WorkspaceControlSize? size;
+  final bool isRequired;
   final bool floatingLabel;
   final bool autofocus;
   final bool obscureText;
@@ -595,6 +597,7 @@ class _WorkspaceInput extends StatelessWidget {
       label: tr(label),
       hintText: hintText == null ? null : tr(hintText!),
       size: effectiveSize,
+      isRequired: isRequired,
       floatingLabel: floatingLabel,
       autofocus: autofocus,
       obscureText: obscureText,
@@ -619,6 +622,7 @@ class _WorkspaceInputField extends StatefulWidget {
     required this.label,
     required this.hintText,
     required this.size,
+    required this.isRequired,
     required this.floatingLabel,
     required this.autofocus,
     required this.obscureText,
@@ -639,6 +643,7 @@ class _WorkspaceInputField extends StatefulWidget {
   final String label;
   final String? hintText;
   final _WorkspaceControlSize size;
+  final bool isRequired;
   final bool floatingLabel;
   final bool autofocus;
   final bool obscureText;
@@ -717,6 +722,7 @@ class _WorkspaceInputFieldState extends State<_WorkspaceInputField> {
         widget.controller.text.isNotEmpty;
     return _WorkspaceFieldFrame(
       label: widget.label,
+      isRequired: widget.isRequired,
       size: widget.size,
       focused: _focusNode.hasFocus,
       floatingLabel: widget.floatingLabel,
@@ -912,6 +918,7 @@ class _WorkspaceSelect<T> extends StatefulWidget {
     required this.items,
     required this.onChanged,
     this.size,
+    this.isRequired = false,
     this.floatingLabel = true,
     this.editable = false,
     this.searchable = false,
@@ -936,6 +943,7 @@ class _WorkspaceSelect<T> extends StatefulWidget {
   final List<DropdownMenuItem<T>> items;
   final ValueChanged<T?> onChanged;
   final _WorkspaceControlSize? size;
+  final bool isRequired;
   final bool floatingLabel;
   final bool editable;
   final bool searchable;
@@ -1544,6 +1552,7 @@ class _WorkspaceSelectState<T> extends State<_WorkspaceSelect<T>> {
         child: _WorkspaceFieldFrame(
           frameKey: _fieldKey,
           label: widget.label,
+          isRequired: widget.isRequired,
           size: _effectiveSize,
           focused: _open || _inputFocusNode.hasFocus,
           floatingLabel: widget.floatingLabel,
@@ -1830,6 +1839,7 @@ class _WorkspaceFieldFrame extends StatelessWidget {
   const _WorkspaceFieldFrame({
     super.key,
     required this.label,
+    this.isRequired = false,
     required this.size,
     required this.focused,
     required this.floatingLabel,
@@ -1845,6 +1855,7 @@ class _WorkspaceFieldFrame extends StatelessWidget {
   });
 
   final String label;
+  final bool isRequired;
   final _WorkspaceControlSize size;
   final bool focused;
   final bool floatingLabel;
@@ -1867,6 +1878,8 @@ class _WorkspaceFieldFrame extends StatelessWidget {
     final focusColor = terminalColors?.accent ?? _blue;
     final error = errorText?.trim();
     final hasError = error?.isNotEmpty == true;
+    final translatedLabel = tr(label);
+    final displayLabel = isRequired ? '$translatedLabel *' : translatedLabel;
     const errorColor = Color(0xffe5453d);
     final fieldHeight = height ?? size.inputHeight;
     final frame = SizedBox(
@@ -1877,8 +1890,8 @@ class _WorkspaceFieldFrame extends StatelessWidget {
         expands: true,
         textAlignVertical: textAlignVertical ?? TextAlignVertical.center,
         decoration: InputDecoration(
-          labelText: floatingLabel ? tr(label) : null,
-          hintText: floatingLabel ? null : tr(label),
+          labelText: floatingLabel ? displayLabel : null,
+          hintText: floatingLabel ? null : displayLabel,
           alignLabelWithHint: alignLabelWithHint,
           labelStyle: TextStyle(
             color: hasError ? errorColor : muted,

@@ -557,7 +557,8 @@ class _GroupEditorContentState extends State<_GroupEditorContent> {
                 );
                 final input = _WorkspaceInput(
                   controller: _nameController,
-                  label: 'Name *',
+                  label: 'Name',
+                  isRequired: true,
                   errorText: _nameError,
                   autofocus: true,
                 );

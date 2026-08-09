@@ -190,7 +190,8 @@ class _KeyExportEditorContentState extends State<_KeyExportEditorContent> {
           title: 'Destination',
           children: [
             _WorkspaceSelect<int?>(
-              label: 'Host *',
+              label: 'Host',
+              isRequired: true,
               value: _hostId,
               errorText: _hostError,
               editable: true,
@@ -213,13 +214,15 @@ class _KeyExportEditorContentState extends State<_KeyExportEditorContent> {
             SizedBox(height: _workspaceFormFieldGap),
             _WorkspaceInput(
               controller: _locationController,
-              label: 'Location (\$1) *',
+              label: 'Location (\$1)',
+              isRequired: true,
               errorText: _locationError,
             ),
             SizedBox(height: _workspaceFormFieldGap),
             _WorkspaceInput(
               controller: _filenameController,
-              label: 'Filename (\$2) *',
+              label: 'Filename (\$2)',
+              isRequired: true,
               errorText: _filenameError,
             ),
             SizedBox(height: 12),

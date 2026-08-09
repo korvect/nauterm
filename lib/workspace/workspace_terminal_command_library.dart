@@ -397,6 +397,7 @@ class _TerminalSnippetEditorState extends State<_TerminalSnippetEditor> {
                       _WorkspaceInput(
                         controller: _scriptController,
                         label: 'Script',
+                        isRequired: true,
                         size: _WorkspaceControlSize.medium,
                         autofocus: true,
                         minLines: 6,

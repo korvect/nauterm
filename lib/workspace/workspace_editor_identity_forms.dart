@@ -202,7 +202,8 @@ class _IdentityEditorContentState extends State<_IdentityEditorContent> {
             SizedBox(height: _workspaceFormFieldGap),
             _WorkspaceInput(
               controller: _usernameController,
-              label: 'Username *',
+              label: 'Username',
+              isRequired: true,
               errorText: _usernameError,
             ),
             SizedBox(height: _workspaceFormFieldGap),
@@ -472,11 +473,20 @@ class _PortForwardEditorContentState extends State<_PortForwardEditorContent> {
     final isDynamic = _type == 'dynamic';
     final isRemote = _type == 'remote';
     final bindPortLabel = isRemote
-        ? '${tr('workspace.portForward.field.remotePort', fallback: 'Remote port number')} *'
-        : '${tr('workspace.portForward.field.localPort', fallback: 'Local port number')} *';
+        ? tr(
+            'workspace.portForward.field.remotePort',
+            fallback: 'Remote port number',
+          )
+        : tr(
+            'workspace.portForward.field.localPort',
+            fallback: 'Local port number',
+          );
     final hostLabel = isRemote
-        ? '${tr('workspace.portForward.field.remoteHost', fallback: 'Remote host')} *'
-        : '${tr('workspace.portForward.field.intermediateHost', fallback: 'Intermediate host')} *';
+        ? tr('workspace.portForward.field.remoteHost', fallback: 'Remote host')
+        : tr(
+            'workspace.portForward.field.intermediateHost',
+            fallback: 'Intermediate host',
+          );
 
     return _EditorShell(
       title: initial == null
@@ -495,8 +505,8 @@ class _PortForwardEditorContentState extends State<_PortForwardEditorContent> {
           children: [
             _WorkspaceInput(
               controller: _nameController,
-              label:
-                  '${tr('workspace.label.ruleName', fallback: 'Rule name')} *',
+              label: tr('workspace.label.ruleName', fallback: 'Rule name'),
+              isRequired: true,
               errorText: _nameError,
             ),
             SizedBox(height: _workspaceFormFieldGap),
@@ -553,6 +563,7 @@ class _PortForwardEditorContentState extends State<_PortForwardEditorContent> {
               port: _WorkspaceInput(
                 controller: _bindPortController,
                 label: bindPortLabel,
+                isRequired: true,
                 errorText: _bindPortError,
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -574,6 +585,7 @@ class _PortForwardEditorContentState extends State<_PortForwardEditorContent> {
           children: [
             _WorkspaceSelect<int?>(
               label: hostLabel,
+              isRequired: true,
               value: _hostId,
               errorText: _hostError,
               editable: true,
@@ -604,14 +616,20 @@ class _PortForwardEditorContentState extends State<_PortForwardEditorContent> {
               _WorkspaceAddressPortFields(
                 address: _WorkspaceInput(
                   controller: _destinationHostController,
-                  label:
-                      '${tr('workspace.portForward.field.destinationAddress', fallback: 'Destination address')} *',
+                  label: tr(
+                    'workspace.portForward.field.destinationAddress',
+                    fallback: 'Destination address',
+                  ),
+                  isRequired: true,
                   errorText: _destinationHostError,
                 ),
                 port: _WorkspaceInput(
                   controller: _destinationPortController,
-                  label:
-                      '${tr('workspace.portForward.field.destinationPort', fallback: 'Destination port number')} *',
+                  label: tr(
+                    'workspace.portForward.field.destinationPort',
+                    fallback: 'Destination port number',
+                  ),
+                  isRequired: true,
                   errorText: _destinationPortError,
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -870,8 +888,8 @@ class _ProxyEditorContentState extends State<_ProxyEditorContent> {
           children: [
             _WorkspaceInput(
               controller: _nameController,
-              label:
-                  '${tr('workspace.label.proxyName', fallback: 'Proxy name')} *',
+              label: tr('workspace.label.proxyName', fallback: 'Proxy name'),
+              isRequired: true,
               errorText: _nameError,
             ),
             SizedBox(height: _workspaceFormFieldGap),
@@ -897,12 +915,14 @@ class _ProxyEditorContentState extends State<_ProxyEditorContent> {
             _WorkspaceAddressPortFields(
               address: _WorkspaceInput(
                 controller: _hostController,
-                label: '${tr('common.label.host', fallback: 'Host')} *',
+                label: tr('common.label.host', fallback: 'Host'),
+                isRequired: true,
                 errorText: _hostError,
               ),
               port: _WorkspaceInput(
                 controller: _portController,
-                label: '${tr('common.label.port', fallback: 'Port')} *',
+                label: tr('common.label.port', fallback: 'Port'),
+                isRequired: true,
                 errorText: _portError,
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -1062,7 +1082,8 @@ class _SnippetPackageEditorContentState
           children: [
             _WorkspaceInput(
               controller: _nameController,
-              label: 'Name *',
+              label: 'Name',
+              isRequired: true,
               errorText: _nameError,
               autofocus: true,
             ),
@@ -1248,7 +1269,8 @@ class _SnippetEditorContentState extends State<_SnippetEditorContent> {
             SizedBox(height: _workspaceFormFieldGap),
             _WorkspaceInput(
               controller: _scriptController,
-              label: '${tr('common.label.script', fallback: 'Script')} *',
+              label: tr('common.label.script', fallback: 'Script'),
+              isRequired: true,
               errorText: _scriptError,
               minLines: 6,
               maxLines: 10,
