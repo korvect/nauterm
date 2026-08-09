@@ -3,6 +3,16 @@ part of 'nauterm_workspace.dart';
 const _workspacePanelTransitionDuration = Duration(milliseconds: 180);
 const _workspacePanelTransitionCurve = Curves.easeInOutCubic;
 
+@visibleForTesting
+bool shouldUseTerminalChrome({
+  required bool terminalPageVisible,
+  required TerminalConnectionPhase phase,
+  required bool hasConnectedOnce,
+}) {
+  return terminalPageVisible &&
+      (phase == TerminalConnectionPhase.connected || hasConnectedOnce);
+}
+
 extension _NautermWorkspaceRendering on _NautermWorkspaceState {
   Widget _buildTopBar(_TerminalTab? selectedTerminalTab) {
     Widget buildTopBar() {
@@ -74,11 +84,16 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
   }
 
   bool _usesTerminalChrome(_TerminalTab? selectedTerminalTab) {
-    if (selectedTerminalTab?.pageMode == _TerminalTabPageMode.sftp) {
+    final controller = selectedTerminalTab?.controller;
+    if (controller == null) {
       return false;
     }
-    return selectedTerminalTab?.controller.connectionStatus.phase ==
-        TerminalConnectionPhase.connected;
+    return shouldUseTerminalChrome(
+      terminalPageVisible:
+          selectedTerminalTab!.pageMode == _TerminalTabPageMode.ssh,
+      phase: controller.connectionStatus.phase,
+      hasConnectedOnce: controller.hasConnectedOnce,
+    );
   }
 
   bool _usesConnectionPageChrome(_TerminalTab? selectedTerminalTab) {

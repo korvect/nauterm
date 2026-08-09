@@ -24,4 +24,37 @@ void main() {
       isTrue,
     );
   });
+
+  test('terminal chrome remains active while reconnecting', () {
+    expect(
+      shouldUseTerminalChrome(
+        terminalPageVisible: true,
+        phase: TerminalConnectionPhase.connecting,
+        hasConnectedOnce: true,
+      ),
+      isTrue,
+    );
+  });
+
+  test('terminal chrome waits for the first successful connection', () {
+    expect(
+      shouldUseTerminalChrome(
+        terminalPageVisible: true,
+        phase: TerminalConnectionPhase.connecting,
+        hasConnectedOnce: false,
+      ),
+      isFalse,
+    );
+  });
+
+  test('SFTP pages do not use terminal chrome', () {
+    expect(
+      shouldUseTerminalChrome(
+        terminalPageVisible: false,
+        phase: TerminalConnectionPhase.connected,
+        hasConnectedOnce: true,
+      ),
+      isFalse,
+    );
+  });
 }
