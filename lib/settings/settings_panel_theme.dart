@@ -496,10 +496,14 @@ class _ApplicationThemePreviewSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final background = dark ? const Color(0xff111827) : const Color(0xfffbfcfd);
-    final sidebar = dark ? const Color(0xff202b3d) : const Color(0xffedf1f4);
-    final line = dark ? const Color(0xff344158) : const Color(0xffe8edf1);
-    final field = dark ? const Color(0xff1d293b) : Colors.white;
+    final background = dark
+        ? NautermPalette.dark.background
+        : const Color(0xfffbfcfd);
+    final sidebar = dark
+        ? NautermPalette.dark.surface
+        : const Color(0xffedf1f4);
+    final line = dark ? NautermPalette.dark.outline : const Color(0xffe8edf1);
+    final field = dark ? NautermPalette.dark.surfaceContainer : Colors.white;
     return ColoredBox(
       color: background,
       child: Padding(

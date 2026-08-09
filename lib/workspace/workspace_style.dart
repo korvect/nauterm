@@ -11,37 +11,38 @@ bool get _workspaceDark {
 }
 
 Color get _topBar =>
-    _workspaceDark ? const Color(0xff171d25) : const Color(0xff363c51);
+    _workspaceDark ? const Color(0xff282828) : const Color(0xff363c51);
 Color get _topBarForeground =>
-    _workspaceDark ? const Color(0xffa4b3bd) : const Color(0xffaeb6c8);
+    _workspaceDark ? NautermPalette.dark.mutedText : const Color(0xffaeb6c8);
 Color get _topBarTabActive =>
-    _workspaceDark ? const Color(0xff222b35) : const Color(0xff4a5065);
+    _workspaceDark ? const Color(0xff3a3a3a) : const Color(0xff4a5065);
 Color get _topBarTabInactive =>
-    _workspaceDark ? const Color(0xff1b222b) : const Color(0xff40465b);
+    _workspaceDark ? const Color(0xff303030) : const Color(0xff40465b);
 Color get _sidebar =>
-    _workspaceDark ? const Color(0xff171d25) : const Color(0xfff6f9f9);
+    _workspaceDark ? const Color(0xff282828) : const Color(0xfff6f9f9);
 Color get _sidebarDivider =>
-    _workspaceDark ? const Color(0xff303a46) : const Color(0xffdbe6e8);
+    _workspaceDark ? NautermPalette.dark.outline : const Color(0xffdbe6e8);
 Color get _sidebarHover =>
-    _workspaceDark ? const Color(0xff222b35) : const Color(0xffedf4f5);
+    _workspaceDark ? const Color(0xff383838) : const Color(0xffedf4f5);
 Color get _sidebarPressed =>
-    _workspaceDark ? const Color(0xff2c3844) : const Color(0xffc7d5d8);
+    _workspaceDark ? const Color(0xff444444) : const Color(0xffc7d5d8);
 Color get _surface =>
-    _workspaceDark ? const Color(0xff12161c) : const Color(0xffedf3f3);
+    _workspaceDark ? NautermPalette.dark.background : const Color(0xffedf3f3);
 Color get _card =>
-    _workspaceDark ? const Color(0xff1a2028) : const Color(0xffffffff);
-Color get _cardHover =>
-    _workspaceDark ? const Color(0xff202832) : const Color(0xfffbfdfd);
+    _workspaceDark ? NautermPalette.dark.surface : const Color(0xffffffff);
+Color get _cardHover => _workspaceDark
+    ? NautermPalette.dark.surfaceContainer
+    : const Color(0xfffbfdfd);
 Color get _mutedText =>
-    _workspaceDark ? const Color(0xff8fa0aa) : const Color(0xff8ca0a6);
+    _workspaceDark ? NautermPalette.dark.mutedText : const Color(0xff8ca0a6);
 Color get _text =>
-    _workspaceDark ? const Color(0xffedf3f7) : const Color(0xff151927);
+    _workspaceDark ? NautermPalette.dark.text : const Color(0xff151927);
 Color get _blue =>
-    _workspaceDark ? const Color(0xff4da6ff) : const Color(0xff168df2);
+    _workspaceDark ? NautermPalette.dark.primary : const Color(0xff168df2);
 Color get _orange =>
-    _workspaceDark ? const Color(0xffff7a57) : const Color(0xffff5425);
+    _workspaceDark ? const Color(0xffff9f0a) : const Color(0xffff5425);
 Color get _green =>
-    _workspaceDark ? const Color(0xff35d394) : const Color(0xff35d394);
+    _workspaceDark ? NautermPalette.dark.secondary : const Color(0xff35d394);
 Color get _topBarDestructiveHover =>
     _workspaceDark ? const Color(0xffe05545) : const Color(0xffe05545);
 const double _topBarHeight = 44;
@@ -69,16 +70,17 @@ const double _contextMenuWidth = 286;
 const double _contextSubmenuWidth = 190;
 const Duration _contextMenuAnimationDuration = Duration(milliseconds: 78);
 const Duration _workspacePageTransitionDuration = Duration(milliseconds: 130);
-Color get _workspaceMenuBackground =>
-    _workspaceDark ? const Color(0xff202832) : const Color(0xffffffff);
+Color get _workspaceMenuBackground => _workspaceDark
+    ? NautermPalette.dark.surfaceContainer
+    : const Color(0xffffffff);
 Color get _workspaceMenuBorder =>
-    _workspaceDark ? const Color(0xff303a46) : const Color(0xffd9e3e6);
+    _workspaceDark ? NautermPalette.dark.outline : const Color(0xffd9e3e6);
 Color get _workspaceMenuHover =>
-    _workspaceDark ? const Color(0xff293340) : const Color(0xfff0f4f5);
+    _workspaceDark ? const Color(0xff3e3e3e) : const Color(0xfff0f4f5);
 Color get _workspaceMenuPressed =>
-    _workspaceDark ? const Color(0xff303c49) : const Color(0xffe9f1f3);
+    _workspaceDark ? const Color(0xff484848) : const Color(0xffe9f1f3);
 Color get _workspaceMenuDisabledText =>
-    _workspaceDark ? const Color(0xff5f707d) : const Color(0xffc2d0d5);
+    _workspaceDark ? const Color(0xff737373) : const Color(0xffc2d0d5);
 ButtonStyle? get _workspaceIconButtonInteractionStyle => _workspaceDark
     ? IconButton.styleFrom(
         hoverColor: _sidebarHover,

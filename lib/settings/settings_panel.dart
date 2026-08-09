@@ -85,22 +85,24 @@ bool get _settingsDark {
 }
 
 Color get _primary =>
-    _settingsDark ? const Color(0xff4da6ff) : const Color(0xff2563eb);
+    _settingsDark ? NautermPalette.dark.primary : const Color(0xff2563eb);
 Color get _secondary =>
-    _settingsDark ? const Color(0xff35d394) : const Color(0xff10b981);
-Color get _surface => _settingsDark ? const Color(0xff1a2028) : Colors.white;
-Color get _surfaceContainer =>
-    _settingsDark ? const Color(0xff202832) : const Color(0xfff9fafb);
+    _settingsDark ? NautermPalette.dark.secondary : const Color(0xff10b981);
+Color get _surface =>
+    _settingsDark ? NautermPalette.dark.surface : Colors.white;
+Color get _surfaceContainer => _settingsDark
+    ? NautermPalette.dark.surfaceContainer
+    : const Color(0xfff9fafb);
 Color get _text =>
-    _settingsDark ? const Color(0xffedf3f7) : const Color(0xff111827);
+    _settingsDark ? NautermPalette.dark.text : const Color(0xff111827);
 Color get _mutedText =>
-    _settingsDark ? const Color(0xffa4b3bd) : const Color(0xff4b5563);
+    _settingsDark ? NautermPalette.dark.mutedText : const Color(0xff4b5563);
 Color get _faintText =>
-    _settingsDark ? const Color(0xff73838f) : const Color(0xff9ca3af);
+    _settingsDark ? NautermPalette.dark.faintText : const Color(0xff9ca3af);
 Color get _softOutline =>
-    _settingsDark ? const Color(0xff303a46) : const Color(0xffe5e7eb);
+    _settingsDark ? NautermPalette.dark.outline : const Color(0xffe5e7eb);
 Color get _settingsFieldHover =>
-    _settingsDark ? const Color(0xff232c37) : const Color(0xfff8fafc);
+    _settingsDark ? const Color(0xff3a3a3a) : const Color(0xfff8fafc);
 const double _settingsSelectHeight = 34;
 const double _settingsFieldFontSize = 14;
 const double _settingsFieldTextHeight = 18;

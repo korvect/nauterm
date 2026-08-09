@@ -40,16 +40,16 @@ class NautermPalette extends ThemeExtension<NautermPalette> {
   );
 
   static const dark = NautermPalette(
-    background: Color(0xff12161c),
-    surface: Color(0xff1a2028),
-    surfaceContainer: Color(0xff202832),
-    text: Color(0xffedf3f7),
-    mutedText: Color(0xffa4b3bd),
-    faintText: Color(0xff73838f),
-    outline: Color(0xff303a46),
-    softOutline: Color(0xff28323d),
-    primary: Color(0xff4da6ff),
-    secondary: Color(0xff35d394),
+    background: Color(0xff202020),
+    surface: Color(0xff2c2c2c),
+    surfaceContainer: Color(0xff343434),
+    text: Color(0xfff2f2f2),
+    mutedText: Color(0xffb8b8b8),
+    faintText: Color(0xff858585),
+    outline: Color(0xff464646),
+    softOutline: Color(0xff3a3a3a),
+    primary: Color(0xff0a84ff),
+    secondary: Color(0xff30d158),
   );
 
   @override
@@ -134,16 +134,16 @@ ThemeData nautermTheme([Brightness brightness = Brightness.light]) {
     extensions: [palette],
     textSelectionTheme: TextSelectionThemeData(
       cursorColor: palette.primary,
-      selectionColor: dark ? const Color(0x554da6ff) : const Color(0x3356b8ff),
+      selectionColor: dark ? const Color(0x550a84ff) : const Color(0x3356b8ff),
       selectionHandleColor: palette.primary,
     ),
     scrollbarTheme: ScrollbarThemeData(
       thumbColor: WidgetStateProperty.resolveWith((states) {
         if (states.contains(WidgetState.hovered) ||
             states.contains(WidgetState.dragged)) {
-          return dark ? const Color(0xff72808c) : const Color(0xff8da2aa);
+          return dark ? const Color(0xff767676) : const Color(0xff8da2aa);
         }
-        return dark ? const Color(0xff4b5864) : const Color(0xffb7c7cc);
+        return dark ? const Color(0xff555555) : const Color(0xffb7c7cc);
       }),
       trackColor: const WidgetStatePropertyAll(Colors.transparent),
     ),
