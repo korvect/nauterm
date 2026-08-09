@@ -300,6 +300,8 @@ void main() {
           sshEditor: 'nano',
           showTab: false,
           textFileExtensions: ['md', 'toml'],
+          concurrentTasks: 6,
+          transferThreads: 16,
         ),
         aiAssistant: AiAssistantConfig(
           protocol: AiApiProtocol.anthropic,
@@ -334,6 +336,8 @@ void main() {
     expect(loaded.sftp.sshEditor, 'nano');
     expect(loaded.sftp.showTab, isFalse);
     expect(loaded.sftp.textFileExtensions, ['md', 'toml']);
+    expect(loaded.sftp.concurrentTasks, 6);
+    expect(loaded.sftp.transferThreads, 16);
     expect(loaded.autocompleteEnabled, isTrue);
     expect(loaded.scrollbarEnabled, isFalse);
     expect(loaded.sshKeepaliveIntervalSeconds, 45);
@@ -402,7 +406,11 @@ void main() {
         Platform.environment['USERPROFILE'] ??
         Directory.current.path;
     final normalizedHome = home.replaceAll('/', Platform.pathSeparator);
-    expect(defaultDownloadDirectory(), normalizedHome);
+    expect(defaultSftpLocalDirectory(), normalizedHome);
+    expect(
+      fallbackDownloadsDirectory(),
+      '$normalizedHome${Platform.pathSeparator}Downloads',
+    );
   });
 
   test('saving a terminal theme preserves unrelated settings', () async {

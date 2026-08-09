@@ -61,7 +61,9 @@
   "sftp": {
     "showTab": true,
     "sshEditor": "vim",
-    "showHiddenFiles": false
+    "showHiddenFiles": false,
+    "concurrentTasks": 3,
+    "transferThreads": 8
   },
   "workspace": {
     "enabled": true

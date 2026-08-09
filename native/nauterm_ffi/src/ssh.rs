@@ -10,7 +10,7 @@ use std::future::Future;
 use std::io::{Read, Seek, SeekFrom, Write as _};
 use std::path::{Path, PathBuf};
 use std::ptr;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::thread::{self, JoinHandle};
@@ -23,7 +23,7 @@ use russh::keys::known_hosts;
 use russh::keys::{decode_secret_key, Error as KeyError, HashAlg, PrivateKeyWithHashAlg};
 use russh::ChannelMsg;
 use serde::Deserialize;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use zeroize::Zeroize;
 
 mod auth;
@@ -54,6 +54,7 @@ const SSH_SHUTDOWN_TIMEOUT: Duration = Duration::from_millis(250);
 const SSH_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(20);
 const SSH_KEEPALIVE_MISSES: usize = 3;
 const SUDO_SFTP_SESSION_LIFETIME: Duration = Duration::from_secs(15 * 60);
+const SFTP_MAX_CHANNEL_WINDOW_SIZE: u32 = 16 * 1024 * 1024;
 
 pub type ShellHistoryResult = Result<(Option<String>, String), String>;
 pub type ShellHistoryReceiver = Receiver<ShellHistoryResult>;
@@ -253,6 +254,8 @@ enum SftpTaskRequest {
     Download {
         remote_path: String,
         local_path: String,
+        #[serde(default = "default_sftp_transfer_threads")]
+        transfer_threads: usize,
         #[serde(default)]
         sudo_password: Option<String>,
         #[serde(default)]
@@ -261,8 +264,17 @@ enum SftpTaskRequest {
     Upload {
         local_path: String,
         remote_path: String,
+        #[serde(default = "default_sftp_transfer_threads")]
+        transfer_threads: usize,
         #[serde(default)]
         replace_existing: bool,
+        #[serde(default)]
+        sudo_password: Option<String>,
+        #[serde(default)]
+        sudo_session_id: Option<String>,
+    },
+    CleanupUpload {
+        remote_path: String,
         #[serde(default)]
         sudo_password: Option<String>,
         #[serde(default)]
@@ -305,10 +317,23 @@ enum SftpTaskRequest {
 }
 
 impl SftpTaskRequest {
+    fn transfer_threads(&self) -> usize {
+        match self {
+            Self::Download {
+                transfer_threads, ..
+            }
+            | Self::Upload {
+                transfer_threads, ..
+            } => (*transfer_threads).clamp(1, 32),
+            _ => default_sftp_transfer_threads(),
+        }
+    }
+
     fn take_sudo_password(&mut self) -> Option<String> {
         match self {
             Self::Download { sudo_password, .. }
             | Self::Upload { sudo_password, .. }
+            | Self::CleanupUpload { sudo_password, .. }
             | Self::Move { sudo_password, .. }
             | Self::Copy { sudo_password, .. }
             | Self::Mkdir { sudo_password, .. }
@@ -322,6 +347,9 @@ impl SftpTaskRequest {
                 sudo_session_id, ..
             }
             | Self::Upload {
+                sudo_session_id, ..
+            }
+            | Self::CleanupUpload {
                 sudo_session_id, ..
             }
             | Self::Move {
@@ -338,6 +366,10 @@ impl SftpTaskRequest {
             } => sudo_session_id.take(),
         }
     }
+}
+
+const fn default_sftp_transfer_threads() -> usize {
+    8
 }
 
 #[derive(Clone, Debug, serde::Serialize)]
@@ -357,6 +389,15 @@ struct SftpTaskProgress {
     cancel: Arc<AtomicBool>,
     total_bytes: u64,
     transferred_bytes: u64,
+    concurrent: Option<SftpConcurrentProgress>,
+}
+
+#[derive(Clone)]
+struct SftpConcurrentProgress {
+    callback: SftpTaskProgressCallback,
+    user_data: usize,
+    total_bytes: u64,
+    transferred_bytes: Arc<AtomicU64>,
 }
 
 static SFTP_TASK_CANCEL_FLAGS: OnceLock<Mutex<HashMap<u64, Arc<AtomicBool>>>> = OnceLock::new();
@@ -671,6 +712,7 @@ pub fn execute_sftp_task_blocking_with_trust(
                 cancel: sftp_task_cancel_flag(task_id),
                 total_bytes: 0,
                 transferred_bytes: 0,
+                concurrent: None,
             },
         );
         finish_sftp_task(task_id);
@@ -709,6 +751,7 @@ pub fn execute_sftp_task_blocking_with_trust(
             cancel,
             total_bytes: 0,
             transferred_bytes: 0,
+            concurrent: None,
         },
     ));
     finish_sftp_task(task_id);
@@ -730,6 +773,7 @@ fn execute_cached_sudo_sftp_task_blocking(
     mut sudo_password: Option<String>,
     mut progress: SftpTaskProgress,
 ) -> SftpTaskResult {
+    let transfer_threads = request.transfer_threads();
     let runtime = match sudo_sftp_runtime() {
         Ok(runtime) => runtime,
         Err(error) => {
@@ -805,6 +849,7 @@ fn execute_cached_sudo_sftp_task_blocking(
                     host_key_trust_mode,
                     events.clone(),
                     sudo_password_value,
+                    transfer_threads,
                 )
                 .await;
                 if let Some(password) = sudo_password.as_mut() {
@@ -925,11 +970,22 @@ async fn execute_sftp_request(
         SftpTaskRequest::Download {
             remote_path,
             local_path,
+            transfer_threads,
             ..
-        } => download_sftp_path(sftp, &remote_path, Path::new(&local_path), progress).await,
+        } => {
+            download_sftp_path(
+                sftp,
+                &remote_path,
+                Path::new(&local_path),
+                transfer_threads.clamp(1, 32),
+                progress,
+            )
+            .await
+        }
         SftpTaskRequest::Upload {
             local_path,
             remote_path,
+            transfer_threads,
             replace_existing,
             ..
         } => {
@@ -938,9 +994,14 @@ async fn execute_sftp_request(
                 Path::new(&local_path),
                 &remote_path,
                 replace_existing,
+                transfer_threads.clamp(1, 32),
                 progress,
             )
             .await
+        }
+        SftpTaskRequest::CleanupUpload { remote_path, .. } => {
+            sftp::cleanup_sftp_upload_parts(sftp, &remote_path).await;
+            Ok((0, "unknown".to_owned()))
         }
         SftpTaskRequest::Move {
             source_path,
@@ -978,6 +1039,7 @@ async fn execute_sftp_task(
 ) -> SftpTaskResult {
     let events = Arc::new(Mutex::new(Vec::<SessionEvent>::new()));
     let result = async {
+        let transfer_threads = request.transfer_threads();
         let mut sudo_password = request.take_sudo_password();
         let session = match sudo_password.as_deref() {
             Some(sudo_password) => {
@@ -993,6 +1055,7 @@ async fn execute_sftp_task(
                     host_key_trust_mode,
                     events.clone(),
                     sudo_password,
+                    transfer_threads,
                 )
                 .await
             }
@@ -1008,6 +1071,7 @@ async fn execute_sftp_task(
                     proxy.as_ref(),
                     host_key_trust_mode,
                     events.clone(),
+                    transfer_threads,
                 )
                 .await
             }
@@ -1048,6 +1112,21 @@ async fn execute_sftp_task(
 
 fn ssh_client_config() -> Arc<client::Config> {
     ssh_client_config_with_keepalive(SSH_KEEPALIVE_INTERVAL.as_secs() as u32)
+}
+
+fn ssh_client_config_for_sftp(transfer_concurrency: usize) -> Arc<client::Config> {
+    let mut config = client::Config {
+        nodelay: true,
+        keepalive_interval: Some(SSH_KEEPALIVE_INTERVAL),
+        keepalive_max: SSH_KEEPALIVE_MISSES,
+        ..client::Config::default()
+    };
+    let desired_window = transfer_concurrency
+        .clamp(1, 32)
+        .saturating_mul(2 * 256 * 1024)
+        .min(SFTP_MAX_CHANNEL_WINDOW_SIZE as usize);
+    config.window_size = config.window_size.max(desired_window as u32);
+    Arc::new(config)
 }
 
 fn ssh_client_config_with_keepalive(interval_seconds: u32) -> Arc<client::Config> {
@@ -2241,6 +2320,21 @@ mod tests {
     }
 
     #[test]
+    fn sftp_task_request_bounds_transfer_threads() {
+        let default_request = serde_json::from_str::<SftpTaskRequest>(
+            r#"{"op":"upload","local_path":"a","remote_path":"b"}"#,
+        )
+        .unwrap();
+        let oversized_request = serde_json::from_str::<SftpTaskRequest>(
+            r#"{"op":"download","remote_path":"a","local_path":"b","transfer_threads":99}"#,
+        )
+        .unwrap();
+
+        assert_eq!(default_request.transfer_threads(), 8);
+        assert_eq!(oversized_request.transfer_threads(), 32);
+    }
+
+    #[test]
     fn remote_shell_history_header_is_removed_and_normalized() {
         let (shell, content) = parse_shell_history_output(
             "Welcome to the server\nprofile warning\n\
@@ -2402,6 +2496,17 @@ mod tests {
 
         assert_eq!(config.keepalive_interval, None);
         assert_eq!(config.keepalive_max, SSH_KEEPALIVE_MISSES);
+    }
+
+    #[test]
+    fn sftp_channel_window_scales_with_transfer_concurrency() {
+        let single = ssh_client_config_for_sftp(1);
+        let eight = ssh_client_config_for_sftp(8);
+        let oversized = ssh_client_config_for_sftp(99);
+
+        assert_eq!(single.window_size, client::Config::default().window_size);
+        assert_eq!(eight.window_size, 4 * 1024 * 1024);
+        assert_eq!(oversized.window_size, SFTP_MAX_CHANNEL_WINDOW_SIZE);
     }
 
     #[test]

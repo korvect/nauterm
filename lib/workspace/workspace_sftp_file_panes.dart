@@ -53,6 +53,7 @@ class _SftpLocalPane extends StatelessWidget {
     required this.onTaskClearCompleted,
     required this.onTaskDismiss,
     required this.onTaskCancel,
+    required this.onTaskPauseToggle,
     required this.onPathPanelDismiss,
     required this.onPathFavoriteToggle,
     required this.onFavoriteListToggle,
@@ -105,6 +106,7 @@ class _SftpLocalPane extends StatelessWidget {
   final VoidCallback onTaskClearCompleted;
   final ValueChanged<int> onTaskDismiss;
   final ValueChanged<int> onTaskCancel;
+  final ValueChanged<int> onTaskPauseToggle;
   final VoidCallback onPathPanelDismiss;
   final VoidCallback onPathFavoriteToggle;
   final VoidCallback onFavoriteListToggle;
@@ -243,6 +245,7 @@ class _SftpLocalPane extends StatelessWidget {
                     onClearCompleted: onTaskClearCompleted,
                     onDismissTask: onTaskDismiss,
                     onCancelTask: onTaskCancel,
+                    onPauseToggle: onTaskPauseToggle,
                   ),
                 ),
               if (remote &&

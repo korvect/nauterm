@@ -1,6 +1,6 @@
 part of 'nauterm_workspace.dart';
 
-class _TerminalSftpPanel extends StatefulWidget {
+class _TerminalSftpPanel extends ConsumerStatefulWidget {
   const _TerminalSftpPanel({
     required this.sessionId,
     required this.colors,
@@ -29,12 +29,13 @@ class _TerminalSftpPanel extends StatefulWidget {
   final void Function(_HostItem host, _SftpRemoteAuth auth)? onRemoteConnected;
 
   @override
-  State<_TerminalSftpPanel> createState() => _TerminalSftpPanelState();
+  ConsumerState<_TerminalSftpPanel> createState() => _TerminalSftpPanelState();
 }
 
-class _TerminalSftpPanelState extends State<_TerminalSftpPanel> {
+class _TerminalSftpPanelState extends ConsumerState<_TerminalSftpPanel> {
   int _nextRequestId = 0;
   _SftpConnectRequest? _connectRequest;
+  late final _SftpPaneController _paneController;
   SshConnectionProfile? _boundProfile;
   int? _boundHostId;
   String? _boundHostName;
@@ -42,8 +43,18 @@ class _TerminalSftpPanelState extends State<_TerminalSftpPanel> {
   @override
   void initState() {
     super.initState();
+    _paneController = ref.read(
+      _sftpPaneControllerProvider('${widget.sessionId}:sftp-tool'),
+    );
+    _nextRequestId = _paneController.retainedConnectRequest?.id ?? 0;
+    final sameBinding =
+        identical(_paneController.boundToolProfile, widget.profile) &&
+        _paneController.boundToolHostId == widget.profileHost?.id &&
+        _paneController.boundToolHostName == widget.profileHost?.name;
     _rememberConnection();
-    _connectRequest = _createProfileRequest();
+    _connectRequest = sameBinding
+        ? _paneController.retainedConnectRequest ?? _createProfileRequest()
+        : _createProfileRequest();
   }
 
   @override
@@ -63,6 +74,9 @@ class _TerminalSftpPanelState extends State<_TerminalSftpPanel> {
     _boundProfile = widget.profile;
     _boundHostId = host?.id;
     _boundHostName = host?.name;
+    _paneController.boundToolProfile = widget.profile;
+    _paneController.boundToolHostId = host?.id;
+    _paneController.boundToolHostName = host?.name;
   }
 
   _SftpConnectRequest? _createProfileRequest() {
@@ -169,6 +183,7 @@ class _TerminalSftpBrowser extends StatefulWidget {
     required this.onTaskClearCompleted,
     required this.onTaskDismiss,
     required this.onTaskCancel,
+    required this.onTaskPauseToggle,
     required this.onPanelsDismiss,
     required this.onPathFavoriteToggle,
     required this.onFavoriteListToggle,
@@ -215,6 +230,7 @@ class _TerminalSftpBrowser extends StatefulWidget {
   final VoidCallback onTaskClearCompleted;
   final ValueChanged<int> onTaskDismiss;
   final ValueChanged<int> onTaskCancel;
+  final ValueChanged<int> onTaskPauseToggle;
   final VoidCallback onPanelsDismiss;
   final VoidCallback onPathFavoriteToggle;
   final VoidCallback onFavoriteListToggle;
@@ -635,6 +651,7 @@ class _TerminalSftpBrowserState extends State<_TerminalSftpBrowser> {
                 onClearCompleted: widget.onTaskClearCompleted,
                 onDismiss: widget.onTaskDismiss,
                 onCancel: widget.onTaskCancel,
+                onPauseToggle: widget.onTaskPauseToggle,
               ),
             ),
           if (widget.favoriteListOpen)
@@ -714,7 +731,8 @@ class _TerminalSftpTaskButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final active = tasks.where((task) {
       return task.status == _SftpTaskStatus.running ||
-          task.status == _SftpTaskStatus.queued;
+          task.status == _SftpTaskStatus.queued ||
+          task.status == _SftpTaskStatus.paused;
     }).length;
     return Stack(
       clipBehavior: Clip.none,
@@ -888,6 +906,7 @@ class _TerminalSftpTasksPanel extends StatelessWidget {
     required this.onClearCompleted,
     required this.onDismiss,
     required this.onCancel,
+    required this.onPauseToggle,
   });
 
   final _AiAssistantColors colors;
@@ -895,6 +914,7 @@ class _TerminalSftpTasksPanel extends StatelessWidget {
   final VoidCallback onClearCompleted;
   final ValueChanged<int> onDismiss;
   final ValueChanged<int> onCancel;
+  final ValueChanged<int> onPauseToggle;
 
   @override
   Widget build(BuildContext context) {
@@ -960,7 +980,8 @@ class _TerminalSftpTasksPanel extends StatelessWidget {
                       final task = ordered[index];
                       final cancellable =
                           task.status == _SftpTaskStatus.queued ||
-                          task.status == _SftpTaskStatus.running;
+                          task.status == _SftpTaskStatus.running ||
+                          task.status == _SftpTaskStatus.paused;
                       final progress = task.totalBytes > 0
                           ? (task.bytes / task.totalBytes)
                                 .clamp(0.0, 1.0)
@@ -971,70 +992,121 @@ class _TerminalSftpTasksPanel extends StatelessWidget {
                         child: Stack(
                           children: [
                             Padding(
-                              padding: const EdgeInsets.fromLTRB(10, 5, 34, 5),
+                              padding: const EdgeInsets.symmetric(vertical: 5),
                               child: Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text.rich(
-                                    TextSpan(
-                                      children: [
-                                        TextSpan(
-                                          text: _sftpTaskActionLabel(task.type),
-                                        ),
-                                        TextSpan(
-                                          text:
-                                              ' ${_sftpTaskPrimaryPath(task)}',
-                                          style: TextStyle(
-                                            decoration:
-                                                task.status ==
-                                                        _SftpTaskStatus
-                                                            .cancelled ||
-                                                    _sftpTaskLocalPathUnavailable(
-                                                      task,
-                                                    )
-                                                ? TextDecoration.lineThrough
-                                                : TextDecoration.none,
-                                          ),
-                                        ),
-                                      ],
+                                  Padding(
+                                    padding: const EdgeInsets.only(
+                                      left: 10,
+                                      right: 58,
                                     ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      color: colors.foreground,
-                                      fontSize: 10.5,
-                                      fontWeight: NautermFontWeights.medium,
-                                      letterSpacing: 0,
+                                    child: Text.rich(
+                                      TextSpan(
+                                        children: [
+                                          TextSpan(
+                                            text: _sftpTaskActionLabel(
+                                              task.type,
+                                            ),
+                                          ),
+                                          TextSpan(
+                                            text:
+                                                ' ${_sftpTaskPrimaryPath(task)}',
+                                            style: TextStyle(
+                                              decoration:
+                                                  task.status ==
+                                                          _SftpTaskStatus
+                                                              .cancelled ||
+                                                      _sftpTaskLocalPathUnavailable(
+                                                        task,
+                                                      )
+                                                  ? TextDecoration.lineThrough
+                                                  : TextDecoration.none,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: colors.foreground,
+                                        fontSize: 10.5,
+                                        fontWeight: NautermFontWeights.medium,
+                                        letterSpacing: 0,
+                                      ),
                                     ),
                                   ),
                                   const SizedBox(height: 2),
-                                  Text(
-                                    _sftpTaskSubtitle(task),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      color:
-                                          task.status == _SftpTaskStatus.failed
-                                          ? const Color(0xffd54b3f)
-                                          : colors.muted,
-                                      fontSize: 9,
-                                      letterSpacing: 0,
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                    ),
+                                    child: Text(
+                                      _sftpTaskSubtitle(task),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color:
+                                            task.status ==
+                                                _SftpTaskStatus.failed
+                                            ? const Color(0xffd54b3f)
+                                            : colors.muted,
+                                        fontSize: 9,
+                                        letterSpacing: 0,
+                                      ),
                                     ),
                                   ),
                                 ],
                               ),
                             ),
-                            if (task.status == _SftpTaskStatus.running)
+                            if (task.status == _SftpTaskStatus.running ||
+                                task.status == _SftpTaskStatus.paused)
                               Positioned(
                                 left: 10,
-                                right: 34,
+                                right: 10,
                                 bottom: 2,
                                 child: LinearProgressIndicator(
                                   minHeight: 1.5,
                                   value: progress,
-                                  color: colors.accent,
+                                  color: task.status == _SftpTaskStatus.paused
+                                      ? const Color(0xffd18b22)
+                                      : colors.accent,
                                   backgroundColor: colors.inputBackground,
+                                ),
+                              ),
+                            if (_isPausableSftpTask(task) &&
+                                (task.status == _SftpTaskStatus.queued ||
+                                    task.status == _SftpTaskStatus.running ||
+                                    task.status == _SftpTaskStatus.paused))
+                              Positioned(
+                                right: 28,
+                                top: 8,
+                                child: _TerminalSftpIconButton(
+                                  tooltip: task.status == _SftpTaskStatus.paused
+                                      ? tr(
+                                          'common.action.continue',
+                                          fallback: 'Continue',
+                                        )
+                                      : tr(
+                                          'common.action.pause',
+                                          fallback: 'Pause',
+                                        ),
+                                  icon: task.status == _SftpTaskStatus.paused
+                                      ? LucideIcons.play
+                                      : LucideIcons.circlePause,
+                                  colors: colors,
+                                  onPressed:
+                                      task.pauseRequested ||
+                                          task.cancelRequested ||
+                                          (task.status !=
+                                                  _SftpTaskStatus.queued &&
+                                              task.status !=
+                                                  _SftpTaskStatus.running &&
+                                              task.status !=
+                                                  _SftpTaskStatus.paused)
+                                      ? null
+                                      : () => onPauseToggle(task.id),
                                 ),
                               ),
                             Positioned(
@@ -1044,7 +1116,7 @@ class _TerminalSftpTasksPanel extends StatelessWidget {
                                 tooltip: cancellable ? 'Cancel' : 'Dismiss',
                                 icon: LucideIcons.x,
                                 colors: colors,
-                                onPressed: task.cancelRequested
+                                onPressed: cancellable && task.cancelRequested
                                     ? null
                                     : () => cancellable
                                           ? onCancel(task.id)

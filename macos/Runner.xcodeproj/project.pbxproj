@@ -347,6 +347,7 @@
 		};
 		7B0C8A122D4F4A5E00E2B7A1 /* Build Native FFI */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);

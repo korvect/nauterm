@@ -42,10 +42,59 @@ class _SftpPane extends ConsumerStatefulWidget {
   ConsumerState<_SftpPane> createState() => _SftpPaneState();
 }
 
-final _sftpPaneControllerProvider = ChangeNotifierProvider.autoDispose
-    .family<_SftpPaneController, String>(
-      (ref, sessionId) => _SftpPaneController(sessionId),
+final _sftpTaskManagerProvider = ChangeNotifierProvider<_SftpTaskManager>(
+  (ref) => _SftpTaskManager(),
+);
+
+final _sftpPaneControllerProvider =
+    ChangeNotifierProvider.family<_SftpPaneController, String>(
+      (ref, sessionId) =>
+          _SftpPaneController(sessionId, ref.read(_sftpTaskManagerProvider)),
     );
+
+class _SftpTaskManager extends ChangeNotifier {
+  _SftpTaskManager() : downloadsDirectory = _prepareSftpDownloadsDirectory();
+
+  int nextTaskId = 1;
+  int nextHistoryTaskId = -1;
+  List<_SftpTask> _tasks = const [];
+  final Map<int, _SftpPaneState> _owners = <int, _SftpPaneState>{};
+  final Map<int, _QueuedSftpTaskExecution> taskExecutions =
+      <int, _QueuedSftpTaskExecution>{};
+  final Map<int, Completer<_SftpTask>> taskCompletions =
+      <int, Completer<_SftpTask>>{};
+  final Set<int> runningTaskIds = <int>{};
+  final Set<Future<void>> taskCleanupFutures = <Future<void>>{};
+  bool historyLoaded = false;
+  final Future<io.Directory?> downloadsDirectory;
+
+  List<_SftpTask> get tasks => _tasks;
+
+  set tasks(List<_SftpTask> value) {
+    _tasks = value;
+    notifyListeners();
+  }
+
+  void registerOwner(int taskId, _SftpPaneState owner) {
+    _owners[taskId] = owner;
+  }
+
+  _SftpPaneState? ownerOf(int taskId) => _owners[taskId];
+
+  void forgetOwner(int taskId) {
+    _owners.remove(taskId);
+  }
+
+  bool isOwnedBy(int taskId, _SftpPaneState owner) {
+    return identical(_owners[taskId], owner);
+  }
+
+  void pumpQueues() {
+    for (final owner in _owners.values.toSet()) {
+      owner._pumpSftpTaskQueue();
+    }
+  }
+}
 
 class _SftpRemotePaneSession {
   _SftpRemotePaneSession(this.sessionId) {
@@ -136,7 +185,7 @@ class _SftpLocalPaneSession {
 }
 
 class _SftpPaneController extends ChangeNotifier {
-  _SftpPaneController(this.sessionId) {
+  _SftpPaneController(this.sessionId, this.taskManager) {
     final defaultLocalPath = _defaultSftpPath();
     hostSearchController = TextEditingController();
     leftLocal = _SftpLocalPaneSession(defaultLocalPath);
@@ -148,23 +197,48 @@ class _SftpPaneController extends ChangeNotifier {
     rightLocal.filterController.addListener(notifyListeners);
     leftRemote.filterController.addListener(notifyListeners);
     rightRemote.filterController.addListener(notifyListeners);
+    taskManager.addListener(notifyListeners);
   }
 
   final String sessionId;
+  final _SftpTaskManager taskManager;
   late final TextEditingController hostSearchController;
   late final _SftpLocalPaneSession leftLocal;
   late final _SftpLocalPaneSession rightLocal;
   late final _SftpRemotePaneSession leftRemote;
   late final _SftpRemotePaneSession rightRemote;
   int? handledConnectRequestId;
-  int nextSftpTaskId = 1;
-  int nextSftpHistoryTaskId = -1;
-  List<_SftpTask> tasks = const [];
-  final Map<int, _QueuedSftpTaskExecution> taskExecutions =
-      <int, _QueuedSftpTaskExecution>{};
-  final Map<int, Completer<_SftpTask>> taskCompletions =
-      <int, Completer<_SftpTask>>{};
-  bool taskQueueRunning = false;
+  _SftpConnectRequest? retainedConnectRequest;
+  SshConnectionProfile? boundToolProfile;
+  int? boundToolHostId;
+  String? boundToolHostName;
+  int get nextSftpTaskId => taskManager.nextTaskId;
+
+  set nextSftpTaskId(int value) {
+    taskManager.nextTaskId = value;
+  }
+
+  int get nextSftpHistoryTaskId => taskManager.nextHistoryTaskId;
+
+  set nextSftpHistoryTaskId(int value) {
+    taskManager.nextHistoryTaskId = value;
+  }
+
+  List<_SftpTask> get tasks => taskManager.tasks;
+
+  set tasks(List<_SftpTask> value) {
+    taskManager.tasks = value;
+  }
+
+  Map<int, _QueuedSftpTaskExecution> get taskExecutions =>
+      taskManager.taskExecutions;
+
+  Map<int, Completer<_SftpTask>> get taskCompletions =>
+      taskManager.taskCompletions;
+
+  Set<int> get runningTaskIds => taskManager.runningTaskIds;
+
+  Set<Future<void>> get taskCleanupFutures => taskManager.taskCleanupFutures;
   bool taskListOpen = false;
   _SftpPaneSlot taskListSlot = _SftpPaneSlot.right;
   bool favoriteListOpen = false;
@@ -180,6 +254,7 @@ class _SftpPaneController extends ChangeNotifier {
 
   @override
   void dispose() {
+    taskManager.removeListener(notifyListeners);
     hostSearchController.removeListener(notifyListeners);
     leftLocal.filterController.removeListener(notifyListeners);
     rightLocal.filterController.removeListener(notifyListeners);
@@ -527,7 +602,7 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
 
   void _loadPersistedSftpTaskHistory() {
     final store = widget.dataStore;
-    if (store == null) return;
+    if (store == null || _controller.taskManager.historyLoaded) return;
     try {
       final entries = store.listSftpTaskHistory(
         cutoff: DateTime.now().subtract(_sftpTaskHistoryRetention),
@@ -565,6 +640,7 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
           ...history,
         ];
       });
+      _controller.taskManager.historyLoaded = true;
     } on Object catch (error, stackTrace) {
       NautermLog.warning(
         'sftp',
@@ -581,31 +657,14 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     unawaited(_fileDropSubscription?.cancel());
     _leftRemote.listingCancellation?.cancel();
     _leftRemote.listingCancellation = null;
+    _leftRemote.loading = false;
     _rightRemote.listingCancellation?.cancel();
     _rightRemote.listingCancellation = null;
+    _rightRemote.loading = false;
     for (final session in _externalEditSessions.values) {
       session.dispose();
     }
     _externalEditSessions.clear();
-    for (final completer in _controller.taskCompletions.values) {
-      if (!completer.isCompleted) {
-        completer.complete(
-          _SftpTask(
-            id: -1,
-            nativeTaskId: -1,
-            slot: _SftpPaneSlot.right,
-            type: _SftpTaskType.download,
-            status: _SftpTaskStatus.cancelled,
-            displayName: 'SFTP task',
-            sourcePath: '',
-            targetPath: '',
-            createdAt: DateTime.now(),
-            error: 'SFTP pane closed.',
-          ),
-        );
-      }
-    }
-    _controller.taskCompletions.clear();
     if (widget.manageFileDrop) {
       unawaited(NautermFileDropChannel.instance.setEnabled(false));
     }
@@ -632,8 +691,12 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
 
     final pendingTasks = <Future<_SftpTask>>[];
     for (final task in _tasks.toList(growable: false)) {
+      if (!_controller.taskManager.isOwnedBy(task.id, this)) {
+        continue;
+      }
       if (task.status != _SftpTaskStatus.queued &&
-          task.status != _SftpTaskStatus.running) {
+          task.status != _SftpTaskStatus.running &&
+          task.status != _SftpTaskStatus.paused) {
         continue;
       }
       final completion = _controller.taskCompletions[task.id];
@@ -652,6 +715,22 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
           error: error,
           stackTrace: stackTrace,
           fields: {'task_count': pendingTasks.length},
+        );
+      }
+    }
+    final pendingCleanups = _controller.taskCleanupFutures.toList(
+      growable: false,
+    );
+    if (pendingCleanups.isNotEmpty) {
+      try {
+        await Future.wait(pendingCleanups).timeout(const Duration(seconds: 10));
+      } on TimeoutException catch (error, stackTrace) {
+        NautermLog.warning(
+          'sftp',
+          'Timed out cleaning up cancelled SFTP tasks during shutdown.',
+          error: error,
+          stackTrace: stackTrace,
+          fields: {'cleanup_count': pendingCleanups.length},
         );
       }
     }
@@ -870,6 +949,7 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     if (request == null || request.id == _handledConnectRequestId) {
       return;
     }
+    _controller.retainedConnectRequest = request;
     _handledConnectRequestId = request.id;
     final session = _remoteSessionForSlot(_pendingConnectSlot);
     _pendingConnectSlot = null;
@@ -2105,7 +2185,7 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     _controller.taskExecutions[id] = _QueuedSftpTaskExecution(
       nativeTaskId: nativeTaskId,
       auth: auth,
-      operation: operation,
+      operation: {...operation, 'transfer_threads': sftpTransferThreads},
       refreshLocal: refreshLocal,
       refreshRemote: refreshRemote,
       localSession: localSession,
@@ -2113,50 +2193,63 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
       persistHistory: persistHistory,
       withSudo: withSudo,
     );
-    _pumpSftpTaskQueue();
+    _controller.taskManager.registerOwner(id, this);
+    _controller.taskManager.pumpQueues();
     return completer.future;
   }
 
   void _pumpSftpTaskQueue() {
-    if (!mounted || _shuttingDown || _controller.taskQueueRunning) {
+    if (_shuttingDown) {
       return;
     }
-    final nextTask = _tasks
-        .where(
-          (task) =>
-              task.status == _SftpTaskStatus.queued && !task.cancelRequested,
-        )
-        .firstOrNull;
-    if (nextTask == null) {
-      return;
-    }
-    final execution = _controller.taskExecutions[nextTask.id];
-    if (execution == null) {
-      _replaceSftpTask(
-        nextTask.id,
-        (task) => task.copyWith(
-          status: _SftpTaskStatus.failed,
-          error: 'SFTP task queue entry was missing.',
-          finishedAt: DateTime.now(),
-        ),
-      );
-      _persistSftpTaskHistory(nextTask.id);
-      _completeSftpTask(nextTask.id);
-      scheduleMicrotask(_pumpSftpTaskQueue);
-      return;
-    }
+    while (_controller.runningTaskIds.length < sftpConcurrentTasks) {
+      final nextTask = _tasks
+          .where(
+            (task) =>
+                task.status == _SftpTaskStatus.queued &&
+                !task.cancelRequested &&
+                _controller.taskManager.isOwnedBy(task.id, this) &&
+                !_controller.runningTaskIds.contains(task.id),
+          )
+          .firstOrNull;
+      if (nextTask == null) {
+        return;
+      }
+      final execution = _controller.taskExecutions[nextTask.id];
+      if (execution == null) {
+        _replaceSftpTask(
+          nextTask.id,
+          (task) => task.copyWith(
+            status: _SftpTaskStatus.failed,
+            error: 'SFTP task queue entry was missing.',
+            finishedAt: DateTime.now(),
+          ),
+        );
+        _persistSftpTaskHistory(nextTask.id);
+        _completeSftpTask(nextTask.id);
+        continue;
+      }
 
-    _controller.taskQueueRunning = true;
-    final runningTaskId = nextTask.id;
-    unawaited(
-      _runQueuedSftpTask(runningTaskId, execution).whenComplete(() {
-        _controller.taskQueueRunning = false;
-        _controller.taskExecutions.remove(runningTaskId);
-        if (mounted) {
-          _pumpSftpTaskQueue();
-        }
-      }),
-    );
+      final runningTaskId = nextTask.id;
+      _controller.runningTaskIds.add(runningTaskId);
+      unawaited(
+        _runQueuedSftpTask(runningTaskId, execution).whenComplete(() {
+          _controller.runningTaskIds.remove(runningTaskId);
+          final finishedTask = _tasks
+              .where((task) => task.id == runningTaskId)
+              .firstOrNull;
+          final retainExecution =
+              finishedTask?.status == _SftpTaskStatus.paused ||
+              (finishedTask?.status == _SftpTaskStatus.failed &&
+                  _isPausableSftpTask(finishedTask!));
+          if (!retainExecution) {
+            _controller.taskExecutions.remove(runningTaskId);
+            _controller.taskManager.forgetOwner(runningTaskId);
+          }
+          _controller.taskManager.pumpQueues();
+        }),
+      );
+    }
   }
 
   Future<void> _runQueuedSftpTask(
@@ -2223,7 +2316,6 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
         initialSudoPassword = await _promptSftpSudoPassword(
           kind: _SftpSudoPromptKind.explicit,
         );
-        if (!mounted) return;
       }
       if (usedCachedChannel || initialSudoPassword != null) {
         operation = {
@@ -2245,10 +2337,6 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
             error: 'Sudo authorization was cancelled.',
           )
         : await run(operation);
-    if (!mounted) {
-      return;
-    }
-
     if (execution.withSudo) {
       if (result.ok) {
         session.sudoSessionAuthenticated = true;
@@ -2260,7 +2348,6 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
             kind: _SftpSudoPromptKind.explicit,
             error: result.error,
           );
-          if (!mounted) return;
           if (replacementPassword != null) {
             result = await run({
               ...execution.operation,
@@ -2270,7 +2357,6 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
             if (result.ok) {
               session.sudoSessionAuthenticated = true;
             }
-            if (!mounted) return;
           }
         }
       }
@@ -2279,42 +2365,59 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
         kind: _SftpSudoPromptKind.permissionDenied,
         error: result.error,
       );
-      if (!mounted) return;
       if (oneShotPassword != null) {
         result = await run({
           ...execution.operation,
           'sudo_password': oneShotPassword,
         });
-        if (!mounted) return;
       }
     }
     final cancelled = result.error?.toLowerCase().contains('cancelled') == true;
-    if (result.ok) {
+    final latestTask = _tasks.where((task) => task.id == taskId).firstOrNull;
+    final paused =
+        !result.ok && cancelled && latestTask?.pauseRequested == true;
+    if (cancelled && !paused) {
+      await _discardCancelledSftpTaskParts(operation, arguments);
+    }
+    if (result.ok && mounted) {
       logOperation.succeed(
         fields: {'bytes': result.bytes, 'item_kind': result.itemKind},
       );
     } else {
-      logOperation.warn(fields: {'status': cancelled ? 'cancelled' : 'failed'});
+      logOperation.warn(
+        fields: {
+          'status': paused
+              ? 'paused'
+              : cancelled
+              ? 'cancelled'
+              : 'failed',
+        },
+      );
     }
     _replaceSftpTask(
       taskId,
       (task) => task.copyWith(
         status: result.ok
             ? _SftpTaskStatus.completed
+            : paused
+            ? _SftpTaskStatus.paused
             : cancelled
             ? _SftpTaskStatus.cancelled
             : _SftpTaskStatus.failed,
         bytes: result.ok ? result.bytes : null,
         itemKind: result.ok ? result.itemKind : null,
-        error: result.ok ? null : result.error ?? 'SFTP task failed.',
-        finishedAt: DateTime.now(),
+        pauseRequested: false,
+        error: result.ok || paused ? null : result.error ?? 'SFTP task failed.',
+        finishedAt: paused ? null : DateTime.now(),
       ),
     );
-    if (execution.persistHistory) {
+    if (!paused && execution.persistHistory) {
       _persistSftpTaskHistory(taskId);
     }
-    _completeSftpTask(taskId);
-    if (!execution.persistHistory && result.ok) {
+    if (!paused) {
+      _completeSftpTask(taskId);
+    }
+    if (!paused && !execution.persistHistory && result.ok) {
       _removeSftpTaskFromMemory(taskId);
     }
     if (result.ok) {
@@ -2347,14 +2450,9 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
   }
 
   void _replaceSftpTask(int taskId, _SftpTask Function(_SftpTask task) update) {
-    if (!mounted) {
-      return;
-    }
-    _setSftpState(() {
-      _tasks = [
-        for (final task in _tasks) task.id == taskId ? update(task) : task,
-      ];
-    });
+    _tasks = [
+      for (final task in _tasks) task.id == taskId ? update(task) : task,
+    ];
   }
 
   Future<String?> _promptSftpSudoPassword({
@@ -2523,19 +2621,18 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
   }
 
   void _removeSftpTaskFromMemory(int taskId) {
-    _setSftpState(() {
-      _tasks = [
-        for (final task in _tasks)
-          if (task.id != taskId) task,
-      ];
-    });
+    _tasks = [
+      for (final task in _tasks)
+        if (task.id != taskId) task,
+    ];
+    _controller.taskManager.forgetOwner(taskId);
   }
 
   List<_SftpTask> _tasksForSlot(_SftpPaneSlot slot) {
     final cutoff = DateTime.now().subtract(_sftpTaskHistoryRetention);
     return [
       for (final task in _tasks)
-        if (task.slot == slot &&
+        if ((task.slot == slot || widget.remoteOnly || widget.compact) &&
             (!_isFinishedSftpTask(task) ||
                 (task.finishedAt ?? task.createdAt).isAfter(cutoff)))
           task,
@@ -2543,6 +2640,23 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
   }
 
   void _clearCompletedSftpTasks() {
+    final removedTasks = [
+      for (final task in _tasks)
+        if (task.status != _SftpTaskStatus.queued &&
+            task.status != _SftpTaskStatus.running &&
+            task.status != _SftpTaskStatus.paused)
+          task,
+    ];
+    for (final task in removedTasks) {
+      final execution = _controller.taskExecutions[task.id];
+      if (task.status != _SftpTaskStatus.completed && execution != null) {
+        _trackSftpTaskCleanup(_discardSftpExecutionParts(execution));
+      } else if (task.status != _SftpTaskStatus.completed &&
+          task.type.wireName == _SftpTaskType.download.wireName) {
+        _trackSftpTaskCleanup(_discardLocalDownloadParts(task.targetPath));
+      }
+      _controller.taskManager.forgetOwner(task.id);
+    }
     try {
       widget.dataStore?.clearSftpTaskHistory();
     } on Object catch (error, stackTrace) {
@@ -2557,7 +2671,8 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
       _tasks = [
         for (final task in _tasks)
           if (task.status == _SftpTaskStatus.queued ||
-              task.status == _SftpTaskStatus.running)
+              task.status == _SftpTaskStatus.running ||
+              task.status == _SftpTaskStatus.paused)
             task,
       ];
     });
@@ -2568,10 +2683,21 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
   }
 
   void _dismissSftpTask(int taskId) {
-    final historyId = _tasks
-        .where((task) => task.id == taskId)
-        .firstOrNull
-        ?.historyId;
+    final owner = _controller.taskManager.ownerOf(taskId);
+    if (owner != null && !identical(owner, this)) {
+      owner._dismissSftpTask(taskId);
+      return;
+    }
+    final task = _tasks.where((task) => task.id == taskId).firstOrNull;
+    final historyId = task?.historyId;
+    final execution = _controller.taskExecutions[taskId];
+    if (task != null && task.status != _SftpTaskStatus.completed) {
+      if (execution != null) {
+        _trackSftpTaskCleanup(_discardSftpExecutionParts(execution));
+      } else if (task.type.wireName == _SftpTaskType.download.wireName) {
+        _trackSftpTaskCleanup(_discardLocalDownloadParts(task.targetPath));
+      }
+    }
     if (historyId != null) {
       try {
         widget.dataStore?.deleteSftpTaskHistory(historyId);
@@ -2585,6 +2711,7 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
       }
     }
     _controller.taskExecutions.remove(taskId);
+    _controller.taskManager.forgetOwner(taskId);
     _setSftpState(() {
       _tasks = [
         for (final task in _tasks)
@@ -2594,6 +2721,11 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
   }
 
   void _cancelSftpTask(int taskId) {
+    final owner = _controller.taskManager.ownerOf(taskId);
+    if (owner != null && !identical(owner, this)) {
+      owner._cancelSftpTask(taskId);
+      return;
+    }
     _SftpTask? selectedTask;
     for (final task in _tasks) {
       if (task.id == taskId) {
@@ -2603,11 +2735,16 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     }
     if (selectedTask == null ||
         (selectedTask.status != _SftpTaskStatus.queued &&
-            selectedTask.status != _SftpTaskStatus.running)) {
+            selectedTask.status != _SftpTaskStatus.running &&
+            selectedTask.status != _SftpTaskStatus.paused)) {
       return;
     }
-    if (selectedTask.status == _SftpTaskStatus.queued) {
+    if (selectedTask.status == _SftpTaskStatus.queued ||
+        selectedTask.status == _SftpTaskStatus.paused) {
       final execution = _controller.taskExecutions[selectedTask.id];
+      if (execution != null) {
+        _trackSftpTaskCleanup(_discardSftpExecutionParts(execution));
+      }
       _controller.taskExecutions.remove(taskId);
       _replaceSftpTask(
         taskId,
@@ -2621,11 +2758,213 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
         _persistSftpTaskHistory(taskId);
       }
       _completeSftpTask(taskId);
-      _pumpSftpTaskQueue();
+      _controller.taskManager.forgetOwner(taskId);
+      _controller.taskManager.pumpQueues();
       return;
     }
     FfiSftpTaskExecutor.cancel(selectedTask.nativeTaskId);
-    _replaceSftpTask(taskId, (task) => task.copyWith(cancelRequested: true));
+    _replaceSftpTask(
+      taskId,
+      (task) => task.copyWith(cancelRequested: true, pauseRequested: false),
+    );
+  }
+
+  void _pauseSftpTask(int taskId) {
+    final owner = _controller.taskManager.ownerOf(taskId);
+    if (owner != null && !identical(owner, this)) {
+      owner._pauseSftpTask(taskId);
+      return;
+    }
+    final task = _tasks.where((task) => task.id == taskId).firstOrNull;
+    if (task == null ||
+        !_isPausableSftpTask(task) ||
+        (task.status != _SftpTaskStatus.queued &&
+            task.status != _SftpTaskStatus.running)) {
+      return;
+    }
+    if (task.status == _SftpTaskStatus.queued) {
+      _replaceSftpTask(
+        taskId,
+        (task) => task.copyWith(status: _SftpTaskStatus.paused),
+      );
+      _controller.taskManager.pumpQueues();
+      return;
+    }
+    FfiSftpTaskExecutor.cancel(task.nativeTaskId);
+    _replaceSftpTask(taskId, (task) => task.copyWith(pauseRequested: true));
+  }
+
+  void _resumeSftpTask(int taskId) {
+    final owner = _controller.taskManager.ownerOf(taskId);
+    if (owner != null && !identical(owner, this)) {
+      owner._resumeSftpTask(taskId);
+      return;
+    }
+    final task = _tasks.where((task) => task.id == taskId).firstOrNull;
+    final execution = _controller.taskExecutions[taskId];
+    if (task == null ||
+        execution == null ||
+        task.status != _SftpTaskStatus.paused) {
+      return;
+    }
+    final nativeTaskId = DateTime.now().microsecondsSinceEpoch + taskId;
+    _controller.taskExecutions[taskId] = execution.withNativeTaskId(
+      nativeTaskId,
+    );
+    _replaceSftpTask(
+      taskId,
+      (task) => task.copyWith(
+        nativeTaskId: nativeTaskId,
+        status: _SftpTaskStatus.queued,
+        cancelRequested: false,
+        pauseRequested: false,
+        error: null,
+        finishedAt: null,
+      ),
+    );
+    _controller.taskManager.pumpQueues();
+  }
+
+  void _toggleSftpTaskPause(int taskId) {
+    final task = _tasks.where((task) => task.id == taskId).firstOrNull;
+    if (task?.status == _SftpTaskStatus.paused) {
+      _resumeSftpTask(taskId);
+    } else {
+      _pauseSftpTask(taskId);
+    }
+  }
+
+  Future<void> _discardCancelledSftpTaskParts(
+    Map<String, Object?> operation,
+    Map<String, Object?> arguments,
+  ) async {
+    final operationName = operation['op'];
+    if (operationName == _SftpTaskType.download.wireName) {
+      final localPath = operation['local_path'] as String?;
+      if (localPath != null && localPath.isNotEmpty) {
+        await _discardLocalDownloadParts(localPath);
+      }
+      return;
+    }
+    if (operationName != _SftpTaskType.upload.wireName) {
+      return;
+    }
+    final remotePath = operation['remote_path'] as String?;
+    if (remotePath == null || remotePath.isEmpty) {
+      return;
+    }
+    final cleanupOperation = <String, Object?>{
+      'op': 'cleanup_upload',
+      'remote_path': remotePath,
+      if (operation['sudo_session_id'] case final String sessionId)
+        'sudo_session_id': sessionId,
+      if (operation['sudo_password'] case final String password)
+        'sudo_password': password,
+    };
+    final cleanupArguments = <String, Object?>{
+      ...arguments,
+      'taskId': DateTime.now().microsecondsSinceEpoch,
+      'operation': cleanupOperation,
+    };
+    final result = await _spawnSftpTask(cleanupArguments, onProgress: (_) {});
+    if (!result.ok) {
+      NautermLog.warning(
+        'sftp',
+        'Unable to discard cancelled SFTP upload data.',
+        fields: {'remote_path': remotePath, 'error': result.error},
+      );
+    }
+  }
+
+  Future<void> _discardSftpExecutionParts(
+    _QueuedSftpTaskExecution execution,
+  ) async {
+    final session = execution.remoteSession ?? _rightRemote;
+    final operation = <String, Object?>{
+      ...execution.operation,
+      if (execution.withSudo) 'sudo_session_id': session.sudoSessionId,
+    };
+    final arguments = execution.auth.toArguments(session.path)
+      ..['taskId'] = DateTime.now().microsecondsSinceEpoch;
+    await _discardCancelledSftpTaskParts(operation, arguments);
+  }
+
+  void _trackSftpTaskCleanup(Future<void> cleanup) {
+    final tracked = cleanup.then<void>(
+      (_) {},
+      onError: (Object error, StackTrace stackTrace) {
+        NautermLog.warning(
+          'sftp',
+          'Unable to clean up cancelled SFTP task data.',
+          error: error,
+          stackTrace: stackTrace,
+        );
+      },
+    );
+    _controller.taskCleanupFutures.add(tracked);
+    unawaited(
+      tracked.whenComplete(() {
+        _controller.taskCleanupFutures.remove(tracked);
+      }),
+    );
+  }
+
+  Future<void> _discardLocalDownloadParts(String localPath) async {
+    final target = io.File(localPath);
+    final partPath = _joinSftpPath(
+      target.parent.path,
+      '.${_basename(localPath)}.nauterm-download.part',
+    );
+    final metadataPath = '$partPath.meta';
+    try {
+      final metadata = await io.File(metadataPath).readAsString();
+      if (!metadata.startsWith('nauterm-sftp-part-v1\n') &&
+          !metadata.startsWith('nauterm-sftp-download-v1\n')) {
+        NautermLog.warning(
+          'sftp',
+          'Refusing to remove an unowned SFTP download staging path.',
+          fields: {'staging_path': partPath},
+        );
+        return;
+      }
+    } on Object {
+      return;
+    }
+    final paths = <String>[
+      partPath,
+      for (var index = 0; index < 32; index++) '$partPath.chunk-$index',
+    ];
+    var removedOwnedData = true;
+    for (final path in paths) {
+      try {
+        final type = await io.FileSystemEntity.type(path, followLinks: false);
+        if (type == io.FileSystemEntityType.directory) {
+          await io.Directory(path).delete(recursive: true);
+        } else if (type != io.FileSystemEntityType.notFound) {
+          await io.File(path).delete();
+        }
+      } on Object catch (error, stackTrace) {
+        removedOwnedData = false;
+        NautermLog.warning(
+          'sftp',
+          'Unable to discard cancelled SFTP download data.',
+          error: error,
+          stackTrace: stackTrace,
+        );
+      }
+    }
+    if (removedOwnedData) {
+      try {
+        await io.File(metadataPath).delete();
+      } on Object catch (error, stackTrace) {
+        NautermLog.warning(
+          'sftp',
+          'Unable to discard cancelled SFTP download metadata.',
+          error: error,
+          stackTrace: stackTrace,
+        );
+      }
+    }
   }
 
   void _toggleSftpTaskList(_SftpPaneSlot slot) {
@@ -2999,15 +3338,24 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     }
   }
 
-  void _downloadSelectedRemoteToDefaultDirectory(
+  Future<void> _downloadSelectedRemoteToDownloadsDirectory(
     _SftpRemotePaneSession session, {
     bool withSudo = false,
-  }) {
+  }) async {
     final entries = _selectedRemoteEntries(session);
-    _downloadRemoteEntriesToDirectory(
+    if (entries.isEmpty) return;
+    final downloadsDirectory = await _controller.taskManager.downloadsDirectory;
+    if (downloadsDirectory == null) {
+      if (mounted) {
+        _showSftpSnack('Unable to use the system Downloads directory.');
+      }
+      return;
+    }
+    if (!mounted) return;
+    await _downloadRemoteEntriesToDirectory(
       entries,
       session,
-      _defaultSftpPath(),
+      _normalizeLocalSftpSeparators(downloadsDirectory.path),
       withSudo: withSudo,
     );
   }
@@ -3017,21 +3365,23 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     _SftpRemotePaneSession session,
     _SftpLocalPaneSession localSession,
   ) {
-    _downloadRemoteEntriesToDirectory(
-      entries,
-      session,
-      localSession.path,
-      localSession: localSession,
+    unawaited(
+      _downloadRemoteEntriesToDirectory(
+        entries,
+        session,
+        localSession.path,
+        localSession: localSession,
+      ),
     );
   }
 
-  void _downloadRemoteEntriesToDirectory(
+  Future<void> _downloadRemoteEntriesToDirectory(
     List<_SftpFileEntry> entries,
     _SftpRemotePaneSession session,
     String targetDirectory, {
     _SftpLocalPaneSession? localSession,
     bool withSudo = false,
-  }) {
+  }) async {
     final connection = session.connection;
     final auth = connection?.auth;
     if (entries.isEmpty || connection == null || auth == null) {
@@ -3040,12 +3390,12 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     final reservedTargets = <String>{};
     for (final entry in entries) {
       final targetPath = entries.length == 1
-          ? _uniqueLocalSftpPath(targetDirectory, entry.name)
-          : _uniqueLocalSftpPathWithReserved(
+          ? (await _uniqueLocalSftpPath(targetDirectory, entry.name))
+          : (await _uniqueLocalSftpPathWithReserved(
               targetDirectory,
               entry.name,
               reservedTargets,
-            );
+            ));
       reservedTargets.add(targetPath);
       _enqueueSftpTask(
         type: _SftpTaskType.download,
@@ -3902,9 +4252,16 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
       case _SftpAction.close:
         _closeRemoteEndpoint(session);
       case _SftpAction.copyToTarget:
-        _downloadSelectedRemoteToDefaultDirectory(session, withSudo: withSudo);
+        unawaited(
+          _downloadSelectedRemoteToDownloadsDirectory(
+            session,
+            withSudo: withSudo,
+          ),
+        );
       case _SftpAction.sudoDownload:
-        _downloadSelectedRemoteToDefaultDirectory(session, withSudo: true);
+        unawaited(
+          _downloadSelectedRemoteToDownloadsDirectory(session, withSudo: true),
+        );
       case _SftpAction.uploadFiles:
         unawaited(_pickLocalFilesForRemoteUpload(session, withSudo: withSudo));
       case _SftpAction.sudoUpload:
@@ -4477,6 +4834,7 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
       onTaskClearCompleted: () {},
       onTaskDismiss: _dismissSftpTask,
       onTaskCancel: _cancelSftpTask,
+      onTaskPauseToggle: _toggleSftpTaskPause,
       onPathPanelDismiss: () {},
       onPathFavoriteToggle: () {},
       onFavoriteListToggle: () {},
@@ -4607,6 +4965,7 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
           onTaskClearCompleted: _clearCompletedSftpTasks,
           onTaskDismiss: _dismissSftpTask,
           onTaskCancel: _cancelSftpTask,
+          onTaskPauseToggle: _toggleSftpTaskPause,
           onPanelsDismiss: _dismissSftpPathPanels,
           onPathFavoriteToggle: () =>
               _toggleRemoteSftpFavoritePath(session, connection.host),
@@ -4690,6 +5049,7 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
         onTaskClearCompleted: _clearCompletedSftpTasks,
         onTaskDismiss: _dismissSftpTask,
         onTaskCancel: _cancelSftpTask,
+        onTaskPauseToggle: _toggleSftpTaskPause,
         onPathPanelDismiss: _dismissSftpPathPanels,
         onPathFavoriteToggle: () =>
             _toggleRemoteSftpFavoritePath(session, connection.host),

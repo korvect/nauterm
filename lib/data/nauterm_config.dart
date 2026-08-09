@@ -564,6 +564,16 @@ SftpConfig _sftpFromJson(Object? value) {
         : sftpDefaultTextFileExtensions,
     defaultDownloadDir: (json['defaultDownloadDir'] as String?)?.trim(),
     showHiddenFiles: json['showHiddenFiles'] as bool? ?? false,
+    concurrentTasks:
+        ((json['concurrentTasks'] as num?)?.toInt() ??
+                sftpDefaultConcurrentTasks)
+            .clamp(1, 8)
+            .toInt(),
+    transferThreads:
+        ((json['transferThreads'] as num?)?.toInt() ??
+                sftpDefaultTransferThreads)
+            .clamp(1, 32)
+            .toInt(),
   );
 }
 
@@ -576,4 +586,6 @@ Map<String, Object?> _sftpToJson(SftpConfig value) => <String, Object?>{
   if (value.defaultDownloadDir != null && value.defaultDownloadDir!.isNotEmpty)
     'defaultDownloadDir': value.defaultDownloadDir,
   'showHiddenFiles': value.showHiddenFiles,
+  'concurrentTasks': value.concurrentTasks,
+  'transferThreads': value.transferThreads,
 };

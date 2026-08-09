@@ -50,6 +50,7 @@ dependencies:
   flutter_svg: ^2.3.0
   http: ^1.2.0
   package_info_plus: ^10.2.0
+  path_provider: ^2.1.5
 
 dependency_overrides:
   cnativeapi:

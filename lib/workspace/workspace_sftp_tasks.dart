@@ -37,7 +37,18 @@ enum _SftpTaskType {
   final IconData icon;
 }
 
-enum _SftpTaskStatus { queued, running, completed, failed, cancelled }
+enum _SftpTaskStatus { queued, running, paused, completed, failed, cancelled }
+
+bool _isPausableSftpTask(_SftpTask task) {
+  return switch (task.type) {
+    _SftpTaskType.download ||
+    _SftpTaskType.upload ||
+    _SftpTaskType.transferDownload ||
+    _SftpTaskType.transferUpload ||
+    _SftpTaskType.edit => true,
+    _ => false,
+  };
+}
 
 _SftpTaskType? _sftpTaskTypeFromHistory(String value) {
   return _SftpTaskType.values.where((type) => type.name == value).firstOrNull;
@@ -74,6 +85,7 @@ class _SftpTask {
     this.totalBytes = 0,
     this.currentPath = '',
     this.cancelRequested = false,
+    this.pauseRequested = false,
     this.itemKind = 'unknown',
     this.error,
     this.historyId,
@@ -93,17 +105,20 @@ class _SftpTask {
   final int totalBytes;
   final String currentPath;
   final bool cancelRequested;
+  final bool pauseRequested;
   final String itemKind;
   final String? error;
   final int? historyId;
   final DateTime? finishedAt;
 
   _SftpTask copyWith({
+    int? nativeTaskId,
     _SftpTaskStatus? status,
     int? bytes,
     int? totalBytes,
     String? currentPath,
     bool? cancelRequested,
+    bool? pauseRequested,
     String? itemKind,
     Object? error = _sftpTaskUnchanged,
     Object? historyId = _sftpTaskUnchanged,
@@ -111,7 +126,7 @@ class _SftpTask {
   }) {
     return _SftpTask(
       id: id,
-      nativeTaskId: nativeTaskId,
+      nativeTaskId: nativeTaskId ?? this.nativeTaskId,
       slot: slot,
       type: type,
       status: status ?? this.status,
@@ -123,6 +138,7 @@ class _SftpTask {
       totalBytes: totalBytes ?? this.totalBytes,
       currentPath: currentPath ?? this.currentPath,
       cancelRequested: cancelRequested ?? this.cancelRequested,
+      pauseRequested: pauseRequested ?? this.pauseRequested,
       itemKind: itemKind ?? this.itemKind,
       error: identical(error, _sftpTaskUnchanged)
           ? this.error
@@ -159,6 +175,20 @@ class _QueuedSftpTaskExecution {
   final _SftpRemotePaneSession? remoteSession;
   final bool persistHistory;
   final bool withSudo;
+
+  _QueuedSftpTaskExecution withNativeTaskId(int value) {
+    return _QueuedSftpTaskExecution(
+      nativeTaskId: value,
+      auth: auth,
+      operation: operation,
+      refreshLocal: refreshLocal,
+      refreshRemote: refreshRemote,
+      localSession: localSession,
+      remoteSession: remoteSession,
+      persistHistory: persistHistory,
+      withSudo: withSudo,
+    );
+  }
 }
 
 FfiSftpTaskResult _runSftpTask(

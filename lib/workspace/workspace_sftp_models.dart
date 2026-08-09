@@ -642,7 +642,7 @@ List<NautermContextMenuEntry<_SftpMenuCommand>> _sftpFileContextMenuEntries(
 }
 
 String _defaultSftpPath() {
-  return _normalizeLocalSftpSeparators(sftpEffectiveDownloadDir());
+  return _normalizeLocalSftpSeparators(sftpEffectiveLocalDirectory());
 }
 
 String _localSftpHomePath() {
@@ -697,18 +697,18 @@ String _joinSftpPath(String left, String right) {
   return '$left$separator$right';
 }
 
-String _uniqueLocalSftpPath(String directory, String name) {
+Future<String> _uniqueLocalSftpPath(String directory, String name) {
   return _uniqueLocalSftpPathWithReserved(directory, name, const <String>{});
 }
 
-String _uniqueLocalSftpPathWithReserved(
+Future<String> _uniqueLocalSftpPathWithReserved(
   String directory,
   String name,
   Set<String> reservedPaths,
-) {
+) async {
   var candidate = _joinSftpPath(directory, name);
   if (reservedPaths.contains(candidate) ||
-      io.FileSystemEntity.typeSync(candidate) !=
+      await io.FileSystemEntity.type(candidate) !=
           io.FileSystemEntityType.notFound) {
     final dotIndex = name.lastIndexOf('.');
     final hasExtension = dotIndex > 0 && dotIndex < name.length - 1;
@@ -719,10 +719,38 @@ String _uniqueLocalSftpPathWithReserved(
       candidate = _joinSftpPath(directory, '$stem $suffix$extension');
       suffix += 1;
     } while (reservedPaths.contains(candidate) ||
-        io.FileSystemEntity.typeSync(candidate) !=
+        await io.FileSystemEntity.type(candidate) !=
             io.FileSystemEntityType.notFound);
   }
   return candidate;
+}
+
+Future<io.Directory?> _prepareSftpDownloadsDirectory() async {
+  io.Directory? directory;
+  try {
+    directory = await getDownloadsDirectory();
+  } on Object catch (error, stackTrace) {
+    NautermLog.warning(
+      'sftp',
+      'Unable to resolve the system Downloads directory.',
+      error: error,
+      stackTrace: stackTrace,
+    );
+  }
+  directory ??= io.Directory(fallbackDownloadsDirectory());
+  try {
+    await directory.create(recursive: true);
+    return directory;
+  } on Object catch (error, stackTrace) {
+    NautermLog.warning(
+      'sftp',
+      'Unable to prepare the system Downloads directory.',
+      error: error,
+      stackTrace: stackTrace,
+      fields: {'path': directory.path},
+    );
+    return null;
+  }
 }
 
 const _remoteSftpSeparator = '/';
@@ -1015,7 +1043,13 @@ String _sftpTaskSubtitle(_SftpTask task, {int? queuePosition}) {
   final status = switch (task.status) {
     _SftpTaskStatus.queued =>
       queuePosition == null ? 'queued' : 'queued #$queuePosition',
-    _SftpTaskStatus.running => task.cancelRequested ? 'cancelling' : 'running',
+    _SftpTaskStatus.running =>
+      task.pauseRequested
+          ? 'pausing'
+          : task.cancelRequested
+          ? 'cancelling'
+          : 'running',
+    _SftpTaskStatus.paused => 'paused',
     _SftpTaskStatus.completed => 'completed',
     _SftpTaskStatus.failed => 'failed',
     _SftpTaskStatus.cancelled => 'cancelled',

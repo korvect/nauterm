@@ -193,17 +193,21 @@ List<String> sftpTextFileExtensions = sftpDefaultTextFileExtensions;
 bool sftpTabEnabled = true;
 String? sftpDefaultDownloadDir;
 bool sftpShowHiddenFiles = false;
+const int sftpDefaultConcurrentTasks = 3;
+const int sftpDefaultTransferThreads = 8;
+int sftpConcurrentTasks = sftpDefaultConcurrentTasks;
+int sftpTransferThreads = sftpDefaultTransferThreads;
 bool workspacePageEnabled = true;
 
-String sftpEffectiveDownloadDir() {
+String sftpEffectiveLocalDirectory() {
   final configured = sftpDefaultDownloadDir;
   if (configured != null && configured.isNotEmpty) {
     return configured;
   }
-  return defaultDownloadDirectory();
+  return defaultSftpLocalDirectory();
 }
 
-String defaultDownloadDirectory() {
+String defaultSftpLocalDirectory() {
   var home =
       Platform.environment['HOME'] ??
       Platform.environment['USERPROFILE'] ??
@@ -212,6 +216,10 @@ String defaultDownloadDirectory() {
     home = home.replaceAll('/', Platform.pathSeparator);
   }
   return home;
+}
+
+String fallbackDownloadsDirectory() {
+  return '${defaultSftpLocalDirectory()}${Platform.pathSeparator}Downloads';
 }
 
 final ValueNotifier<bool> sftpTabEnabledListenable = ValueNotifier<bool>(
@@ -370,6 +378,8 @@ class SftpConfig {
     this.textFileExtensions = sftpDefaultTextFileExtensions,
     this.defaultDownloadDir,
     this.showHiddenFiles = false,
+    this.concurrentTasks = sftpDefaultConcurrentTasks,
+    this.transferThreads = sftpDefaultTransferThreads,
   });
 
   final bool showTab;
@@ -378,6 +388,8 @@ class SftpConfig {
   final List<String> textFileExtensions;
   final String? defaultDownloadDir;
   final bool showHiddenFiles;
+  final int concurrentTasks;
+  final int transferThreads;
 }
 
 @immutable
@@ -481,6 +493,8 @@ void applyNautermRuntimeSettings(NautermRuntimeSettings settings) {
   sftpTextFileExtensions = settings.sftp.textFileExtensions;
   sftpDefaultDownloadDir = settings.sftp.defaultDownloadDir;
   sftpShowHiddenFiles = settings.sftp.showHiddenFiles;
+  sftpConcurrentTasks = settings.sftp.concurrentTasks;
+  sftpTransferThreads = settings.sftp.transferThreads;
   setSftpTabEnabled(settings.sftp.showTab);
   setWorkspacePageEnabled(settings.workspacePageEnabled);
   terminalRecordingConfig = settings.recording;
@@ -502,6 +516,8 @@ NautermRuntimeSettings currentNautermRuntimeSettings() {
       textFileExtensions: sftpTextFileExtensions,
       defaultDownloadDir: sftpDefaultDownloadDir,
       showHiddenFiles: sftpShowHiddenFiles,
+      concurrentTasks: sftpConcurrentTasks,
+      transferThreads: sftpTransferThreads,
     ),
     appThemeMode: appThemeMode,
     appLanguage: appLanguage,

@@ -1147,6 +1147,62 @@ Widget _buildSettingsSftpContent(_SettingsPanelState state) {
         ),
         SizedBox(height: 30),
         _SettingsSection(
+          key: state._settingsSectionKey('sftp-transfers'),
+          icon: Icons.swap_vert_circle_outlined,
+          title: 'Transfers',
+          localizationKey: 'settings.sftp.transfers.label',
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              maxWidth: _settingsContentMaxWidth,
+            ),
+            child: Column(
+              children: [
+                _SettingsRow(
+                  localizationKey: 'settings.sftp.concurrentTasks',
+                  title: 'Concurrent Tasks',
+                  subtitle: 'Maximum number of SFTP tasks running at once.',
+                  trailing: _SettingsSelect(
+                    label: 'Concurrent Tasks',
+                    showLabel: false,
+                    localizeOptions: false,
+                    value: state._sftpConcurrentTasks.toString(),
+                    values: const ['1', '2', '3', '4', '5', '6', '7', '8'],
+                    onChanged: (value) {
+                      final parsed = int.tryParse(value);
+                      if (parsed == null) return;
+                      state._mutate(() => state._sftpConcurrentTasks = parsed);
+                      sftpConcurrentTasks = parsed;
+                      state._persistRuntimeSettings();
+                    },
+                  ),
+                ),
+                SizedBox(height: 18),
+                _SettingsRow(
+                  localizationKey: 'settings.sftp.transferConcurrency',
+                  title: 'Transfer Concurrency',
+                  subtitle:
+                      'Maximum parallel SFTP requests or files within each transfer task.',
+                  trailing: _SettingsSelect(
+                    label: 'Transfer Concurrency',
+                    showLabel: false,
+                    localizeOptions: false,
+                    value: state._sftpTransferThreads.toString(),
+                    values: const ['1', '2', '4', '8', '16', '32'],
+                    onChanged: (value) {
+                      final parsed = int.tryParse(value);
+                      if (parsed == null) return;
+                      state._mutate(() => state._sftpTransferThreads = parsed);
+                      sftpTransferThreads = parsed;
+                      state._persistRuntimeSettings();
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        SizedBox(height: 30),
+        _SettingsSection(
           key: state._settingsSectionKey('sftp-files'),
           icon: Icons.folder_outlined,
           title: 'Files',
@@ -1158,11 +1214,11 @@ Widget _buildSettingsSftpContent(_SettingsPanelState state) {
               children: [
                 _SettingsRow(
                   localizationKey: 'settings.sftp.defaultDirectory',
-                  title: 'Default Directory',
+                  title: 'Initial Local Directory',
                   subtitle: 'Initial local directory when opening SFTP.',
                   trailing: _SettingsTextField(
                     controller: state._sftpDownloadDirController,
-                    hint: defaultDownloadDirectory(),
+                    hint: defaultSftpLocalDirectory(),
                     onChanged: (value) {
                       state._sftpDefaultDownloadDir = value.trim();
                       sftpDefaultDownloadDir =

@@ -277,6 +277,13 @@ const _settingsSearchEntries = <_SettingsSearchEntry>[
   ),
   _SettingsSearchEntry(
     page: _SettingsPage.sftp,
+    section: 'sftp-transfers',
+    title: 'Transfers',
+    subtitle: 'Concurrent tasks and per-task transfer concurrency.',
+    keywords: 'parallel concurrency upload performance',
+  ),
+  _SettingsSearchEntry(
+    page: _SettingsPage.sftp,
     section: 'sftp-files',
     title: 'SFTP Files',
     subtitle: 'Default directory and hidden files.',
@@ -410,6 +417,8 @@ class _SettingsPanelState extends State<SettingsPanel> {
   String _sftpDefaultDownloadDir = sftpDefaultDownloadDir ?? '';
   List<String> _sftpTextFileExtensions = sftpTextFileExtensions;
   bool _sftpShowHiddenFiles = sftpShowHiddenFiles;
+  int _sftpConcurrentTasks = sftpConcurrentTasks;
+  int _sftpTransferThreads = sftpTransferThreads;
   bool _includeTerminalSelection = aiAssistantConfig.includeTerminalSelection;
   bool _includeRecentTerminalOutput =
       aiAssistantConfig.includeRecentTerminalOutput;
@@ -688,6 +697,8 @@ class _SettingsPanelState extends State<SettingsPanel> {
         _terminalPadding = settings.padding;
         _useOptionAsMetaKey = settings.keyboard.useOptionAsMetaKey;
         _sftpTabEnabled = settings.sftp.showTab;
+        _sftpConcurrentTasks = settings.sftp.concurrentTasks;
+        _sftpTransferThreads = settings.sftp.transferThreads;
         _workspacePageEnabled = settings.workspacePageEnabled;
         _aiBaseUrlController.text = provider.config.baseUrl;
         _aiModelController.text = provider.config.model;
@@ -1444,6 +1455,10 @@ class _SettingsPanelState extends State<SettingsPanel> {
         _sftpDownloadDirController.text = _sftpDefaultDownloadDir;
         _sftpShowHiddenFiles = defaults.sftp.showHiddenFiles;
         sftpShowHiddenFiles = defaults.sftp.showHiddenFiles;
+        _sftpConcurrentTasks = defaults.sftp.concurrentTasks;
+        sftpConcurrentTasks = defaults.sftp.concurrentTasks;
+        _sftpTransferThreads = defaults.sftp.transferThreads;
+        sftpTransferThreads = defaults.sftp.transferThreads;
       }
       if (pages.contains(_SettingsPage.shortcuts)) {
         _useOptionAsMetaKey = defaults.keyboard.useOptionAsMetaKey;
