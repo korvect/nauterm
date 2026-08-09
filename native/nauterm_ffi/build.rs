@@ -106,6 +106,7 @@ fn fetch_ghostty(out_dir: &Path) -> PathBuf {
         .map(|existing_commit| existing_commit.trim() == GHOSTTY_COMMIT)
         .unwrap_or(false);
     if source_dir.join("build.zig").is_file() && cached_commit_matches {
+        remove_ghostty_git_metadata(&source_dir);
         return source_dir;
     }
 
@@ -138,8 +139,22 @@ fn fetch_ghostty(out_dir: &Path) -> PathBuf {
             commit_stamp.display()
         )
     });
+    remove_ghostty_git_metadata(&source_dir);
 
     source_dir
+}
+
+fn remove_ghostty_git_metadata(source_dir: &Path) {
+    let git_dir = source_dir.join(".git");
+    if !git_dir.exists() {
+        return;
+    }
+    std::fs::remove_dir_all(&git_dir).unwrap_or_else(|error| {
+        panic!(
+            "failed to remove Ghostty Git metadata at {}: {error}",
+            git_dir.display()
+        )
+    });
 }
 
 fn run(command: &mut Command, description: &str) {
