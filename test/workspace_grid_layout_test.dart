@@ -143,4 +143,25 @@ void main() {
     expect(invokedAction, 'delete');
     expect(() => invokedItems!.add('delta'), throwsUnsupportedError);
   });
+
+  test('activating a selected host preserves the multi-selection', () {
+    expect(
+      workspaceItemShouldPreserveMultiSelectionForActivation(
+        itemSelected: true,
+        selectedItemCount: 3,
+        hasDoubleTapAction: true,
+        selectionModifierPressed: false,
+      ),
+      isTrue,
+    );
+    expect(
+      workspaceItemShouldPreserveMultiSelectionForActivation(
+        itemSelected: false,
+        selectedItemCount: 3,
+        hasDoubleTapAction: true,
+        selectionModifierPressed: false,
+      ),
+      isFalse,
+    );
+  });
 }

@@ -127,6 +127,19 @@ bool get _workspaceItemMultiSelectionPressed =>
     _workspaceItemToggleSelectionPressed || _workspaceItemRangeSelectionPressed;
 
 @visibleForTesting
+bool workspaceItemShouldPreserveMultiSelectionForActivation({
+  required bool itemSelected,
+  required int selectedItemCount,
+  required bool hasDoubleTapAction,
+  required bool selectionModifierPressed,
+}) {
+  return itemSelected &&
+      selectedItemCount > 1 &&
+      hasDoubleTapAction &&
+      !selectionModifierPressed;
+}
+
+@visibleForTesting
 ({
   Set<Object> selectedIdentities,
   Object? activeIdentity,
@@ -227,7 +240,6 @@ class _WorkspaceItemSelectionController extends ChangeNotifier {
   _WorkspaceItemSelectionController({this.onSelectionChanged});
 
   final ValueChanged<Set<Object>>? onSelectionChanged;
-  final Object tapRegionGroupId = Object();
   Set<Object> _selectedIdentities = <Object>{};
   Object? _activeIdentity;
   Object? _anchorIdentity;
@@ -551,8 +563,10 @@ class _WorkspaceItemGridState<T extends _WorkspaceItemData>
       if (!mounted || _focusNode.hasFocus) {
         return;
       }
+      // Restoring keyboard focus after returning to the workspace must not
+      // reposition the outer pane. Focus-first/last navigation reveals its
+      // target explicitly.
       _focusNode.requestFocus();
-      _revealSelection();
     });
   }
 
@@ -589,12 +603,21 @@ class _WorkspaceItemGridState<T extends _WorkspaceItemData>
     _focusNode.requestFocus();
   }
 
-  void _clearSelection() {
-    _focusNode.unfocus();
-    _sharedSelection?.clear();
-    if (_sharedSelection == null && _selectedIndex != null) {
-      setState(() => _selectedIndex = null);
+  void _selectFromPointer(int index) {
+    final preserveSelection =
+        workspaceItemShouldPreserveMultiSelectionForActivation(
+          itemSelected: _isSelected(index),
+          selectedItemCount:
+              _sharedSelection?.selectedIdentities.length ??
+              (_selectedIndex == null ? 0 : 1),
+          hasDoubleTapAction: widget.onItemDoubleTap != null,
+          selectionModifierPressed: _workspaceItemMultiSelectionPressed,
+        );
+    if (preserveSelection) {
+      _focusNode.requestFocus();
+      return;
     }
+    _select(index, respectSelectionModifiers: true);
   }
 
   List<T> _contextItemsFor(int index) {
@@ -710,64 +733,58 @@ class _WorkspaceItemGridState<T extends _WorkspaceItemData>
 
   @override
   Widget build(BuildContext context) {
-    return TapRegion(
-      groupId: _sharedSelection?.tapRegionGroupId ?? this,
-      onTapOutside: (_) => _clearSelection(),
-      child: Focus(
-        focusNode: _focusNode,
-        autofocus: _effectiveSelectedIndex != null,
-        onKeyEvent: _handleKeyEvent,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final width = constraints.maxWidth;
-            final columns = workspaceGridColumnCount(
-              width: width,
-              itemCount: widget.items.length,
-              maxColumns: widget.maxColumns,
-              layoutItemCount: widget.layoutItemCount,
-            );
-            _columns = columns;
-            final totalSpacing = _workspaceGridColumnSpacing * (columns - 1);
-            final cardWidth = (width - totalSpacing) / columns;
+    return Focus(
+      focusNode: _focusNode,
+      autofocus: _effectiveSelectedIndex != null,
+      onKeyEvent: _handleKeyEvent,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth;
+          final columns = workspaceGridColumnCount(
+            width: width,
+            itemCount: widget.items.length,
+            maxColumns: widget.maxColumns,
+            layoutItemCount: widget.layoutItemCount,
+          );
+          _columns = columns;
+          final totalSpacing = _workspaceGridColumnSpacing * (columns - 1);
+          final cardWidth = (width - totalSpacing) / columns;
 
-            return Wrap(
-              spacing: _workspaceGridColumnSpacing,
-              runSpacing: 12,
-              children: [
-                for (var index = 0; index < widget.items.length; index++)
-                  _WorkspaceItemCard<T>(
-                    key: ValueKey(
-                      'workspace-item-card:${_workspaceItemIdentity(widget.items[index])}',
-                    ),
-                    width: cardWidth
-                        .clamp(
-                          _workspaceGridMinCardWidth,
-                          _workspaceGridMaxCardWidth,
-                        )
-                        .toDouble(),
-                    item: widget.items[index],
-                    selected: _isSelected(index),
-                    contextItems: _contextItemsFor(index),
-                    onTap: () =>
-                        _select(index, respectSelectionModifiers: true),
-                    onDoubleTap:
-                        widget.onItemDoubleTap == null &&
-                            widget.onItemTap == null
-                        ? null
-                        : () => (widget.onItemDoubleTap ?? widget.onItemTap)!(
-                            widget.items[index],
-                          ),
-                    onContextAction:
-                        widget.onContextAction == null &&
-                            widget.onContextActions == null
-                        ? null
-                        : _contextActionFor(index),
-                    contextWorkspaceName: widget.contextWorkspaceName,
+          return Wrap(
+            spacing: _workspaceGridColumnSpacing,
+            runSpacing: 12,
+            children: [
+              for (var index = 0; index < widget.items.length; index++)
+                _WorkspaceItemCard<T>(
+                  key: ValueKey(
+                    'workspace-item-card:${_workspaceItemIdentity(widget.items[index])}',
                   ),
-              ],
-            );
-          },
-        ),
+                  width: cardWidth
+                      .clamp(
+                        _workspaceGridMinCardWidth,
+                        _workspaceGridMaxCardWidth,
+                      )
+                      .toDouble(),
+                  item: widget.items[index],
+                  selected: _isSelected(index),
+                  contextItems: _contextItemsFor(index),
+                  onTap: () => _selectFromPointer(index),
+                  onDoubleTap:
+                      widget.onItemDoubleTap == null && widget.onItemTap == null
+                      ? null
+                      : () => (widget.onItemDoubleTap ?? widget.onItemTap)!(
+                          widget.items[index],
+                        ),
+                  onContextAction:
+                      widget.onContextAction == null &&
+                          widget.onContextActions == null
+                      ? null
+                      : _contextActionFor(index),
+                  contextWorkspaceName: widget.contextWorkspaceName,
+                ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -902,8 +919,8 @@ class _WorkspaceItemListState<T extends _WorkspaceItemData>
       if (!mounted || _focusNode.hasFocus) {
         return;
       }
+      // Preserve the user's scroll offset when this collection is rebuilt.
       _focusNode.requestFocus();
-      _revealSelection();
     });
   }
 
@@ -940,12 +957,21 @@ class _WorkspaceItemListState<T extends _WorkspaceItemData>
     _focusNode.requestFocus();
   }
 
-  void _clearSelection() {
-    _focusNode.unfocus();
-    _sharedSelection?.clear();
-    if (_sharedSelection == null && _selectedIndex != null) {
-      setState(() => _selectedIndex = null);
+  void _selectFromPointer(int index) {
+    final preserveSelection =
+        workspaceItemShouldPreserveMultiSelectionForActivation(
+          itemSelected: _isSelected(index),
+          selectedItemCount:
+              _sharedSelection?.selectedIdentities.length ??
+              (_selectedIndex == null ? 0 : 1),
+          hasDoubleTapAction: widget.onItemDoubleTap != null,
+          selectionModifierPressed: _workspaceItemMultiSelectionPressed,
+        );
+    if (preserveSelection) {
+      _focusNode.requestFocus();
+      return;
     }
+    _select(index, respectSelectionModifiers: true);
   }
 
   List<T> _contextItemsFor(int index) {
@@ -1031,41 +1057,37 @@ class _WorkspaceItemListState<T extends _WorkspaceItemData>
 
   @override
   Widget build(BuildContext context) {
-    return TapRegion(
-      groupId: _sharedSelection?.tapRegionGroupId ?? this,
-      onTapOutside: (_) => _clearSelection(),
-      child: Focus(
-        focusNode: _focusNode,
-        autofocus: _effectiveSelectedIndex != null,
-        onKeyEvent: _handleKeyEvent,
-        child: Column(
-          children: [
-            for (var index = 0; index < widget.items.length; index++) ...[
-              if (index > 0) SizedBox(height: 7),
-              _WorkspaceItemListRow<T>(
-                key: ValueKey(
-                  'workspace-item-row:${_workspaceItemIdentity(widget.items[index])}',
-                ),
-                item: widget.items[index],
-                selected: _isSelected(index),
-                contextItems: _contextItemsFor(index),
-                onTap: () => _select(index, respectSelectionModifiers: true),
-                onDoubleTap:
-                    widget.onItemDoubleTap == null && widget.onItemTap == null
-                    ? null
-                    : () => (widget.onItemDoubleTap ?? widget.onItemTap)!(
-                        widget.items[index],
-                      ),
-                onContextAction:
-                    widget.onContextAction == null &&
-                        widget.onContextActions == null
-                    ? null
-                    : _contextActionFor(index),
-                contextWorkspaceName: widget.contextWorkspaceName,
+    return Focus(
+      focusNode: _focusNode,
+      autofocus: _effectiveSelectedIndex != null,
+      onKeyEvent: _handleKeyEvent,
+      child: Column(
+        children: [
+          for (var index = 0; index < widget.items.length; index++) ...[
+            if (index > 0) SizedBox(height: 7),
+            _WorkspaceItemListRow<T>(
+              key: ValueKey(
+                'workspace-item-row:${_workspaceItemIdentity(widget.items[index])}',
               ),
-            ],
+              item: widget.items[index],
+              selected: _isSelected(index),
+              contextItems: _contextItemsFor(index),
+              onTap: () => _selectFromPointer(index),
+              onDoubleTap:
+                  widget.onItemDoubleTap == null && widget.onItemTap == null
+                  ? null
+                  : () => (widget.onItemDoubleTap ?? widget.onItemTap)!(
+                      widget.items[index],
+                    ),
+              onContextAction:
+                  widget.onContextAction == null &&
+                      widget.onContextActions == null
+                  ? null
+                  : _contextActionFor(index),
+              contextWorkspaceName: widget.contextWorkspaceName,
+            ),
           ],
-        ),
+        ],
       ),
     );
   }
