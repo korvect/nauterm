@@ -926,6 +926,8 @@ void main() {
     await tester.pump();
 
     expect(totalLimit, findsOneWidget);
+    expect(find.text('Record Terminal Sessions'), findsOneWidget);
+    expect(find.text('Raw Terminal Output'), findsNothing);
     expect(find.text('Reserved · not enforced'), findsNothing);
     expect(find.text('HISTORY & STORAGE'), findsOneWidget);
     expect(

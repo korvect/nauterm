@@ -93,8 +93,8 @@ void main() {
         '在本机保存连接历史。',
       );
       expect(
-        chinese.tr('Save encrypted terminal output for replay.'),
-        '保存加密的终端输出，供以后回放。',
+        chinese.tr('Encrypt and save terminal output for later replay.'),
+        '加密保存终端输出，以便稍后回放。',
       );
       expect(
         chinese.tr(

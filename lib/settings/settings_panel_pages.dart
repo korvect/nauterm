@@ -890,8 +890,9 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
                 SizedBox(height: 18),
                 _SettingsRow(
                   localizationKey: 'settings.terminal.recording.rawOutput',
-                  title: 'Raw Terminal Output',
-                  subtitle: 'Save encrypted terminal output for replay.',
+                  title: 'Record Terminal Sessions',
+                  subtitle:
+                      'Encrypt and save terminal output for later replay.',
                   trailing: _SettingsSwitch(
                     key: const ValueKey('settings-terminal-raw-output-switch'),
                     value: terminalRecordingConfig.captureEnabled,

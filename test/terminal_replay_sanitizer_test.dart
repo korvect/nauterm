@@ -48,6 +48,33 @@ void main() {
     expect(utf8.decode([...output, ...sanitizer.close()]), 'before\x1b[7m');
   });
 
+  test('removes internal shell OSC across capture chunks', () {
+    final sanitizer = TerminalReplaySanitizer();
+    final first = sanitizer.add(
+      Uint8List.fromList(utf8.encode('before\x1b]7;file://localhost/t')),
+    );
+    final second = sanitizer.add(
+      Uint8List.fromList(utf8.encode('mp\x07middle\x1b]133;A\x1b\\after')),
+    );
+
+    expect(
+      utf8.decode([...first, ...second, ...sanitizer.close()]),
+      'beforemiddleafter',
+    );
+  });
+
+  test('preserves unrelated OSC during replay', () {
+    final sanitizer = TerminalReplaySanitizer();
+    final output = sanitizer.add(
+      Uint8List.fromList(utf8.encode('\x1b]0;terminal title\x07prompt')),
+    );
+
+    expect(
+      utf8.decode([...output, ...sanitizer.close()]),
+      '\x1b]0;terminal title\x07prompt',
+    );
+  });
+
   test('can force an unfinished alternate screen back to primary', () {
     final sanitizer = TerminalReplaySanitizer();
 

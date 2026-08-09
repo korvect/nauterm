@@ -16,14 +16,14 @@ void main() {
     );
   });
 
-  test('internal shell OSC is removed across chunks', () {
+  test('internal shell OSC is preserved in capture across chunks', () {
     final sanitizer = TerminalCaptureSanitizer();
     final first = sanitizer.add(_bytes('before\x1b]7;file://localhost/t'));
     final second = sanitizer.add(_bytes('mp\x07middle\x1b]133;A\x1b\\after'));
 
     expect(
       utf8.decode([...first, ...second, ...sanitizer.close()]),
-      'beforemiddleafter',
+      'before\x1b]7;file://localhost/tmp\x07middle\x1b]133;A\x1b\\after',
     );
   });
 

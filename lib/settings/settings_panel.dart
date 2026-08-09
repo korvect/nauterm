@@ -260,7 +260,7 @@ const _settingsSearchEntries = <_SettingsSearchEntry>[
     page: _SettingsPage.terminal,
     section: 'terminal-recording',
     title: 'History & Storage',
-    subtitle: 'Manage terminal history and raw output.',
+    subtitle: 'Manage terminal history and session recordings.',
     keywords: 'capture logs retention encryption storage privacy',
   ),
   _SettingsSearchEntry(
