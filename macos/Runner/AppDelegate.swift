@@ -302,6 +302,18 @@ class AppDelegate: FlutterAppDelegate {
     appMenuChannel?.invokeMethod("showAbout", arguments: nil)
   }
 
+  @IBAction func checkForUpdates(_ sender: Any?) {
+    guard let updaterController = sparkleUpdaterController else {
+      let alert = NSAlert()
+      alert.alertStyle = .warning
+      alert.messageText = "Updates are not configured"
+      alert.informativeText = "This build does not include a Sparkle update feed and public key."
+      alert.runModal()
+      return
+    }
+    updaterController.checkForUpdates(sender)
+  }
+
   @IBAction func closeSelectedTerminalTab(_ sender: Any?) {
     if NSApp.keyWindow?.title == "Nauterm Settings" {
       NSApp.keyWindow?.performClose(sender)

@@ -105,6 +105,217 @@ class _WorkspaceNotificationToast extends StatelessWidget {
   }
 }
 
+class _WorkspaceUpdateToast extends StatelessWidget {
+  const _WorkspaceUpdateToast({required this.notice});
+
+  final StartupUpdateNotice notice;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.nautermPalette;
+    final busy =
+        notice.phase == StartupUpdatePhase.downloading ||
+        notice.phase == StartupUpdatePhase.installing;
+    final restart = notice.phase == StartupUpdatePhase.restartRequired;
+    final error = notice.phase == StartupUpdatePhase.error;
+    final message = switch (notice.phase) {
+      StartupUpdatePhase.available => tr(
+        'update.startup.available.description',
+        fallback: 'Nauterm {version} is available.',
+        args: {'version': notice.version},
+      ),
+      StartupUpdatePhase.downloading => tr(
+        'update.startup.downloading',
+        fallback: 'Downloading Nauterm {version}...',
+        args: {'version': notice.version},
+      ),
+      StartupUpdatePhase.installing => tr(
+        'update.startup.installing',
+        fallback: 'Installing Nauterm {version}...',
+        args: {'version': notice.version},
+      ),
+      StartupUpdatePhase.restartRequired => tr(
+        'update.startup.restartRequired',
+        fallback: 'Nauterm {version} is ready. Restart to finish updating.',
+        args: {'version': notice.version},
+      ),
+      StartupUpdatePhase.installerLaunched => tr(
+        'update.startup.installerLaunched',
+        fallback: 'The Nauterm {version} installer is open.',
+        args: {'version': notice.version},
+      ),
+      StartupUpdatePhase.error => tr(
+        'update.startup.error',
+        fallback: 'Unable to update Nauterm {version}.',
+        args: {'version': notice.version},
+      ),
+    };
+
+    return Positioned(
+      right: 18,
+      bottom: 66,
+      child: Material(
+        color: Colors.transparent,
+        child: Container(
+          width: 390,
+          constraints: const BoxConstraints(maxWidth: 390),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: _card,
+            borderRadius: BorderRadius.circular(9),
+            border: Border.all(
+              color: (error ? const Color(0xffef4444) : palette.primary)
+                  .withValues(alpha: 0.34),
+            ),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x26000000),
+                blurRadius: 22,
+                offset: Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    error ? Icons.error_outline_rounded : Icons.system_update,
+                    color: error ? const Color(0xffef4444) : palette.primary,
+                    size: 19,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          tr(
+                            'update.startup.title',
+                            fallback: 'Nauterm update available',
+                          ),
+                          style: TextStyle(
+                            color: _text,
+                            fontSize: NautermFontSizes.labelLarge,
+                            fontWeight: NautermFontWeights.semibold,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          message,
+                          style: TextStyle(
+                            color: _mutedText,
+                            fontSize: NautermFontSizes.labelMedium,
+                            height: 1.4,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (!busy)
+                    _WorkspaceButton(
+                      icon: LucideIcons.x,
+                      tooltip: tr(
+                        'settings.update.action.later',
+                        fallback: 'Later',
+                      ),
+                      size: _WorkspaceControlSize.tiny,
+                      variant: _WorkspaceButtonVariant.text,
+                      height: 24,
+                      minWidth: 24,
+                      onPressed: notice.onDismiss,
+                    ),
+                ],
+              ),
+              if (notice.progress != null) ...[
+                const SizedBox(height: 12),
+                LinearProgressIndicator(
+                  value: notice.progress,
+                  minHeight: 3,
+                  color: palette.primary,
+                  backgroundColor: palette.softOutline,
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ],
+              if (!busy) ...[
+                const SizedBox(height: 12),
+                Wrap(
+                  alignment: WrapAlignment.end,
+                  spacing: 8,
+                  children: [
+                    if (notice.phase == StartupUpdatePhase.available)
+                      _WorkspaceTextButton(
+                        label: tr(
+                          'update.startup.action.skip',
+                          fallback: 'Skip this version',
+                        ),
+                        onPressed: notice.onSkip,
+                      ),
+                    if (notice.phase != StartupUpdatePhase.installerLaunched)
+                      _WorkspaceTextButton(
+                        label: tr(
+                          restart
+                              ? 'settings.update.action.restart'
+                              : 'update.startup.action.update',
+                          fallback: restart ? 'Restart Nauterm' : 'Update',
+                        ),
+                        primary: true,
+                        onPressed: notice.onUpdate,
+                      ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WorkspaceTextButton extends StatelessWidget {
+  const _WorkspaceTextButton({
+    required this.label,
+    required this.onPressed,
+    this.primary = false,
+  });
+
+  final String label;
+  final VoidCallback onPressed;
+  final bool primary;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.nautermPalette;
+    return TextButton(
+      onPressed: onPressed,
+      style: TextButton.styleFrom(
+        foregroundColor: primary ? Colors.white : _mutedText,
+        backgroundColor: primary ? palette.primary : Colors.transparent,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        minimumSize: const Size(0, 32),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(7),
+          side: primary
+              ? BorderSide.none
+              : BorderSide(color: palette.softOutline),
+        ),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: NautermFontSizes.labelMedium,
+          fontWeight: NautermFontWeights.medium,
+        ),
+      ),
+    );
+  }
+}
+
 class _SerialConnectionDialog extends StatefulWidget {
   const _SerialConnectionDialog();
 

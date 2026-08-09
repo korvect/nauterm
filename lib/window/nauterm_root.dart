@@ -10,6 +10,8 @@ import '../settings/settings_panel.dart';
 import '../data/nauterm_paths.dart';
 import '../data/sync_service.dart';
 import '../workspace/nauterm_workspace.dart';
+import '../update/desktop_update.dart';
+import '../update/startup_update.dart';
 import 'main_window.dart';
 import 'native_windowing.dart';
 import 'settings_window.dart';
@@ -26,6 +28,7 @@ class _NautermRootState extends State<NautermRoot>
   final NautermWorkspaceController _workspaceController =
       NautermWorkspaceController();
   late final SyncService _syncService;
+  late final StartupUpdateCoordinator _updateCoordinator;
   bool _isMainWindowMounted = true;
   bool _isMainWindowContentMounted = true;
   bool _isSettingsWindowMounted = false;
@@ -41,12 +44,29 @@ class _NautermRootState extends State<NautermRoot>
       NautermPaths.resolve(),
       onSyncCompleted: notifyNautermSyncCompleted,
     );
+    _updateCoordinator = StartupUpdateCoordinator(
+      showNotice: _workspaceController.showUpdateNotice,
+      loadSkippedVersion: _workspaceController.loadSkippedUpdateVersion,
+      saveSkippedVersion: _workspaceController.saveSkippedUpdateVersion,
+      restart: (disposition) => restartNautermApplication(
+        launchInstalledExecutable:
+            disposition == DesktopUpdateInstallDisposition.restartRequired,
+      ),
+    );
     registerNautermRoot(this);
     nautermDatabaseBulkChangeRevision.addListener(_reloadBulkDatabaseChanges);
     nautermSyncPreferencesRevision.addListener(_reloadSyncPreferences);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_preloadSecureDataAfterDatabaseReady());
+      unawaited(_checkForUpdatesAfterWorkspaceReady());
     });
+  }
+
+  Future<void> _checkForUpdatesAfterWorkspaceReady() async {
+    await _workspaceController.initialDataReady;
+    if (mounted) {
+      await _updateCoordinator.checkAtStartup();
+    }
   }
 
   Future<void> _preloadSecureDataAfterDatabaseReady() async {
@@ -63,6 +83,7 @@ class _NautermRootState extends State<NautermRoot>
     nautermSyncPreferencesRevision.removeListener(_reloadSyncPreferences);
     unregisterNautermRoot(this);
     unawaited(_syncService.close());
+    _updateCoordinator.close();
     final settingsWindowController = _settingsWindowController;
     if (settingsWindowController != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {

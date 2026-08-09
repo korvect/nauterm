@@ -58,6 +58,7 @@ import '../terminal/terminal_replay_sanitizer.dart';
 import '../terminal/system_font_catalog.dart';
 import '../terminal/system_shells.dart';
 import '../terminal/terminal_theme.dart';
+import '../update/startup_update.dart';
 import '../terminal/terminal_widget.dart';
 import '../window/file_drop_channel.dart';
 import '../window/native_windowing.dart';
@@ -117,6 +118,7 @@ final Set<Future<void> Function()> _workspaceShutdownHooks = {};
 
 class NautermWorkspaceController extends ChangeNotifier {
   _NautermWorkspaceState? _state;
+  StartupUpdateNotice? _updateNotice;
   final Completer<void> _initialDataReady = Completer<void>();
   Future<void>? _flushAndCloseFuture;
 
@@ -141,6 +143,21 @@ class NautermWorkspaceController extends ChangeNotifier {
     await _state?._loadWorkspaceData();
   }
 
+  Future<String?> loadSkippedUpdateVersion() async {
+    await initialDataReady;
+    return _state?._dataStore?.getAppMetadata('skipped_update_version');
+  }
+
+  Future<void> saveSkippedUpdateVersion(String version) async {
+    await initialDataReady;
+    _state?._dataStore?.setAppMetadata('skipped_update_version', version);
+  }
+
+  void showUpdateNotice(StartupUpdateNotice? notice) {
+    _updateNotice = notice;
+    _state?._showUpdateNotice(notice);
+  }
+
   Future<void> flushAndClose() {
     return _flushAndCloseFuture ??=
         _state?._flushAndClose() ?? Future<void>.value();
@@ -148,6 +165,7 @@ class NautermWorkspaceController extends ChangeNotifier {
 
   void _attach(_NautermWorkspaceState state) {
     _state = state;
+    state._showUpdateNotice(_updateNotice);
     notifyListeners();
   }
 
@@ -212,6 +230,7 @@ class _NautermWorkspaceModel extends ChangeNotifier {
   bool loadingData = true;
   bool workspaceOverviewActive = false;
   _WorkspaceNotification? notification;
+  StartupUpdateNotice? updateNotice;
   int sftpConnectRequestId = 0;
   _SftpConnectRequest? sftpConnectRequest;
   bool sftpPaneMounted = false;
@@ -454,6 +473,12 @@ class _NautermWorkspaceState extends ConsumerState<NautermWorkspace> {
 
   set _notification(_WorkspaceNotification? value) {
     _workspaceModel.notification = value;
+  }
+
+  StartupUpdateNotice? get _updateNotice => _workspaceModel.updateNotice;
+
+  set _updateNotice(StartupUpdateNotice? value) {
+    _workspaceModel.updateNotice = value;
   }
 
   int get _sftpConnectRequestId => _workspaceModel.sftpConnectRequestId;
@@ -1116,6 +1141,8 @@ class _NautermWorkspaceState extends ConsumerState<NautermWorkspace> {
                         notification: _notification!,
                         onDismissed: _dismissWorkspaceNotification,
                       ),
+                    if (_updateNotice != null)
+                      _WorkspaceUpdateToast(notice: _updateNotice!),
                   ],
                 ),
               ),

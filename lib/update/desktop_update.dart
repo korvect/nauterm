@@ -11,11 +11,17 @@ const String defaultUpdateRepository = String.fromEnvironment(
   'NAUTERM_UPDATE_REPOSITORY',
 );
 
-enum DesktopUpdatePlatform { windows, linux }
+enum DesktopUpdatePlatform { macos, windows, linux }
 
 enum DesktopUpdateArchitecture { x86_64, arm64 }
 
-enum DesktopUpdateAssetKind { windowsInstaller, deb, rpm, appImage }
+enum DesktopUpdateAssetKind {
+  macosArchive,
+  windowsInstaller,
+  deb,
+  rpm,
+  appImage,
+}
 
 enum DesktopUpdateInstallDisposition {
   installerLaunched,
@@ -39,6 +45,7 @@ class DesktopUpdateTarget {
 
   static DesktopUpdateTarget current() {
     final platform = switch (Platform.operatingSystem) {
+      'macos' => DesktopUpdatePlatform.macos,
       'windows' => DesktopUpdatePlatform.windows,
       'linux' => DesktopUpdatePlatform.linux,
       final value => throw UnsupportedError(
@@ -46,7 +53,10 @@ class DesktopUpdateTarget {
       ),
     };
     final architecture = switch (Abi.current()) {
+      Abi.macosArm64 => DesktopUpdateArchitecture.arm64,
+      Abi.macosX64 => DesktopUpdateArchitecture.x86_64,
       Abi.linuxArm64 => DesktopUpdateArchitecture.arm64,
+      Abi.windowsArm64 => DesktopUpdateArchitecture.arm64,
       Abi.windowsX64 || Abi.linuxX64 => DesktopUpdateArchitecture.x86_64,
       final abi => throw UnsupportedError(
         'Application updates are not supported on $abi.',
@@ -319,6 +329,8 @@ class DesktopUpdateService {
     DesktopUpdateAssetKind kind,
   ) async {
     switch (kind) {
+      case DesktopUpdateAssetKind.macosArchive:
+        throw UnsupportedError('macOS updates are installed through Sparkle.');
       case DesktopUpdateAssetKind.windowsInstaller:
         await Process.start(
           file.path,
@@ -557,6 +569,12 @@ selectUpdateAsset(
   final arch = target.architecture.name;
   bool baseMatch(({String name, Uri? uri, int size}) asset) {
     final name = asset.name.toLowerCase();
+    if (target.platform == DesktopUpdatePlatform.macos) {
+      final archNames = target.architecture == DesktopUpdateArchitecture.x86_64
+          ? const ['x86_64']
+          : const ['arm64', 'aarch64'];
+      return name.contains('macos') && archNames.any(name.contains);
+    }
     if (target.platform == DesktopUpdatePlatform.windows) {
       return name.contains(platform) && name.contains(arch);
     }
@@ -571,6 +589,9 @@ selectUpdateAsset(
 
   final candidates = assets.where(baseMatch);
   final extensions = switch (target.platform) {
+    DesktopUpdatePlatform.macos => const [
+      ('.app.zip', DesktopUpdateAssetKind.macosArchive),
+    ],
     DesktopUpdatePlatform.windows => const [
       ('-setup.exe', DesktopUpdateAssetKind.windowsInstaller),
     ],

@@ -1272,6 +1272,12 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
     });
   }
 
+  void _showUpdateNotice(StartupUpdateNotice? notice) {
+    _setWorkspaceState(() {
+      _updateNotice = notice;
+    });
+  }
+
   Future<TerminalTheme> _themeForId(String? themeId) async {
     final theme = await _terminalThemeCatalog?.loadTheme(themeId);
     return theme ?? defaultTerminalTheme;

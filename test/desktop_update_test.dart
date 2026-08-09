@@ -49,6 +49,21 @@ void main() {
       expect(match?.$2, DesktopUpdateAssetKind.windowsInstaller);
     });
 
+    test('selects the signed macOS app archive for Sparkle discovery', () {
+      final match = selectUpdateAsset(
+        [
+          _asset('Nauterm-1.0.0-macos-arm64.dmg'),
+          _asset('Nauterm-1.0.0-macos-arm64.app.zip'),
+        ],
+        const DesktopUpdateTarget(
+          platform: DesktopUpdatePlatform.macos,
+          architecture: DesktopUpdateArchitecture.arm64,
+        ),
+      );
+      expect(match?.$1.name, 'Nauterm-1.0.0-macos-arm64.app.zip');
+      expect(match?.$2, DesktopUpdateAssetKind.macosArchive);
+    });
+
     test('honors Debian and RPM Linux package preferences', () {
       for (final (preference, expectedName) in [
         (DesktopUpdateAssetKind.deb, 'nauterm_1.2.0-1_amd64.deb'),
