@@ -1,7 +1,7 @@
 part of 'terminal_ffi.dart';
 
 class _TerminalBindings {
-  static const _expectedAbiVersion = 1;
+  static const _expectedAbiVersion = 2;
 
   _TerminalBindings(this.library)
     : createLocalSessionConfigured = library
@@ -653,6 +653,7 @@ TerminalSnapshot _snapshotFromNative(_NativeTerminalSnapshot native) {
     ),
     keyboardMode: _keyboardModeFromNative(native.keyboardMode),
     inputEchoEnabled: native.inputEchoEnabled != 0,
+    alternateScreen: native.alternateScreen != 0,
   );
 }
 

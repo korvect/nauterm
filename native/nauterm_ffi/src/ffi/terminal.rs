@@ -518,6 +518,7 @@ mod tests {
             assert_eq!((*snapshot).columns, 4);
             assert_eq!((*snapshot).rows, 1);
             assert_eq!((*snapshot).cells_len, 4);
+            assert_eq!((*snapshot).alternate_screen, 0);
 
             let cells = slice::from_raw_parts((*snapshot).cells, (*snapshot).cells_len);
             assert_eq!(cells[0].text_len, 1);

@@ -422,6 +422,7 @@ class TerminalSnapshot {
     this.displayOffset = 0,
     this.title = '',
     this.inputEchoEnabled = true,
+    this.alternateScreen = false,
     this.clipboardText = '',
     this.bellCount = 0,
   });
@@ -433,6 +434,7 @@ class TerminalSnapshot {
     int displayOffset = 0,
     TerminalKeyboardMode keyboardMode = const TerminalKeyboardMode(),
     bool inputEchoEnabled = true,
+    bool alternateScreen = false,
   }) {
     return TerminalSnapshot(
       columns: columns,
@@ -455,6 +457,7 @@ class TerminalSnapshot {
       keyboardMode: keyboardMode,
       title: '',
       inputEchoEnabled: inputEchoEnabled,
+      alternateScreen: alternateScreen,
     );
   }
 
@@ -470,6 +473,7 @@ class TerminalSnapshot {
   final List<TerminalGraphicImage> graphicImages;
   final List<TerminalGraphicPlacement> graphicPlacements;
   final bool inputEchoEnabled;
+  final bool alternateScreen;
   final String clipboardText;
   final int bellCount;
 
@@ -487,6 +491,7 @@ class TerminalSnapshot {
       displayOffset: displayOffset,
       title: title,
       inputEchoEnabled: inputEchoEnabled,
+      alternateScreen: alternateScreen,
       clipboardText: clipboardText ?? this.clipboardText,
       bellCount: bellCount ?? this.bellCount,
     );

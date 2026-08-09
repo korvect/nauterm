@@ -31,12 +31,26 @@ EdgeInsets terminalPadding = EdgeInsets.zero;
 
 enum TerminalMoshPredictionMode { adaptive, always, never }
 
+enum TerminalSshPredictionMode {
+  adaptive,
+  always,
+  never;
+
+  static TerminalSshPredictionMode fromString(String? value) => switch (value) {
+    'always' => TerminalSshPredictionMode.always,
+    'never' => TerminalSshPredictionMode.never,
+    _ => TerminalSshPredictionMode.adaptive,
+  };
+}
+
 enum TerminalOsc52Mode { copy, copyAndPaste }
 
 TerminalOsc52Mode terminalOsc52Mode = TerminalOsc52Mode.copy;
 
 TerminalMoshPredictionMode terminalMoshPredictionMode =
     TerminalMoshPredictionMode.adaptive;
+TerminalSshPredictionMode terminalSshPredictionMode =
+    TerminalSshPredictionMode.adaptive;
 
 TerminalCursorShape terminalCursorShape = TerminalCursorShape.block;
 bool terminalCursorBlink = true;
@@ -420,6 +434,7 @@ class NautermRuntimeSettings {
     this.scrollbarEnabled = true,
     this.scrollbackLines = 10000,
     this.sshKeepaliveIntervalSeconds = 20,
+    this.sshPredictionMode = TerminalSshPredictionMode.adaptive,
     this.emulationType = TerminalType.xterm256Color,
     this.emulatorBackend = TerminalEmulatorBackend.alacritty,
     this.themeId,
@@ -448,6 +463,7 @@ class NautermRuntimeSettings {
   final bool scrollbarEnabled;
   final int scrollbackLines;
   final int sshKeepaliveIntervalSeconds;
+  final TerminalSshPredictionMode sshPredictionMode;
   final TerminalType emulationType;
   final TerminalEmulatorBackend emulatorBackend;
   final String? themeId;
@@ -469,6 +485,7 @@ void applyNautermRuntimeSettings(NautermRuntimeSettings settings) {
   terminalScrollbarEnabled = settings.scrollbarEnabled;
   terminalScrollbackLines = settings.scrollbackLines;
   terminalSshKeepaliveIntervalSeconds = settings.sshKeepaliveIntervalSeconds;
+  terminalSshPredictionMode = settings.sshPredictionMode;
   terminalEmulationType = settings.emulationType;
   terminalEmulatorBackend = settings.emulatorBackend;
   terminalThemeId = settings.themeId;
@@ -529,6 +546,7 @@ NautermRuntimeSettings currentNautermRuntimeSettings() {
     scrollbarEnabled: terminalScrollbarEnabled,
     scrollbackLines: terminalScrollbackLines,
     sshKeepaliveIntervalSeconds: terminalSshKeepaliveIntervalSeconds,
+    sshPredictionMode: terminalSshPredictionMode,
     emulationType: terminalEmulationType,
     emulatorBackend: terminalEmulatorBackend,
     themeId: terminalThemeId,
@@ -567,6 +585,7 @@ TerminalConfig currentTerminalConfig() {
     padding: terminalPadding,
     scrollbackLines: terminalScrollbackLines,
     sshKeepaliveIntervalSeconds: terminalSshKeepaliveIntervalSeconds,
+    sshPredictionMode: terminalSshPredictionMode,
     emulation: TerminalEmulationConfig(type: terminalEmulationType),
     emulatorBackend: terminalEmulatorBackend,
     moshPredictionMode: terminalMoshPredictionMode,
@@ -588,6 +607,7 @@ class TerminalConfig {
     this.padding = EdgeInsets.zero,
     this.scrollbackLines = 10000,
     this.sshKeepaliveIntervalSeconds = 20,
+    this.sshPredictionMode = TerminalSshPredictionMode.adaptive,
     this.copyOnSelect = false,
   });
 
@@ -603,6 +623,7 @@ class TerminalConfig {
     EdgeInsets? padding,
     int? scrollbackLines,
     int? sshKeepaliveIntervalSeconds,
+    TerminalSshPredictionMode? sshPredictionMode,
     bool? copyOnSelect,
   }) {
     return TerminalConfig(
@@ -618,6 +639,7 @@ class TerminalConfig {
       scrollbackLines: scrollbackLines ?? this.scrollbackLines,
       sshKeepaliveIntervalSeconds:
           sshKeepaliveIntervalSeconds ?? this.sshKeepaliveIntervalSeconds,
+      sshPredictionMode: sshPredictionMode ?? this.sshPredictionMode,
       copyOnSelect: copyOnSelect ?? this.copyOnSelect,
     );
   }
@@ -633,6 +655,7 @@ class TerminalConfig {
   final EdgeInsets padding;
   final int scrollbackLines;
   final int sshKeepaliveIntervalSeconds;
+  final TerminalSshPredictionMode sshPredictionMode;
   final bool copyOnSelect;
 }
 

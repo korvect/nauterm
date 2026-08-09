@@ -56,7 +56,8 @@
     }
   },
   "ssh": {
-    "keepaliveInterval": 20000
+    "keepaliveInterval": 20000,
+    "predictionMode": "adaptive"
   },
   "sftp": {
     "showTab": true,

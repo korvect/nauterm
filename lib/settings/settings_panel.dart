@@ -1415,6 +1415,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
             .toString();
         terminalSshKeepaliveIntervalSeconds =
             defaults.sshKeepaliveIntervalSeconds;
+        terminalSshPredictionMode = defaults.sshPredictionMode;
         _sshKeepaliveIntervalSecondsController.text =
             _sshKeepaliveIntervalSeconds;
         _emulationType = defaults.emulationType;

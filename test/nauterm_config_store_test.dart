@@ -314,6 +314,7 @@ void main() {
         autocompleteEnabled: true,
         scrollbarEnabled: false,
         sshKeepaliveIntervalSeconds: 45,
+        sshPredictionMode: TerminalSshPredictionMode.always,
         hostIconMode: HostIconMode.osIcon,
         recording: NautermRecordingConfig(
           enabled: false,
@@ -341,6 +342,7 @@ void main() {
     expect(loaded.autocompleteEnabled, isTrue);
     expect(loaded.scrollbarEnabled, isFalse);
     expect(loaded.sshKeepaliveIntervalSeconds, 45);
+    expect(loaded.sshPredictionMode, TerminalSshPredictionMode.always);
     expect(loaded.hostIconMode, HostIconMode.osIcon);
     expect(loaded.recording.enabled, isFalse);
     expect(loaded.recording.captureEnabled, isTrue);

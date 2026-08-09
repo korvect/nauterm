@@ -70,6 +70,7 @@ class NautermConfigStore {
       scrollbarEnabled: terminal.appearance.scrollbar,
       scrollbackLines: terminal.behavior.scrollbackLines,
       sshKeepaliveIntervalSeconds: config.ssh.keepaliveInterval ~/ 1000,
+      sshPredictionMode: config.ssh.predictionMode,
       emulationType: terminal.emulation,
       emulatorBackend: terminal.emulationEngine,
       themeId: terminal.appearance.themeId,
@@ -120,6 +121,7 @@ class NautermConfigStore {
         ),
         ssh: NautermSshConfig(
           keepaliveInterval: settings.sshKeepaliveIntervalSeconds * 1000,
+          predictionMode: settings.sshPredictionMode,
         ),
         sftp: settings.sftp,
         workspace: NautermWorkspaceConfig(

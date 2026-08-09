@@ -1027,6 +1027,7 @@ class NativeTerminalDriver implements TerminalDriver {
       ),
       keyboardMode: _keyboardModeFromNative(native.keyboardMode),
       inputEchoEnabled: native.inputEchoEnabled != 0,
+      alternateScreen: native.alternateScreen != 0,
     );
   }
 }

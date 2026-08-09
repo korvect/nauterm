@@ -1185,12 +1185,13 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
                                 metrics: metrics,
                                 textStyle: textStyle,
                                 showCursor:
-                                    widget.controller.moshPrediction.isEmpty &&
+                                    widget.controller.localPrediction.isEmpty &&
                                     _showCursor(snapshot),
                                 composingText: snapshot.displayOffset == 0
                                     ? _imeComposingText
                                     : null,
-                                predictedText: widget.controller.moshPrediction,
+                                predictedText:
+                                    widget.controller.localPrediction,
                                 selection: _selection,
                                 commandBlockSelection: _commandBlockSelection,
                                 paintCommandBlockVerticalBorders: false,

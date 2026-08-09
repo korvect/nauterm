@@ -798,6 +798,49 @@ void main() {
     expect(terminalEmulatorBackend, TerminalEmulatorBackend.ghostty);
   });
 
+  testWidgets('SSH prediction selector updates new-session behavior', (
+    WidgetTester tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1000, 820);
+    final originalMode = terminalSshPredictionMode;
+    addTearDown(() {
+      tester.view.resetDevicePixelRatio();
+      tester.view.resetPhysicalSize();
+      terminalSshPredictionMode = originalMode;
+    });
+    terminalSshPredictionMode = TerminalSshPredictionMode.adaptive;
+
+    await tester.pumpWidget(
+      const MaterialApp(home: SettingsPanel(detectExternalEditors: false)),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('settings-nav-terminal')));
+    await tester.pump();
+
+    final select = find.byKey(
+      const ValueKey('settings-terminal-ssh-prediction-select'),
+    );
+    await tester.scrollUntilVisible(
+      select,
+      300,
+      scrollable: find
+          .descendant(
+            of: find.byKey(const ValueKey('settings-terminal-scroll-view')),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    await Scrollable.ensureVisible(tester.element(select), alignment: 0.5);
+    await tester.pump();
+    await tester.tap(select);
+    await tester.pump();
+    await tester.tap(find.text('Always').last);
+    await tester.pump();
+
+    expect(terminalSshPredictionMode, TerminalSshPredictionMode.always);
+  });
+
   testWidgets('settings select menu follows its field while scrolling', (
     WidgetTester tester,
   ) async {

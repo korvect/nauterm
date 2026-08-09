@@ -409,6 +409,7 @@ pub struct TerminalSnapshot {
     pub cursor_blinking: bool,
     pub keyboard_mode: u32,
     pub input_echo_enabled: bool,
+    pub alternate_screen: bool,
     pub cells: Vec<FfiTerminalCell>,
     pub text: Vec<u8>,
     pub hyperlink_text: Vec<u8>,
@@ -1113,6 +1114,7 @@ impl TerminalEngine {
             cursor_blinking,
             keyboard_mode,
             input_echo_enabled,
+            alternate_screen: self.is_alt_screen(),
             cells,
             text,
             hyperlink_text,
@@ -2456,11 +2458,13 @@ mod tests {
 
         terminal.write_bytes(b"\x1b[?1049h\x1b[?12l\x1b[2 q");
         let snapshot = terminal.snapshot();
+        assert!(snapshot.alternate_screen);
         assert_eq!(snapshot.cursor_shape, 0);
         assert!(!snapshot.cursor_blinking);
 
         terminal.write_bytes(b"\x1b[?1049l");
         let snapshot = terminal.snapshot();
+        assert!(!snapshot.alternate_screen);
         assert_eq!(snapshot.cursor_shape, 2);
         assert!(snapshot.cursor_blinking);
     }

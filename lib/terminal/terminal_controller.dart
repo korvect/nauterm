@@ -14,6 +14,7 @@ import 'terminal_recording.dart';
 import 'terminal_selection.dart';
 import 'terminal_sensitive_input.dart';
 import 'terminal_shell_integration.dart';
+import 'terminal_ssh_prediction.dart';
 import 'terminal_theme.dart';
 import 'terminal_text_width.dart';
 
@@ -264,6 +265,9 @@ class TerminalController extends ChangeNotifier {
   static const Duration _snapshotRefreshInterval = Duration(milliseconds: 16);
   static const double _moshPredictionAdaptiveEnableLatencyMs = 80;
   static const double _moshPredictionAdaptiveDisableLatencyMs = 40;
+  static const double _sshPredictionAdaptiveEnableLatencyMs = 80;
+  static const double _sshPredictionAdaptiveDisableLatencyMs = 40;
+  static const Duration _sshPredictionExpiry = Duration(seconds: 5);
 
   TerminalController({
     TerminalDriver? driver,
@@ -334,6 +338,7 @@ class TerminalController extends ChangeNotifier {
     TerminalInputSink? onInputSent,
     int initialColumns = 80,
     int initialRows = 24,
+    TerminalDriver? driver,
     this.config = defaultTerminalConfig,
   }) : _onInput = null,
        _onInputSent = onInputSent,
@@ -365,23 +370,25 @@ class TerminalController extends ChangeNotifier {
          phase: TerminalConnectionPhase.connecting,
          message: 'Connecting to $username@$host:$port...',
        ) {
-    _driver = _createSshDriver(
-      columns: initialColumns,
-      rows: initialRows,
-      config: config,
-      onWakeup: _handleDriverWakeup,
-      host: host,
-      port: port,
-      username: username,
-      knownHostsPath: knownHostsPath,
-      password: password,
-      privateKey: privateKey,
-      passphrase: passphrase,
-      proxy: proxy,
-      environment: environment,
-      encoding: encoding,
-      theme: theme,
-    );
+    _driver =
+        driver ??
+        _createSshDriver(
+          columns: initialColumns,
+          rows: initialRows,
+          config: config,
+          onWakeup: _handleDriverWakeup,
+          host: host,
+          port: port,
+          username: username,
+          knownHostsPath: knownHostsPath,
+          password: password,
+          privateKey: privateKey,
+          passphrase: passphrase,
+          proxy: proxy,
+          environment: environment,
+          encoding: encoding,
+          theme: theme,
+        );
     _snapshot = _driver.snapshot;
     _startDriverWatchdog();
     _recorder?.recordSnapshot(_snapshot);
@@ -625,6 +632,9 @@ class TerminalController extends ChangeNotifier {
   bool _moshAdaptivePredictionEnabled = true;
   double? _moshLatencyMs;
   double? _sshLatencyMs;
+  final SshLocalPredictionState _sshPrediction = SshLocalPredictionState();
+  bool _sshAdaptivePredictionEnabled = false;
+  Timer? _sshPredictionExpiryTimer;
   int? _moshCommittedScreenStateNum;
   _ConfirmedPredictionLineState? _moshConfirmedLineState;
   MoshNetworkState _moshNetworkState = MoshNetworkState.stable;
@@ -698,8 +708,15 @@ class TerminalController extends ChangeNotifier {
   }
 
   bool get isMoshSession => _remoteTransport == _RemoteTerminalTransport.mosh;
+  bool get isSshSession => _remoteTransport == _RemoteTerminalTransport.ssh;
   String get moshPrediction =>
       _moshPendingPrediction.map((unit) => unit.grapheme).join();
+  String get sshPrediction => _sshPrediction.text;
+  String get localPrediction => isMoshSession ? moshPrediction : sshPrediction;
+
+  @visibleForTesting
+  List<SshPredictionDebugBatch> get debugSshPredictionBatches =>
+      _sshPrediction.debugBatches;
   @visibleForTesting
   List<MoshPredictionDebugBatch> get debugMoshPredictionBatches {
     final ordered = <int>[];
@@ -953,6 +970,8 @@ class TerminalController extends ChangeNotifier {
     _pendingInputLine = '';
     _startupSnippetSent = false;
     _sshLatencyMs = null;
+    _sshAdaptivePredictionEnabled = false;
+    _clearSshPrediction();
     _connectionEvents.clear();
     _addConnectionEvent(
       TerminalConnectionEvent(
@@ -1098,6 +1117,15 @@ class TerminalController extends ChangeNotifier {
         );
       }
     }
+    if (isSshSession) {
+      if (effectiveSensitive || inputStatus != TerminalInputStatus.accepted) {
+        _suspendSshPrediction();
+      } else if (_shouldPredictSshInput()) {
+        _updateSshPrediction(data);
+      } else {
+        _clearSshPrediction();
+      }
+    }
     if (inputStatus != TerminalInputStatus.accepted &&
         !effectiveSensitive &&
         !isMoshSession) {
@@ -1137,6 +1165,80 @@ class TerminalController extends ChangeNotifier {
       ),
       TerminalMoshPredictionMode.always => true,
     };
+  }
+
+  bool _shouldPredictSshInput() {
+    if (!isSshSession ||
+        _connectionStatus.phase != TerminalConnectionPhase.connected) {
+      return false;
+    }
+    return switch (config.sshPredictionMode) {
+      TerminalSshPredictionMode.never => false,
+      TerminalSshPredictionMode.adaptive => _sshAdaptivePredictionEnabled,
+      TerminalSshPredictionMode.always => true,
+    };
+  }
+
+  void _updateSshPrediction(String data) {
+    final changed = _sshPrediction.addInput(data, _snapshot);
+    _syncSshPredictionExpiryTimer();
+    if (changed) {
+      notifyListeners();
+    }
+  }
+
+  void _reconcileSshPrediction(TerminalSnapshot snapshot) {
+    if (!isSshSession) {
+      return;
+    }
+    _sshPrediction.reconcile(snapshot);
+    _syncSshPredictionExpiryTimer();
+  }
+
+  void _updateSshLatency(double? latencyMs) {
+    if (latencyMs == null || !latencyMs.isFinite || latencyMs < 0) {
+      return;
+    }
+    _sshLatencyMs = latencyMs;
+    if (_sshAdaptivePredictionEnabled) {
+      if (latencyMs <= _sshPredictionAdaptiveDisableLatencyMs) {
+        _sshAdaptivePredictionEnabled = false;
+        _clearSshPrediction();
+      }
+      return;
+    }
+    if (latencyMs >= _sshPredictionAdaptiveEnableLatencyMs) {
+      _sshAdaptivePredictionEnabled = true;
+    }
+  }
+
+  void _suspendSshPrediction() {
+    final changed = _sshPrediction.suspendUntilScreenUpdate();
+    _syncSshPredictionExpiryTimer();
+    if (changed) {
+      notifyListeners();
+    }
+  }
+
+  void _clearSshPrediction() {
+    _sshPrediction.clear();
+    _sshPredictionExpiryTimer?.cancel();
+    _sshPredictionExpiryTimer = null;
+  }
+
+  void _syncSshPredictionExpiryTimer() {
+    _sshPredictionExpiryTimer?.cancel();
+    _sshPredictionExpiryTimer = null;
+    if (_sshPrediction.isEmpty) {
+      return;
+    }
+    _sshPredictionExpiryTimer = Timer(_sshPredictionExpiry, () {
+      _sshPredictionExpiryTimer = null;
+      if (_disposed || !_sshPrediction.clear()) {
+        return;
+      }
+      notifyListeners();
+    });
   }
 
   bool _shouldPredictAdaptiveMoshInput({
@@ -1669,6 +1771,7 @@ class TerminalController extends ChangeNotifier {
   void _refreshSnapshot() {
     final nextSnapshot = _driver.snapshot;
     _snapshot = nextSnapshot;
+    _reconcileSshPrediction(nextSnapshot);
     _reconcileMoshPredictionBatches();
     _invalidateMoshPredictionAtOrAfterCursor(nextSnapshot.cursor);
     _invalidateMoshPredictionAtOrAfterMismatch(nextSnapshot);
@@ -1927,7 +2030,7 @@ class TerminalController extends ChangeNotifier {
         }
         _scheduleStartupSnippetIfNeeded();
       case TerminalConnectionEventKind.sshLatencyUpdated:
-        _sshLatencyMs = event.latencyMs;
+        _updateSshLatency(event.latencyMs);
       case TerminalConnectionEventKind.moshEchoEnabled:
         _moshPredictionEnabled = true;
       case TerminalConnectionEventKind.moshEchoDisabled:
@@ -2288,6 +2391,8 @@ class TerminalController extends ChangeNotifier {
     _driverWakeupPending = false;
     _snapshotRefreshTimer?.cancel();
     _snapshotRefreshTimer = null;
+    _sshPredictionExpiryTimer?.cancel();
+    _sshPredictionExpiryTimer = null;
     _moshNetworkRestoredTimer?.cancel();
     _moshNetworkRestoredTimer = null;
     _moshConnectedRevealTimer?.cancel();

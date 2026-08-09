@@ -45,6 +45,7 @@ and is not affiliated with or endorsed by Termius.
 - Local shell sessions and saved remote hosts
 - SSH, Mosh, Telnet, and serial connections
 - Multiple terminal tabs, split panes, and workspace-oriented navigation
+- Adaptive local predictive echo for high-latency SSH connections
 - SSH host key verification and a managed `known_hosts` file
 - Password, private key, certificate, identity, proxy, and startup command
   configuration
@@ -52,8 +53,9 @@ and is not affiliated with or endorsed by Termius.
 
 ### Files and workflows
 
-- Integrated SFTP browser and transfer queue
+- Integrated SFTP browser with concurrent, chunked, resumable transfers
 - Open selected remote files in a configured local editor
+- Import hosts from CSV, OpenSSH, PuTTY, MobaXterm, and SecureCRT
 - Global, group, and host-scoped snippet packages
 - Searchable shell history and optional encrypted terminal recording
 - Configurable retention and storage limits for recorded sessions
@@ -108,10 +110,9 @@ not supported.
 ## Roadmap
 
 - [x] Ghostty terminal emulation backend (`libghostty-vt`)
-- [ ] SFTP multithreaded, chunked transfer with resume
-- [ ] Predictive local echo
+- [x] SFTP multithreaded, chunked transfer with resume
+- [x] Predictive local echo for SSH
 - [ ] Session and window restoration after restart
-- [ ] Import hosts from Tabby
 - [ ] Unified Capability Registry exposed via MCP to external agents and the built-in AI assistant
 
 ## Installation

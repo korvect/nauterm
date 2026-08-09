@@ -131,6 +131,9 @@ final class _NativeTerminalSnapshot extends Struct {
   @Uint32()
   external int inputEchoEnabled;
 
+  @Uint32()
+  external int alternateScreen;
+
   @IntPtr()
   external int cellsLength;
 

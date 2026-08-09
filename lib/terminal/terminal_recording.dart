@@ -583,6 +583,7 @@ Map<String, Object?> terminalSnapshotToJson(TerminalSnapshot snapshot) {
       'sgr_mouse': snapshot.keyboardMode.sgrMouse,
     },
     'input_echo_enabled': snapshot.inputEchoEnabled,
+    'alternate_screen': snapshot.alternateScreen,
     'cells': [
       for (final cell in snapshot.cells)
         [
@@ -643,6 +644,7 @@ TerminalSnapshot terminalSnapshotFromJson(Map<String, Object?> json) {
       sgrMouse: keyboardMode?['sgr_mouse'] as bool? ?? false,
     ),
     inputEchoEnabled: json['input_echo_enabled'] as bool? ?? true,
+    alternateScreen: json['alternate_screen'] as bool? ?? false,
   );
 }
 

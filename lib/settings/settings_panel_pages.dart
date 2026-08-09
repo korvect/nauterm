@@ -645,6 +645,44 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
                 ),
                 SizedBox(height: 18),
                 _SettingsRow(
+                  localizationKey: 'settings.terminal.sshPrediction',
+                  title: 'SSH Local Predictive Echo',
+                  subtitle:
+                      'Shows safe local input predictions on high-latency SSH connections.',
+                  trailing: _SettingsSelect(
+                    key: const ValueKey(
+                      'settings-terminal-ssh-prediction-select',
+                    ),
+                    label: 'SSH Local Predictive Echo',
+                    showLabel: false,
+                    value: terminalSshPredictionMode.name,
+                    values: TerminalSshPredictionMode.values
+                        .map((mode) => mode.name)
+                        .toList(growable: false),
+                    format: (value) => switch (value) {
+                      'always' => state.context.tr(
+                        'settings.terminal.sshPrediction.always',
+                        fallback: 'Always',
+                      ),
+                      'never' => state.context.tr(
+                        'settings.terminal.sshPrediction.never',
+                        fallback: 'Off',
+                      ),
+                      _ => state.context.tr(
+                        'settings.terminal.sshPrediction.adaptive',
+                        fallback: 'Adaptive',
+                      ),
+                    },
+                    onChanged: (value) {
+                      terminalSshPredictionMode =
+                          TerminalSshPredictionMode.fromString(value);
+                      state._mutate(() {});
+                      state._persistRuntimeSettings();
+                    },
+                  ),
+                ),
+                SizedBox(height: 18),
+                _SettingsRow(
                   localizationKey: 'settings.terminal.sshKeepalive',
                   title: 'SSH Keepalive Interval',
                   subtitle:

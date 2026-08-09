@@ -376,9 +376,13 @@ class NautermTerminalFeaturesConfig {
 
 @immutable
 class NautermSshConfig {
-  const NautermSshConfig({this.keepaliveInterval = 20000});
+  const NautermSshConfig({
+    this.keepaliveInterval = 20000,
+    this.predictionMode = TerminalSshPredictionMode.adaptive,
+  });
 
   final int keepaliveInterval;
+  final TerminalSshPredictionMode predictionMode;
 
   factory NautermSshConfig.fromJson(Object? value) {
     final json = _map(value);
@@ -386,11 +390,15 @@ class NautermSshConfig {
       keepaliveInterval: ((json['keepaliveInterval'] as num?)?.toInt() ?? 20000)
           .clamp(0, maxSshKeepaliveIntervalSeconds * 1000)
           .toInt(),
+      predictionMode: TerminalSshPredictionMode.fromString(
+        json['predictionMode'] as String?,
+      ),
     );
   }
 
   Map<String, Object?> toJson() => <String, Object?>{
     'keepaliveInterval': keepaliveInterval,
+    'predictionMode': predictionMode.name,
   };
 }
 

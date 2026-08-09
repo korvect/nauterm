@@ -990,6 +990,7 @@ impl GhosttyTerminalEngine {
             cursor_blinking: false,
             keyboard_mode: self.keyboard_mode(),
             input_echo_enabled: self.input_echo_enabled(),
+            alternate_screen: self.is_alt_screen(),
             cells,
             text: Vec::new(),
             hyperlink_text: Vec::new(),
@@ -1144,6 +1145,7 @@ impl GhosttyTerminalEngine {
                 .unwrap_or(false),
             keyboard_mode: self.keyboard_mode(),
             input_echo_enabled: self.input_echo_enabled(),
+            alternate_screen: self.is_alt_screen(),
             cells,
             text,
             hyperlink_text,
@@ -2506,8 +2508,10 @@ mod tests {
         assert!(terminal.snapshot().history_lines > 0);
         terminal.write_bytes(b"\x1b[?1049halt");
         assert!(terminal.is_alt_screen());
+        assert!(terminal.snapshot().alternate_screen);
         terminal.write_bytes(b"\x1b[?1049l");
         assert!(!terminal.is_alt_screen());
+        assert!(!terminal.snapshot().alternate_screen);
     }
 
     #[test]
