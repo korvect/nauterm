@@ -7,6 +7,49 @@ import 'package:nauterm/ui/nauterm_context_menu.dart';
 import 'package:nauterm/ui/nauterm_overlay.dart';
 
 void main() {
+  testWidgets('dialogs are mutually exclusive within the same overlay', (
+    tester,
+  ) async {
+    final controller = NautermOverlayController();
+    addTearDown(controller.dispose);
+    late BuildContext dialogContext;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NautermOverlayScope(
+          controller: controller,
+          child: Builder(
+            builder: (context) {
+              dialogContext = context;
+              return const SizedBox();
+            },
+          ),
+        ),
+      ),
+    );
+
+    final first = showNautermDialog<bool>(
+      context: dialogContext,
+      builder: (_) => const Center(child: Text('First dialog')),
+    );
+    await tester.pump();
+    expect(find.text('First dialog'), findsOneWidget);
+
+    final second = showNautermDialog<bool>(
+      context: dialogContext,
+      builder: (_) => const Center(child: Text('Second dialog')),
+    );
+    await tester.pump();
+
+    expect(find.text('First dialog'), findsOneWidget);
+    expect(find.text('Second dialog'), findsNothing);
+    expect(await second, isNull);
+
+    controller.dismissTransientOverlays();
+    await tester.pump();
+    expect(await first, isNull);
+  });
+
   testWidgets('defers overlay refreshes requested during build', (
     tester,
   ) async {

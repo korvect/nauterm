@@ -2521,6 +2521,27 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('close shortcut does not stack terminal confirmation dialogs', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(NautermApp(onOpenSettings: () {}));
+
+    await _switchToMultiWorkspace(tester);
+    await _openLocalTerminal(tester);
+    await _openLocalTerminal(tester);
+
+    await _sendCloseTabShortcut(tester);
+    expect(find.text('Close Terminal'), findsOneWidget);
+
+    await _sendCloseTabShortcut(tester);
+    expect(find.text('Close Terminal'), findsOneWidget);
+    expect(_terminalTopTabs(), findsNWidgets(2));
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pump();
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('workspace split creates another terminal view', (
     WidgetTester tester,
   ) async {
@@ -2727,6 +2748,13 @@ Future<void> _sendNewTabShortcut(WidgetTester tester) async {
   await tester.sendKeyEvent(LogicalKeyboardKey.keyT);
   await tester.sendKeyUpEvent(modifier);
   await tester.pump(const Duration(milliseconds: 200));
+}
+
+Future<void> _sendCloseTabShortcut(WidgetTester tester) async {
+  final modifier = await _pressCommandModifier(tester);
+  await tester.sendKeyEvent(LogicalKeyboardKey.keyW);
+  await tester.sendKeyUpEvent(modifier);
+  await tester.pump();
 }
 
 Future<void> _sendQuickConnectShortcut(WidgetTester tester) async {

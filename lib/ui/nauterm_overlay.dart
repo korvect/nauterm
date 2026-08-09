@@ -263,37 +263,60 @@ NautermTransientOverlayHandle showNautermTransientOverlay({
   return handle;
 }
 
+final Expando<Object> _activeNautermDialogTokens = Expando<Object>(
+  'active Nauterm dialog token',
+);
+
 Future<T?> showNautermDialog<T>({
   required BuildContext context,
   required WidgetBuilder builder,
   bool barrierDismissible = true,
 }) {
+  final overlay = Overlay.of(context);
+  if (_activeNautermDialogTokens[overlay] != null) {
+    return Future<T?>.value();
+  }
+  final dialogToken = Object();
+  _activeNautermDialogTokens[overlay] = dialogToken;
+
   final completer = Completer<T?>();
   late final NautermTransientOverlayHandle handle;
   var completed = false;
+
+  void releaseDialog() {
+    if (identical(_activeNautermDialogTokens[overlay], dialogToken)) {
+      _activeNautermDialogTokens[overlay] = null;
+    }
+  }
 
   void complete(T? result, {bool dismiss = true}) {
     if (completed) {
       return;
     }
     completed = true;
+    releaseDialog();
     completer.complete(result);
     if (dismiss) {
       handle.dismiss(notify: false);
     }
   }
 
-  handle = showNautermTransientOverlay(
-    context: context,
-    token: Object(),
-    dismissExisting: true,
-    onDismissed: () => complete(null, dismiss: false),
-    builder: (_) => _NautermDialogOverlay<T>(
-      builder: builder,
-      barrierDismissible: barrierDismissible,
-      onComplete: (result) => complete(result),
-    ),
-  );
+  try {
+    handle = showNautermTransientOverlay(
+      context: context,
+      token: dialogToken,
+      dismissExisting: true,
+      onDismissed: () => complete(null, dismiss: false),
+      builder: (_) => _NautermDialogOverlay<T>(
+        builder: builder,
+        barrierDismissible: barrierDismissible,
+        onComplete: (result) => complete(result),
+      ),
+    );
+  } catch (_) {
+    releaseDialog();
+    rethrow;
+  }
 
   return completer.future;
 }
