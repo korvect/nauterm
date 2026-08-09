@@ -25,6 +25,23 @@ void main() {
       greaterThanOrEqualTo(4.5),
     );
   });
+
+  test('application themes share the light tooltip appearance', () {
+    final lightTooltip = nautermTheme(Brightness.light).tooltipTheme;
+    final darkTooltip = nautermTheme(Brightness.dark).tooltipTheme;
+    final lightDecoration = lightTooltip.decoration! as BoxDecoration;
+    final darkDecoration = darkTooltip.decoration! as BoxDecoration;
+
+    expect(darkDecoration, lightDecoration);
+    expect(darkTooltip.textStyle, lightTooltip.textStyle);
+    expect(darkTooltip.textStyle?.color, Colors.white);
+    expect(darkDecoration.border, isNull);
+    expect(darkDecoration.boxShadow, isNull);
+    expect(
+      _contrastRatio(darkTooltip.textStyle!.color!, darkDecoration.color!),
+      greaterThanOrEqualTo(4.5),
+    );
+  });
 }
 
 double _contrastRatio(Color foreground, Color background) {

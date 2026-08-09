@@ -123,6 +123,13 @@ ThemeData nautermTheme([Brightness brightness = Brightness.light]) {
   final colorScheme = _nautermColorScheme(brightness);
   final dark = brightness == Brightness.dark;
   final palette = dark ? NautermPalette.dark : NautermPalette.light;
+  final tooltipTheme = TooltipThemeData(
+    decoration: BoxDecoration(
+      color: Colors.grey.shade700.withValues(alpha: 0.9),
+      borderRadius: const BorderRadius.all(Radius.circular(4)),
+    ),
+    textStyle: const TextStyle(color: Colors.white, fontSize: 12),
+  );
 
   return ThemeData(
     brightness: brightness,
@@ -147,6 +154,7 @@ ThemeData nautermTheme([Brightness brightness = Brightness.light]) {
       }),
       trackColor: const WidgetStatePropertyAll(Colors.transparent),
     ),
+    tooltipTheme: tooltipTheme,
     iconButtonTheme: dark
         ? IconButtonThemeData(
             style: ButtonStyle(
