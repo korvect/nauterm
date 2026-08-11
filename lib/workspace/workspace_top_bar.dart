@@ -648,13 +648,13 @@ class _WorkspaceTabButtonState extends State<_WorkspaceTabButton> {
 
     final collapsed = widget.collapseToIconWhenInactive && !widget.selected;
     final width = collapsed
-        ? 34.0
+        ? 30.0
         : widget.constrainWidth
         ? widget.selected
               ? 220.0
               : 142.0
         : null;
-    final contentPadding = EdgeInsets.symmetric(horizontal: collapsed ? 0 : 9);
+    final contentPadding = EdgeInsets.symmetric(horizontal: collapsed ? 0 : 8);
     final overlayAmount = _pressed ? 0.16 : (_hovered ? 0.08 : 0.0);
     final background = overlayAmount == 0
         ? baseBackground
