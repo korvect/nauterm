@@ -915,6 +915,7 @@
   "workspace.terminalTools.snippets.run": "运行代码片段",
   "workspace.terminalTools.snippets.search": "搜索代码片段",
   "workspace.themeGallery.loadError.description": "无法加载主题。",
+  "workspace.tooltip.filterByTags": "按标签筛选",
   "workspace.tooltip.gridView": "网格视图",
   "workspace.tooltip.listView": "列表视图",
   "workspace.tooltip.sort": "排序：{order}",

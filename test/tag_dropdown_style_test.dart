@@ -11,6 +11,7 @@ void main() {
   ) async {
     await tester.pumpWidget(NautermApp(onOpenSettings: () {}));
 
+    expect(find.byTooltip('Filter by tags'), findsOneWidget);
     await tester.tap(find.byIcon(LucideIcons.tag));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
@@ -82,6 +83,7 @@ void main() {
 
     expect(find.text('Select Host'), findsOneWidget);
     expect(find.text('Search hosts or tags'), findsOneWidget);
+    expect(find.byTooltip('Filter by tags'), findsOneWidget);
     expect(find.byIcon(LucideIcons.tag), findsOneWidget);
     expect(find.byIcon(LucideIcons.arrowDownAZ), findsOneWidget);
 
@@ -120,6 +122,7 @@ void main() {
 
     await tester.tap(find.text('Keychain'));
     await tester.pump();
+    expect(find.byTooltip('Search'), findsOneWidget);
     await tester.tap(find.byTooltip('New key actions'));
     await tester.pump();
     expect(find.text('Generate key'), findsOneWidget);

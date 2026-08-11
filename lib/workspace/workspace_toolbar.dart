@@ -161,8 +161,13 @@ class _HostTagFilterButtonState extends State<_HostTagFilterButton> {
     return _WorkspaceDropdown<void>(
       width: 210,
       onOpen: _toggleMenu,
-      triggerBuilder: (openMenu) =>
-          _SquareIconButton(icon: LucideIcons.tag, onTap: openMenu),
+      triggerBuilder: (openMenu) => Tooltip(
+        message: tr(
+          'workspace.tooltip.filterByTags',
+          fallback: 'Filter by tags',
+        ),
+        child: _SquareIconButton(icon: LucideIcons.tag, onTap: openMenu),
+      ),
     );
   }
 
@@ -919,18 +924,21 @@ class _WorkspaceToolbarSearchState extends State<_WorkspaceToolbarSearch> {
   @override
   Widget build(BuildContext context) {
     if (!_open) {
-      return _SquareIconButton(
-        icon: widget.query.trim().isEmpty
-            ? Icons.search_rounded
-            : Icons.manage_search_rounded,
-        onTap: () {
-          setState(() => _open = true);
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              _focusNode.requestFocus();
-            }
-          });
-        },
+      return Tooltip(
+        message: tr('common.action.search', fallback: 'Search'),
+        child: _SquareIconButton(
+          icon: widget.query.trim().isEmpty
+              ? Icons.search_rounded
+              : Icons.manage_search_rounded,
+          onTap: () {
+            setState(() => _open = true);
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                _focusNode.requestFocus();
+              }
+            });
+          },
+        ),
       );
     }
 

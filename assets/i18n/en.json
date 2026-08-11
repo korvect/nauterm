@@ -915,6 +915,7 @@
   "workspace.terminalTools.snippets.run": "Run snippet",
   "workspace.terminalTools.snippets.search": "Search snippets",
   "workspace.themeGallery.loadError.description": "Failed to load themes.",
+  "workspace.tooltip.filterByTags": "Filter by tags",
   "workspace.tooltip.gridView": "Grid view",
   "workspace.tooltip.listView": "List view",
   "workspace.tooltip.sort": "Sort: {order}"
