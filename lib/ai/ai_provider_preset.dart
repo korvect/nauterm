@@ -14,7 +14,7 @@ class AiProviderPreset {
 
   final String id;
   final String name;
-  final String protocol; // 'openai' | 'anthropic'
+  final String protocol; // 'openai' | 'anthropic' | 'google' | 'ollama'
   final String baseUrl;
   final List<String> defaultModels;
   final String? websiteUrl;

@@ -968,6 +968,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
             model: activeEntry.model,
             apiKey: activeEntry.apiKey,
             maxTokens: activeEntry.maxTokens,
+            temperature: activeEntry.temperature,
             includeTerminalSelection: preferences.includeTerminalSelection,
             includeRecentTerminalOutput:
                 preferences.includeRecentTerminalOutput,
@@ -1645,24 +1646,23 @@ class _SettingsPanelState extends State<SettingsPanel> {
   void _createAiProviderFromPreset(AiProviderPreset? preset) {
     final store = AiProviderStore(NautermPaths.resolve());
     final hasActive = _aiProviders.any((p) => p.active);
-    final protocol = preset != null
-        ? (preset.protocol == 'anthropic'
-              ? AiApiProtocol.anthropic
-              : AiApiProtocol.openAi)
-        : AiApiProtocol.openAi;
+    final protocol = preset == null
+        ? AiApiProtocol.openAi
+        : AiApiProtocol.fromString(preset.protocol);
+    final baseUrl = preset?.baseUrl ?? protocol.defaultBaseUrl;
     final newEntry = store.save(
       AiAssistantConfig(
         protocol: protocol,
-        baseUrl: preset?.baseUrl ?? AiAssistantConfig.openAiDefaultBaseUrl,
+        baseUrl: baseUrl,
         model: preset?.defaultModels.firstOrNull ?? '',
       ),
       existing: AiProviderEntry(
         name: preset?.name ?? 'New Provider',
         protocol: protocol.storageValue,
-        baseUrl: preset?.baseUrl ?? AiAssistantConfig.openAiDefaultBaseUrl,
+        baseUrl: baseUrl,
         model: preset?.defaultModels.firstOrNull ?? '',
         apiKey: '',
-        config: const <String, Object?>{'max_tokens': 4096},
+        config: const <String, Object?>{},
         active: !hasActive,
       ),
     );
@@ -1677,7 +1677,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
       setAiAssistantConfig(
         AiAssistantConfig(
           protocol: protocol,
-          baseUrl: preset?.baseUrl ?? AiAssistantConfig.openAiDefaultBaseUrl,
+          baseUrl: baseUrl,
           model: preset?.defaultModels.firstOrNull ?? '',
         ),
       );
@@ -1717,6 +1717,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
       model: entry.model,
       apiKey: entry.apiKey,
       maxTokens: entry.maxTokens,
+      temperature: entry.temperature,
     );
     store.save(config, existing: entry, active: true);
     setAiAssistantConfig(config);
@@ -1735,6 +1736,9 @@ class _SettingsPanelState extends State<SettingsPanel> {
     String? model,
     String? apiKey,
     int? maxTokens,
+    bool clearMaxTokens = false,
+    double? temperature,
+    bool clearTemperature = false,
   }) {
     if (_selectedAiProviderIndex < 0 ||
         _selectedAiProviderIndex >= _aiProviders.length) {
@@ -1742,12 +1746,21 @@ class _SettingsPanelState extends State<SettingsPanel> {
     }
     final entry = _aiProviders[_selectedAiProviderIndex];
     final store = AiProviderStore(NautermPaths.resolve());
+    final previousProtocol = AiApiProtocol.fromString(entry.protocol);
+    final nextProtocol = AiApiProtocol.fromString(protocol ?? entry.protocol);
+    final nextBaseUrl =
+        baseUrl ??
+        (protocol != null &&
+                _usesDefaultAiBaseUrl(entry.baseUrl, previousProtocol)
+            ? nextProtocol.defaultBaseUrl
+            : entry.baseUrl);
     final config = AiAssistantConfig(
-      protocol: AiApiProtocol.fromString(protocol ?? entry.protocol),
-      baseUrl: baseUrl ?? entry.baseUrl,
+      protocol: nextProtocol,
+      baseUrl: nextBaseUrl,
       model: model ?? entry.model,
       apiKey: apiKey ?? entry.apiKey,
-      maxTokens: maxTokens ?? entry.maxTokens,
+      maxTokens: clearMaxTokens ? null : maxTokens ?? entry.maxTokens,
+      temperature: clearTemperature ? null : temperature ?? entry.temperature,
     );
     store.save(
       config,
@@ -1767,4 +1780,16 @@ class _SettingsPanelState extends State<SettingsPanel> {
     });
     _cacheAiProviderState();
   }
+}
+
+bool _usesDefaultAiBaseUrl(String value, AiApiProtocol protocol) {
+  final normalized = value.trim().replaceFirst(RegExp(r'/+$'), '');
+  if (normalized == protocol.defaultBaseUrl) return true;
+  return switch (protocol) {
+    AiApiProtocol.anthropic => normalized == 'https://api.anthropic.com/v1',
+    AiApiProtocol.google =>
+      normalized == 'https://generativelanguage.googleapis.com/v1beta/openai',
+    AiApiProtocol.ollama => normalized == 'http://localhost:11434/v1',
+    AiApiProtocol.openAi => false,
+  };
 }

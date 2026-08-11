@@ -30,6 +30,9 @@ class _AiProvidersEditor extends StatelessWidget {
     String? model,
     String? apiKey,
     int? maxTokens,
+    bool clearMaxTokens,
+    double? temperature,
+    bool clearTemperature,
   })
   onFieldChanged;
 
@@ -229,6 +232,9 @@ class _AiProviderEditor extends StatefulWidget {
     String? model,
     String? apiKey,
     int? maxTokens,
+    bool clearMaxTokens,
+    double? temperature,
+    bool clearTemperature,
   })
   onFieldChanged;
 
@@ -242,6 +248,7 @@ class _AiProviderEditorState extends State<_AiProviderEditor> {
   late TextEditingController _modelController;
   late TextEditingController _apiKeyController;
   late TextEditingController _maxTokensController;
+  late TextEditingController _temperatureController;
   bool _advancedExpanded = false;
   bool _advancedHovered = false;
 
@@ -253,20 +260,37 @@ class _AiProviderEditorState extends State<_AiProviderEditor> {
     _modelController = TextEditingController(text: widget.provider.model);
     _apiKeyController = TextEditingController(text: widget.provider.apiKey);
     _maxTokensController = TextEditingController(
-      text: widget.provider.maxTokens.toString(),
+      text: widget.provider.maxTokens?.toString() ?? '',
+    );
+    _temperatureController = TextEditingController(
+      text: widget.provider.temperature?.toString() ?? '',
     );
   }
 
   @override
   void didUpdateWidget(_AiProviderEditor oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.provider.id != widget.provider.id) {
+    if (oldWidget.provider.id != widget.provider.id ||
+        oldWidget.provider.name != widget.provider.name) {
       _nameController.text = widget.provider.name;
-      _baseUrlController.text = widget.provider.baseUrl;
-      _modelController.text = widget.provider.model;
-      _apiKeyController.text = widget.provider.apiKey;
-      _maxTokensController.text = widget.provider.maxTokens.toString();
     }
+    if (oldWidget.provider.id != widget.provider.id ||
+        oldWidget.provider.baseUrl != widget.provider.baseUrl) {
+      _baseUrlController.text = widget.provider.baseUrl;
+    }
+    if (oldWidget.provider.id != widget.provider.id ||
+        oldWidget.provider.model != widget.provider.model) {
+      _modelController.text = widget.provider.model;
+    }
+    if (oldWidget.provider.id != widget.provider.id ||
+        oldWidget.provider.apiKey != widget.provider.apiKey) {
+      _apiKeyController.text = widget.provider.apiKey;
+    }
+    if (oldWidget.provider.id != widget.provider.id ||
+        oldWidget.provider.maxTokens != widget.provider.maxTokens) {
+      _maxTokensController.text = widget.provider.maxTokens?.toString() ?? '';
+    }
+    _syncGenerationControllers(oldWidget.provider);
   }
 
   @override
@@ -276,6 +300,7 @@ class _AiProviderEditorState extends State<_AiProviderEditor> {
     _modelController.dispose();
     _apiKeyController.dispose();
     _maxTokensController.dispose();
+    _temperatureController.dispose();
     super.dispose();
   }
 
@@ -391,28 +416,99 @@ class _AiProviderEditorState extends State<_AiProviderEditor> {
           child: _advancedExpanded
               ? Padding(
                   padding: const EdgeInsets.only(top: 10, left: 19),
-                  child: _SettingsRow(
-                    localizationKey: 'settings.ai.provider.maxTokens',
-                    title: 'Max Tokens',
-                    subtitle: 'Maximum tokens generated in one response.',
-                    trailing: _SettingsTextField(
-                      key: const ValueKey('settings-ai-max-tokens-field'),
-                      controller: _maxTokensController,
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      onChanged: (value) {
-                        final parsed = int.tryParse(value);
-                        if (parsed != null && parsed > 0) {
-                          widget.onFieldChanged(maxTokens: parsed);
-                        }
-                      },
-                    ),
+                  child: Column(
+                    children: [
+                      _generationRow(
+                        localizationKey: 'settings.ai.provider.maxTokens',
+                        title: 'Max Tokens',
+                        subtitle:
+                            'Maximum tokens generated in one response. Leave blank to use the provider default (Anthropic falls back to 4096).',
+                        controller: _maxTokensController,
+                        fieldKey: const ValueKey(
+                          'settings-ai-max-tokens-field',
+                        ),
+                        integer: true,
+                        onChanged: (value) {
+                          final parsed = int.tryParse(value);
+                          if (parsed != null && parsed > 0) {
+                            widget.onFieldChanged(maxTokens: parsed);
+                          } else if (value.trim().isEmpty) {
+                            widget.onFieldChanged(clearMaxTokens: true);
+                          }
+                        },
+                      ),
+                      _generationRow(
+                        localizationKey: 'settings.ai.provider.temperature',
+                        title: 'Temperature',
+                        subtitle:
+                            'Sampling randomness from 0 to 1. Leave blank to use the provider default.',
+                        controller: _temperatureController,
+                        decimal: true,
+                        onChanged: _updateTemperature,
+                      ),
+                    ],
                   ),
                 )
               : const SizedBox.shrink(),
         ),
       ],
     );
+  }
+
+  void _syncGenerationControllers(AiProviderEntry oldProvider) {
+    if (oldProvider.id != widget.provider.id ||
+        oldProvider.temperature != widget.provider.temperature) {
+      _temperatureController.text =
+          widget.provider.temperature?.toString() ?? '';
+    }
+  }
+
+  Widget _generationRow({
+    required String localizationKey,
+    required String title,
+    required String subtitle,
+    required TextEditingController controller,
+    required ValueChanged<String> onChanged,
+    Key? fieldKey,
+    bool integer = false,
+    bool decimal = false,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: _SettingsRow(
+        localizationKey: localizationKey,
+        title: title,
+        subtitle: subtitle,
+        trailing: _SettingsTextField(
+          key: fieldKey,
+          controller: controller,
+          keyboardType: integer
+              ? TextInputType.number
+              : decimal
+              ? const TextInputType.numberWithOptions(
+                  decimal: true,
+                  signed: true,
+                )
+              : TextInputType.text,
+          inputFormatters: integer
+              ? [FilteringTextInputFormatter.digitsOnly]
+              : null,
+          onChanged: onChanged,
+        ),
+      ),
+    );
+  }
+
+  void _updateTemperature(String value) {
+    final normalized = value.trim();
+    if (normalized.isEmpty) {
+      widget.onFieldChanged(clearTemperature: true);
+      return;
+    }
+    final parsed = double.tryParse(normalized);
+    if (parsed != null && parsed.isFinite && parsed >= 0 && parsed <= 1) {
+      widget.onFieldChanged(temperature: parsed);
+    }
   }
 }
 

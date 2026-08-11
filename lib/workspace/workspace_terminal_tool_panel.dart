@@ -488,6 +488,7 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
       model: _resolveProviderModel(provider, preferred: model),
       apiKey: provider.apiKey,
       maxTokens: provider.maxTokens,
+      temperature: provider.temperature,
       includeTerminalSelection: currentConfig.includeTerminalSelection,
       includeRecentTerminalOutput: currentConfig.includeRecentTerminalOutput,
     );

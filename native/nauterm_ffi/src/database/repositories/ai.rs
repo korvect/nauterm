@@ -19,16 +19,16 @@ impl NautermDatabase {
             ));
         }
         let mut config = provider.config.clone();
-        let max_tokens = config
-            .get("max_tokens")
-            .and_then(Value::as_i64)
-            .unwrap_or(4096);
-        if max_tokens <= 0 {
-            return Err(rusqlite::Error::InvalidParameterName(
-                "AI provider max_tokens must be greater than zero".to_string(),
-            ));
+        if let Some(max_tokens) = config.get("max_tokens").and_then(Value::as_i64) {
+            if max_tokens <= 0 {
+                return Err(rusqlite::Error::InvalidParameterName(
+                    "AI provider max_tokens must be greater than zero".to_string(),
+                ));
+            }
+            config.insert("max_tokens".to_string(), json!(max_tokens));
+        } else {
+            config.remove("max_tokens");
         }
-        config.insert("max_tokens".to_string(), json!(max_tokens));
         let config = serde_json::to_string(&config)
             .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
         let transaction = self.connection.transaction()?;

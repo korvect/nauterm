@@ -533,11 +533,11 @@ pub(super) fn create_ai_provider_schema(connection: &Connection) -> rusqlite::Re
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           uuid TEXT NOT NULL UNIQUE,
           name TEXT NOT NULL,
-          protocol TEXT NOT NULL CHECK (protocol IN ('openai', 'anthropic')),
+          protocol TEXT NOT NULL,
           base_url TEXT NOT NULL,
           model TEXT NOT NULL DEFAULT '',
           api_key TEXT NOT NULL DEFAULT '',
-          config TEXT NOT NULL DEFAULT '{"max_tokens":4096}'
+          config TEXT NOT NULL DEFAULT '{}'
             CHECK (json_valid(config) AND json_type(config) = 'object'),
           active INTEGER NOT NULL DEFAULT 0 CHECK (active IN (0, 1)),
           created_at INTEGER NOT NULL DEFAULT (CAST(unixepoch('subsec') * 1000 AS INTEGER)),

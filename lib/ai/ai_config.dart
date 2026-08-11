@@ -2,16 +2,29 @@ import 'package:flutter/foundation.dart';
 
 enum AiApiProtocol {
   openAi('openai', 'OpenAI'),
-  anthropic('anthropic', 'Anthropic');
+  anthropic('anthropic', 'Anthropic'),
+  google('google', 'Google Gemini'),
+  ollama('ollama', 'Ollama');
 
   const AiApiProtocol(this.storageValue, this.label);
 
   final String storageValue;
   final String label;
 
+  String get defaultBaseUrl => switch (this) {
+    AiApiProtocol.openAi => AiAssistantConfig.openAiDefaultBaseUrl,
+    AiApiProtocol.anthropic => AiAssistantConfig.anthropicDefaultBaseUrl,
+    AiApiProtocol.google => AiAssistantConfig.googleDefaultBaseUrl,
+    AiApiProtocol.ollama => AiAssistantConfig.ollamaDefaultBaseUrl,
+  };
+
+  bool get requiresApiKey => this != AiApiProtocol.ollama;
+
   static AiApiProtocol fromString(Object? value) {
     return switch (value) {
       'anthropic' => AiApiProtocol.anthropic,
+      'google' || 'googleai' || 'gemini' => AiApiProtocol.google,
+      'ollama' => AiApiProtocol.ollama,
       _ => AiApiProtocol.openAi,
     };
   }
@@ -24,19 +37,24 @@ class AiAssistantConfig {
     this.baseUrl = openAiDefaultBaseUrl,
     this.model = '',
     this.apiKey = '',
-    this.maxTokens = 4096,
+    this.maxTokens,
+    this.temperature,
     this.includeTerminalSelection = true,
     this.includeRecentTerminalOutput = true,
   });
 
   static const String openAiDefaultBaseUrl = 'https://api.openai.com/v1';
-  static const String anthropicDefaultBaseUrl = 'https://api.anthropic.com/v1';
+  static const String anthropicDefaultBaseUrl = 'https://api.anthropic.com';
+  static const String googleDefaultBaseUrl =
+      'https://generativelanguage.googleapis.com';
+  static const String ollamaDefaultBaseUrl = 'http://localhost:11434';
 
   final AiApiProtocol protocol;
   final String baseUrl;
   final String model;
   final String apiKey;
-  final int maxTokens;
+  final int? maxTokens;
+  final double? temperature;
   final bool includeTerminalSelection;
   final bool includeRecentTerminalOutput;
 
@@ -51,7 +69,7 @@ class AiAssistantConfig {
     if (model.trim().isEmpty) {
       return 'Configure an AI model in Settings.';
     }
-    if (apiKey.trim().isEmpty) {
+    if (protocol.requiresApiKey && apiKey.trim().isEmpty) {
       return 'Configure an AI API key in Settings.';
     }
     return null;
@@ -62,7 +80,8 @@ class AiAssistantConfig {
     String? baseUrl,
     String? model,
     String? apiKey,
-    int? maxTokens,
+    Object? maxTokens = _unset,
+    Object? temperature = _unset,
     bool? includeTerminalSelection,
     bool? includeRecentTerminalOutput,
   }) {
@@ -71,7 +90,12 @@ class AiAssistantConfig {
       baseUrl: baseUrl ?? this.baseUrl,
       model: model ?? this.model,
       apiKey: apiKey ?? this.apiKey,
-      maxTokens: maxTokens ?? this.maxTokens,
+      maxTokens: identical(maxTokens, _unset)
+          ? this.maxTokens
+          : maxTokens as int?,
+      temperature: identical(temperature, _unset)
+          ? this.temperature
+          : temperature as double?,
       includeTerminalSelection:
           includeTerminalSelection ?? this.includeTerminalSelection,
       includeRecentTerminalOutput:
@@ -86,6 +110,7 @@ class AiAssistantConfig {
       'model': model,
       'apiKey': apiKey,
       'maxTokens': maxTokens,
+      'temperature': temperature,
       'includeTerminalSelection': includeTerminalSelection,
       'includeRecentTerminalOutput': includeRecentTerminalOutput,
     };
@@ -97,16 +122,15 @@ class AiAssistantConfig {
     }
     final json = value.cast<String, Object?>();
     final protocol = AiApiProtocol.fromString(json['protocol']);
-    final defaultBaseUrl = protocol == AiApiProtocol.anthropic
-        ? anthropicDefaultBaseUrl
-        : openAiDefaultBaseUrl;
+    final defaultBaseUrl = protocol.defaultBaseUrl;
     final baseUrl = (json['baseUrl'] as String?)?.trim();
     return AiAssistantConfig(
       protocol: protocol,
       baseUrl: baseUrl == null || baseUrl.isEmpty ? defaultBaseUrl : baseUrl,
       model: (json['model'] as String?)?.trim() ?? '',
       apiKey: (json['apiKey'] as String?)?.trim() ?? '',
-      maxTokens: (json['maxTokens'] as num?)?.toInt() ?? 4096,
+      maxTokens: (json['maxTokens'] as num?)?.toInt(),
+      temperature: (json['temperature'] as num?)?.toDouble(),
       includeTerminalSelection:
           json['includeTerminalSelection'] as bool? ?? true,
       includeRecentTerminalOutput:
@@ -114,6 +138,8 @@ class AiAssistantConfig {
     );
   }
 }
+
+const Object _unset = Object();
 
 AiAssistantConfig aiAssistantConfig = const AiAssistantConfig();
 

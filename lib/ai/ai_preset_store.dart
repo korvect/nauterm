@@ -148,7 +148,10 @@ class AiPresetStore {
       final presets = json['presets'] as Map<String, Object?>? ?? {};
       return presets.map((key, value) {
         if (value is Map<String, Object?>) {
-          return MapEntry(key, AiProviderPreset.fromJson(key, value));
+          return MapEntry(
+            key,
+            _normalizeNativePreset(AiProviderPreset.fromJson(key, value)),
+          );
         }
         return MapEntry(
           key,
@@ -164,6 +167,24 @@ class AiPresetStore {
       );
       return {};
     }
+  }
+
+  AiProviderPreset _normalizeNativePreset(AiProviderPreset preset) {
+    final nativeProtocol = switch (preset.id) {
+      'google' => ('google', 'https://generativelanguage.googleapis.com'),
+      'ollama' => ('ollama', 'http://localhost:11434'),
+      _ => null,
+    };
+    if (nativeProtocol == null) return preset;
+    return AiProviderPreset(
+      id: preset.id,
+      name: preset.name,
+      protocol: nativeProtocol.$1,
+      baseUrl: nativeProtocol.$2,
+      defaultModels: preset.defaultModels,
+      websiteUrl: preset.websiteUrl,
+      apiKeyUrl: preset.apiKeyUrl,
+    );
   }
 
   Map<String, AiProviderPreset> _builtInDefaults() {
@@ -186,6 +207,20 @@ class AiPresetStore {
           'claude-sonnet-5',
           'claude-haiku-4-5-20251001',
         ],
+      ),
+      'google': const AiProviderPreset(
+        id: 'google',
+        name: 'Google Gemini',
+        protocol: 'google',
+        baseUrl: 'https://generativelanguage.googleapis.com',
+        defaultModels: ['gemini-2.5-pro', 'gemini-2.5-flash'],
+      ),
+      'ollama': const AiProviderPreset(
+        id: 'ollama',
+        name: 'Ollama',
+        protocol: 'ollama',
+        baseUrl: 'http://localhost:11434',
+        defaultModels: ['qwen3', 'llama3.2'],
       ),
     };
   }

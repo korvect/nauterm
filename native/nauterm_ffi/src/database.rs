@@ -21,7 +21,7 @@ mod schema;
 
 use schema::create_schema;
 
-const SCHEMA_VERSION: i32 = 1;
+const SCHEMA_VERSION: i32 = 2;
 #[cfg(test)]
 const DEFAULT_MOSH_SERVER_COMMAND: &str = "mosh-server new -s -l LANG=en_US.UTF-8";
 const DEVICE_ID_METADATA_KEY: &str = "device_id";
@@ -410,13 +410,15 @@ pub struct AiProviderEntry {
 }
 
 fn default_ai_provider_config() -> Map<String, Value> {
-    Map::from_iter([("max_tokens".to_string(), json!(4096))])
+    Map::new()
 }
 
 fn normalize_ai_provider_protocol(value: &str) -> rusqlite::Result<&'static str> {
     match value.trim().to_ascii_lowercase().as_str() {
         "openai" => Ok("openai"),
         "anthropic" => Ok("anthropic"),
+        "google" | "googleai" | "gemini" => Ok("google"),
+        "ollama" => Ok("ollama"),
         value => Err(rusqlite::Error::InvalidParameterName(format!(
             "unsupported AI provider protocol: {value}"
         ))),
@@ -4090,6 +4092,90 @@ mod tests {
 
         let error = NautermDatabase::ensure_schema(&mut connection).unwrap_err();
         assert!(error.to_string().contains("unsupported"));
+    }
+
+    #[test]
+    fn migrates_ai_provider_schema_to_v2() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        NautermDatabase::configure(&connection).unwrap();
+        connection
+            .execute_batch(
+                r#"
+                CREATE TABLE ai_providers (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  uuid TEXT NOT NULL UNIQUE,
+                  name TEXT NOT NULL,
+                  protocol TEXT NOT NULL CHECK (protocol IN ('openai', 'anthropic')),
+                  base_url TEXT NOT NULL,
+                  model TEXT NOT NULL DEFAULT '',
+                  api_key TEXT NOT NULL DEFAULT '',
+                  config TEXT NOT NULL DEFAULT '{"max_tokens":4096}',
+                  active INTEGER NOT NULL DEFAULT 0,
+                  created_at INTEGER NOT NULL DEFAULT 0,
+                  updated_at INTEGER NOT NULL DEFAULT 0
+                );
+                CREATE INDEX idx_ai_providers_active ON ai_providers(active);
+                CREATE INDEX idx_ai_providers_updated_at ON ai_providers(updated_at DESC);
+                INSERT INTO ai_providers
+                  (uuid, name, protocol, base_url)
+                VALUES ('provider-1', 'OpenAI', 'openai', 'https://api.openai.com/v1');
+                PRAGMA user_version = 1;
+                "#,
+            )
+            .unwrap();
+
+        NautermDatabase::ensure_schema(&mut connection).unwrap();
+        connection
+            .execute(
+                "INSERT INTO ai_providers (uuid, name, protocol, base_url) VALUES (?, ?, ?, ?)",
+                params!["provider-2", "Ollama", "ollama", "http://localhost:11434"],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO ai_providers (uuid, name, protocol, base_url) VALUES (?, ?, ?, ?)",
+                params![
+                    "provider-3",
+                    "Future Provider",
+                    "future_protocol",
+                    "https://example.com"
+                ],
+            )
+            .unwrap();
+
+        assert_eq!(
+            connection
+                .query_row("PRAGMA user_version", [], |row| row.get::<_, i32>(0))
+                .unwrap(),
+            2
+        );
+        assert_eq!(
+            connection
+                .query_row("SELECT COUNT(*) FROM ai_providers", [], |row| row
+                    .get::<_, i64>(0))
+                .unwrap(),
+            3
+        );
+        assert_eq!(
+            connection
+                .query_row(
+                    "SELECT config FROM ai_providers WHERE uuid = 'provider-3'",
+                    [],
+                    |row| row.get::<_, String>(0),
+                )
+                .unwrap(),
+            "{}"
+        );
+        assert_eq!(
+            connection
+                .query_row(
+                    "SELECT config FROM ai_providers WHERE uuid = 'provider-1'",
+                    [],
+                    |row| row.get::<_, String>(0),
+                )
+                .unwrap(),
+            r#"{"max_tokens":4096}"#
+        );
     }
 
     #[test]

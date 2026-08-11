@@ -1,7 +1,10 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nauterm/ai/ai_config.dart';
+import 'package:nauterm/data/ai_provider_store.dart';
 import 'package:nauterm/data/nauterm_data_store.dart';
+import 'package:nauterm/data/nauterm_paths.dart';
 
 void main() {
   test('AI provider reads max tokens from extensible config', () {
@@ -16,11 +19,47 @@ void main() {
     });
 
     expect(provider.maxTokens, 8192);
-    expect(provider.config['temperature'], 0.25);
+    expect(provider.temperature, 0.25);
     expect(provider.toJson()['config'], {
       'max_tokens': 8192,
       'temperature': 0.25,
     });
+  });
+
+  test('AI provider store persists standardized generation settings', () {
+    final directory = Directory.systemTemp.createTempSync(
+      'nauterm_ai_generation_config_test_',
+    );
+    addTearDown(() => directory.deleteSync(recursive: true));
+    final store = AiProviderStore(
+      NautermPaths(configDirectory: directory, dataDirectory: directory),
+    );
+
+    final saved = store.save(
+      const AiAssistantConfig(
+        model: 'model',
+        apiKey: 'key',
+        maxTokens: 2048,
+        temperature: 0.5,
+      ),
+      existing: const AiProviderEntry(
+        name: 'Example',
+        protocol: 'openai',
+        baseUrl: 'https://api.openai.com/v1',
+        model: 'model',
+        apiKey: 'key',
+        config: {'future_setting': true},
+      ),
+    );
+
+    expect(saved.config, {
+      'future_setting': true,
+      'max_tokens': 2048,
+      'temperature': 0.5,
+    });
+    final loaded = store.load(const AiAssistantConfig()).config;
+    expect(loaded.maxTokens, 2048);
+    expect(loaded.temperature, 0.5);
   });
 
   test('database can reopen immediately after the previous handle closes', () {
@@ -78,7 +117,7 @@ void main() {
       '${directory.path}${Platform.pathSeparator}nauterm.sqlite',
     );
 
-    expect(store.schemaVersion, 1);
+    expect(store.schemaVersion, 2);
     final deviceId = store.deviceId;
     expect(
       deviceId,

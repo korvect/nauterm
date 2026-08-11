@@ -125,6 +125,13 @@ AiProviderEntry _entryFromConfig(
   String? name,
   bool? active,
 }) {
+  final providerConfig = <String, Object?>{...?existing?.config};
+  if (config.maxTokens == null) {
+    providerConfig.remove('max_tokens');
+  } else {
+    providerConfig['max_tokens'] = config.maxTokens;
+  }
+  _setOptionalConfigValue(providerConfig, 'temperature', config.temperature);
   return AiProviderEntry(
     id: existing?.id,
     uuid: existing?.uuid,
@@ -133,10 +140,7 @@ AiProviderEntry _entryFromConfig(
     baseUrl: config.baseUrl.trim(),
     model: config.model.trim(),
     apiKey: config.apiKey,
-    config: <String, Object?>{
-      ...?existing?.config,
-      'max_tokens': config.maxTokens,
-    },
+    config: providerConfig,
     active: active ?? existing?.active ?? true,
     createdAt: existing?.createdAt,
     updatedAt: existing?.updatedAt,
@@ -156,7 +160,20 @@ AiAssistantConfig _configFromEntry(
     model: entry.model,
     apiKey: entry.apiKey,
     maxTokens: entry.maxTokens,
+    temperature: entry.temperature,
     includeTerminalSelection: preferences.includeTerminalSelection,
     includeRecentTerminalOutput: preferences.includeRecentTerminalOutput,
   );
+}
+
+void _setOptionalConfigValue(
+  Map<String, Object?> config,
+  String key,
+  Object? value,
+) {
+  if (value == null || (value is Iterable && value.isEmpty)) {
+    config.remove(key);
+  } else {
+    config[key] = value;
+  }
 }

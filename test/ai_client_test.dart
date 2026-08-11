@@ -53,6 +53,7 @@ void main() {
       final body = jsonDecode(await utf8.decoder.bind(request).join()) as Map;
       expect(body['model'], 'openai-model');
       expect(body['stream'], isTrue);
+      expect(body.containsKey('max_tokens'), isFalse);
       expect((body['messages'] as List).last, {
         'role': 'user',
         'content': 'hello\n\n<terminal_context>safe output</terminal_context>',
@@ -131,11 +132,9 @@ void main() {
         'text',
         'event-stream',
       );
-      request.response.write('event: message_start\n');
-      request.response.write('data: {"type":"message_start"}\n\n');
       request.response.write('event: content_block_delta\n');
       request.response.write(
-        'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"hi"}}\n\n',
+        'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"hi"}}\n\n',
       );
       request.response.write('event: content_block_start\n');
       request.response.write(
@@ -172,15 +171,100 @@ void main() {
     expect(chunks.whereType<AiToolCall>().single.terminalCommand, 'ls');
   });
 
+  test('Google protocol streams Gemini content and function calls', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    final handled = server.first.then((request) async {
+      expect(
+        request.uri.path,
+        '/v1beta/models/gemini-test:streamGenerateContent',
+      );
+      expect(request.uri.queryParameters['key'], 'google-key');
+      final body = jsonDecode(await utf8.decoder.bind(request).join()) as Map;
+      expect(body['generationConfig'], isNull);
+      expect(
+        (body['tools'] as List).single['functionDeclarations'],
+        hasLength(1),
+      );
+      request.response.headers.contentType = ContentType(
+        'text',
+        'event-stream',
+      );
+      request.response.write(
+        'data: {"candidates":[{"content":{"role":"model","parts":[{"text":"hi"},{"functionCall":{"name":"run_terminal_command","args":{"command":"pwd"}}}]}}]}\n\n',
+      );
+      await request.response.close();
+    });
+
+    final chunks = await AiProtocolClient()
+        .streamCompletion(
+          config: AiAssistantConfig(
+            protocol: AiApiProtocol.google,
+            baseUrl: 'http://${server.address.host}:${server.port}',
+            model: 'gemini-test',
+            apiKey: 'google-key',
+          ),
+          messages: const [
+            AiChatMessage(role: AiChatRole.user, content: 'hello'),
+          ],
+          enableTerminalTool: true,
+        )
+        .toList();
+    await handled;
+    expect(chunks.whereType<AiTextDelta>().single.text, 'hi');
+    expect(chunks.whereType<AiToolCall>().single.terminalCommand, 'pwd');
+  });
+
+  test('Ollama protocol supports local auth-free streaming', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    final handled = server.first.then((request) async {
+      expect(request.uri.path, '/api/chat');
+      expect(request.headers.value(HttpHeaders.authorizationHeader), isNull);
+      final body = jsonDecode(await utf8.decoder.bind(request).join()) as Map;
+      expect(body['options'], isNull);
+      expect((body['tools'] as List), hasLength(1));
+      request.response.headers.contentType = ContentType.json;
+      request.response.write(
+        '{"message":{"role":"assistant","content":"hi"},"done":false}\n',
+      );
+      request.response.write(
+        '{"message":{"role":"assistant","content":"","tool_calls":[{"function":{"name":"run_terminal_command","arguments":{"command":"pwd"}}}]},"done":true}\n',
+      );
+      await request.response.close();
+    });
+
+    const config = AiAssistantConfig(
+      protocol: AiApiProtocol.ollama,
+      baseUrl: 'http://localhost:11434',
+      model: 'qwen3',
+    );
+    expect(config.validationError, isNull);
+    final chunks = await AiProtocolClient()
+        .streamCompletion(
+          config: config.copyWith(
+            baseUrl: 'http://${server.address.host}:${server.port}',
+          ),
+          messages: const [
+            AiChatMessage(role: AiChatRole.user, content: 'hello'),
+          ],
+          enableTerminalTool: true,
+        )
+        .toList();
+    await handled;
+    expect(chunks.whereType<AiTextDelta>().single.text, 'hi');
+    expect(chunks.whereType<AiToolCall>().single.terminalCommand, 'pwd');
+  });
+
   test('OpenAI protocol encodes tool calls and tool results', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => server.close(force: true));
     final requestHandled = server.first.then((request) async {
       final body = jsonDecode(await utf8.decoder.bind(request).join()) as Map;
+      expect(body.containsKey('max_tokens'), isFalse);
       expect(body['messages'], [
         {
           'role': 'assistant',
-          'content': null,
           'tool_calls': [
             {
               'id': 'call-1',
@@ -245,6 +329,7 @@ void main() {
     addTearDown(() => server.close(force: true));
     final requestHandled = server.first.then((request) async {
       final body = jsonDecode(await utf8.decoder.bind(request).join()) as Map;
+      expect(body['max_tokens'], 4096);
       expect(body['messages'], [
         {
           'role': 'assistant',
@@ -269,13 +354,17 @@ void main() {
             {
               'type': 'tool_result',
               'tool_use_id': 'tool-1',
-              'content': '{"exit_code":1}',
+              'content': [
+                {'type': 'text', 'text': '{"exit_code":1}'},
+              ],
               'is_error': true,
             },
             {
               'type': 'tool_result',
               'tool_use_id': 'tool-2',
-              'content': '{"exit_code":0}',
+              'content': [
+                {'type': 'text', 'text': '{"exit_code":0}'},
+              ],
             },
           ],
         },
@@ -413,6 +502,74 @@ void main() {
     expect(anthropicContent[1]['type'], 'text');
     expect(anthropicContent[2]['type'], 'image');
     expect(anthropicContent[2]['source']['media_type'], 'image/png');
+  });
+
+  test('standardized generation settings map to each protocol', () async {
+    Future<Map<String, dynamic>> capture(AiApiProtocol protocol) async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      late Map<String, dynamic> body;
+      final handled = server.first.then((request) async {
+        body = (jsonDecode(await utf8.decoder.bind(request).join()) as Map)
+            .cast<String, dynamic>();
+        if (protocol == AiApiProtocol.ollama) {
+          request.response.headers.contentType = ContentType.json;
+          request.response.write(
+            '{"message":{"role":"assistant","content":""},"done":true}\n',
+          );
+        } else {
+          request.response.headers.contentType = ContentType(
+            'text',
+            'event-stream',
+          );
+          request.response.write(switch (protocol) {
+            AiApiProtocol.openAi => 'data: [DONE]\n\n',
+            AiApiProtocol.anthropic => 'data: {"type":"message_stop"}\n\n',
+            AiApiProtocol.google => 'data: {"candidates":[]}\n\n',
+            AiApiProtocol.ollama => throw StateError('unreachable'),
+          });
+        }
+        await request.response.close();
+      });
+      final baseUrl = 'http://${server.address.host}:${server.port}';
+      await AiProtocolClient()
+          .streamCompletion(
+            config: AiAssistantConfig(
+              protocol: protocol,
+              baseUrl: protocol == AiApiProtocol.openAi
+                  ? '$baseUrl/v1'
+                  : baseUrl,
+              model: 'model',
+              apiKey: protocol == AiApiProtocol.ollama ? '' : 'key',
+              maxTokens: 1024,
+              temperature: 0.7,
+            ),
+            messages: const [
+              AiChatMessage(role: AiChatRole.user, content: 'hello'),
+            ],
+            enableTerminalTool: false,
+          )
+          .drain<void>();
+      await handled;
+      return body;
+    }
+
+    final openAi = await capture(AiApiProtocol.openAi);
+    expect(openAi, containsPair('max_tokens', 1024));
+    expect(openAi, containsPair('temperature', 0.7));
+
+    final anthropic = await capture(AiApiProtocol.anthropic);
+    expect(anthropic, containsPair('max_tokens', 1024));
+    expect(anthropic, containsPair('temperature', 0.7));
+
+    final google = await capture(AiApiProtocol.google);
+    expect(google['generationConfig'], {
+      'maxOutputTokens': 1024,
+      'temperature': 0.7,
+    });
+
+    final ollama = await capture(AiApiProtocol.ollama);
+    expect(ollama['options'], {'num_predict': 1024, 'temperature': 0.7});
   });
 
   test('protocol errors expose provider message without credentials', () async {

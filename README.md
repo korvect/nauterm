@@ -82,7 +82,7 @@ and is not affiliated with or endorsed by Termius.
 
 ### Optional AI assistance
 
-- Configurable OpenAI-compatible and Anthropic-compatible providers
+- Native OpenAI, Anthropic, Google Gemini, and Ollama protocol support
 - Terminal-aware conversations and command drafting
 - Explicit review before a generated command is sent to a terminal
 

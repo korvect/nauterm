@@ -2,6 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:anthropic_sdk_dart/anthropic_sdk_dart.dart' as anthropic;
+import 'package:googleai_dart/googleai_dart.dart' as google;
+import 'package:http/io_client.dart';
+import 'package:ollama_dart/ollama_dart.dart' as ollama;
+import 'package:openai_dart/openai_dart.dart' as openai;
+
 import 'ai_config.dart';
 import 'ai_attachment.dart';
 
@@ -154,6 +160,18 @@ class AiProtocolClient {
             messages,
             enableTerminalTool: enableTerminalTool,
           ),
+          AiApiProtocol.google => _streamGoogle(
+            client,
+            config,
+            messages,
+            enableTerminalTool: enableTerminalTool,
+          ),
+          AiApiProtocol.ollama => _streamOllama(
+            client,
+            config,
+            messages,
+            enableTerminalTool: enableTerminalTool,
+          ),
         };
       },
       abort: () => activeClient?.close(force: true),
@@ -167,75 +185,38 @@ class AiProtocolClient {
     required bool enableTerminalTool,
   }) async* {
     final toolCalls = <int, _ToolCallAccumulator>{};
+    final httpClient = IOClient(client);
+    final sdk = openai.OpenAIClient(
+      config: openai.OpenAIConfig(
+        authProvider: openai.ApiKeyProvider(config.apiKey.trim()),
+        baseUrl: config.baseUrl.trim(),
+        retryPolicy: const openai.RetryPolicy(maxRetries: 0),
+      ),
+      httpClient: httpClient,
+      streamClientFactory: () => httpClient,
+    );
     try {
-      final request = await client.postUrl(
-        _versionedEndpoint(config.baseUrl, 'chat/completions'),
+      final request = openai.ChatCompletionCreateRequest.fromJson(
+        <String, dynamic>{
+          'model': config.model.trim(),
+          'messages': [for (final message in messages) _openAiMessage(message)],
+          if (config.maxTokens != null) 'max_tokens': config.maxTokens,
+          if (config.temperature != null) 'temperature': config.temperature,
+          if (enableTerminalTool) 'tools': [_openAiTerminalCommandTool],
+        },
       );
-      request.headers
-        ..contentType = ContentType.json
-        ..set(HttpHeaders.acceptHeader, 'text/event-stream')
-        ..set(
-          HttpHeaders.authorizationHeader,
-          'Bearer ${config.apiKey.trim()}',
-        );
-      request.add(
-        utf8.encode(
-          jsonEncode(<String, Object?>{
-            'model': config.model.trim(),
-            'stream': true,
-            'messages': [
-              for (final message in messages) _openAiMessage(message),
-            ],
-            if (enableTerminalTool) 'tools': [_openAiTerminalCommandTool],
-          }),
-        ),
-      );
-      final response = await request.close();
-      await _throwForError(response);
-      await for (final data in _sseData(response)) {
-        if (data.trim() == '[DONE]') {
-          break;
-        }
-        final event = _jsonMap(data);
-        final error = _nestedMap(event['error']);
-        if (error != null) {
-          throw AiProtocolException(
-            _nonEmptyString(error['message']) ?? 'OpenAI request failed.',
-          );
-        }
-        final choices = event['choices'];
-        if (choices is! List || choices.isEmpty) {
-          continue;
-        }
-        final choice = _nestedMap(choices.first);
-        final delta = _nestedMap(choice?['delta']);
-        final rawToolCalls = delta?['tool_calls'];
-        if (rawToolCalls is List) {
-          for (final rawToolCall in rawToolCalls) {
-            final toolCall = _nestedMap(rawToolCall);
-            if (toolCall == null) {
-              continue;
-            }
-            final index = (toolCall['index'] as num?)?.toInt() ?? 0;
+      await for (final event in sdk.chat.completions.createStream(request)) {
+        final text = event.textDelta;
+        if (text != null && text.isNotEmpty) yield AiTextDelta(text);
+        for (final choice in event.choices ?? const []) {
+          for (final toolCall in choice.delta.toolCalls ?? const []) {
             final accumulator = toolCalls.putIfAbsent(
-              index,
+              toolCall.index,
               _ToolCallAccumulator.new,
             );
-            accumulator.id += toolCall['id'] as String? ?? '';
-            final function = _nestedMap(toolCall['function']);
-            accumulator.name += function?['name'] as String? ?? '';
-            accumulator.arguments += function?['arguments'] as String? ?? '';
-          }
-        }
-        final content = delta?['content'];
-        if (content is String && content.isNotEmpty) {
-          yield AiTextDelta(content);
-        } else if (content is List) {
-          for (final part in content) {
-            final text = _nonEmptyString(_nestedMap(part)?['text']);
-            if (text != null) {
-              yield AiTextDelta(text);
-            }
+            accumulator.id += toolCall.id ?? '';
+            accumulator.name += toolCall.function?.name ?? '';
+            accumulator.arguments += toolCall.function?.arguments ?? '';
           }
         }
       }
@@ -247,7 +228,11 @@ class AiProtocolClient {
           yield event;
         }
       }
+    } on openai.ApiException catch (error) {
+      throw AiProtocolException(error.message, statusCode: error.statusCode);
     } finally {
+      sdk.close();
+      httpClient.close();
       client.close(force: true);
     }
   }
@@ -259,91 +244,327 @@ class AiProtocolClient {
     required bool enableTerminalTool,
   }) async* {
     final toolCalls = <int, _ToolCallAccumulator>{};
+    final httpClient = IOClient(client);
+    final sdk = anthropic.AnthropicClient(
+      config: anthropic.AnthropicConfig(
+        baseUrl: _withoutTrailingVersion(config.baseUrl),
+        authProvider: anthropic.ApiKeyProvider(config.apiKey.trim()),
+        retryPolicy: const anthropic.RetryPolicy(maxRetries: 0),
+      ),
+      httpClient: httpClient,
+    );
     try {
-      final request = await client.postUrl(
-        _versionedEndpoint(config.baseUrl, 'messages'),
-      );
-      request.headers
-        ..contentType = ContentType.json
-        ..set(HttpHeaders.acceptHeader, 'text/event-stream')
-        ..set('x-api-key', config.apiKey.trim())
-        ..set('anthropic-version', '2023-06-01');
       final system = messages
           .where((message) => message.role == AiChatRole.system)
           .map((message) => message.content)
           .where((content) => content.trim().isNotEmpty)
           .join('\n\n');
-      request.add(
-        utf8.encode(
-          jsonEncode(<String, Object?>{
-            'model': config.model.trim(),
-            'max_tokens': config.maxTokens,
-            'stream': true,
-            if (system.isNotEmpty) 'system': system,
-            'messages': _anthropicMessages(messages),
-            if (enableTerminalTool) 'tools': [_anthropicTerminalCommandTool],
-          }),
-        ),
-      );
-      final response = await request.close();
-      await _throwForError(response);
-      await for (final data in _sseData(response)) {
-        final event = _jsonMap(data);
-        final type = event['type'];
-        if (type == 'message_stop') {
-          for (final toolCall
-              in toolCalls.entries.toList()
-                ..sort((left, right) => left.key.compareTo(right.key))) {
-            final event = toolCall.value.toEvent();
-            if (event != null) {
-              yield event;
-            }
-          }
-          return;
-        }
-        if (type == 'error') {
-          final error = _nestedMap(event['error']);
-          throw AiProtocolException(
-            _nonEmptyString(error?['message']) ?? 'Anthropic request failed.',
+      final request = anthropic.MessageCreateRequest.fromJson(<String, dynamic>{
+        'model': config.model.trim(),
+        'max_tokens': config.maxTokens ?? 4096,
+        if (config.temperature != null) 'temperature': config.temperature,
+        if (system.isNotEmpty) 'system': system,
+        'messages': _anthropicMessages(messages),
+        if (enableTerminalTool) 'tools': [_anthropicTerminalCommandTool],
+      });
+      await for (final event in sdk.messages.createStream(request)) {
+        if (event is anthropic.ContentBlockStartEvent &&
+            event.contentBlock is anthropic.ToolUseBlock) {
+          final block = event.contentBlock as anthropic.ToolUseBlock;
+          final accumulator = toolCalls.putIfAbsent(
+            event.index,
+            _ToolCallAccumulator.new,
           );
-        }
-        if (type == 'content_block_start') {
-          final contentBlock = _nestedMap(event['content_block']);
-          if (contentBlock?['type'] == 'tool_use') {
-            final index = (event['index'] as num?)?.toInt() ?? 0;
-            final accumulator = toolCalls.putIfAbsent(
-              index,
-              _ToolCallAccumulator.new,
-            );
-            accumulator.id = contentBlock?['id'] as String? ?? '';
-            accumulator.name = contentBlock?['name'] as String? ?? '';
-            final input = contentBlock?['input'];
-            if (input is Map && input.isNotEmpty) {
-              accumulator.arguments = jsonEncode(input);
-            }
+          accumulator.id = block.id;
+          accumulator.name = block.name;
+          if (block.input.isNotEmpty) {
+            accumulator.arguments = jsonEncode(block.input);
           }
-          continue;
         }
-        if (type != 'content_block_delta') {
-          continue;
-        }
-        final delta = _nestedMap(event['delta']);
-        if (delta?['type'] == 'text_delta') {
-          final text = _nonEmptyString(delta?['text']);
-          if (text != null) {
-            yield AiTextDelta(text);
+        if (event is anthropic.ContentBlockDeltaEvent) {
+          final delta = event.delta;
+          if (delta is anthropic.TextDelta && delta.text.isNotEmpty) {
+            yield AiTextDelta(delta.text);
+          } else if (delta is anthropic.InputJsonDelta) {
+            toolCalls
+                    .putIfAbsent(event.index, _ToolCallAccumulator.new)
+                    .arguments +=
+                delta.partialJson;
           }
-        } else if (delta?['type'] == 'input_json_delta') {
-          final index = (event['index'] as num?)?.toInt() ?? 0;
-          toolCalls.putIfAbsent(index, _ToolCallAccumulator.new).arguments +=
-              delta?['partial_json'] as String? ?? '';
         }
       }
+      yield* _toolCallEvents(toolCalls);
+    } on anthropic.ApiException catch (error) {
+      throw AiProtocolException(error.message, statusCode: error.statusCode);
     } finally {
+      sdk.close();
+      httpClient.close();
+      client.close(force: true);
+    }
+  }
+
+  Stream<AiStreamEvent> _streamGoogle(
+    HttpClient client,
+    AiAssistantConfig config,
+    List<AiChatMessage> messages, {
+    required bool enableTerminalTool,
+  }) async* {
+    final httpClient = IOClient(client);
+    final sdk = google.GoogleAIClient(
+      config: google.GoogleAIConfig(
+        baseUrl: _withoutTrailingVersion(config.baseUrl),
+        apiMode: google.ApiMode.googleAI,
+        apiVersion: google.ApiVersion.v1beta,
+        authProvider: google.ApiKeyProvider(config.apiKey.trim()),
+        retryPolicy: const google.RetryPolicy(maxRetries: 0),
+      ),
+      httpClient: httpClient,
+    );
+    try {
+      final request = google.GenerateContentRequest.fromJson(
+        _googleRequest(messages, config, enableTerminalTool),
+      );
+      var toolIndex = 0;
+      await for (final event in sdk.models.streamGenerateContent(
+        model: config.model.trim(),
+        request: request,
+      )) {
+        for (final candidate in event.candidates ?? const []) {
+          for (final part in candidate.content?.parts ?? const []) {
+            final json = part.toJson();
+            final text = _nonEmptyString(json['text']);
+            if (text != null) yield AiTextDelta(text);
+            final call = _nestedMap(json['functionCall']);
+            final name = _nonEmptyString(call?['name']);
+            if (name != null) {
+              yield AiToolCall(
+                id: 'google-${toolIndex++}',
+                name: name,
+                arguments: (_nestedMap(call?['args']) ?? const {}),
+              );
+            }
+          }
+        }
+      }
+    } on google.ApiException catch (error) {
+      throw AiProtocolException(error.message, statusCode: error.statusCode);
+    } finally {
+      sdk.close();
+      httpClient.close();
+      client.close(force: true);
+    }
+  }
+
+  Stream<AiStreamEvent> _streamOllama(
+    HttpClient client,
+    AiAssistantConfig config,
+    List<AiChatMessage> messages, {
+    required bool enableTerminalTool,
+  }) async* {
+    final httpClient = IOClient(client);
+    final apiKey = config.apiKey.trim();
+    final sdk = ollama.OllamaClient(
+      config: ollama.OllamaConfig(
+        baseUrl: config.baseUrl.trim(),
+        authProvider: apiKey.isEmpty
+            ? null
+            : ollama.BearerTokenProvider(apiKey),
+        retryPolicy: const ollama.RetryPolicy(maxRetries: 0),
+      ),
+      httpClient: httpClient,
+    );
+    try {
+      final request = ollama.ChatRequest.fromJson(
+        _ollamaRequest(messages, config, enableTerminalTool),
+      );
+      var toolIndex = 0;
+      await for (final event in sdk.chat.createStream(request: request)) {
+        final message = event.message;
+        final text = message?.content;
+        if (text != null && text.isNotEmpty) yield AiTextDelta(text);
+        for (final call in message?.toolCalls ?? const []) {
+          final function = call.function;
+          if (function != null) {
+            yield AiToolCall(
+              id: 'ollama-${toolIndex++}',
+              name: function.name,
+              arguments: function.arguments ?? const {},
+            );
+          }
+        }
+      }
+    } on ollama.ApiException catch (error) {
+      throw AiProtocolException(error.message, statusCode: error.statusCode);
+    } finally {
+      sdk.close();
+      httpClient.close();
       client.close(force: true);
     }
   }
 }
+
+Stream<AiStreamEvent> _toolCallEvents(
+  Map<int, _ToolCallAccumulator> toolCalls,
+) async* {
+  for (final entry
+      in toolCalls.entries.toList()
+        ..sort((left, right) => left.key.compareTo(right.key))) {
+    final event = entry.value.toEvent();
+    if (event != null) yield event;
+  }
+}
+
+Map<String, dynamic> _googleRequest(
+  List<AiChatMessage> messages,
+  AiAssistantConfig config,
+  bool enableTerminalTool,
+) {
+  final generationConfig = <String, dynamic>{
+    if (config.maxTokens != null) 'maxOutputTokens': config.maxTokens,
+    if (config.temperature != null) 'temperature': config.temperature,
+  };
+  final system = messages
+      .where((message) => message.role == AiChatRole.system)
+      .map((message) => message.requestContent)
+      .where((content) => content.trim().isNotEmpty)
+      .join('\n\n');
+  return <String, dynamic>{
+    'contents': [
+      for (final message in messages)
+        if (message.role != AiChatRole.system) _googleMessage(message),
+    ],
+    if (system.isNotEmpty)
+      'systemInstruction': <String, dynamic>{
+        'parts': [
+          <String, dynamic>{'text': system},
+        ],
+      },
+    if (generationConfig.isNotEmpty) 'generationConfig': generationConfig,
+    if (enableTerminalTool)
+      'tools': [
+        <String, dynamic>{
+          'functionDeclarations': [
+            <String, dynamic>{
+              'name': 'run_terminal_command',
+              'description': _terminalCommandDescription,
+              'parameters': _terminalCommandParameters,
+            },
+          ],
+        },
+      ],
+  };
+}
+
+Map<String, dynamic> _googleMessage(AiChatMessage message) {
+  final result = message.toolResult;
+  if (result != null) {
+    return <String, dynamic>{
+      'role': 'user',
+      'parts': [
+        <String, dynamic>{
+          'functionResponse': <String, dynamic>{
+            'id': result.toolCallId,
+            'name': result.name,
+            'response': <String, dynamic>{
+              'content': result.content,
+              if (result.isError) 'is_error': true,
+            },
+          },
+        },
+      ],
+    };
+  }
+  return <String, dynamic>{
+    'role': message.role == AiChatRole.assistant ? 'model' : 'user',
+    'parts': [
+      if (message.requestContent.isNotEmpty)
+        <String, dynamic>{'text': message.requestContent},
+      for (final attachment in message.attachments)
+        if (attachment.kind == AiAttachmentKind.text)
+          <String, dynamic>{'text': _textAttachmentContent(attachment)}
+        else
+          <String, dynamic>{
+            'inlineData': <String, dynamic>{
+              'mimeType': attachment.mimeType,
+              'data': attachment.base64Data,
+            },
+          },
+      for (final call in message.toolCalls)
+        <String, dynamic>{
+          'functionCall': <String, dynamic>{
+            'name': call.name,
+            'args': call.arguments,
+          },
+        },
+    ],
+  };
+}
+
+Map<String, dynamic> _ollamaRequest(
+  List<AiChatMessage> messages,
+  AiAssistantConfig config,
+  bool enableTerminalTool,
+) {
+  final options = <String, dynamic>{
+    if (config.maxTokens != null) 'num_predict': config.maxTokens,
+    if (config.temperature != null) 'temperature': config.temperature,
+  };
+  return <String, dynamic>{
+    'model': config.model.trim(),
+    'messages': [for (final message in messages) _ollamaMessage(message)],
+    if (options.isNotEmpty) 'options': options,
+    if (enableTerminalTool)
+      'tools': [
+        <String, dynamic>{
+          'type': 'function',
+          'function': <String, dynamic>{
+            'name': 'run_terminal_command',
+            'description': _terminalCommandDescription,
+            'parameters': _terminalCommandParameters,
+          },
+        },
+      ],
+  };
+}
+
+Map<String, dynamic> _ollamaMessage(AiChatMessage message) {
+  final result = message.toolResult;
+  if (result != null) {
+    return <String, dynamic>{'role': 'tool', 'content': result.content};
+  }
+  final textAttachments = message.attachments
+      .where((attachment) => attachment.kind == AiAttachmentKind.text)
+      .map(_textAttachmentContent);
+  return <String, dynamic>{
+    'role': message.role.name,
+    'content': [
+      message.requestContent,
+      ...textAttachments,
+    ].where((part) => part.isNotEmpty).join('\n\n'),
+    if (message.attachments.any(
+      (attachment) => attachment.kind == AiAttachmentKind.image,
+    ))
+      'images': [
+        for (final attachment in message.attachments)
+          if (attachment.kind == AiAttachmentKind.image) attachment.base64Data,
+      ],
+    if (message.toolCalls.isNotEmpty)
+      'tool_calls': [
+        for (final call in message.toolCalls)
+          <String, dynamic>{
+            'function': <String, dynamic>{
+              'name': call.name,
+              'arguments': call.arguments,
+            },
+          },
+      ],
+  };
+}
+
+String _withoutTrailingVersion(String baseUrl) => baseUrl
+    .trim()
+    .replaceFirst(RegExp(r'/v\d+(?:beta\d*)?/?$'), '')
+    .replaceFirst(RegExp(r'/+$'), '');
 
 Stream<T> _cancellableStream<T>({
   required Stream<T> Function() source,
@@ -517,7 +738,9 @@ List<Map<String, Object?>> _anthropicMessages(
       (toolResults ??= <Object?>[]).add(<String, Object?>{
         'type': 'tool_result',
         'tool_use_id': toolResult.toolCallId,
-        'content': toolResult.content,
+        'content': <Object?>[
+          <String, Object?>{'type': 'text', 'text': toolResult.content},
+        ],
         if (toolResult.isError) 'is_error': true,
       });
       continue;
@@ -555,20 +778,21 @@ const Map<String, Object?> _terminalCommandParameters = <String, Object?>{
   'additionalProperties': false,
 };
 
+const String _terminalCommandDescription =
+    'Propose a command with an explanation for the user to review and run in the active terminal.';
+
 const Map<String, Object?> _openAiTerminalCommandTool = <String, Object?>{
   'type': 'function',
   'function': <String, Object?>{
     'name': 'run_terminal_command',
-    'description':
-        'Propose a command with an explanation for the user to review and run in the active terminal.',
+    'description': _terminalCommandDescription,
     'parameters': _terminalCommandParameters,
   },
 };
 
 const Map<String, Object?> _anthropicTerminalCommandTool = <String, Object?>{
   'name': 'run_terminal_command',
-  'description':
-      'Propose a command with an explanation for the user to review and run in the active terminal.',
+  'description': _terminalCommandDescription,
   'input_schema': _terminalCommandParameters,
 };
 
@@ -586,61 +810,6 @@ class _ToolCallAccumulator {
     } on FormatException {
       return null;
     }
-  }
-}
-
-Uri _versionedEndpoint(String baseUrl, String path) {
-  final base = Uri.parse(baseUrl.trim());
-  final basePath = base.path.replaceFirst(RegExp(r'/+$'), '');
-  final hasApiVersion = RegExp(
-    r'/(?:v\d+(?:beta\d*)?)(?:/|$)',
-  ).hasMatch(basePath);
-  final versionedBasePath = hasApiVersion ? basePath : '$basePath/v1';
-  return base.replace(path: '$versionedBasePath/$path');
-}
-
-Future<void> _throwForError(HttpClientResponse response) async {
-  if (response.statusCode >= 200 && response.statusCode < 300) {
-    return;
-  }
-  final body = await response.transform(utf8.decoder).join();
-  String? message;
-  try {
-    final decoded = _jsonMap(body);
-    message =
-        _nonEmptyString(_nestedMap(decoded['error'])?['message']) ??
-        _nonEmptyString(decoded['message']);
-  } on FormatException {
-    message = null;
-  }
-  throw AiProtocolException(
-    message ?? 'AI request failed with HTTP ${response.statusCode}.',
-    statusCode: response.statusCode,
-  );
-}
-
-Stream<String> _sseData(HttpClientResponse response) async* {
-  final dataLines = <String>[];
-  await for (final line
-      in response.transform(utf8.decoder).transform(const LineSplitter())) {
-    if (line.isEmpty) {
-      if (dataLines.isNotEmpty) {
-        yield dataLines.join('\n');
-        dataLines.clear();
-      }
-      continue;
-    }
-    if (line.startsWith(':') || !line.startsWith('data:')) {
-      continue;
-    }
-    var data = line.substring(5);
-    if (data.startsWith(' ')) {
-      data = data.substring(1);
-    }
-    dataLines.add(data);
-  }
-  if (dataLines.isNotEmpty) {
-    yield dataLines.join('\n');
   }
 }
 

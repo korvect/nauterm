@@ -866,13 +866,13 @@ class AiProviderEntry {
   final String? createdDeviceId;
   final String? updatedDeviceId;
 
-  static const int defaultMaxTokens = 4096;
-
-  int get maxTokens {
+  int? get maxTokens {
     final value = config['max_tokens'];
     final parsed = value is num ? value.toInt() : null;
-    return parsed != null && parsed > 0 ? parsed : defaultMaxTokens;
+    return parsed != null && parsed > 0 ? parsed : null;
   }
+
+  double? get temperature => _finiteDouble(config['temperature']);
 
   List<String> get models => model.isEmpty
       ? []
@@ -920,6 +920,11 @@ class AiProviderEntry {
       updatedDeviceId: _stringOrNull(map['updated_device_id']),
     );
   }
+}
+
+double? _finiteDouble(Object? value) {
+  final parsed = value is num ? value.toDouble() : null;
+  return parsed != null && parsed.isFinite ? parsed : null;
 }
 
 class SftpFavoritePathEntry {
