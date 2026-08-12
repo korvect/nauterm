@@ -14,6 +14,11 @@ bool shouldUseTerminalChrome({
 }
 
 extension _NautermWorkspaceRendering on _NautermWorkspaceState {
+  void _handleTerminalBell(_TerminalTab tab) {
+    if (!terminalBellConfig.tabIndicator || tab.bellIndicator) return;
+    _setWorkspaceState(() => tab.bellIndicator = true);
+  }
+
   Widget _buildTopBar(_TerminalTab? selectedTerminalTab) {
     Widget buildTopBar() {
       final aiAssistantAvailable = _aiAssistantAvailable(selectedTerminalTab);
@@ -757,6 +762,8 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
               composerSuggestions: tab.replay ? const [] : composerSuggestions,
               autofocusTerminal: selected,
               readOnly: tab.replay,
+              bellEnabled: !tab.replay,
+              onBell: tab.replay ? null : () => _handleTerminalBell(tab),
               composerSuggestionResolver: (input, limit) =>
                   _composerDirectorySuggestions(view, input, limit),
               composerVisible: tab.replay ? false : view.composerVisible,

@@ -70,6 +70,7 @@ class NautermConfigStore {
       multiTabEnabled: terminal.features.multiTab,
       scrollbarEnabled: terminal.appearance.scrollbar,
       scrollbackLines: terminal.behavior.scrollbackLines,
+      bell: terminal.behavior.bell,
       sshKeepaliveIntervalSeconds: config.ssh.keepaliveInterval ~/ 1000,
       sshPredictionMode: config.ssh.predictionMode,
       emulationType: terminal.emulation,
@@ -113,6 +114,7 @@ class NautermConfigStore {
             copyOnSelect: settings.copyOnSelect,
             selectCommandBlockOnClick: settings.selectCommandBlockOnClick,
             scrollbackLines: settings.scrollbackLines,
+            bell: settings.bell,
           ),
           features: NautermTerminalFeaturesConfig(
             composer: settings.composerEnabled,

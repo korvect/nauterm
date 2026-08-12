@@ -55,6 +55,7 @@ TerminalSshPredictionMode terminalSshPredictionMode =
 
 TerminalCursorShape terminalCursorShape = TerminalCursorShape.block;
 bool terminalCursorBlink = true;
+TerminalBellConfig terminalBellConfig = const TerminalBellConfig();
 bool terminalConfirmOnClose = true;
 NautermRecordingConfig terminalRecordingConfig = const NautermRecordingConfig();
 
@@ -442,6 +443,7 @@ class NautermRuntimeSettings {
     this.themeId,
     this.customThemeJson,
     this.cursor = const TerminalCursorConfig(),
+    this.bell = const TerminalBellConfig(),
     this.confirmOnClose = true,
     this.hostIconMode = HostIconMode.osBadge,
     this.shellPath,
@@ -472,6 +474,7 @@ class NautermRuntimeSettings {
   final String? themeId;
   final Map<String, Object?>? customThemeJson;
   final TerminalCursorConfig cursor;
+  final TerminalBellConfig bell;
   final bool confirmOnClose;
   final HostIconMode hostIconMode;
   final String? shellPath;
@@ -498,6 +501,7 @@ void applyNautermRuntimeSettings(NautermRuntimeSettings settings) {
       : defaultTerminalTheme;
   terminalCursorShape = settings.cursor.shape;
   terminalCursorBlink = settings.cursor.blink;
+  terminalBellConfig = settings.bell;
   terminalConfirmOnClose = settings.confirmOnClose;
   hostIconMode = settings.hostIconMode;
   terminalShellPath = settings.shellPath;
@@ -560,6 +564,7 @@ NautermRuntimeSettings currentNautermRuntimeSettings() {
       shape: terminalCursorShape,
       blink: terminalCursorBlink,
     ),
+    bell: terminalBellConfig,
     confirmOnClose: terminalConfirmOnClose,
     hostIconMode: hostIconMode,
     shellPath: terminalShellPath,
@@ -832,6 +837,27 @@ class TerminalCursorConfig {
   final TerminalCursorShape shape;
   final bool blink;
   final Duration blinkInterval;
+}
+
+@immutable
+class TerminalBellConfig {
+  const TerminalBellConfig({
+    this.sound = true,
+    this.visual = false,
+    this.tabIndicator = true,
+  });
+
+  final bool sound;
+  final bool visual;
+  final bool tabIndicator;
+
+  TerminalBellConfig copyWith({bool? sound, bool? visual, bool? tabIndicator}) {
+    return TerminalBellConfig(
+      sound: sound ?? this.sound,
+      visual: visual ?? this.visual,
+      tabIndicator: tabIndicator ?? this.tabIndicator,
+    );
+  }
 }
 
 @immutable

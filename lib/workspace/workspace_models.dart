@@ -31,6 +31,7 @@ class _TerminalTab {
     _TerminalViewLayout? rootLayout,
     this.replay = false,
     this.replayLoading = false,
+    this.bellIndicator = false,
     this.pageMode = _TerminalTabPageMode.ssh,
     this.sftpPaneMounted = false,
     this.sftpConnectRequestId = 0,
@@ -60,6 +61,7 @@ class _TerminalTab {
   final _TerminalViewLayout rootLayout;
   final bool replay;
   bool replayLoading;
+  bool bellIndicator;
   TerminalFontConfig font;
   _TerminalTabPageMode pageMode;
   bool sftpPaneMounted;
@@ -100,6 +102,7 @@ class _TerminalTab {
       rootLayout: rootLayout ?? this.rootLayout,
       replay: replay,
       replayLoading: replayLoading,
+      bellIndicator: bellIndicator,
       pageMode: pageMode,
       sftpPaneMounted: sftpPaneMounted,
       sftpConnectRequestId: sftpConnectRequestId,

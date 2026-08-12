@@ -23,6 +23,8 @@ class _TerminalSessionView extends StatefulWidget {
     required this.composerSuggestions,
     required this.autofocusTerminal,
     this.readOnly = false,
+    this.bellEnabled = true,
+    this.onBell,
     this.composerSuggestionResolver,
     this.composerVisible,
     this.onComposerVisibilityChanged,
@@ -49,6 +51,8 @@ class _TerminalSessionView extends StatefulWidget {
   final List<String> composerSuggestions;
   final bool autofocusTerminal;
   final bool readOnly;
+  final bool bellEnabled;
+  final VoidCallback? onBell;
   final TerminalComposerSuggestionResolver? composerSuggestionResolver;
   final bool? composerVisible;
   final ValueChanged<bool>? onComposerVisibilityChanged;
@@ -74,6 +78,46 @@ class _TerminalSessionViewState extends State<_TerminalSessionView> {
   bool _holdingConnectedPage = false;
   TerminalConnectionPhase? _lastConnectionPhase;
   bool? _reportedConnectionPageVisibility;
+  late int _lastBellCount;
+  bool _bellFeedbackScheduled = false;
+  bool _visualBellVisible = false;
+  Timer? _visualBellTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _lastBellCount = widget.controller.snapshot.bellCount;
+  }
+
+  void _observeBellCount(int bellCount) {
+    if (!widget.bellEnabled) {
+      _lastBellCount = bellCount;
+      return;
+    }
+    if (bellCount <= _lastBellCount) {
+      _lastBellCount = bellCount;
+      return;
+    }
+    _lastBellCount = bellCount;
+    if (_bellFeedbackScheduled) return;
+    _bellFeedbackScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _bellFeedbackScheduled = false;
+      if (!mounted) return;
+      final config = terminalBellConfig;
+      if (config.sound) {
+        unawaited(SystemSound.play(SystemSoundType.alert));
+      }
+      if (config.visual) {
+        _visualBellTimer?.cancel();
+        setState(() => _visualBellVisible = true);
+        _visualBellTimer = Timer(const Duration(milliseconds: 160), () {
+          if (mounted) setState(() => _visualBellVisible = false);
+        });
+      }
+      widget.onBell?.call();
+    });
+  }
 
   void _reportConnectionPageVisibility(bool visible) {
     if (_reportedConnectionPageVisibility == visible) return;
@@ -93,11 +137,17 @@ class _TerminalSessionViewState extends State<_TerminalSessionView> {
     _holdingConnectedPage = false;
     _lastConnectionPhase = null;
     _reportedConnectionPageVisibility = null;
+    _lastBellCount = widget.controller.snapshot.bellCount;
+    _bellFeedbackScheduled = false;
+    _visualBellTimer?.cancel();
+    _visualBellTimer = null;
+    _visualBellVisible = false;
   }
 
   @override
   void dispose() {
     _connectionPageTimer?.cancel();
+    _visualBellTimer?.cancel();
     super.dispose();
   }
 
@@ -170,6 +220,7 @@ class _TerminalSessionViewState extends State<_TerminalSessionView> {
       child: AnimatedBuilder(
         animation: widget.controller,
         builder: (context, _) {
+          _observeBellCount(widget.controller.snapshot.bellCount);
           final status = widget.controller.connectionStatus;
           final profile = widget.controller.sshProfile;
           final serialProfile = widget.controller.serialProfile;
@@ -222,6 +273,20 @@ class _TerminalSessionViewState extends State<_TerminalSessionView> {
                   theme: widget.theme,
                   onCloseRequested: widget.onCloseRequested,
                 ),
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: AnimatedOpacity(
+                    key: const ValueKey('terminal-visual-bell'),
+                    opacity: _visualBellVisible ? 1 : 0,
+                    duration: const Duration(milliseconds: 70),
+                    child: ColoredBox(
+                      color: widget.theme.primary.foreground.withValues(
+                        alpha: 0.14,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ],
           );
         },

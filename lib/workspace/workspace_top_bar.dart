@@ -187,6 +187,12 @@ class _TopBar extends StatelessWidget {
                       terminalTheme: terminalTheme,
                       onTap: () => onTerminalTabSelected(terminalTab.id),
                       onClose: () => onTerminalTabClosed(terminalTab.id),
+                      showBellIndicator:
+                          terminalBellConfig.tabIndicator &&
+                          terminalTab.bellIndicator &&
+                          !(selectedTab == _WorkspaceTab.sessions &&
+                              !workspacePageActive &&
+                              selectedTerminalId == terminalTab.id),
                     ),
                   ],
                   _TopBarIconButton(
@@ -600,6 +606,7 @@ class _WorkspaceTabButton extends StatefulWidget {
     required this.terminalTheme,
     required this.onTap,
     this.onClose,
+    this.showBellIndicator = false,
     this.collapseToIconWhenInactive = false,
     this.constrainWidth = true,
   });
@@ -612,6 +619,7 @@ class _WorkspaceTabButton extends StatefulWidget {
   final TerminalTheme terminalTheme;
   final VoidCallback onTap;
   final VoidCallback? onClose;
+  final bool showBellIndicator;
   final bool collapseToIconWhenInactive;
   final bool constrainWidth;
 
@@ -720,6 +728,16 @@ class _WorkspaceTabButtonState extends State<_WorkspaceTabButton> {
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
+                            if (widget.showBellIndicator) ...[
+                              SizedBox(width: 5),
+                              Icon(
+                                LucideIcons.bell,
+                                key: const ValueKey(
+                                  'terminal-tab-bell-indicator',
+                                ),
+                                size: 12,
+                              ),
+                            ],
                             if (widget.onClose != null) ...[
                               SizedBox(width: 5),
                               _TopBarTabCloseButton(

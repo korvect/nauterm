@@ -448,6 +448,9 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
       _tab = _WorkspaceTab.sessions;
       _workspaceOverviewActive = false;
       _selectedTerminalId = terminalId;
+      for (final tab in _terminalTabs) {
+        if (tab.id == terminalId) tab.bellIndicator = false;
+      }
       _selectedTerminalViewId = _terminalTabs
           .where((tab) => tab.id == terminalId)
           .firstOrNull
@@ -471,6 +474,7 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
       if (tab == null) {
         return;
       }
+      tab.bellIndicator = false;
       _tab = _WorkspaceTab.sessions;
       _workspaceOverviewActive = keepWorkspaceOverview;
       _selectedTerminalId = terminalId;

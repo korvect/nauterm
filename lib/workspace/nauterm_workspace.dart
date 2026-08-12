@@ -850,6 +850,15 @@ class _NautermWorkspaceState extends ConsumerState<NautermWorkspace> {
   }
 
   void _handleTerminalConfigChanged() {
+    if (mounted) {
+      setState(() {
+        if (!terminalBellConfig.tabIndicator) {
+          for (final tab in _allTerminalTabs) {
+            tab.bellIndicator = false;
+          }
+        }
+      });
+    }
     final current = terminalRecordingConfig;
     final previous = _lastRecordingConfig;
     if (current.enabled == previous.enabled &&

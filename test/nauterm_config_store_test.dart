@@ -323,6 +323,11 @@ void main() {
         window: WindowConfig(width: 1180, height: 760, x: -320, y: 48),
         autocompleteEnabled: true,
         scrollbarEnabled: false,
+        bell: TerminalBellConfig(
+          sound: false,
+          visual: true,
+          tabIndicator: false,
+        ),
         sshKeepaliveIntervalSeconds: 45,
         sshPredictionMode: TerminalSshPredictionMode.always,
         hostIconMode: HostIconMode.osIcon,
@@ -352,6 +357,9 @@ void main() {
     expect(loaded.sftp.transferThreads, 16);
     expect(loaded.autocompleteEnabled, isTrue);
     expect(loaded.scrollbarEnabled, isFalse);
+    expect(loaded.bell.sound, isFalse);
+    expect(loaded.bell.visual, isTrue);
+    expect(loaded.bell.tabIndicator, isFalse);
     expect(loaded.sshKeepaliveIntervalSeconds, 45);
     expect(loaded.sshPredictionMode, TerminalSshPredictionMode.always);
     expect(loaded.hostIconMode, HostIconMode.osIcon);
@@ -384,6 +392,11 @@ void main() {
     expect((terminal['appearance'] as Map)['scrollbar'], isFalse);
     expect((terminal['behavior'] as Map)['copyOnSelect'], isTrue);
     expect((terminal['behavior'] as Map)['selectCommandBlockOnClick'], isFalse);
+    expect((terminal['behavior'] as Map)['bell'], {
+      'sound': false,
+      'visual': true,
+      'tabIndicator': false,
+    });
     expect((terminal['features'] as Map)['autocomplete'], isTrue);
     expect((terminal['input'] as Map)['useOptionAsMetaKey'], isFalse);
     expect((json['tabs'] as Map)['confirmOnClose'], isTrue);

@@ -804,6 +804,75 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
         ),
         SizedBox(height: 30),
         _SettingsSection(
+          key: state._settingsSectionKey('terminal-bell'),
+          icon: Icons.notifications_none_rounded,
+          localizationKey: 'settings.terminal.bell.title',
+          title: 'Bell',
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              maxWidth: _settingsContentMaxWidth,
+            ),
+            child: Column(
+              children: [
+                _SettingsRow(
+                  localizationKey: 'settings.terminal.bell.sound',
+                  title: 'Sound',
+                  subtitle:
+                      'Play the system alert sound when a bell is received.',
+                  trailing: _SettingsSwitch(
+                    value: terminalBellConfig.sound,
+                    onChanged: (value) {
+                      state._mutate(
+                        () => terminalBellConfig = terminalBellConfig.copyWith(
+                          sound: value,
+                        ),
+                      );
+                      state._persistRuntimeSettings();
+                    },
+                  ),
+                ),
+                SizedBox(height: 18),
+                _SettingsRow(
+                  localizationKey: 'settings.terminal.bell.visual',
+                  title: 'Visual Bell',
+                  subtitle:
+                      'Briefly flash the terminal when a bell is received.',
+                  trailing: _SettingsSwitch(
+                    value: terminalBellConfig.visual,
+                    onChanged: (value) {
+                      state._mutate(
+                        () => terminalBellConfig = terminalBellConfig.copyWith(
+                          visual: value,
+                        ),
+                      );
+                      state._persistRuntimeSettings();
+                    },
+                  ),
+                ),
+                SizedBox(height: 18),
+                _SettingsRow(
+                  localizationKey: 'settings.terminal.bell.tabIndicator',
+                  title: 'Show Bell in Tab',
+                  subtitle:
+                      'Keep a bell marker on background tabs until selected.',
+                  trailing: _SettingsSwitch(
+                    value: terminalBellConfig.tabIndicator,
+                    onChanged: (value) {
+                      state._mutate(
+                        () => terminalBellConfig = terminalBellConfig.copyWith(
+                          tabIndicator: value,
+                        ),
+                      );
+                      state._persistRuntimeSettings();
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        SizedBox(height: 30),
+        _SettingsSection(
           key: state._settingsSectionKey('terminal-interaction'),
           icon: Icons.content_copy_rounded,
           title: 'Interaction',

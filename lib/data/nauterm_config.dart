@@ -328,11 +328,13 @@ class NautermTerminalBehaviorConfig {
     this.copyOnSelect = false,
     this.selectCommandBlockOnClick = true,
     this.scrollbackLines = 10000,
+    this.bell = const TerminalBellConfig(),
   });
 
   final bool copyOnSelect;
   final bool selectCommandBlockOnClick;
   final int scrollbackLines;
+  final TerminalBellConfig bell;
 
   factory NautermTerminalBehaviorConfig.fromJson(Object? value) {
     final json = _map(value);
@@ -341,6 +343,7 @@ class NautermTerminalBehaviorConfig {
       selectCommandBlockOnClick:
           json['selectCommandBlockOnClick'] as bool? ?? true,
       scrollbackLines: (json['scrollbackLines'] as num?)?.toInt() ?? 10000,
+      bell: _terminalBellFromJson(json['bell']),
     );
   }
 
@@ -348,8 +351,24 @@ class NautermTerminalBehaviorConfig {
     'copyOnSelect': copyOnSelect,
     'selectCommandBlockOnClick': selectCommandBlockOnClick,
     'scrollbackLines': scrollbackLines,
+    'bell': _terminalBellToJson(bell),
   };
 }
+
+TerminalBellConfig _terminalBellFromJson(Object? value) {
+  final json = _map(value);
+  return TerminalBellConfig(
+    sound: json['sound'] as bool? ?? true,
+    visual: json['visual'] as bool? ?? false,
+    tabIndicator: json['tabIndicator'] as bool? ?? true,
+  );
+}
+
+Map<String, Object?> _terminalBellToJson(TerminalBellConfig bell) => {
+  'sound': bell.sound,
+  'visual': bell.visual,
+  'tabIndicator': bell.tabIndicator,
+};
 
 @immutable
 class NautermTerminalFeaturesConfig {

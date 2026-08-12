@@ -244,6 +244,13 @@ const _settingsSearchEntries = <_SettingsSearchEntry>[
   ),
   _SettingsSearchEntry(
     page: _SettingsPage.terminal,
+    section: 'terminal-bell',
+    title: 'Bell',
+    subtitle: 'Sound, visual feedback, and background tab indicators.',
+    keywords: 'alert beep flash notification tab',
+  ),
+  _SettingsSearchEntry(
+    page: _SettingsPage.terminal,
     section: 'terminal-interaction',
     title: 'Copy on Select',
     subtitle: 'Automatically copy selected terminal text.',
@@ -1444,6 +1451,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
         terminalPadding = defaults.padding;
         terminalCursorShape = defaults.cursor.shape;
         terminalCursorBlink = defaults.cursor.blink;
+        terminalBellConfig = defaults.bell;
         terminalRecordingConfig = defaults.recording;
         terminalPaddingNotifier.value++;
       }
