@@ -820,6 +820,7 @@
   "workspace.label.openTerminalTab": "Open terminal tab",
   "workspace.label.parentGroup": "Parent group",
   "workspace.label.portForwarding": "Port Forwarding",
+  "workspace.label.processingTerminalReplay": "Processing terminal replay…",
   "workspace.label.proxyName": "Proxy Name",
   "workspace.label.publicKey": "Public Key",
   "workspace.label.rawTerminalStreamAnsi": "Raw terminal stream (.ansi)",

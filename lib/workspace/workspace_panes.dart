@@ -230,6 +230,46 @@ class _TerminalSessionViewState extends State<_TerminalSessionView> {
   }
 }
 
+class _TerminalReplayLoadingOverlay extends StatelessWidget {
+  const _TerminalReplayLoadingOverlay({required this.theme});
+
+  final TerminalTheme theme;
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground = theme.primary.foreground;
+    return ColoredBox(
+      key: const ValueKey('terminal-replay-loading'),
+      color: theme.primary.background,
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox.square(
+              dimension: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: foreground.withValues(alpha: 0.72),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              tr(
+                'workspace.label.processingTerminalReplay',
+                fallback: 'Processing terminal replay…',
+              ),
+              style: TextStyle(
+                color: foreground.withValues(alpha: 0.72),
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _KnownHostsPane extends StatefulWidget {
   const _KnownHostsPane({
     required this.text,

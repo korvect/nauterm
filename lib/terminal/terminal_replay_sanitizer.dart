@@ -30,17 +30,67 @@ const List<int> _restorePrimaryScreen = [
   0x39,
   0x6c,
 ];
+const List<List<int>> _alternateScreenEnterSequences = [
+  [_escape, 0x5b, 0x3f, 0x34, 0x37, 0x68],
+  [_escape, 0x5b, 0x3f, 0x31, 0x30, 0x34, 0x37, 0x68],
+  [_escape, 0x5b, 0x3f, 0x31, 0x30, 0x34, 0x39, 0x68],
+];
+const List<List<int>> _alternateScreenExitSequences = [
+  [_escape, 0x5b, 0x3f, 0x34, 0x37, 0x6c],
+  [_escape, 0x5b, 0x3f, 0x31, 0x30, 0x34, 0x37, 0x6c],
+  [_escape, 0x5b, 0x3f, 0x31, 0x30, 0x34, 0x39, 0x6c],
+];
 
 class TerminalReplaySanitizer {
   final List<int> _markerPending = [];
   final List<int> _oscPending = [];
+  final List<int> _alternateScreenPending = [];
+  bool _alternateScreen = false;
 
   Uint8List add(Uint8List chunk) {
     if (chunk.isEmpty) {
       return Uint8List(0);
     }
 
-    return _stripPromptMarkers(_stripInternalOsc(chunk));
+    return _stripPromptMarkers(_stripInternalOsc(_stripAlternateScreen(chunk)));
+  }
+
+  Uint8List _stripAlternateScreen(Uint8List chunk) {
+    final input = <int>[..._alternateScreenPending, ...chunk];
+    _alternateScreenPending.clear();
+    final output = BytesBuilder(copy: false);
+    var index = 0;
+
+    while (index < input.length) {
+      final sequences = _alternateScreen
+          ? _alternateScreenExitSequences
+          : _alternateScreenEnterSequences;
+      final match = _firstSequenceMatch(input, index, sequences);
+      if (match != null) {
+        if (!_alternateScreen && match.index > index) {
+          output.add(input.sublist(index, match.index));
+        }
+        _alternateScreen = !_alternateScreen;
+        index = match.index + match.length;
+        continue;
+      }
+
+      final pendingLength = _sequencePrefixSuffixLength(
+        input,
+        index,
+        sequences,
+      );
+      final end = input.length - pendingLength;
+      if (!_alternateScreen && end > index) {
+        output.add(input.sublist(index, end));
+      }
+      if (pendingLength > 0) {
+        _alternateScreenPending.addAll(input.sublist(end));
+      }
+      break;
+    }
+
+    return output.takeBytes();
   }
 
   Uint8List _stripPromptMarkers(Uint8List chunk) {
@@ -74,7 +124,18 @@ class TerminalReplaySanitizer {
   }
 
   Uint8List close({bool restorePrimaryScreen = false}) {
-    final trailingOsc = Uint8List.fromList(_oscPending);
+    final trailingAlternateScreen = _alternateScreen
+        ? Uint8List(0)
+        : Uint8List.fromList(_alternateScreenPending);
+    _alternateScreenPending.clear();
+    _alternateScreen = false;
+    final sanitizedTrailingAlternateScreen = _stripInternalOsc(
+      trailingAlternateScreen,
+    );
+    final trailingOsc = Uint8List.fromList([
+      ...sanitizedTrailingAlternateScreen,
+      ..._oscPending,
+    ]);
     _oscPending.clear();
     final sanitizedTrailingOsc = _stripPromptMarkers(trailingOsc);
     final remaining = Uint8List.fromList([
@@ -150,6 +211,68 @@ class TerminalReplaySanitizer {
     }
     return true;
   }
+}
+
+class _SequenceMatch {
+  const _SequenceMatch(this.index, this.length);
+
+  final int index;
+  final int length;
+}
+
+_SequenceMatch? _firstSequenceMatch(
+  List<int> input,
+  int start,
+  List<List<int>> sequences,
+) {
+  for (var index = start; index < input.length; index++) {
+    for (final sequence in sequences) {
+      if (_matchesSequenceAt(input, index, sequence)) {
+        return _SequenceMatch(index, sequence.length);
+      }
+    }
+  }
+  return null;
+}
+
+bool _matchesSequenceAt(List<int> input, int start, List<int> sequence) {
+  if (input.length - start < sequence.length) return false;
+  for (var index = 0; index < sequence.length; index++) {
+    if (input[start + index] != sequence[index]) return false;
+  }
+  return true;
+}
+
+int _sequencePrefixSuffixLength(
+  List<int> input,
+  int start,
+  List<List<int>> sequences,
+) {
+  final available = input.length - start;
+  final maxLength = sequences.fold<int>(
+    0,
+    (length, sequence) => sequence.length > length ? sequence.length : length,
+  );
+  for (
+    var length = available < maxLength ? available : maxLength - 1;
+    length > 0;
+    length--
+  ) {
+    final suffixStart = input.length - length;
+    if (suffixStart < start) continue;
+    for (final sequence in sequences) {
+      if (length >= sequence.length) continue;
+      var matches = true;
+      for (var index = 0; index < length; index++) {
+        if (input[suffixStart + index] != sequence[index]) {
+          matches = false;
+          break;
+        }
+      }
+      if (matches) return length;
+    }
+  }
+  return 0;
 }
 
 int _indexOfOsc(List<int> input, int start) {

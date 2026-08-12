@@ -2480,6 +2480,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       theme: _defaultThemeForSettings(),
       controller: controller,
       replay: true,
+      replayLoading: true,
     );
     _setWorkspaceState(() {
       _tab = _WorkspaceTab.sessions;
@@ -2526,6 +2527,12 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
         );
       }
       rethrow;
+    } finally {
+      if (mounted &&
+          !controller.isDisposed &&
+          workspace.terminalTabs.contains(replayTab)) {
+        _setWorkspaceState(() => replayTab.replayLoading = false);
+      }
     }
   }
 

@@ -743,82 +743,95 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
             _selectedTerminalViewId = view.id;
           });
         },
-        child: _TerminalSessionView(
-          key: ValueKey('${tab.id}:${view.id}'),
-          controller: view.controller,
-          theme: view.theme,
-          config: terminalConfig,
-          connectionKeys: _terminalConnectionKeys,
-          connectionIdentities: _terminalConnectionIdentities,
-          composerHistory: tab.replay ? const [] : composerHistory,
-          composerSuggestions: tab.replay ? const [] : composerSuggestions,
-          autofocusTerminal: selected,
-          readOnly: tab.replay,
-          composerSuggestionResolver: (input, limit) =>
-              _composerDirectorySuggestions(view, input, limit),
-          composerVisible: tab.replay ? false : view.composerVisible,
-          onComposerVisibilityChanged: tab.replay
-              ? null
-              : (visible) {
-                  if (view.composerVisible == visible) {
-                    return;
-                  }
-                  _setWorkspaceState(() => view.composerVisible = visible);
-                },
-          tabToolbar: tab.replay
-              ? null
-              : _terminalViewTabToolbar(
-                  tab,
-                  view,
-                  sftpPageAvailable: sftpPageAvailable,
-                ),
-          onConnectionAuthSaved: tab.replay ? null : _saveTerminalAuth,
-          onAddKeyRequested: tab.replay ? null : _createKey,
-          onConnectionPageVisibilityChanged: tab.replay
-              ? null
-              : (visible) {
-                  if (connectionViewTab.connectionPageVisible == visible) {
-                    return;
-                  }
-                  _setWorkspaceState(
-                    () => connectionViewTab.connectionPageVisible = visible,
-                  );
-                },
-          onEditHostRequested: tab.replay
-              ? null
-              : () {
-                  final hostId =
-                      view.controller.sshProfile?.hostId ??
-                      view.controller.telnetProfile?.hostId;
-                  final host = hostId == null
-                      ? null
-                      : _hosts.where((entry) => entry.id == hostId).firstOrNull;
-                  if (host != null) _editHost(host);
-                },
-          onReloadConnection: tab.replay
-              ? null
-              : () => _reloadTerminalConnection(view.controller, view.theme),
-          onSplitRequested: tab.replay
-              ? null
-              : (direction) {
-                  _selectedTerminalId = tab.id;
-                  _selectedTerminalViewId = view.id;
-                  _splitSelectedTerminalTab(direction);
-                },
-          onNewTabRequested: tab.replay
-              ? null
-              : () => _openLocalTerminalViewTab(tab.id, view.id),
-          onSettingsRequested: tab.replay
-              ? null
-              : widget.onOpenTerminalSettings,
-          onCloseRequested: tab.replay
-              ? null
-              : () => _confirmAndClose(
-                  () =>
-                      _closeTerminalViewTab(tab.id, view.id, view.activeTab.id),
-                  controller: view.activeTab.controller,
-                ),
-          dataStore: _dataStore,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            _TerminalSessionView(
+              key: ValueKey('${tab.id}:${view.id}'),
+              controller: view.controller,
+              theme: view.theme,
+              config: terminalConfig,
+              connectionKeys: _terminalConnectionKeys,
+              connectionIdentities: _terminalConnectionIdentities,
+              composerHistory: tab.replay ? const [] : composerHistory,
+              composerSuggestions: tab.replay ? const [] : composerSuggestions,
+              autofocusTerminal: selected,
+              readOnly: tab.replay,
+              composerSuggestionResolver: (input, limit) =>
+                  _composerDirectorySuggestions(view, input, limit),
+              composerVisible: tab.replay ? false : view.composerVisible,
+              onComposerVisibilityChanged: tab.replay
+                  ? null
+                  : (visible) {
+                      if (view.composerVisible == visible) {
+                        return;
+                      }
+                      _setWorkspaceState(() => view.composerVisible = visible);
+                    },
+              tabToolbar: tab.replay
+                  ? null
+                  : _terminalViewTabToolbar(
+                      tab,
+                      view,
+                      sftpPageAvailable: sftpPageAvailable,
+                    ),
+              onConnectionAuthSaved: tab.replay ? null : _saveTerminalAuth,
+              onAddKeyRequested: tab.replay ? null : _createKey,
+              onConnectionPageVisibilityChanged: tab.replay
+                  ? null
+                  : (visible) {
+                      if (connectionViewTab.connectionPageVisible == visible) {
+                        return;
+                      }
+                      _setWorkspaceState(
+                        () => connectionViewTab.connectionPageVisible = visible,
+                      );
+                    },
+              onEditHostRequested: tab.replay
+                  ? null
+                  : () {
+                      final hostId =
+                          view.controller.sshProfile?.hostId ??
+                          view.controller.telnetProfile?.hostId;
+                      final host = hostId == null
+                          ? null
+                          : _hosts
+                                .where((entry) => entry.id == hostId)
+                                .firstOrNull;
+                      if (host != null) _editHost(host);
+                    },
+              onReloadConnection: tab.replay
+                  ? null
+                  : () =>
+                        _reloadTerminalConnection(view.controller, view.theme),
+              onSplitRequested: tab.replay
+                  ? null
+                  : (direction) {
+                      _selectedTerminalId = tab.id;
+                      _selectedTerminalViewId = view.id;
+                      _splitSelectedTerminalTab(direction);
+                    },
+              onNewTabRequested: tab.replay
+                  ? null
+                  : () => _openLocalTerminalViewTab(tab.id, view.id),
+              onSettingsRequested: tab.replay
+                  ? null
+                  : widget.onOpenTerminalSettings,
+              onCloseRequested: tab.replay
+                  ? null
+                  : () => _confirmAndClose(
+                      () => _closeTerminalViewTab(
+                        tab.id,
+                        view.id,
+                        view.activeTab.id,
+                      ),
+                      controller: view.activeTab.controller,
+                    ),
+              dataStore: _dataStore,
+            ),
+            if (tab.replayLoading)
+              _TerminalReplayLoadingOverlay(theme: view.theme),
+          ],
         ),
       );
     }

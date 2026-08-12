@@ -75,6 +75,68 @@ void main() {
     );
   });
 
+  test('removes alternate screen sequences and their contents', () {
+    for (final mode in const ['47', '1047', '1049']) {
+      final sanitizer = TerminalReplaySanitizer();
+      final output = sanitizer.add(
+        Uint8List.fromList(
+          utf8.encode(
+            'before\x1b[?${mode}hfull-screen output\x1b[?${mode}lafter',
+          ),
+        ),
+      );
+
+      expect(utf8.decode([...output, ...sanitizer.close()]), 'beforeafter');
+    }
+  });
+
+  test('removes alternate screen sections split across capture chunks', () {
+    const input = 'before\x1b[?1049hfull-screen output\x1b[?1049lafter';
+    for (var split = 1; split < input.length; split++) {
+      final sanitizer = TerminalReplaySanitizer();
+      final first = sanitizer.add(
+        Uint8List.fromList(utf8.encode(input.substring(0, split))),
+      );
+      final second = sanitizer.add(
+        Uint8List.fromList(utf8.encode(input.substring(split))),
+      );
+
+      expect(
+        utf8.decode([...first, ...second, ...sanitizer.close()]),
+        'beforeafter',
+        reason: 'split at $split',
+      );
+    }
+  });
+
+  test('discards an unfinished alternate screen at end of capture', () {
+    final sanitizer = TerminalReplaySanitizer();
+    final output = sanitizer.add(
+      Uint8List.fromList(
+        utf8.encode('primary\x1b[?1049hunclosed full-screen output'),
+      ),
+    );
+
+    expect(
+      utf8.decode([...output, ...sanitizer.close(restorePrimaryScreen: true)]),
+      'primary\x1b[?1049l',
+    );
+  });
+
+  test('removes multiple alternate screen sections', () {
+    final sanitizer = TerminalReplaySanitizer();
+    final output = sanitizer.add(
+      Uint8List.fromList(
+        utf8.encode(
+          'one\x1b[?1049hvim\x1b[?1049ltwo'
+          '\x1b[?1049htop\x1b[?1049lthree',
+        ),
+      ),
+    );
+
+    expect(utf8.decode([...output, ...sanitizer.close()]), 'onetwothree');
+  });
+
   test('can force an unfinished alternate screen back to primary', () {
     final sanitizer = TerminalReplaySanitizer();
 

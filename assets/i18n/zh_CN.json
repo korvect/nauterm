@@ -820,6 +820,7 @@
   "workspace.label.openTerminalTab": "打开终端标签页",
   "workspace.label.parentGroup": "父分组",
   "workspace.label.portForwarding": "端口转发",
+  "workspace.label.processingTerminalReplay": "正在处理终端回放…",
   "workspace.label.proxyName": "代理名称",
   "workspace.label.publicKey": "公钥",
   "workspace.label.rawTerminalStreamAnsi": "原始终端流（.ansi）",
