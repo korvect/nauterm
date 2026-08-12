@@ -302,7 +302,11 @@ void main() {
           cjkFamily: 'Sarasa Mono SC',
           size: 15,
         ),
-        keyboard: TerminalKeyboardConfig(useOptionAsMetaKey: false),
+        keyboard: TerminalKeyboardConfig(
+          useOptionAsMetaKey: false,
+          reportMouseEvents: false,
+          navigationKeysScrollOutsideInteractiveApps: false,
+        ),
         shortcuts: TerminalShortcutConfig(
           quickConnect: '',
           tabSwitches: [
@@ -363,6 +367,8 @@ void main() {
     expect(loaded.font.cjkFamily, 'Sarasa Mono SC');
     expect(loaded.font.size, 15);
     expect(loaded.keyboard.useOptionAsMetaKey, isFalse);
+    expect(loaded.keyboard.reportMouseEvents, isFalse);
+    expect(loaded.keyboard.navigationKeysScrollOutsideInteractiveApps, isFalse);
     expect(loaded.shortcuts.quickConnect, isEmpty);
     expect(loaded.shortcuts.tabSwitches.first, isEmpty);
     expect(loaded.sftp.sshEditor, 'nano');
@@ -420,6 +426,11 @@ void main() {
     });
     expect((terminal['features'] as Map)['autocomplete'], isTrue);
     expect((terminal['input'] as Map)['useOptionAsMetaKey'], isFalse);
+    expect((terminal['input'] as Map)['reportMouseEvents'], isFalse);
+    expect(
+      (terminal['input'] as Map)['navigationKeysScrollOutsideInteractiveApps'],
+      isFalse,
+    );
     expect((json['tabs'] as Map)['confirmOnClose'], isTrue);
     expect((json['ssh'] as Map)['keepaliveInterval'], 45000);
     expect(json['shortcuts'], isA<Map>());

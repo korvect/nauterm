@@ -1895,12 +1895,27 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
     if (modifiers.alt || modifiers.control || modifiers.meta) {
       return false;
     }
+    final snapshot = widget.controller.snapshot;
+    if (!_config.keyboard.navigationKeysScrollOutsideInteractiveApps ||
+        snapshot.alternateScreen) {
+      return false;
+    }
     if (event.logicalKey == LogicalKeyboardKey.pageUp) {
       widget.controller.scrollPageUp();
       return true;
     }
     if (event.logicalKey == LogicalKeyboardKey.pageDown) {
       widget.controller.scrollPageDown();
+      return true;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.home) {
+      widget.controller.scrollLines(
+        snapshot.historyLines - snapshot.displayOffset,
+      );
+      return true;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.end) {
+      widget.controller.scrollToBottom();
       return true;
     }
     return false;
@@ -2878,7 +2893,7 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
     bool motion = false,
     bool release = false,
   }) {
-    if (widget.readOnly) return false;
+    if (widget.readOnly || !_config.keyboard.reportMouseEvents) return false;
     final mode = widget.controller.snapshot.keyboardMode;
     if (!mode.mouseReporting || button == null) {
       return false;

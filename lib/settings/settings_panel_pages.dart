@@ -862,6 +862,55 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
         ),
         SizedBox(height: 30),
         _SettingsSection(
+          key: state._settingsSectionKey('terminal-input'),
+          icon: Icons.input_rounded,
+          localizationKey: 'settings.terminal.input.title',
+          title: 'Input',
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              maxWidth: _settingsContentMaxWidth,
+            ),
+            child: Column(
+              children: [
+                _SettingsRow(
+                  localizationKey: 'settings.terminal.input.reportMouseEvents',
+                  title: 'Report Mouse Events',
+                  subtitle:
+                      'Send mouse input to terminal applications that request it.',
+                  trailing: _SettingsSwitch(
+                    value: state._reportMouseEvents,
+                    onChanged: (value) {
+                      state._updateKeyboardSettings(
+                        terminalKeyboardConfig.copyWith(
+                          reportMouseEvents: value,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                SizedBox(height: 18),
+                _SettingsRow(
+                  localizationKey:
+                      'settings.terminal.input.navigationKeysScroll',
+                  title: 'Scroll with Navigation Keys',
+                  subtitle: 'Use navigation keys to scroll the terminal.',
+                  trailing: _SettingsSwitch(
+                    value: state._navigationKeysScrollOutsideInteractiveApps,
+                    onChanged: (value) {
+                      state._updateKeyboardSettings(
+                        terminalKeyboardConfig.copyWith(
+                          navigationKeysScrollOutsideInteractiveApps: value,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        SizedBox(height: 30),
+        _SettingsSection(
           key: state._settingsSectionKey('terminal-pointer'),
           icon: Icons.mouse_outlined,
           localizationKey: 'settings.terminal.pointer.title',

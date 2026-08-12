@@ -595,11 +595,19 @@ TerminalKeyboardConfig _keyboardFromJson(Object? value) {
   final json = _map(value);
   return TerminalKeyboardConfig(
     useOptionAsMetaKey: json['useOptionAsMetaKey'] as bool? ?? true,
+    reportMouseEvents: json['reportMouseEvents'] as bool? ?? true,
+    navigationKeysScrollOutsideInteractiveApps:
+        json['navigationKeysScrollOutsideInteractiveApps'] as bool? ?? true,
   );
 }
 
 Map<String, Object?> _keyboardToJson(TerminalKeyboardConfig value) =>
-    <String, Object?>{'useOptionAsMetaKey': value.useOptionAsMetaKey};
+    <String, Object?>{
+      'useOptionAsMetaKey': value.useOptionAsMetaKey,
+      'reportMouseEvents': value.reportMouseEvents,
+      'navigationKeysScrollOutsideInteractiveApps':
+          value.navigationKeysScrollOutsideInteractiveApps,
+    };
 
 SftpConfig _sftpFromJson(Object? value) {
   final json = _map(value);

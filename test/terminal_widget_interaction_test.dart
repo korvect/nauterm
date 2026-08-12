@@ -451,6 +451,44 @@ void main() {
     expect(inputs.single, startsWith('\x1b[<65;'));
   });
 
+  testWidgets('mouse reporting can be disabled for terminal applications', (
+    tester,
+  ) async {
+    final inputs = <String>[];
+    final driver = _SnapshotDriver(
+      TerminalSnapshot.blank(
+        columns: 80,
+        rows: 8,
+        historyLines: 20,
+        displayOffset: 10,
+        keyboardMode: const TerminalKeyboardMode(
+          mouseReportClick: true,
+          sgrMouse: true,
+        ),
+      ),
+    );
+    final controller = TerminalController(driver: driver, onInput: inputs.add);
+    addTearDown(controller.dispose);
+    await _pumpTerminal(
+      tester,
+      controller,
+      keyboard: const TerminalKeyboardConfig(reportMouseEvents: false),
+    );
+
+    await tester.sendEventToBinding(
+      PointerScrollEvent(
+        position: tester.getCenter(
+          find.byKey(const ValueKey('terminal-renderer-region')),
+        ),
+        scrollDelta: const Offset(0, 20),
+      ),
+    );
+    await tester.pump();
+
+    expect(inputs, isEmpty);
+    expect(driver.scrolledLines, lessThan(0));
+  });
+
   testWidgets('mouse selection copies selected terminal text', (tester) async {
     final driver = MemoryTerminalDriver(columns: 80, rows: 8);
     final controller = TerminalController(driver: driver);
@@ -639,6 +677,86 @@ void main() {
 
     expect(_terminalPainter(tester).commandBlockSelection, isNull);
     expect(inputs, isEmpty);
+  });
+
+  testWidgets('navigation keys scroll outside interactive applications', (
+    tester,
+  ) async {
+    final inputs = <String>[];
+    final driver = _SnapshotDriver(
+      TerminalSnapshot.blank(
+        columns: 80,
+        rows: 8,
+        historyLines: 40,
+        displayOffset: 10,
+      ),
+    );
+    final controller = TerminalController(driver: driver, onInput: inputs.add);
+    addTearDown(controller.dispose);
+    await _pumpTerminal(tester, controller, autofocusTerminal: true);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.home);
+    expect(controller.snapshot.displayOffset, 40);
+    await tester.sendKeyEvent(LogicalKeyboardKey.end);
+    expect(controller.snapshot.displayOffset, 0);
+    await tester.sendKeyEvent(LogicalKeyboardKey.pageUp);
+    expect(controller.snapshot.displayOffset, greaterThan(0));
+    await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
+    expect(controller.snapshot.displayOffset, 0);
+    expect(inputs, isEmpty);
+  });
+
+  testWidgets('navigation keys are sent to alternate-screen applications', (
+    tester,
+  ) async {
+    final inputs = <String>[];
+    final driver = _SnapshotDriver(
+      TerminalSnapshot.blank(
+        columns: 80,
+        rows: 8,
+        historyLines: 40,
+        alternateScreen: true,
+      ),
+    );
+    final controller = TerminalController(driver: driver, onInput: inputs.add);
+    addTearDown(controller.dispose);
+    await _pumpTerminal(tester, controller, autofocusTerminal: true);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.pageUp);
+    await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
+    await tester.sendKeyEvent(LogicalKeyboardKey.home);
+    await tester.sendKeyEvent(LogicalKeyboardKey.end);
+
+    expect(inputs, ['\x1b[5~', '\x1b[6~', '\x1b[H', '\x1b[F']);
+    expect(controller.snapshot.displayOffset, 0);
+  });
+
+  testWidgets('navigation key scrolling can be disabled', (tester) async {
+    final inputs = <String>[];
+    final driver = _SnapshotDriver(
+      TerminalSnapshot.blank(
+        columns: 80,
+        rows: 8,
+        historyLines: 40,
+        displayOffset: 10,
+      ),
+    );
+    final controller = TerminalController(driver: driver, onInput: inputs.add);
+    addTearDown(controller.dispose);
+    await _pumpTerminal(
+      tester,
+      controller,
+      autofocusTerminal: true,
+      keyboard: const TerminalKeyboardConfig(
+        navigationKeysScrollOutsideInteractiveApps: false,
+      ),
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.pageUp);
+    await tester.sendKeyEvent(LogicalKeyboardKey.home);
+
+    expect(inputs, ['\x1b[5~', '\x1b[H']);
+    expect(controller.snapshot.displayOffset, 0);
   });
 
   testWidgets('command click opens a local terminal path', (tester) async {
@@ -2069,6 +2187,7 @@ class _SnapshotDriver implements TerminalDriver {
       displayOffset: _snapshot.displayOffset,
       keyboardMode: _snapshot.keyboardMode,
       inputEchoEnabled: _snapshot.inputEchoEnabled,
+      alternateScreen: _snapshot.alternateScreen,
     );
   }
 
@@ -2104,18 +2223,19 @@ class _SnapshotDriver implements TerminalDriver {
       displayOffset: displayOffset,
       keyboardMode: _snapshot.keyboardMode,
       inputEchoEnabled: _snapshot.inputEchoEnabled,
+      alternateScreen: _snapshot.alternateScreen,
     );
     return true;
   }
 
   @override
-  bool scrollPageUp() => false;
+  bool scrollPageUp() => scrollLines(_snapshot.rows);
 
   @override
-  bool scrollPageDown() => false;
+  bool scrollPageDown() => scrollLines(-_snapshot.rows);
 
   @override
-  bool scrollToBottom() => false;
+  bool scrollToBottom() => scrollLines(-_snapshot.displayOffset);
 
   @override
   TerminalSearchResult search(
@@ -2168,6 +2288,7 @@ Future<void> _pumpTerminal(
   TerminalTheme theme = defaultTerminalTheme,
   bool autocompleteEnabled = true,
   bool autofocusTerminal = false,
+  TerminalKeyboardConfig keyboard = const TerminalKeyboardConfig(),
   TerminalOpenTargetCallback? onOpenTarget,
   VoidCallback? onSettingsRequested,
 }) async {
@@ -2179,6 +2300,7 @@ Future<void> _pumpTerminal(
         child: TerminalView(
           controller: controller,
           config: defaultTerminalConfig.copyWith(
+            keyboard: keyboard,
             composer: TerminalComposerConfig(
               autocompleteEnabled: autocompleteEnabled,
             ),

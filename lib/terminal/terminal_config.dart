@@ -890,15 +890,29 @@ class TerminalPointerConfig {
 
 @immutable
 class TerminalKeyboardConfig {
-  const TerminalKeyboardConfig({this.useOptionAsMetaKey = true});
+  const TerminalKeyboardConfig({
+    this.useOptionAsMetaKey = true,
+    this.reportMouseEvents = true,
+    this.navigationKeysScrollOutsideInteractiveApps = true,
+  });
 
-  TerminalKeyboardConfig copyWith({bool? useOptionAsMetaKey}) {
+  TerminalKeyboardConfig copyWith({
+    bool? useOptionAsMetaKey,
+    bool? reportMouseEvents,
+    bool? navigationKeysScrollOutsideInteractiveApps,
+  }) {
     return TerminalKeyboardConfig(
       useOptionAsMetaKey: useOptionAsMetaKey ?? this.useOptionAsMetaKey,
+      reportMouseEvents: reportMouseEvents ?? this.reportMouseEvents,
+      navigationKeysScrollOutsideInteractiveApps:
+          navigationKeysScrollOutsideInteractiveApps ??
+          this.navigationKeysScrollOutsideInteractiveApps,
     );
   }
 
   final bool useOptionAsMetaKey;
+  final bool reportMouseEvents;
+  final bool navigationKeysScrollOutsideInteractiveApps;
 }
 
 LogicalKeyboardKey? keyFromName(String name) {

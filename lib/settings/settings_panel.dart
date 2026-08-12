@@ -328,6 +328,20 @@ const _settingsSearchEntries = <_SettingsSearchEntry>[
     keywords: 'alt escape keyboard',
   ),
   _SettingsSearchEntry(
+    page: _SettingsPage.terminal,
+    section: 'terminal-input',
+    title: 'Report Mouse Events',
+    subtitle: 'Send mouse input to terminal applications that request it.',
+    keywords: 'input pointer click drag move scroll wheel application vim',
+  ),
+  _SettingsSearchEntry(
+    page: _SettingsPage.terminal,
+    section: 'terminal-input',
+    title: 'Scroll with Navigation Keys',
+    subtitle: 'Use navigation keys to scroll the terminal.',
+    keywords: 'input paging page up down home end scroll vim less emacs',
+  ),
+  _SettingsSearchEntry(
     page: _SettingsPage.shortcuts,
     section: 'shortcuts-keyboard',
     title: 'Terminal Shortcuts',
@@ -429,6 +443,9 @@ class _SettingsPanelState extends State<SettingsPanel> {
   }
 
   bool _useOptionAsMetaKey = terminalKeyboardConfig.useOptionAsMetaKey;
+  bool _reportMouseEvents = terminalKeyboardConfig.reportMouseEvents;
+  bool _navigationKeysScrollOutsideInteractiveApps =
+      terminalKeyboardConfig.navigationKeysScrollOutsideInteractiveApps;
   TerminalShortcutConfig _shortcutConfig = terminalShortcutConfig;
   bool _sftpTabEnabled = sftpTabEnabled;
   bool _workspacePageEnabled = workspacePageEnabled;
@@ -706,6 +723,9 @@ class _SettingsPanelState extends State<SettingsPanel> {
         _fontSize = settings.font.size.toStringAsFixed(0);
         _terminalPadding = settings.padding;
         _useOptionAsMetaKey = settings.keyboard.useOptionAsMetaKey;
+        _reportMouseEvents = settings.keyboard.reportMouseEvents;
+        _navigationKeysScrollOutsideInteractiveApps =
+            settings.keyboard.navigationKeysScrollOutsideInteractiveApps;
         _sftpTabEnabled = settings.sftp.showTab;
         _sftpConcurrentTasks = settings.sftp.concurrentTasks;
         _sftpTransferThreads = settings.sftp.transferThreads;
@@ -862,6 +882,9 @@ class _SettingsPanelState extends State<SettingsPanel> {
   void _updateKeyboardSettings(TerminalKeyboardConfig keyboard) {
     setState(() {
       _useOptionAsMetaKey = keyboard.useOptionAsMetaKey;
+      _reportMouseEvents = keyboard.reportMouseEvents;
+      _navigationKeysScrollOutsideInteractiveApps =
+          keyboard.navigationKeysScrollOutsideInteractiveApps;
     });
     terminalKeyboardConfig = keyboard;
     _persistRuntimeSettings();
@@ -1452,6 +1475,14 @@ class _SettingsPanelState extends State<SettingsPanel> {
         terminalBellConfig = defaults.bell;
         terminalPointerConfig = defaults.pointer;
         terminalRecordingConfig = defaults.recording;
+        _reportMouseEvents = defaults.keyboard.reportMouseEvents;
+        _navigationKeysScrollOutsideInteractiveApps =
+            defaults.keyboard.navigationKeysScrollOutsideInteractiveApps;
+        terminalKeyboardConfig = terminalKeyboardConfig.copyWith(
+          reportMouseEvents: defaults.keyboard.reportMouseEvents,
+          navigationKeysScrollOutsideInteractiveApps:
+              defaults.keyboard.navigationKeysScrollOutsideInteractiveApps,
+        );
         terminalPaddingNotifier.value++;
       }
       if (pages.contains(_SettingsPage.sftp)) {
@@ -1478,7 +1509,9 @@ class _SettingsPanelState extends State<SettingsPanel> {
       }
       if (pages.contains(_SettingsPage.shortcuts)) {
         _useOptionAsMetaKey = defaults.keyboard.useOptionAsMetaKey;
-        terminalKeyboardConfig = defaults.keyboard;
+        terminalKeyboardConfig = terminalKeyboardConfig.copyWith(
+          useOptionAsMetaKey: defaults.keyboard.useOptionAsMetaKey,
+        );
         _shortcutConfig = defaults.shortcuts;
         terminalShortcutConfig = defaults.shortcuts;
       }
