@@ -39,18 +39,7 @@ class _TerminalThemeGalleryState extends State<_TerminalThemeGallery> {
   }
 
   Future<List<String>> _loadFontFamilies() async {
-    final families = await loadMonospaceFontFamilies();
-    if (mounted &&
-        io.Platform.isWindows &&
-        widget.currentFont().family.trim().toLowerCase() == 'monospace') {
-      final preferredFamily = preferredMonospaceFontFamily(families);
-      if (preferredFamily != null) {
-        widget.onFontChanged(
-          widget.currentFont().copyWith(family: preferredFamily),
-        );
-      }
-    }
-    return families;
+    return loadMonospaceFontFamilies();
   }
 
   @override
@@ -71,12 +60,7 @@ class _TerminalThemeGalleryState extends State<_TerminalThemeGallery> {
   @override
   Widget build(BuildContext context) {
     final colors = widget.colors;
-    final configuredFont = widget.currentFont();
-    final currentFont =
-        io.Platform.isWindows &&
-            configuredFont.family.trim().toLowerCase() == 'monospace'
-        ? configuredFont.copyWith(family: configuredFont.resolvedFamily())
-        : configuredFont;
+    final currentFont = widget.currentFont();
     final fontSizeOptions = [
       ...terminalFontSizeOptions,
       if (!terminalFontSizeOptions.contains(currentFont.size)) currentFont.size,
@@ -113,13 +97,7 @@ class _TerminalThemeGalleryState extends State<_TerminalThemeGallery> {
                         builder: (context, snapshot) {
                           final loadedFamilies =
                               snapshot.data ?? fallbackMonospaceFontFamilies;
-                          final fontOptions = [
-                            if (!io.Platform.isWindows) 'monospace',
-                            ...loadedFamilies.where(
-                              (family) =>
-                                  family.trim().toLowerCase() != 'monospace',
-                            ),
-                          ];
+                          final fontOptions = [...loadedFamilies];
                           return _TerminalAppearanceField(
                             label: 'Font',
                             colors: colors,
@@ -130,14 +108,7 @@ class _TerminalThemeGalleryState extends State<_TerminalThemeGallery> {
                                 for (final family in fontOptions)
                                   NautermContextMenuAction(
                                     value: family,
-                                    label:
-                                        family.trim().toLowerCase() ==
-                                            'monospace'
-                                        ? tr(
-                                            'settings.terminal.systemMonospace',
-                                            fallback: 'System Monospace',
-                                          )
-                                        : family,
+                                    label: family,
                                   ),
                               ],
                               colors: colors,

@@ -608,15 +608,6 @@ class _SettingsPanelState extends State<SettingsPanel> {
       _monospaceFontFamilies = monospaceFamilies;
       _systemFontFamilies = families[1];
     });
-    if ((Platform.isWindows || Platform.isLinux) &&
-        terminalFontConfig.family.trim().toLowerCase() == 'monospace' &&
-        monospaceFamilies.isNotEmpty) {
-      _updateTerminalFont(
-        family:
-            preferredMonospaceFontFamily(monospaceFamilies) ??
-            monospaceFamilies.first,
-      );
-    }
   }
 
   void _reloadSyncStatus() {

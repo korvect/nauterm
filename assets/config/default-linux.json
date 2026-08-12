@@ -21,7 +21,7 @@
         "id": "default"
       },
       "font": {
-        "family": "monospace",
+        "family": "DejaVu Sans Mono",
         "cjkFamily": null,
         "size": 12,
         "lineHeight": 1.18,

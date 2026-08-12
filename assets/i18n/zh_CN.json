@@ -480,7 +480,6 @@
   "settings.sync.webdav.path.description": "加密同步文件的路径。",
   "settings.sync.webdav.serverUrl.description": "WebDAV 服务的 HTTPS 端点。",
   "settings.sync.webdav.username.description": "WebDAV 账户名称。",
-  "settings.terminal.systemMonospace": "系统默认等宽字体",
   "settings.terminal.autocomplete.label": "自动补全",
   "settings.terminal.autocomplete.description": "使用命令编辑器时建议命令和路径。",
   "settings.terminal.bell.title": "终端响铃",

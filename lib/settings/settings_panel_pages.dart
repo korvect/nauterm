@@ -296,11 +296,7 @@ Widget _buildSettingsExternalEditorSelect(_SettingsPanelState state) {
 }
 
 Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
-  final fontOptions = [
-    ...state._monospaceFontFamilies.where(
-      (family) => family.trim().toLowerCase() != 'monospace',
-    ),
-  ];
+  final fontOptions = [...state._monospaceFontFamilies];
   final fontSizeOptions = [
     for (final size in terminalFontSizeOptions)
       size.toStringAsFixed(size == size.roundToDouble() ? 0 : 1),
@@ -381,13 +377,6 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
                       values: fontOptions,
                       searchable: true,
                       allowCustomValue: true,
-                      format: (value) =>
-                          value.trim().toLowerCase() == 'monospace'
-                          ? tr(
-                              'settings.terminal.systemMonospace',
-                              fallback: 'System Monospace',
-                            )
-                          : value,
                       localizeOptions: false,
                       onChanged: (value) =>
                           state._updateTerminalFont(family: value),

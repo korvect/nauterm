@@ -15,6 +15,8 @@ import 'package:nauterm/terminal/terminal_recording_config.dart';
 import 'package:nauterm/terminal/terminal_theme.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   test('automatic sync defaults to three days', () {
     expect(const NautermSyncConfig().interval, 3 * 24 * 60 * 60 * 1000);
   });
@@ -66,6 +68,15 @@ void main() {
       NautermConfigStore.defaultConfigAssetPath(TargetPlatform.windows),
       nautermWindowsDefaultConfigAsset,
     );
+  });
+
+  test('Linux default uses a concrete terminal font family', () async {
+    final json = jsonDecode(
+      await rootBundle.loadString(nautermLinuxDefaultConfigAsset),
+    );
+    final config = NautermConfig.fromJson(json);
+
+    expect(config.terminal.appearance.font.family, 'DejaVu Sans Mono');
   });
 
   test('formats shortcut labels for the current desktop platform', () {

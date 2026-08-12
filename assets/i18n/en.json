@@ -480,7 +480,6 @@
   "settings.sync.webdav.path.description": "Path of the encrypted sync file.",
   "settings.sync.webdav.serverUrl.description": "HTTPS endpoint of the WebDAV service.",
   "settings.sync.webdav.username.description": "WebDAV account name.",
-  "settings.terminal.systemMonospace": "System Monospace",
   "settings.terminal.autocomplete.label": "Autocomplete",
   "settings.terminal.autocomplete.description": "Suggest commands and paths while using the composer.",
   "settings.terminal.bell.title": "Bell",

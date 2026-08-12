@@ -31,15 +31,6 @@ void main() {
     expect(await loadSystemFontFamilies(), ['Menlo', 'PingFang SC']);
   });
 
-  test('prefers a real Windows terminal font family', () {
-    expect(
-      preferredMonospaceFontFamily(['Fira Code', 'Consolas', 'Cascadia Mono']),
-      'Cascadia Mono',
-    );
-    expect(preferredMonospaceFontFamily(['Fira Code']), 'Fira Code');
-    expect(preferredMonospaceFontFamily([]), isNull);
-  });
-
   test('recognizes programming families without admitting CJK text fonts', () {
     for (final family in [
       'Cascadia Code',

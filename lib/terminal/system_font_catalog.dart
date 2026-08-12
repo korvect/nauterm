@@ -89,28 +89,6 @@ bool isLikelyTerminalFontFamily(String familyName) {
   );
 }
 
-String? preferredMonospaceFontFamily(List<String> families) {
-  if (families.isEmpty) return null;
-  const preferredFamilies = [
-    'Cascadia Mono',
-    'Consolas',
-    'JetBrains Mono',
-    'Fira Code',
-    'DejaVu Sans Mono',
-    'Noto Sans Mono',
-    'Ubuntu Mono',
-    'Liberation Mono',
-  ];
-  for (final preferred in preferredFamilies) {
-    for (final family in families) {
-      if (family.toLowerCase() == preferred.toLowerCase()) {
-        return family;
-      }
-    }
-  }
-  return families.first;
-}
-
 Future<List<String>> loadMonospaceFontFamilies() async {
   try {
     final values = await _systemFontsChannel.invokeListMethod<String>(
