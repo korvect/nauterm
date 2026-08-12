@@ -2463,25 +2463,6 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       );
       return;
     }
-    final captureInfo = await store.captureInfo(
-      log.id,
-      captureFile: log.captureFile,
-      includeHash: log.endedAt != null && log.captureSha256 != null,
-    );
-    if (captureInfo.bytes <= 0) {
-      _showWorkspaceMessage('This session has no terminal capture.');
-      return;
-    }
-    if (log.captureSha256 != null && captureInfo.sha256 != log.captureSha256) {
-      throw const FormatException(
-        'The encrypted terminal capture is incomplete or has been modified.',
-      );
-    }
-    final theme = await _themeForId(log.themeId);
-    if (!mounted) {
-      return;
-    }
-
     final controller = TerminalController(
       driver: NativeReplayTerminalDriver.create(
         columns: log.columns ?? 100,
@@ -2490,36 +2471,62 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       ),
       config: currentTerminalConfig(),
     );
-    try {
-      await _loadReplayCapture(controller, store, log.id, captureInfo.fileName);
-    } on Object {
-      _disposeTerminalController(controller);
-      rethrow;
-    }
-    if (!mounted || controller.isDisposed) {
-      _disposeTerminalController(controller);
-      return;
-    }
-
+    final id = _nextTerminalId++;
+    final title = 'Replay: ${log.title}';
+    final workspace = _activeSessionWorkspace;
+    final replayTab = _TerminalTab(
+      id: id,
+      title: title,
+      theme: _defaultThemeForSettings(),
+      controller: controller,
+      replay: true,
+    );
     _setWorkspaceState(() {
       _tab = _WorkspaceTab.sessions;
       _workspaceOverviewActive = false;
-      final id = _nextTerminalId++;
-      final title = 'Replay: ${log.title}';
-      _terminalTabs.add(
-        _TerminalTab(
-          id: id,
-          title: title,
-          theme: theme,
-          controller: controller,
-          replay: true,
-        ),
-      );
+      _terminalTabs.add(replayTab);
       _selectedTerminalId = id;
       _selectedTerminalViewId = id;
       _editorRequest = null;
     });
     widget.controller?._notifyTabsChanged();
+
+    try {
+      final results = await Future.wait<Object>([
+        store.captureInfo(
+          log.id,
+          captureFile: log.captureFile,
+          includeHash: log.endedAt != null && log.captureSha256 != null,
+        ),
+        _themeForId(log.themeId),
+      ]);
+      final captureInfo = results[0] as TerminalLogCaptureInfo;
+      final theme = results[1] as TerminalTheme;
+      if (mounted &&
+          !controller.isDisposed &&
+          workspace.terminalTabs.contains(replayTab)) {
+        _setWorkspaceState(() {
+          replayTab.primaryView.activeTab.theme = theme;
+        });
+      }
+
+      if (captureInfo.bytes <= 0) {
+        throw StateError('This session has no terminal capture.');
+      }
+      if (captureInfo.sha256 != log.captureSha256) {
+        throw const FormatException(
+          'The encrypted terminal capture is incomplete or has been modified.',
+        );
+      }
+      await _loadReplayCapture(controller, store, log.id, captureInfo.fileName);
+    } on Object catch (error) {
+      if (!controller.isDisposed) {
+        controller.write(
+          '\r\nUnable to replay this terminal session: $error\r\n',
+        );
+      }
+      rethrow;
+    }
   }
 
   Future<void> _loadReplayCapture(
