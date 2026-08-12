@@ -31,6 +31,7 @@ const MAX_OSC_BYTES: usize = 64 * 1024;
 const MAX_COMMAND_BLOCK_METADATA: usize = 20_000;
 const COMMAND_BLOCK_MARKER_FLAG: Flags = Flags::from_bits_retain(0x8000);
 const COMMAND_BLOCK_MARKER_PREFIX: char = '\u{f0000}';
+const COMMAND_INPUT_MARKER_PREFIX: char = '\u{f0001}';
 const COMMAND_BLOCK_MARKER_SAME_LINE: char = '\u{f0010}';
 const COMMAND_BLOCK_MARKER_NEXT_LINE: char = '\u{f0011}';
 const COMMAND_BLOCK_MARKER_DIGIT_BASE: u32 = 0xf0100;
@@ -375,7 +376,7 @@ pub struct TerminalEngine {
     command_block_commands: HashMap<u64, String>,
     command_block_exit_codes: HashMap<u64, i32>,
     command_block_order: VecDeque<u64>,
-    command_block_marker_cache: RefCell<Option<Vec<(i64, u64)>>>,
+    command_block_marker_cache: RefCell<Option<CommandBlockMarkers>>,
     current_working_directory: Option<String>,
     size: TerminalGeometry,
     options: TerminalOptions,
@@ -474,6 +475,7 @@ pub struct TerminalCommandBlock {
     pub id: u64,
     pub start: i64,
     pub end: i64,
+    pub input_start: Option<i64>,
     pub working_directory: Option<String>,
     pub command: Option<String>,
     pub exit_code: Option<i32>,
@@ -985,10 +987,14 @@ impl TerminalEngine {
             }
             return;
         }
-        if payload != b"133;A" || self.is_alt_screen() {
+        if self.is_alt_screen() {
             return;
         }
-        self.mark_command_block_start();
+        match payload {
+            b"133;A" => self.mark_command_block_start(),
+            b"133;B" => self.mark_command_input_start(),
+            _ => {}
+        }
     }
 
     fn mark_command_block_start(&mut self) {
@@ -1013,7 +1019,7 @@ impl TerminalEngine {
 
         self.command_block_id = self.command_block_id.saturating_add(1);
         let id = self.command_block_id;
-        let marker = command_block_marker(id, starts_on_next_line);
+        let marker = command_block_marker(COMMAND_BLOCK_MARKER_PREFIX, id, starts_on_next_line);
         let cell = &mut self.term.grid_mut()[marker_line][Column(marker_column)];
         cell.flags.insert(COMMAND_BLOCK_MARKER_FLAG);
         for character in marker {
@@ -1030,6 +1036,32 @@ impl TerminalEngine {
                 self.command_block_commands.remove(&expired);
                 self.command_block_exit_codes.remove(&expired);
             }
+        }
+    }
+
+    fn mark_command_input_start(&mut self) {
+        if self.command_block_id == 0 {
+            return;
+        }
+        let grid = self.term.grid();
+        let cursor = grid.cursor.point;
+        let first_line = -(grid.history_size() as i32);
+        let (marker_line, marker_column, starts_on_next_line) = if cursor.column.0 > 0 {
+            (cursor.line, cursor.column.0 - 1, false)
+        } else if cursor.line.0 > first_line {
+            (cursor.line - 1i32, grid.columns().saturating_sub(1), true)
+        } else {
+            (cursor.line, 0, false)
+        };
+        let marker = command_block_marker(
+            COMMAND_INPUT_MARKER_PREFIX,
+            self.command_block_id,
+            starts_on_next_line,
+        );
+        let cell = &mut self.term.grid_mut()[marker_line][Column(marker_column)];
+        cell.flags.insert(COMMAND_BLOCK_MARKER_FLAG);
+        for character in marker {
+            cell.push_zerowidth(character);
         }
     }
 
@@ -1271,6 +1303,7 @@ impl TerminalEngine {
             id: 0,
             start: start_line * columns,
             end: end_line * columns,
+            input_start: None,
             working_directory: None,
             command: None,
             exit_code: None,
@@ -1297,13 +1330,15 @@ impl TerminalEngine {
             *self.command_block_marker_cache.borrow_mut() = Some(markers);
         }
         let marker_cache = self.command_block_marker_cache.borrow();
-        let markers = marker_cache.as_deref().unwrap_or_default();
-        let (start_line, id) = markers
+        let marker_cache = marker_cache.as_ref()?;
+        let (start_line, id) = marker_cache
+            .blocks
             .iter()
             .rev()
             .find(|(line, _)| *line <= target_line)
             .copied()?;
-        let end_line = markers
+        let end_line = marker_cache
+            .blocks
             .iter()
             .find(|(line, marker_id)| *line > start_line && *marker_id > id)
             .map(|(line, _)| *line)
@@ -1312,6 +1347,7 @@ impl TerminalEngine {
             id,
             start: start_line * columns,
             end: end_line * columns,
+            input_start: marker_cache.inputs.get(&id).copied(),
             working_directory: self.command_block_directories.get(&id).cloned(),
             command: self.command_block_commands.get(&id).cloned(),
             exit_code: self.command_block_exit_codes.get(&id).copied(),
@@ -1581,9 +1617,9 @@ fn shell_integration_directory(payload: &[u8]) -> Option<String> {
     (!path.is_empty()).then_some(path)
 }
 
-fn command_block_marker(id: u64, starts_on_next_line: bool) -> [char; 6] {
+fn command_block_marker(prefix: char, id: u64, starts_on_next_line: bool) -> [char; 6] {
     let mut marker = ['\0'; 6];
-    marker[0] = COMMAND_BLOCK_MARKER_PREFIX;
+    marker[0] = prefix;
     for digit in 0..COMMAND_BLOCK_MARKER_DIGITS {
         let shift = (COMMAND_BLOCK_MARKER_DIGITS - digit - 1) * 12;
         marker[digit + 1] =
@@ -1598,14 +1634,18 @@ fn command_block_marker(id: u64, starts_on_next_line: bool) -> [char; 6] {
     marker
 }
 
-fn command_block_markers(cell: &Cell) -> Vec<(u64, bool)> {
+fn command_block_markers(cell: &Cell) -> Vec<(char, u64, bool)> {
     let Some(characters) = cell.zerowidth() else {
         return Vec::new();
     };
     let mut markers = Vec::new();
     let mut index = 0;
     while index + 5 < characters.len() {
-        if characters[index] != COMMAND_BLOCK_MARKER_PREFIX {
+        let prefix = characters[index];
+        if !matches!(
+            prefix,
+            COMMAND_BLOCK_MARKER_PREFIX | COMMAND_INPUT_MARKER_PREFIX
+        ) {
             index += 1;
             continue;
         }
@@ -1628,7 +1668,7 @@ fn command_block_markers(cell: &Cell) -> Vec<(u64, bool)> {
                 COMMAND_BLOCK_MARKER_SAME_LINE | COMMAND_BLOCK_MARKER_NEXT_LINE
             )
         {
-            markers.push((id, relation == COMMAND_BLOCK_MARKER_NEXT_LINE));
+            markers.push((prefix, id, relation == COMMAND_BLOCK_MARKER_NEXT_LINE));
             index += 6;
         } else {
             index += 1;
@@ -1637,24 +1677,42 @@ fn command_block_markers(cell: &Cell) -> Vec<(u64, bool)> {
     markers
 }
 
+#[derive(Default)]
+struct CommandBlockMarkers {
+    blocks: Vec<(i64, u64)>,
+    inputs: HashMap<u64, i64>,
+}
+
 fn scan_command_block_markers(
     grid: &alacritty_terminal::grid::Grid<Cell>,
     first_line: i64,
     last_line: i64,
-) -> Vec<(i64, u64)> {
-    let mut markers = Vec::new();
+) -> CommandBlockMarkers {
+    let mut markers = CommandBlockMarkers::default();
+    let columns = grid.columns() as i64;
     for line in first_line..=last_line {
         for column in 0..grid.columns() {
             let cell = &grid[Line(line as i32)][Column(column)];
             if !cell.flags.contains(COMMAND_BLOCK_MARKER_FLAG) {
                 continue;
             }
-            for (id, starts_on_next_line) in command_block_markers(cell) {
-                markers.push((line + i64::from(starts_on_next_line), id));
+            for (prefix, id, starts_on_next_line) in command_block_markers(cell) {
+                if prefix == COMMAND_BLOCK_MARKER_PREFIX {
+                    markers
+                        .blocks
+                        .push((line + i64::from(starts_on_next_line), id));
+                } else {
+                    let offset = if starts_on_next_line {
+                        (line + 1) * columns
+                    } else {
+                        line * columns + column as i64 + 1
+                    };
+                    markers.inputs.insert(id, offset);
+                }
             }
         }
     }
-    markers.sort_unstable();
+    markers.blocks.sort_unstable();
     markers
 }
 
@@ -1662,6 +1720,7 @@ fn is_command_block_marker_character(character: char) -> bool {
     matches!(
         character,
         COMMAND_BLOCK_MARKER_PREFIX
+            | COMMAND_INPUT_MARKER_PREFIX
             | COMMAND_BLOCK_MARKER_SAME_LINE
             | COMMAND_BLOCK_MARKER_NEXT_LINE
     ) || (COMMAND_BLOCK_MARKER_DIGIT_BASE..COMMAND_BLOCK_MARKER_DIGIT_BASE + 0x1000)
@@ -2108,7 +2167,7 @@ mod tests {
     fn shell_integration_defines_command_blocks_and_working_directories() {
         let mut terminal = TerminalEngine::new(48, 6);
         terminal.write_bytes(
-            b"\x1b]7;file://localhost/tmp/Project Files\x07\x1b]133;A\x07user@host:/tmp$ cat index.html\r\n</div>\r\n",
+            b"\x1b]7;file://localhost/tmp/Project Files\x07\x1b]133;A\x07user@host:/tmp$ \x1b]133;B\x07cat index.html\r\n</div>\r\n",
         );
         terminal.write_bytes(
             b"\x1b]4545;CommandStarted;Y2F0IGluZGV4Lmh0bWw=\x07\x1b]4545;CommandExited;0\x07",
@@ -2118,6 +2177,7 @@ mod tests {
 
         let block = terminal.command_block_at(48).expect("integrated block");
         assert_eq!((block.start, block.end), (0, 2 * 48));
+        assert_eq!(block.input_start, Some(16));
         assert_eq!(block.id, 1);
         assert_eq!(
             block.working_directory.as_deref(),
@@ -2170,6 +2230,26 @@ mod tests {
             .collect::<Vec<_>>();
         assert!(directories.iter().any(|directory| directory == "/first"));
         assert!(directories.iter().any(|directory| directory == "/second"));
+    }
+
+    #[test]
+    fn shell_input_marker_survives_reflow() {
+        let mut terminal = TerminalEngine::new(20, 6);
+        terminal.write_bytes(
+            b"a long preceding output line\r\n\x1b]133;A\x07custom prompt: \x1b]133;B\x07echo hello",
+        );
+        terminal.resize(8, 10);
+
+        let grid = terminal.term.grid();
+        let first_line = -(grid.history_size() as i64);
+        let last_line = grid.screen_lines() as i64 - 1;
+        let block = (first_line..=last_line)
+            .find_map(|line| terminal.command_block_at(line * 8))
+            .expect("reflowed command block");
+        let input_start = block.input_start.expect("shell input marker");
+        let snapshot = terminal.snapshot();
+        assert_eq!(cell_text(&snapshot, input_start as usize), "e");
+        assert_eq!(cell_text(&snapshot, input_start as usize + 1), "c");
     }
 
     #[test]

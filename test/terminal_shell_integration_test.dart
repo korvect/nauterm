@@ -41,6 +41,7 @@ void main() {
         expect(command, contains('4545;CommandStarted;'));
         expect(command, contains('4545;CommandExited;'));
         expect(command, contains(r'\033]133;A'));
+        expect(command, contains('133;B'));
         expect(command, contains(r'\033]133;C'));
         expect(command, contains(r'\033]133;D;'));
       }

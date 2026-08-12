@@ -560,6 +560,7 @@ TerminalCommandBlock? _commandBlockFromNative(
     }
     final workingDirectory = decoded['working_directory'];
     final id = decoded['id'];
+    final inputStart = decoded['input_start'];
     final command = decoded['command'];
     final exitCode = decoded['exit_code'];
     final completed = decoded['completed'];
@@ -567,6 +568,7 @@ TerminalCommandBlock? _commandBlockFromNative(
     return TerminalCommandBlock(
       selection: TerminalSelection(start: start, end: end),
       id: id is int && id > 0 ? id : null,
+      inputStart: inputStart is int ? inputStart : null,
       workingDirectory:
           workingDirectory is String && workingDirectory.isNotEmpty
           ? workingDirectory

@@ -108,6 +108,7 @@ class TerminalCommandBlock {
   const TerminalCommandBlock({
     required this.selection,
     this.id,
+    this.inputStart,
     this.workingDirectory,
     this.command,
     this.exitCode,
@@ -117,6 +118,9 @@ class TerminalCommandBlock {
 
   final TerminalSelection selection;
   final int? id;
+
+  /// Absolute terminal cell offset where editable shell input begins.
+  final int? inputStart;
   final String? workingDirectory;
   final String? command;
   final int? exitCode;

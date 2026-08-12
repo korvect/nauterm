@@ -346,6 +346,7 @@ struct OutputSuppression {
 struct GhosttyCommandBlockRecord {
     id: u64,
     anchor: GhosttyTrackedGridRef,
+    input_anchor: Option<GhosttyTrackedGridRef>,
     working_directory: Option<String>,
     command: Option<String>,
     exit_code: Option<i32>,
@@ -839,7 +840,36 @@ impl GhosttyTerminalEngine {
             }
             return;
         }
-        if payload != b"133;A" || self.is_alt_screen() {
+        if self.is_alt_screen() {
+            return;
+        }
+        if payload == b"133;B" {
+            let Some(block) = self.command_blocks.back_mut() else {
+                return;
+            };
+            let cursor_x = terminal_get_u16(self.terminal, 3).unwrap_or(0);
+            let cursor_y = terminal_get_u16(self.terminal, 4).unwrap_or(0) as u32;
+            let point = GhosttyPoint {
+                tag: 0,
+                value: GhosttyPointValue {
+                    coordinate: GhosttyPointCoordinate {
+                        x: cursor_x,
+                        y: cursor_y,
+                    },
+                },
+            };
+            let mut input_anchor = ptr::null_mut();
+            if unsafe { ghostty_terminal_grid_ref_track(self.terminal, point, &mut input_anchor) }
+                == GHOSTTY_SUCCESS
+                && !input_anchor.is_null()
+            {
+                if let Some(previous) = block.input_anchor.replace(input_anchor) {
+                    unsafe { ghostty_tracked_grid_ref_free(previous) };
+                }
+            }
+            return;
+        }
+        if payload != b"133;A" {
             return;
         }
         let cursor_y = terminal_get_u16(self.terminal, 4).unwrap_or(0) as usize;
@@ -863,6 +893,7 @@ impl GhosttyTerminalEngine {
         self.command_blocks.push_back(GhosttyCommandBlockRecord {
             id: self.command_block_id,
             anchor,
+            input_anchor: None,
             working_directory: self.current_working_directory.clone(),
             command: None,
             exit_code: None,
@@ -870,6 +901,9 @@ impl GhosttyTerminalEngine {
         while self.command_blocks.len() > MAX_COMMAND_BLOCK_METADATA {
             if let Some(expired) = self.command_blocks.pop_front() {
                 unsafe { ghostty_tracked_grid_ref_free(expired.anchor) };
+                if let Some(input_anchor) = expired.input_anchor {
+                    unsafe { ghostty_tracked_grid_ref_free(input_anchor) };
+                }
             }
         }
     }
@@ -1350,6 +1384,9 @@ impl Drop for GhosttyTerminalEngine {
     fn drop(&mut self) {
         for record in self.command_blocks.drain(..) {
             unsafe { ghostty_tracked_grid_ref_free(record.anchor) };
+            if let Some(input_anchor) = record.input_anchor {
+                unsafe { ghostty_tracked_grid_ref_free(input_anchor) };
+            }
         }
         unsafe {
             ghostty_render_state_free(self.render_state);
@@ -1655,6 +1692,10 @@ impl TerminalEmulator for GhosttyTerminalEngine {
                     id: record.id,
                     start: line_offset(start_absolute_row),
                     end: line_offset(end_absolute_row),
+                    input_start: record
+                        .input_anchor
+                        .and_then(tracked_screen_point)
+                        .map(|point| line_offset(point.y as usize) + point.x as i64),
                     working_directory: record.working_directory.clone(),
                     command: record.command.clone(),
                     exit_code: record.exit_code,
@@ -1691,6 +1732,7 @@ impl TerminalEmulator for GhosttyTerminalEngine {
             id: 0,
             start: line_offset(start_row),
             end: line_offset(end_row),
+            input_start: None,
             working_directory: None,
             command: None,
             exit_code: None,
@@ -2224,14 +2266,18 @@ fn row_semantic_prompt(terminal: GhosttyTerminal, row: usize) -> bool {
     }
 }
 
-fn tracked_screen_row(grid_ref: GhosttyTrackedGridRef) -> Option<usize> {
+fn tracked_screen_point(grid_ref: GhosttyTrackedGridRef) -> Option<GhosttyPointCoordinate> {
     if grid_ref.is_null() {
         return None;
     }
     let mut point = GhosttyPointCoordinate::default();
     (unsafe { ghostty_tracked_grid_ref_point(grid_ref, POINT_TAG_SCREEN, &mut point) }
         == GHOSTTY_SUCCESS)
-        .then_some(point.y as usize)
+        .then_some(point)
+}
+
+fn tracked_screen_row(grid_ref: GhosttyTrackedGridRef) -> Option<usize> {
+    tracked_screen_point(grid_ref).map(|point| point.y as usize)
 }
 
 fn text_looks_like_prompt(text: &str) -> bool {
@@ -2627,7 +2673,7 @@ mod tests {
         terminal.write_bytes(
             concat!(
                 "\x1b]7;file://localhost/tmp/project\x07",
-                "\x1b]133;A\x07$ ",
+                "\x1b]133;A\x07$ \x1b]133;B\x07",
                 "\x1b]4545;CommandStarted;ZWNobyBoaQ==\x07",
                 "echo hi\r\nhi\r\n",
                 "\x1b]4545;CommandExited;0\x07",
@@ -2639,6 +2685,7 @@ mod tests {
             .command_block_at(0)
             .expect("integrated command block");
         assert!(block.shell_integrated);
+        assert_eq!(block.input_start, Some(2));
         assert_eq!(block.working_directory.as_deref(), Some("/tmp/project"));
         assert_eq!(block.command.as_deref(), Some("echo hi"));
         assert_eq!(block.exit_code, Some(0));
@@ -2663,7 +2710,7 @@ mod tests {
         terminal.write_bytes(
             concat!(
                 "a long preceding output line\r\n",
-                "\x1b]133;A\x07$ ",
+                "\x1b]133;A\x07$ \x1b]133;B\x07",
                 "\x1b]4545;CommandStarted;cHdk\x07",
                 "pwd\r\n/tmp\r\n",
                 "\x1b]4545;CommandExited;0\x07",
@@ -2679,6 +2726,7 @@ mod tests {
         let offset = (row as i64 - scrollback as i64) * terminal.size.columns as i64;
         let block = terminal.command_block_at(offset).expect("reflowed block");
         assert_eq!(block.id, id);
+        assert_eq!(block.input_start, Some(offset + 2));
         assert_eq!(block.command.as_deref(), Some("pwd"));
     }
 
