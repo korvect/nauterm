@@ -19,6 +19,22 @@
   English · <a href="README.zh-CN.md">简体中文</a>
 </p>
 
+> [!CAUTION]
+> **Security alert: malicious builds are impersonating Nauterm.**
+>
+> `github.com/gansupomatomidae135/nauterm` and
+> `gansupomatomidae135.github.io` are **not affiliated with Nauterm or
+> Korvect**. They have distributed a trojanized archive disguised as Nauterm;
+> multiple antivirus vendors identify it as malware, including StealC,
+> SmartLoader, and Matanbuchus detections. See the
+> [VirusTotal report](https://www.virustotal.com/gui/file/f2cc32731fe6898e50dd28d572a8c93110ed9db8fd54d88258f1d984bac35e29).
+>
+> **Only trust this repository, `github.com/korvect/nauterm`, and download
+> binaries exclusively from its [official GitHub
+> Releases](https://github.com/korvect/nauterm/releases).** Official releases
+> include `SHA256SUMS.txt`. Do not run files from unofficial mirrors, bypass
+> antivirus warnings, or add unknown builds to an antivirus allowlist.
+
 Nauterm brings local terminals, remote connections, file transfer, port
 forwarding, reusable commands, and encrypted synchronization into one desktop
 application. Its interface is written in Flutter, while latency-sensitive
