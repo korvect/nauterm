@@ -181,6 +181,14 @@ class TerminalKeyEncoder {
     LogicalKeyboardKey logicalKey,
     TerminalKeyboardModifiers modifiers,
   ) {
+    final macOSOptionWordMovement = _macOSOptionWordMovement(
+      logicalKey,
+      modifiers,
+    );
+    if (macOSOptionWordMovement != null) {
+      return macOSOptionWordMovement;
+    }
+
     return switch (logicalKey) {
       LogicalKeyboardKey.enter ||
       LogicalKeyboardKey.numpadEnter => _withAltPrefix('\r', modifiers),
@@ -212,6 +220,25 @@ class TerminalKeyEncoder {
       LogicalKeyboardKey.f10 => _functionKey(null, 21, modifiers),
       LogicalKeyboardKey.f11 => _functionKey(null, 23, modifiers),
       LogicalKeyboardKey.f12 => _functionKey(null, 24, modifiers),
+      _ => null,
+    };
+  }
+
+  String? _macOSOptionWordMovement(
+    LogicalKeyboardKey logicalKey,
+    TerminalKeyboardModifiers modifiers,
+  ) {
+    if ((platform ?? defaultTargetPlatform) != TargetPlatform.macOS ||
+        !modifiers.alt ||
+        modifiers.shift ||
+        modifiers.control ||
+        modifiers.meta) {
+      return null;
+    }
+
+    return switch (logicalKey) {
+      LogicalKeyboardKey.arrowLeft => '\x1bb',
+      LogicalKeyboardKey.arrowRight => '\x1bf',
       _ => null,
     };
   }

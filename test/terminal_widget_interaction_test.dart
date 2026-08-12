@@ -759,6 +759,27 @@ void main() {
     expect(controller.snapshot.displayOffset, 0);
   });
 
+  testWidgets('macOS option arrows move by words in shell input', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+    final inputs = <String>[];
+    final controller = TerminalController(
+      driver: MemoryTerminalDriver(columns: 80, rows: 8),
+      onInput: inputs.add,
+    );
+    addTearDown(controller.dispose);
+    await _pumpTerminal(tester, controller, autofocusTerminal: true);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+    debugDefaultTargetPlatformOverride = null;
+
+    expect(inputs, ['\x1bb', '\x1bf']);
+  });
+
   testWidgets('command click opens a local terminal path', (tester) async {
     final opened = <TerminalOpenTarget>[];
     final fileName =

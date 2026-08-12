@@ -170,6 +170,62 @@ void main() {
     );
   });
 
+  test('encodes macOS option arrows as shell word movement', () {
+    expect(
+      _sequence(
+        encoder,
+        LogicalKeyboardKey.arrowLeft,
+        modifiers: const TerminalKeyboardModifiers(alt: true),
+      ),
+      '\x1bb',
+    );
+    expect(
+      _sequence(
+        encoder,
+        LogicalKeyboardKey.arrowRight,
+        modifiers: const TerminalKeyboardModifiers(alt: true),
+      ),
+      '\x1bf',
+    );
+  });
+
+  test('macOS option arrow word movement is independent of option text', () {
+    const inputOptionEncoder = TerminalKeyEncoder(
+      platform: TargetPlatform.macOS,
+      config: TerminalKeyboardConfig(useOptionAsMetaKey: false),
+    );
+
+    expect(
+      _sequence(
+        inputOptionEncoder,
+        LogicalKeyboardKey.arrowLeft,
+        modifiers: const TerminalKeyboardModifiers(alt: true),
+      ),
+      '\x1bb',
+    );
+  });
+
+  test('keeps xterm option arrow sequences outside macOS', () {
+    const linuxEncoder = TerminalKeyEncoder(platform: TargetPlatform.linux);
+
+    expect(
+      _sequence(
+        linuxEncoder,
+        LogicalKeyboardKey.arrowLeft,
+        modifiers: const TerminalKeyboardModifiers(alt: true),
+      ),
+      '\x1b[1;3D',
+    );
+    expect(
+      _sequence(
+        linuxEncoder,
+        LogicalKeyboardKey.arrowRight,
+        modifiers: const TerminalKeyboardModifiers(alt: true),
+      ),
+      '\x1b[1;3C',
+    );
+  });
+
   test('encodes cursor keys in application cursor mode', () {
     const applicationCursorEncoder = TerminalKeyEncoder(
       mode: TerminalKeyboardMode(applicationCursor: true),
