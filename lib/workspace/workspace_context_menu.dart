@@ -25,15 +25,13 @@ class _WorkspaceItemContextMenuOverlay<T extends _WorkspaceItemData>
 
 class _WorkspaceItemContextMenuOverlayState<T extends _WorkspaceItemData>
     extends State<_WorkspaceItemContextMenuOverlay<T>> {
-  static const _submenuSwitchDelay = Duration(milliseconds: 180);
-  static const _submenuCloseDelay = Duration(milliseconds: 60);
-
   bool _visible = false;
   bool _dismissed = false;
   _ContextMenuAction? _openSubmenu;
   Rect? _menuRect;
   Rect? _submenuRect;
-  Timer? _submenuIntentTimer;
+  final NautermSubmenuAimController _submenuAimController =
+      NautermSubmenuAimController();
 
   @override
   void initState() {
@@ -48,7 +46,7 @@ class _WorkspaceItemContextMenuOverlayState<T extends _WorkspaceItemData>
 
   @override
   void dispose() {
-    _cancelSubmenuIntent();
+    _submenuAimController.dispose();
     GestureBinding.instance.pointerRouter.removeGlobalRoute(
       _handleGlobalPointer,
     );
@@ -56,6 +54,10 @@ class _WorkspaceItemContextMenuOverlayState<T extends _WorkspaceItemData>
   }
 
   void _handleGlobalPointer(PointerEvent event) {
+    if (event is PointerHoverEvent) {
+      _submenuAimController.trackPointer(event.position);
+      return;
+    }
     if (event is! PointerDownEvent || _dismissed) {
       return;
     }
@@ -75,7 +77,7 @@ class _WorkspaceItemContextMenuOverlayState<T extends _WorkspaceItemData>
       return;
     }
     _dismissed = true;
-    _cancelSubmenuIntent();
+    _submenuAimController.cancel();
     if (immediate || !_visible) {
       widget.onDismissed();
       return;
@@ -92,33 +94,35 @@ class _WorkspaceItemContextMenuOverlayState<T extends _WorkspaceItemData>
     });
   }
 
-  void _cancelSubmenuIntent() {
-    _submenuIntentTimer?.cancel();
-    _submenuIntentTimer = null;
-  }
-
-  void _setOpenSubmenu(_ContextMenuAction? row) {
-    if (_openSubmenu == row) {
-      _cancelSubmenuIntent();
+  void _setOpenSubmenu(_ContextMenuAction? row, Offset pointerPosition) {
+    final current = _openSubmenu;
+    if (current != null &&
+        row != null &&
+        _sameContextMenuAction(current, row)) {
+      _submenuAimController.cancel();
       return;
     }
 
-    _cancelSubmenuIntent();
-    final delay = row == null ? _submenuCloseDelay : _submenuSwitchDelay;
-    if (_openSubmenu == null && row != null) {
-      setState(() => _openSubmenu = row);
+    void change() {
+      if (mounted) setState(() => _openSubmenu = row);
+    }
+
+    if (current == null || _submenuRect == null) {
+      _submenuAimController.cancel();
+      change();
       return;
     }
-    _submenuIntentTimer = Timer(delay, () {
-      if (mounted) {
-        setState(() => _openSubmenu = row);
-      }
-    });
+    _submenuAimController.applyOrDefer(
+      pointerPosition: pointerPosition,
+      submenuRect: _submenuRect!,
+      change: change,
+    );
   }
 
   void _openSubmenuImmediately(_ContextMenuAction row) {
-    _cancelSubmenuIntent();
-    if (_openSubmenu != row) {
+    _submenuAimController.cancel();
+    final current = _openSubmenu;
+    if (current == null || !_sameContextMenuAction(current, row)) {
       setState(() => _openSubmenu = row);
     }
   }
@@ -189,7 +193,7 @@ class _WorkspaceItemContextMenuOverlayState<T extends _WorkspaceItemData>
             overlaySize: widget.overlaySize,
             visible: _visible,
             onDismiss: _dismiss,
-            onPointerEntered: _cancelSubmenuIntent,
+            onPointerEntered: _submenuAimController.cancel,
             onAction: widget.onAction,
           ),
       ],
@@ -210,7 +214,8 @@ class _WorkspaceItemContextMenu extends StatelessWidget {
   final List<Object> rows;
   final _ContextMenuAction? openSubmenu;
   final VoidCallback onDismiss;
-  final ValueChanged<_ContextMenuAction?> onSubmenuChanged;
+  final void Function(_ContextMenuAction? row, Offset pointerPosition)
+  onSubmenuChanged;
   final ValueChanged<_ContextMenuAction> onSubmenuTapped;
   final ValueChanged<_ContextMenuActionId>? onAction;
 
@@ -230,7 +235,8 @@ class _WorkspaceItemContextMenu extends StatelessWidget {
                 active:
                     openSubmenu != null &&
                     _sameContextMenuAction(row, openSubmenu!),
-                onHover: () => onSubmenuChanged(row.hasSubmenu ? row : null),
+                onPointerEntered: (position) =>
+                    onSubmenuChanged(row.hasSubmenu ? row : null, position),
                 onTap: () {
                   if (row.hasSubmenu) {
                     onSubmenuTapped(row);
@@ -253,13 +259,13 @@ class _ContextMenuRow extends StatelessWidget {
   const _ContextMenuRow({
     required this.row,
     required this.active,
-    required this.onHover,
+    required this.onPointerEntered,
     required this.onTap,
   });
 
   final _ContextMenuAction row;
   final bool active;
-  final VoidCallback onHover;
+  final ValueChanged<Offset> onPointerEntered;
   final VoidCallback onTap;
 
   @override
@@ -269,52 +275,50 @@ class _ContextMenuRow extends StatelessWidget {
         ? const Color(0xffef3f37)
         : _workspaceMenuDisabledText;
 
-    return SizedBox(
-      height: _contextMenuRowHeight,
-      child: Material(
-        color: active ? _workspaceMenuHover : Colors.transparent,
-        borderRadius: BorderRadius.circular(7),
-        child: InkWell(
+    return MouseRegion(
+      onEnter: (event) => onPointerEntered(event.position),
+      child: SizedBox(
+        height: _contextMenuRowHeight,
+        child: Material(
+          color: active ? _workspaceMenuHover : Colors.transparent,
           borderRadius: BorderRadius.circular(7),
-          hoverColor: row.destructive
-              ? const Color(0xffef3f37).withValues(alpha: 0.12)
-              : _workspaceMenuHover,
-          splashColor: Colors.transparent,
-          highlightColor: Colors.transparent,
-          onTap: onTap,
-          onHover: (hovered) {
-            if (hovered) {
-              onHover();
-            }
-          },
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Row(
-              children: [
-                Icon(row.icon, size: 17, color: color),
-                SizedBox(width: 14),
-                Expanded(
-                  child: Text(
-                    row.localizedLabel,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: color,
-                      fontSize: NautermFontSizes.labelLarge,
-                      fontWeight: NautermFontWeights.semibold,
-                      letterSpacing: 0,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(7),
+            hoverColor: row.destructive
+                ? const Color(0xffef3f37).withValues(alpha: 0.12)
+                : _workspaceMenuHover,
+            splashColor: Colors.transparent,
+            highlightColor: Colors.transparent,
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Row(
+                children: [
+                  Icon(row.icon, size: 17, color: color),
+                  SizedBox(width: 14),
+                  Expanded(
+                    child: Text(
+                      row.localizedLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: color,
+                        fontSize: NautermFontSizes.labelLarge,
+                        fontWeight: NautermFontWeights.semibold,
+                        letterSpacing: 0,
+                      ),
                     ),
                   ),
-                ),
-                if (row.displayShortcut != null)
-                  _ShortcutBadge(
-                    label: row.displayShortcut!,
-                    color: shortcutColor,
-                    destructive: row.destructive,
-                  )
-                else if (row.hasSubmenu)
-                  Icon(Icons.chevron_right_rounded, size: 18, color: color),
-              ],
+                  if (row.displayShortcut != null)
+                    _ShortcutBadge(
+                      label: row.displayShortcut!,
+                      color: shortcutColor,
+                      destructive: row.destructive,
+                    )
+                  else if (row.hasSubmenu)
+                    Icon(Icons.chevron_right_rounded, size: 18, color: color),
+                ],
+              ),
             ),
           ),
         ),
@@ -376,7 +380,7 @@ class _ContextSubmenuPositioned extends StatelessWidget {
                   _ContextMenuRow(
                     row: row,
                     active: false,
-                    onHover: () {},
+                    onPointerEntered: (_) {},
                     onTap: () {
                       final id = row.id;
                       if (id != null) {

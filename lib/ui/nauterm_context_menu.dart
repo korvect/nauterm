@@ -14,6 +14,102 @@ const double nautermContextMenuVerticalPadding = 6;
 const int nautermDropdownMenuMaxVisibleRows = 7;
 const Duration nautermContextMenuAnimationDuration = Duration(milliseconds: 84);
 
+class NautermSubmenuAimController {
+  static const _intentTimeout = Duration(milliseconds: 300);
+  static const _pointerHistoryLimit = 8;
+  static const _aimTolerance = 8.0;
+
+  final List<Offset> _pointerHistory = [];
+  Timer? _intentTimer;
+  VoidCallback? _pendingChange;
+  _NautermSubmenuAim? _aim;
+
+  void trackPointer(Offset position) {
+    _pointerHistory.add(position);
+    if (_pointerHistory.length > _pointerHistoryLimit) {
+      _pointerHistory.removeRange(
+        0,
+        _pointerHistory.length - _pointerHistoryLimit,
+      );
+    }
+
+    final change = _pendingChange;
+    final aim = _aim;
+    if (change == null || aim == null || _isInsideSubmenuAim(position, aim)) {
+      return;
+    }
+    cancel();
+    change();
+  }
+
+  void applyOrDefer({
+    required Offset pointerPosition,
+    required Rect submenuRect,
+    required VoidCallback change,
+  }) {
+    cancel();
+    final origin = _aimOrigin(pointerPosition);
+    if (origin == null ||
+        !_setAimIfMovingTowardSubmenu(
+          origin: origin,
+          pointerPosition: pointerPosition,
+          submenuRect: submenuRect,
+        )) {
+      change();
+      return;
+    }
+
+    _pendingChange = change;
+    _intentTimer = Timer(_intentTimeout, () {
+      final pendingChange = _pendingChange;
+      if (pendingChange == null) return;
+      cancel();
+      pendingChange();
+    });
+  }
+
+  void cancel() {
+    _intentTimer?.cancel();
+    _intentTimer = null;
+    _pendingChange = null;
+    _aim = null;
+  }
+
+  void dispose() {
+    cancel();
+    _pointerHistory.clear();
+  }
+
+  Offset? _aimOrigin(Offset currentPosition) {
+    for (final position in _pointerHistory.reversed) {
+      if ((position - currentPosition).distance >= 4) return position;
+    }
+    return null;
+  }
+
+  bool _setAimIfMovingTowardSubmenu({
+    required Offset origin,
+    required Offset pointerPosition,
+    required Rect submenuRect,
+  }) {
+    final opensRight = submenuRect.center.dx > origin.dx;
+    final horizontalProgress = pointerPosition.dx - origin.dx;
+    if ((opensRight && horizontalProgress <= 0) ||
+        (!opensRight && horizontalProgress >= 0)) {
+      return false;
+    }
+    final edgeX = opensRight ? submenuRect.left : submenuRect.right;
+    final aim = _NautermSubmenuAim(
+      origin: origin,
+      upperCorner: Offset(edgeX, submenuRect.top - _aimTolerance),
+      lowerCorner: Offset(edgeX, submenuRect.bottom + _aimTolerance),
+    );
+    if (!_isInsideSubmenuAim(pointerPosition, aim)) return false;
+    _aim = aim;
+    return true;
+  }
+}
+
 @immutable
 class NautermContextMenuStyle {
   const NautermContextMenuStyle({
@@ -272,22 +368,53 @@ class _NautermContextMenuOverlay<T> extends StatefulWidget {
 
 class _NautermContextMenuOverlayState<T>
     extends State<_NautermContextMenuOverlay<T>> {
-  static const _submenuSwitchDelay = Duration(milliseconds: 180);
-  static const _submenuCloseDelay = Duration(milliseconds: 60);
-
   final Object _tapRegionGroup = Object();
   final List<_NautermOpenSubmenu<T>> _openSubmenus = [];
-  Timer? _submenuIntentTimer;
+  final NautermSubmenuAimController _submenuAimController =
+      NautermSubmenuAimController();
+  Size _overlaySize = Size.zero;
+  EdgeInsets _safePadding = EdgeInsets.zero;
 
   void _cancelSubmenuIntent() {
-    _submenuIntentTimer?.cancel();
-    _submenuIntentTimer = null;
+    _submenuAimController.cancel();
+  }
+
+  Rect _submenuRectFor(_NautermOpenSubmenu<T> submenu) {
+    final contentHeight = nautermContextMenuHeight(submenu.action.children);
+    final height = math.min(
+      contentHeight,
+      _overlaySize.height - _safePadding.vertical - 16,
+    );
+    return _nautermSubmenuRect(
+      anchor: submenu.anchor,
+      overlaySize: _overlaySize,
+      safePadding: _safePadding,
+      width: widget.width,
+      height: height,
+    );
+  }
+
+  void _applyOrDeferSubmenuChange({
+    required int menuDepth,
+    required Offset pointerPosition,
+    required VoidCallback change,
+  }) {
+    if (menuDepth >= _openSubmenus.length || _overlaySize == Size.zero) {
+      change();
+      return;
+    }
+    _submenuAimController.applyOrDefer(
+      pointerPosition: pointerPosition,
+      submenuRect: _submenuRectFor(_openSubmenus[menuDepth]),
+      change: change,
+    );
   }
 
   void _showSubmenu(
     int menuDepth,
     NautermContextMenuAction<T> action,
     Rect anchor,
+    Offset pointerPosition,
   ) {
     final current = menuDepth < _openSubmenus.length
         ? _openSubmenus[menuDepth]
@@ -309,23 +436,36 @@ class _NautermContextMenuOverlayState<T>
       });
     }
 
-    _cancelSubmenuIntent();
     if (current == null) {
+      _cancelSubmenuIntent();
       open();
     } else {
-      _submenuIntentTimer = Timer(_submenuSwitchDelay, open);
+      _applyOrDeferSubmenuChange(
+        menuDepth: menuDepth,
+        pointerPosition: pointerPosition,
+        change: open,
+      );
     }
   }
 
-  void _handleActionHovered(int menuDepth, NautermContextMenuAction<T> action) {
+  void _handleActionHovered(
+    int menuDepth,
+    NautermContextMenuAction<T> action,
+    Offset pointerPosition,
+  ) {
     if (action.hasSubmenu || _openSubmenus.length <= menuDepth) return;
-    _cancelSubmenuIntent();
-    _submenuIntentTimer = Timer(_submenuCloseDelay, () {
+    void close() {
       if (!mounted || _openSubmenus.length <= menuDepth) return;
       setState(() {
         _openSubmenus.removeRange(menuDepth, _openSubmenus.length);
       });
-    });
+    }
+
+    _applyOrDeferSubmenuChange(
+      menuDepth: menuDepth,
+      pointerPosition: pointerPosition,
+      change: close,
+    );
   }
 
   void _closeDeepestSubmenu() {
@@ -337,7 +477,7 @@ class _NautermContextMenuOverlayState<T>
 
   @override
   void dispose() {
-    _cancelSubmenuIntent();
+    _submenuAimController.dispose();
     super.dispose();
   }
 
@@ -348,6 +488,8 @@ class _NautermContextMenuOverlayState<T>
       context,
       base: MediaQuery.paddingOf(context),
     );
+    _overlaySize = overlaySize;
+    _safePadding = safePadding;
     final contentHeight = nautermContextMenuHeight(widget.entries);
     final overlayAvailableHeight = math.max(
       0.0,
@@ -424,45 +566,49 @@ class _NautermContextMenuOverlayState<T>
         }
         return KeyEventResult.ignored;
       },
-      child: Stack(
-        children: [
-          Positioned.fromRect(
-            rect: rect,
-            child: TapRegion(
-              groupId: _tapRegionGroup,
-              onTapOutside: (_) => widget.onDismissed(),
-              child: MouseRegion(
-                onEnter: (_) => _cancelSubmenuIntent(),
-                child: _ContextMenuEntrance(
-                  animate: widget.animate,
-                  scaleAnimation: widget.scaleAnimation,
-                  child: NautermContextMenu<T>(
-                    entries: widget.entries,
-                    width: widget.width,
-                    height: menuHeight < contentHeight ? menuHeight : null,
-                    style: widget.style,
-                    showScrollbarOnHover:
-                        widget.showScrollbarOnHover ||
-                        menuHeight < contentHeight,
-                    onSelected: widget.onSelected,
-                    onSubmenuRequested: (action, anchor) =>
-                        _showSubmenu(0, action, anchor),
-                    onActionHovered: (action) =>
-                        _handleActionHovered(0, action),
+      child: Listener(
+        onPointerHover: (event) =>
+            _submenuAimController.trackPointer(event.position),
+        child: Stack(
+          children: [
+            Positioned.fromRect(
+              rect: rect,
+              child: TapRegion(
+                groupId: _tapRegionGroup,
+                onTapOutside: (_) => widget.onDismissed(),
+                child: MouseRegion(
+                  onEnter: (_) => _cancelSubmenuIntent(),
+                  child: _ContextMenuEntrance(
+                    animate: widget.animate,
+                    scaleAnimation: widget.scaleAnimation,
+                    child: NautermContextMenu<T>(
+                      entries: widget.entries,
+                      width: widget.width,
+                      height: menuHeight < contentHeight ? menuHeight : null,
+                      style: widget.style,
+                      showScrollbarOnHover:
+                          widget.showScrollbarOnHover ||
+                          menuHeight < contentHeight,
+                      onSelected: widget.onSelected,
+                      onSubmenuPointerRequested: (action, anchor, position) =>
+                          _showSubmenu(0, action, anchor, position),
+                      onActionPointerEntered: (action, position) =>
+                          _handleActionHovered(0, action, position),
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-          for (var index = 0; index < _openSubmenus.length; index++)
-            _buildSubmenu(
-              context: context,
-              submenu: _openSubmenus[index],
-              menuDepth: index + 1,
-              overlaySize: overlaySize,
-              safePadding: safePadding,
-            ),
-        ],
+            for (var index = 0; index < _openSubmenus.length; index++)
+              _buildSubmenu(
+                context: context,
+                submenu: _openSubmenus[index],
+                menuDepth: index + 1,
+                overlaySize: overlaySize,
+                safePadding: safePadding,
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -510,10 +656,10 @@ class _NautermContextMenuOverlayState<T>
               style: widget.style,
               showScrollbarOnHover: true,
               onSelected: widget.onSelected,
-              onSubmenuRequested: (action, anchor) =>
-                  _showSubmenu(menuDepth, action, anchor),
-              onActionHovered: (action) =>
-                  _handleActionHovered(menuDepth, action),
+              onSubmenuPointerRequested: (action, anchor, position) =>
+                  _showSubmenu(menuDepth, action, anchor, position),
+              onActionPointerEntered: (action, position) =>
+                  _handleActionHovered(menuDepth, action, position),
             ),
           ),
         ),
@@ -527,6 +673,32 @@ class _NautermOpenSubmenu<T> {
 
   final NautermContextMenuAction<T> action;
   final Rect anchor;
+}
+
+class _NautermSubmenuAim {
+  const _NautermSubmenuAim({
+    required this.origin,
+    required this.upperCorner,
+    required this.lowerCorner,
+  });
+
+  final Offset origin;
+  final Offset upperCorner;
+  final Offset lowerCorner;
+}
+
+bool _isInsideSubmenuAim(Offset point, _NautermSubmenuAim aim) {
+  final first = _triangleSide(point, aim.origin, aim.upperCorner);
+  final second = _triangleSide(point, aim.upperCorner, aim.lowerCorner);
+  final third = _triangleSide(point, aim.lowerCorner, aim.origin);
+  final hasNegative = first < 0 || second < 0 || third < 0;
+  final hasPositive = first > 0 || second > 0 || third > 0;
+  return !(hasNegative && hasPositive);
+}
+
+double _triangleSide(Offset point, Offset start, Offset end) {
+  return (point.dx - end.dx) * (start.dy - end.dy) -
+      (start.dx - end.dx) * (point.dy - end.dy);
 }
 
 Rect _nautermSubmenuRect({
@@ -755,7 +927,9 @@ class NautermContextMenu<T> extends StatelessWidget {
     this.style,
     this.showScrollbarOnHover = false,
     this.onSubmenuRequested,
+    this.onSubmenuPointerRequested,
     this.onActionHovered,
+    this.onActionPointerEntered,
   });
 
   final List<NautermContextMenuEntry<T>> entries;
@@ -766,7 +940,15 @@ class NautermContextMenu<T> extends StatelessWidget {
   final bool showScrollbarOnHover;
   final void Function(NautermContextMenuAction<T> action, Rect anchor)?
   onSubmenuRequested;
+  final void Function(
+    NautermContextMenuAction<T> action,
+    Rect anchor,
+    Offset position,
+  )?
+  onSubmenuPointerRequested;
   final ValueChanged<NautermContextMenuAction<T>>? onActionHovered;
+  final void Function(NautermContextMenuAction<T> action, Offset position)?
+  onActionPointerEntered;
 
   @override
   Widget build(BuildContext context) {
@@ -784,7 +966,9 @@ class NautermContextMenu<T> extends StatelessWidget {
             style: style,
             onSelected: onSelected,
             onSubmenuRequested: onSubmenuRequested,
+            onSubmenuPointerRequested: onSubmenuPointerRequested,
             onActionHovered: onActionHovered,
+            onActionPointerEntered: onActionPointerEntered,
           ),
         },
     ];
@@ -916,6 +1100,7 @@ class NautermDropdownRow extends StatefulWidget {
     this.destructive = false,
     this.style,
     this.onHoverChanged,
+    this.onPointerEnter,
   });
 
   final Widget child;
@@ -924,6 +1109,7 @@ class NautermDropdownRow extends StatefulWidget {
   final bool destructive;
   final NautermContextMenuStyle? style;
   final ValueChanged<bool>? onHoverChanged;
+  final ValueChanged<PointerEnterEvent>? onPointerEnter;
 
   @override
   State<NautermDropdownRow> createState() => _NautermDropdownRowState();
@@ -960,7 +1146,12 @@ class _NautermDropdownRowState extends State<NautermDropdownRow> {
       cursor: widget.enabled
           ? SystemMouseCursors.click
           : SystemMouseCursors.basic,
-      onEnter: widget.enabled ? (_) => setHovered(true) : null,
+      onEnter: widget.enabled
+          ? (event) {
+              setHovered(true);
+              widget.onPointerEnter?.call(event);
+            }
+          : null,
       onExit: widget.enabled ? (_) => setHovered(false) : null,
       child: Container(
         height: nautermContextMenuRowHeight,
@@ -997,7 +1188,9 @@ class _NautermContextMenuItem<T> extends StatefulWidget {
     required this.palette,
     required this.onSelected,
     this.onSubmenuRequested,
+    this.onSubmenuPointerRequested,
     this.onActionHovered,
+    this.onActionPointerEntered,
     this.style,
   });
 
@@ -1006,7 +1199,15 @@ class _NautermContextMenuItem<T> extends StatefulWidget {
   final ValueChanged<T> onSelected;
   final void Function(NautermContextMenuAction<T> action, Rect anchor)?
   onSubmenuRequested;
+  final void Function(
+    NautermContextMenuAction<T> action,
+    Rect anchor,
+    Offset position,
+  )?
+  onSubmenuPointerRequested;
   final ValueChanged<NautermContextMenuAction<T>>? onActionHovered;
+  final void Function(NautermContextMenuAction<T> action, Offset position)?
+  onActionPointerEntered;
   final NautermContextMenuStyle? style;
 
   @override
@@ -1016,12 +1217,15 @@ class _NautermContextMenuItem<T> extends StatefulWidget {
 
 class _NautermContextMenuItemState<T>
     extends State<_NautermContextMenuItem<T>> {
-  void _requestSubmenu() {
+  void _requestSubmenu([Offset? pointerPosition]) {
     final renderObject = context.findRenderObject();
     if (renderObject is! RenderBox) return;
-    widget.onSubmenuRequested?.call(
+    final anchor = renderObject.localToGlobal(Offset.zero) & renderObject.size;
+    widget.onSubmenuRequested?.call(widget.entry, anchor);
+    widget.onSubmenuPointerRequested?.call(
       widget.entry,
-      renderObject.localToGlobal(Offset.zero) & renderObject.size,
+      anchor,
+      pointerPosition ?? anchor.center,
     );
   }
 
@@ -1042,11 +1246,11 @@ class _NautermContextMenuItemState<T>
       enabled: entry.enabled,
       destructive: entry.destructive,
       style: style,
-      onHoverChanged: (hovered) {
-        if (!hovered) return;
+      onPointerEnter: (event) {
         widget.onActionHovered?.call(entry);
+        widget.onActionPointerEntered?.call(entry, event.position);
         if (entry.hasSubmenu) {
-          _requestSubmenu();
+          _requestSubmenu(event.position);
         }
       },
       onTap: entry.hasSubmenu

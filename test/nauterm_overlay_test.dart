@@ -470,9 +470,7 @@ void main() {
     expect(find.byType(NautermContextMenu<int>), findsNothing);
   });
 
-  testWidgets('submenu stays open during diagonal pointer travel', (
-    tester,
-  ) async {
+  testWidgets('submenu aim preserves diagonal pointer travel', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Builder(
@@ -510,18 +508,138 @@ void main() {
     await mouse.moveTo(tester.getCenter(find.text('Open With')));
     await tester.pump();
     expect(find.byType(NautermContextMenu<int>), findsNWidgets(2));
+    await tester.pump(const Duration(milliseconds: 400));
+
+    final parentMenu = find.byType(NautermContextMenu<int>).first;
+    final parentRect = tester.getRect(parentMenu);
+    final renameCenter = tester.getCenter(find.text('Rename'));
+    await mouse.moveTo(Offset(parentRect.right - 12, renameCenter.dy - 10));
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.byType(NautermContextMenu<int>), findsNWidgets(2));
+    expect(find.text('Preview'), findsOneWidget);
+
+    await mouse.moveTo(tester.getCenter(find.text('Preview')));
+    await tester.pump();
+    expect(find.byType(NautermContextMenu<int>), findsNWidgets(2));
 
     await mouse.moveTo(tester.getCenter(find.text('Rename')));
-    await tester.pump(const Duration(milliseconds: 30));
+    await tester.pump();
+    expect(find.byType(NautermContextMenu<int>), findsOneWidget);
+  });
+
+  testWidgets('submenu aim switches immediately during vertical travel', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Center(
+            child: FilledButton(
+              onPressed: () {
+                showNautermContextMenu<int>(
+                  context: context,
+                  position: const Offset(100, 100),
+                  animate: false,
+                  entries: const [
+                    NautermContextMenuAction(
+                      value: 0,
+                      label: 'Open With',
+                      children: [
+                        NautermContextMenuAction(value: 1, label: 'Preview'),
+                      ],
+                    ),
+                    NautermContextMenuAction(
+                      value: 2,
+                      label: 'Rename',
+                      children: [
+                        NautermContextMenuAction(value: 3, label: 'Duplicate'),
+                      ],
+                    ),
+                  ],
+                );
+              },
+              child: const Text('Show menu aim'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Show menu aim'));
+    await tester.pump();
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer();
+    await mouse.moveTo(tester.getCenter(find.text('Open With')));
+    await tester.pump();
+    expect(find.text('Preview'), findsOneWidget);
+
+    await mouse.moveTo(tester.getCenter(find.text('Rename')));
+    await tester.pump();
+    expect(find.text('Preview'), findsNothing);
+    expect(find.text('Duplicate'), findsOneWidget);
+  });
+
+  testWidgets('submenu stays open while pointer remains in the menu gap', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Center(
+            child: FilledButton(
+              onPressed: () {
+                showNautermContextMenu<int>(
+                  context: context,
+                  position: const Offset(100, 100),
+                  animate: false,
+                  entries: const [
+                    NautermContextMenuAction(
+                      value: 0,
+                      label: 'Open With',
+                      children: [
+                        NautermContextMenuAction(value: 1, label: 'Preview'),
+                      ],
+                    ),
+                  ],
+                );
+              },
+              child: const Text('Show exit timeout'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Show exit timeout'));
+    await tester.pump();
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer();
+    await mouse.moveTo(tester.getCenter(find.text('Open With')));
+    await tester.pump();
+    expect(find.byType(NautermContextMenu<int>), findsNWidgets(2));
+
+    final parentItem = find
+        .ancestor(
+          of: find.text('Open With'),
+          matching: find.byType(NautermDropdownRow),
+        )
+        .first;
+    final parentItemRect = tester.getRect(parentItem);
+    await mouse.moveTo(
+      Offset(parentItemRect.right + 2, parentItemRect.center.dy),
+    );
+    await tester.pump(const Duration(milliseconds: 400));
+    await mouse.moveTo(
+      Offset(parentItemRect.right + 2, parentItemRect.top - 18),
+    );
+    await tester.pump(const Duration(seconds: 1));
     expect(find.byType(NautermContextMenu<int>), findsNWidgets(2));
 
     await mouse.moveTo(tester.getCenter(find.text('Preview')));
-    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
     expect(find.byType(NautermContextMenu<int>), findsNWidgets(2));
-
-    await mouse.moveTo(tester.getCenter(find.text('Rename')));
-    await tester.pump(const Duration(milliseconds: 80));
-    expect(find.byType(NautermContextMenu<int>), findsOneWidget);
   });
 }
 
