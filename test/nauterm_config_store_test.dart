@@ -328,6 +328,10 @@ void main() {
           visual: true,
           tabIndicator: false,
         ),
+        pointer: TerminalPointerConfig(
+          commandClickOpensFilenameOrUrl: false,
+          optionClickMovesCursor: false,
+        ),
         sshKeepaliveIntervalSeconds: 45,
         sshPredictionMode: TerminalSshPredictionMode.always,
         hostIconMode: HostIconMode.osIcon,
@@ -360,6 +364,8 @@ void main() {
     expect(loaded.bell.sound, isFalse);
     expect(loaded.bell.visual, isTrue);
     expect(loaded.bell.tabIndicator, isFalse);
+    expect(loaded.pointer.commandClickOpensFilenameOrUrl, isFalse);
+    expect(loaded.pointer.optionClickMovesCursor, isFalse);
     expect(loaded.sshKeepaliveIntervalSeconds, 45);
     expect(loaded.sshPredictionMode, TerminalSshPredictionMode.always);
     expect(loaded.hostIconMode, HostIconMode.osIcon);
@@ -396,6 +402,10 @@ void main() {
       'sound': false,
       'visual': true,
       'tabIndicator': false,
+    });
+    expect((terminal['behavior'] as Map)['pointer'], {
+      'commandClickOpensFilenameOrUrl': false,
+      'optionClickMovesCursor': false,
     });
     expect((terminal['features'] as Map)['autocomplete'], isTrue);
     expect((terminal['input'] as Map)['useOptionAsMetaKey'], isFalse);

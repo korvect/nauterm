@@ -251,6 +251,13 @@ const _settingsSearchEntries = <_SettingsSearchEntry>[
   ),
   _SettingsSearchEntry(
     page: _SettingsPage.terminal,
+    section: 'terminal-pointer',
+    title: 'Pointer',
+    subtitle: 'Modifier-click actions for links, files, and the cursor.',
+    keywords: 'mouse command cmd option alt control click url filename cursor',
+  ),
+  _SettingsSearchEntry(
+    page: _SettingsPage.terminal,
     section: 'terminal-interaction',
     title: 'Copy on Select',
     subtitle: 'Automatically copy selected terminal text.',
@@ -1452,6 +1459,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
         terminalCursorShape = defaults.cursor.shape;
         terminalCursorBlink = defaults.cursor.blink;
         terminalBellConfig = defaults.bell;
+        terminalPointerConfig = defaults.pointer;
         terminalRecordingConfig = defaults.recording;
         terminalPaddingNotifier.value++;
       }

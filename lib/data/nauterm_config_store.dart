@@ -71,6 +71,7 @@ class NautermConfigStore {
       scrollbarEnabled: terminal.appearance.scrollbar,
       scrollbackLines: terminal.behavior.scrollbackLines,
       bell: terminal.behavior.bell,
+      pointer: terminal.behavior.pointer,
       sshKeepaliveIntervalSeconds: config.ssh.keepaliveInterval ~/ 1000,
       sshPredictionMode: config.ssh.predictionMode,
       emulationType: terminal.emulation,
@@ -115,6 +116,7 @@ class NautermConfigStore {
             selectCommandBlockOnClick: settings.selectCommandBlockOnClick,
             scrollbackLines: settings.scrollbackLines,
             bell: settings.bell,
+            pointer: settings.pointer,
           ),
           features: NautermTerminalFeaturesConfig(
             composer: settings.composerEnabled,

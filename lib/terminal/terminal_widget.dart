@@ -37,6 +37,34 @@ typedef TerminalComposerSuggestionResolver =
 typedef TerminalOpenTargetCallback =
     FutureOr<void> Function(TerminalOpenTarget target);
 
+@visibleForTesting
+String terminalCursorMoveSequence({
+  required TerminalSnapshot snapshot,
+  required TerminalCellPosition target,
+  bool useLinearOffset = false,
+}) {
+  final current = TerminalCellPosition(
+    row: snapshot.cursor.row,
+    column: snapshot.cursor.column,
+  ).clampTo(snapshot);
+  final destination = target.clampTo(snapshot);
+  final prefix = snapshot.keyboardMode.applicationCursor ? '\x1bO' : '\x1b[';
+  String repeat(String finalByte, int count) =>
+      List<String>.filled(count, '$prefix$finalByte').join();
+
+  if (useLinearOffset) {
+    final delta =
+        destination.toOffset(snapshot.columns) -
+        current.toOffset(snapshot.columns);
+    return delta < 0 ? repeat('D', -delta) : repeat('C', delta);
+  }
+
+  final rowDelta = destination.row - current.row;
+  final columnDelta = destination.column - current.column;
+  return '${rowDelta < 0 ? repeat('A', -rowDelta) : repeat('B', rowDelta)}'
+      '${columnDelta < 0 ? repeat('D', -columnDelta) : repeat('C', columnDelta)}';
+}
+
 class TerminalWidgetController {
   _TerminalWidgetState? _state;
 
@@ -1018,6 +1046,8 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
   bool _openTargetCacheAllowsLocalPaths = false;
   bool _openTargetCacheValid = false;
   int? _openTargetPointer;
+  int? _cursorMovePointer;
+  TerminalCellPosition? _cursorMovePosition;
   Offset? _lastHoverLocalPosition;
   TerminalMetrics? _lastHoverMetrics;
   bool _searchVisible = false;
@@ -1095,6 +1125,9 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
 
   void _handleConfigChanged() {
     if (!mounted) return;
+    if (!terminalPointerConfig.commandClickOpensFilenameOrUrl) {
+      _hoveredOpenTarget = null;
+    }
     if (!terminalSelectCommandBlockOnClick && _commandBlockSelection != null) {
       _setCommandBlockSelection(null, block: null);
       return;
@@ -2306,6 +2339,14 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
       return;
     }
 
+    if ((event.buttons & kPrimaryMouseButton) != 0 &&
+        _isOptionCursorMoveModifierPressed() &&
+        _canMoveCursorWithPointer()) {
+      _cursorMovePointer = event.pointer;
+      _cursorMovePosition = position;
+      return;
+    }
+
     if ((event.buttons & kSecondaryMouseButton) != 0) {
       widget.onContextMenuRequested?.call(event.position);
       return;
@@ -2341,7 +2382,8 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
   }
 
   void _handlePointerMove(PointerMoveEvent event, TerminalMetrics metrics) {
-    if (event.pointer == _openTargetPointer) {
+    if (event.pointer == _openTargetPointer ||
+        event.pointer == _cursorMovePointer) {
       return;
     }
     if (_isPointerInsideSearchOverlay(event.position)) {
@@ -2390,6 +2432,16 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
       }
       return;
     }
+    if (event.pointer == _cursorMovePointer) {
+      final pressed = _cursorMovePosition;
+      final released = _cellPositionForOffset(event.localPosition, metrics);
+      _cursorMovePointer = null;
+      _cursorMovePosition = null;
+      if (pressed == released) {
+        _moveCursorTo(released);
+      }
+      return;
+    }
     if (event.pointer != _dragPointer) {
       return;
     }
@@ -2435,6 +2487,11 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
     if (event.pointer == _openTargetPointer) {
       _pressedOpenTarget = null;
       _openTargetPointer = null;
+      return;
+    }
+    if (event.pointer == _cursorMovePointer) {
+      _cursorMovePointer = null;
+      _cursorMovePosition = null;
       return;
     }
     if (event.pointer == _dragPointer) {
@@ -2582,10 +2639,50 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
   }
 
   bool _isOpenTargetModifierPressed() {
+    if (!terminalPointerConfig.commandClickOpensFilenameOrUrl) return false;
     final keyboard = HardwareKeyboard.instance;
     return Platform.isMacOS
         ? keyboard.isMetaPressed
         : keyboard.isControlPressed;
+  }
+
+  bool _isOptionCursorMoveModifierPressed() {
+    final keyboard = HardwareKeyboard.instance;
+    return terminalPointerConfig.optionClickMovesCursor &&
+        keyboard.isAltPressed &&
+        !keyboard.isControlPressed &&
+        !keyboard.isMetaPressed;
+  }
+
+  bool _canMoveCursorWithPointer() {
+    final snapshot = widget.controller.snapshot;
+    return !widget.readOnly &&
+        snapshot.cursor.visible &&
+        snapshot.displayOffset == 0;
+  }
+
+  void _moveCursorTo(TerminalCellPosition target) {
+    if (!_canMoveCursorWithPointer()) return;
+    final snapshot = widget.controller.snapshot;
+    final cursorPosition = TerminalCellPosition(
+      row: snapshot.cursor.row,
+      column: snapshot.cursor.column,
+    );
+    final cursorBlock = widget.controller.commandBlockAt(cursorPosition);
+    final targetBlock = widget.controller.commandBlockAt(target);
+    final useLinearOffset =
+        cursorBlock?.shellIntegrated == true &&
+        cursorBlock?.completed == false &&
+        targetBlock?.shellIntegrated == true &&
+        cursorBlock?.id == targetBlock?.id;
+    final sequence = terminalCursorMoveSequence(
+      snapshot: snapshot,
+      target: target,
+      useLinearOffset: useLinearOffset,
+    );
+    if (sequence.isEmpty) return;
+    _clearSelection();
+    widget.controller.sendInput(sequence);
   }
 
   TerminalOpenTarget? _openTargetAt(TerminalCellPosition position) {

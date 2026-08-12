@@ -25,6 +25,7 @@ void main() {
     clipboardText = '';
     terminalAutocompleteEnabled = false;
     terminalSelectCommandBlockOnClick = true;
+    terminalPointerConfig = const TerminalPointerConfig();
     terminalScrollbarEnabled = true;
     terminalShortcutConfig = const TerminalShortcutConfig();
     binding.defaultBinaryMessenger.setMockMethodCallHandler(
@@ -48,6 +49,7 @@ void main() {
   tearDown(() {
     terminalAutocompleteEnabled = false;
     terminalScrollbarEnabled = true;
+    terminalPointerConfig = const TerminalPointerConfig();
     terminalShortcutConfig = const TerminalShortcutConfig();
     debugDefaultTargetPlatformOverride = null;
     binding.defaultBinaryMessenger.setMockMethodCallHandler(
@@ -675,6 +677,121 @@ void main() {
     expect(opened.single.localPath, isTrue);
     expect(opened.single.uri.toFilePath(), file.path);
     expect(_terminalPainter(tester).commandBlockSelection, isNull);
+  });
+
+  testWidgets('command click opening can be disabled', (tester) async {
+    terminalPointerConfig = const TerminalPointerConfig(
+      commandClickOpensFilenameOrUrl: false,
+    );
+    final opened = <TerminalOpenTarget>[];
+    final controller = TerminalController(
+      driver: MemoryTerminalDriver(columns: 80, rows: 8),
+    );
+    addTearDown(controller.dispose);
+    await _pumpTerminal(tester, controller, onOpenTarget: opened.add);
+    controller.write('https://example.com');
+    await tester.pump();
+
+    final metrics = TerminalMetrics.measure(
+      defaultTerminalConfig.font.textStyle(),
+    );
+    final position = _cellCenter(metrics, column: 3, row: 0);
+    final modifier = Platform.isMacOS
+        ? LogicalKeyboardKey.metaLeft
+        : LogicalKeyboardKey.controlLeft;
+    await tester.sendKeyDownEvent(modifier);
+    await tester.tapAt(position, kind: PointerDeviceKind.mouse);
+    await tester.sendKeyUpEvent(modifier);
+    await tester.pump();
+
+    expect(opened, isEmpty);
+  });
+
+  testWidgets('option click moves the terminal cursor with arrow keys', (
+    tester,
+  ) async {
+    final inputs = <String>[];
+    final controller = TerminalController(
+      driver: MemoryTerminalDriver(columns: 80, rows: 8),
+      onInput: inputs.add,
+    );
+    addTearDown(controller.dispose);
+    await _pumpTerminal(tester, controller);
+    controller.write('abcdef');
+    await tester.pump();
+
+    final metrics = TerminalMetrics.measure(
+      defaultTerminalConfig.font.textStyle(),
+    );
+    final position = _cellCenter(metrics, column: 2, row: 0);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+    await tester.tapAt(position, kind: PointerDeviceKind.mouse);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+    await tester.pump();
+
+    expect(inputs, ['\x1b[D\x1b[D\x1b[D\x1b[D']);
+    expect(_terminalPainter(tester).commandBlockSelection, isNull);
+  });
+
+  testWidgets('option click cursor movement can be disabled', (tester) async {
+    terminalPointerConfig = const TerminalPointerConfig(
+      optionClickMovesCursor: false,
+    );
+    final inputs = <String>[];
+    final controller = TerminalController(
+      driver: MemoryTerminalDriver(columns: 80, rows: 8),
+      onInput: inputs.add,
+    );
+    addTearDown(controller.dispose);
+    await _pumpTerminal(tester, controller);
+    controller.write('abcdef');
+    await tester.pump();
+
+    final metrics = TerminalMetrics.measure(
+      defaultTerminalConfig.font.textStyle(),
+    );
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+    await tester.tapAt(
+      _cellCenter(metrics, column: 2, row: 0),
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+    await tester.pump();
+
+    expect(inputs, isEmpty);
+  });
+
+  test('cursor movement uses application cursor sequences', () {
+    final snapshot = TerminalSnapshot(
+      columns: 10,
+      rows: 4,
+      cells: List.filled(40, const TerminalCell.empty()),
+      cursor: const TerminalCursor(
+        column: 4,
+        row: 2,
+        visible: true,
+        shape: TerminalCursorShape.block,
+        color: terminalDefaultCursor,
+        blinking: false,
+      ),
+      keyboardMode: const TerminalKeyboardMode(applicationCursor: true),
+    );
+
+    expect(
+      terminalCursorMoveSequence(
+        snapshot: snapshot,
+        target: const TerminalCellPosition(row: 1, column: 6),
+      ),
+      '\x1bOA\x1bOC\x1bOC',
+    );
+    expect(
+      terminalCursorMoveSequence(
+        snapshot: snapshot,
+        target: const TerminalCellPosition(row: 1, column: 6),
+        useLinearOffset: true,
+      ),
+      List.filled(8, '\x1bOD').join(),
+    );
   });
 
   testWidgets('drag selection beyond the viewport auto-scrolls terminal', (

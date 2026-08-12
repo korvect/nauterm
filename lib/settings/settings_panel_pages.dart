@@ -873,6 +873,57 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
         ),
         SizedBox(height: 30),
         _SettingsSection(
+          key: state._settingsSectionKey('terminal-pointer'),
+          icon: Icons.mouse_outlined,
+          localizationKey: 'settings.terminal.pointer.title',
+          title: 'Pointer',
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              maxWidth: _settingsContentMaxWidth,
+            ),
+            child: Column(
+              children: [
+                _SettingsRow(
+                  localizationKey:
+                      'settings.terminal.pointer.commandClickOpensTarget',
+                  title: 'Cmd-Click Opens Filename/URL',
+                  subtitle:
+                      'Open a recognized filename or URL with the default application.',
+                  trailing: _SettingsSwitch(
+                    value: terminalPointerConfig.commandClickOpensFilenameOrUrl,
+                    onChanged: (value) {
+                      state._mutate(
+                        () => terminalPointerConfig = terminalPointerConfig
+                            .copyWith(commandClickOpensFilenameOrUrl: value),
+                      );
+                      state._persistRuntimeSettings();
+                    },
+                  ),
+                ),
+                SizedBox(height: 18),
+                _SettingsRow(
+                  localizationKey:
+                      'settings.terminal.pointer.optionClickMovesCursor',
+                  title: 'Option-Click Moves Cursor',
+                  subtitle:
+                      'Move the terminal input cursor to the clicked position.',
+                  trailing: _SettingsSwitch(
+                    value: terminalPointerConfig.optionClickMovesCursor,
+                    onChanged: (value) {
+                      state._mutate(
+                        () => terminalPointerConfig = terminalPointerConfig
+                            .copyWith(optionClickMovesCursor: value),
+                      );
+                      state._persistRuntimeSettings();
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        SizedBox(height: 30),
+        _SettingsSection(
           key: state._settingsSectionKey('terminal-interaction'),
           icon: Icons.content_copy_rounded,
           title: 'Interaction',

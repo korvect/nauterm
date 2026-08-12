@@ -329,12 +329,14 @@ class NautermTerminalBehaviorConfig {
     this.selectCommandBlockOnClick = true,
     this.scrollbackLines = 10000,
     this.bell = const TerminalBellConfig(),
+    this.pointer = const TerminalPointerConfig(),
   });
 
   final bool copyOnSelect;
   final bool selectCommandBlockOnClick;
   final int scrollbackLines;
   final TerminalBellConfig bell;
+  final TerminalPointerConfig pointer;
 
   factory NautermTerminalBehaviorConfig.fromJson(Object? value) {
     final json = _map(value);
@@ -344,6 +346,7 @@ class NautermTerminalBehaviorConfig {
           json['selectCommandBlockOnClick'] as bool? ?? true,
       scrollbackLines: (json['scrollbackLines'] as num?)?.toInt() ?? 10000,
       bell: _terminalBellFromJson(json['bell']),
+      pointer: _terminalPointerFromJson(json['pointer']),
     );
   }
 
@@ -352,6 +355,7 @@ class NautermTerminalBehaviorConfig {
     'selectCommandBlockOnClick': selectCommandBlockOnClick,
     'scrollbackLines': scrollbackLines,
     'bell': _terminalBellToJson(bell),
+    'pointer': _terminalPointerToJson(pointer),
   };
 }
 
@@ -368,6 +372,20 @@ Map<String, Object?> _terminalBellToJson(TerminalBellConfig bell) => {
   'sound': bell.sound,
   'visual': bell.visual,
   'tabIndicator': bell.tabIndicator,
+};
+
+TerminalPointerConfig _terminalPointerFromJson(Object? value) {
+  final json = _map(value);
+  return TerminalPointerConfig(
+    commandClickOpensFilenameOrUrl:
+        json['commandClickOpensFilenameOrUrl'] as bool? ?? true,
+    optionClickMovesCursor: json['optionClickMovesCursor'] as bool? ?? true,
+  );
+}
+
+Map<String, Object?> _terminalPointerToJson(TerminalPointerConfig pointer) => {
+  'commandClickOpensFilenameOrUrl': pointer.commandClickOpensFilenameOrUrl,
+  'optionClickMovesCursor': pointer.optionClickMovesCursor,
 };
 
 @immutable

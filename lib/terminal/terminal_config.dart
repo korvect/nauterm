@@ -56,6 +56,7 @@ TerminalSshPredictionMode terminalSshPredictionMode =
 TerminalCursorShape terminalCursorShape = TerminalCursorShape.block;
 bool terminalCursorBlink = true;
 TerminalBellConfig terminalBellConfig = const TerminalBellConfig();
+TerminalPointerConfig terminalPointerConfig = const TerminalPointerConfig();
 bool terminalConfirmOnClose = true;
 NautermRecordingConfig terminalRecordingConfig = const NautermRecordingConfig();
 
@@ -444,6 +445,7 @@ class NautermRuntimeSettings {
     this.customThemeJson,
     this.cursor = const TerminalCursorConfig(),
     this.bell = const TerminalBellConfig(),
+    this.pointer = const TerminalPointerConfig(),
     this.confirmOnClose = true,
     this.hostIconMode = HostIconMode.osBadge,
     this.shellPath,
@@ -475,6 +477,7 @@ class NautermRuntimeSettings {
   final Map<String, Object?>? customThemeJson;
   final TerminalCursorConfig cursor;
   final TerminalBellConfig bell;
+  final TerminalPointerConfig pointer;
   final bool confirmOnClose;
   final HostIconMode hostIconMode;
   final String? shellPath;
@@ -502,6 +505,7 @@ void applyNautermRuntimeSettings(NautermRuntimeSettings settings) {
   terminalCursorShape = settings.cursor.shape;
   terminalCursorBlink = settings.cursor.blink;
   terminalBellConfig = settings.bell;
+  terminalPointerConfig = settings.pointer;
   terminalConfirmOnClose = settings.confirmOnClose;
   hostIconMode = settings.hostIconMode;
   terminalShellPath = settings.shellPath;
@@ -565,6 +569,7 @@ NautermRuntimeSettings currentNautermRuntimeSettings() {
       blink: terminalCursorBlink,
     ),
     bell: terminalBellConfig,
+    pointer: terminalPointerConfig,
     confirmOnClose: terminalConfirmOnClose,
     hostIconMode: hostIconMode,
     shellPath: terminalShellPath,
@@ -856,6 +861,29 @@ class TerminalBellConfig {
       sound: sound ?? this.sound,
       visual: visual ?? this.visual,
       tabIndicator: tabIndicator ?? this.tabIndicator,
+    );
+  }
+}
+
+@immutable
+class TerminalPointerConfig {
+  const TerminalPointerConfig({
+    this.commandClickOpensFilenameOrUrl = true,
+    this.optionClickMovesCursor = true,
+  });
+
+  final bool commandClickOpensFilenameOrUrl;
+  final bool optionClickMovesCursor;
+
+  TerminalPointerConfig copyWith({
+    bool? commandClickOpensFilenameOrUrl,
+    bool? optionClickMovesCursor,
+  }) {
+    return TerminalPointerConfig(
+      commandClickOpensFilenameOrUrl:
+          commandClickOpensFilenameOrUrl ?? this.commandClickOpensFilenameOrUrl,
+      optionClickMovesCursor:
+          optionClickMovesCursor ?? this.optionClickMovesCursor,
     );
   }
 }
