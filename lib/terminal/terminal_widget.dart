@@ -1039,6 +1039,8 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
   bool _openTargetCacheValid = false;
   int? _openTargetPointer;
   int? _cursorMovePointer;
+  TerminalCellPosition? _cursorMovePressedPosition;
+  bool _cursorMoveDragged = false;
   int? _ignoredOptionPointer;
   Offset? _lastHoverLocalPosition;
   TerminalMetrics? _lastHoverMetrics;
@@ -2340,10 +2342,10 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
     }
     if ((event.buttons & kPrimaryMouseButton) != 0 &&
         _isOptionCursorMoveModifierPressed()) {
-      final commandInputPosition = _commandInputPositionFor(position);
-      if (commandInputPosition != null) {
+      if (_canMoveCursorWithPointer() && _effectiveSelection == null) {
         _cursorMovePointer = event.pointer;
-        _moveCursorTo(commandInputPosition);
+        _cursorMovePressedPosition = position;
+        _cursorMoveDragged = false;
       } else {
         _ignoredOptionPointer = event.pointer;
       }
@@ -2393,8 +2395,16 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
   }
 
   void _handlePointerMove(PointerMoveEvent event, TerminalMetrics metrics) {
+    if (event.pointer == _cursorMovePointer) {
+      if ((event.buttons & kPrimaryMouseButton) != 0) {
+        _cursorMoveDragged =
+            _cursorMoveDragged ||
+            _cellPositionForOffset(event.localPosition, metrics) !=
+                _cursorMovePressedPosition;
+      }
+      return;
+    }
     if (event.pointer == _openTargetPointer ||
-        event.pointer == _cursorMovePointer ||
         event.pointer == _ignoredOptionPointer) {
       return;
     }
@@ -2446,6 +2456,14 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
     }
     if (event.pointer == _cursorMovePointer) {
       _cursorMovePointer = null;
+      _cursorMovePressedPosition = null;
+      final dragged = _cursorMoveDragged;
+      _cursorMoveDragged = false;
+      if (!dragged && _effectiveSelection == null) {
+        _moveCursorForPromptClick(
+          _cellPositionForOffset(event.localPosition, metrics),
+        );
+      }
       return;
     }
     if (event.pointer == _ignoredOptionPointer) {
@@ -2501,6 +2519,8 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
     }
     if (event.pointer == _cursorMovePointer) {
       _cursorMovePointer = null;
+      _cursorMovePressedPosition = null;
+      _cursorMoveDragged = false;
       return;
     }
     if (event.pointer == _ignoredOptionPointer) {
@@ -2672,51 +2692,20 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
     return !widget.readOnly &&
         snapshot.cursor.visible &&
         !snapshot.alternateScreen &&
+        !snapshot.keyboardMode.mouseReporting &&
         snapshot.displayOffset == 0;
   }
 
-  TerminalCellPosition? _commandInputPositionFor(TerminalCellPosition target) {
-    if (!_canMoveCursorWithPointer()) return null;
+  void _moveCursorForPromptClick(TerminalCellPosition target) {
+    if (!_canMoveCursorWithPointer()) return;
+    final movement = widget.controller.promptClickMove(target);
+    if (movement == null) return;
+    if (movement.isEmpty) return;
     final snapshot = widget.controller.snapshot;
-    final cursorPosition = TerminalCellPosition(
-      row: snapshot.cursor.row,
-      column: snapshot.cursor.column,
-    );
-    final cursorBlock = widget.controller.commandBlockAt(cursorPosition);
-    final inputStart =
-        cursorBlock?.shellIntegrated == true && cursorBlock?.completed == false
-        ? cursorBlock?.inputStart
-        : null;
-    if (inputStart == null) return target;
-    final targetOffset = terminalCellOffset(snapshot, target);
-    final cursorOffset = terminalCellOffset(snapshot, cursorPosition);
-    var inputEnd = cursorOffset;
-    final viewportEnd = snapshot.rows * snapshot.columns;
-    final blockEnd = cursorBlock!.selection.end.clamp(0, viewportEnd);
-    for (var offset = math.max(inputStart, 0); offset < blockEnd; offset++) {
-      final row = offset ~/ snapshot.columns;
-      final column = offset % snapshot.columns;
-      final cell = snapshot.cellAt(row, column);
-      if (cell.text.trim().isNotEmpty && !cell.wideCharSpacer) {
-        inputEnd = math.max(inputEnd, offset + 1);
-      }
-    }
-    final effectiveOffset = targetOffset.clamp(inputStart, inputEnd);
-    return TerminalCellPosition(
-      row: effectiveOffset ~/ snapshot.columns,
-      column: effectiveOffset % snapshot.columns,
-    );
-  }
-
-  void _moveCursorTo(TerminalCellPosition target) {
-    final commandInputPosition = _commandInputPositionFor(target);
-    if (commandInputPosition == null) return;
-    final snapshot = widget.controller.snapshot;
-    final sequence = terminalCursorMoveSequence(
-      snapshot: snapshot,
-      target: commandInputPosition,
-    );
-    if (sequence.isEmpty) return;
+    final prefix = snapshot.keyboardMode.applicationCursor ? '\x1bO' : '\x1b[';
+    final sequence = movement.left > 0
+        ? List.filled(movement.left, '${prefix}D').join()
+        : List.filled(movement.right, '${prefix}C').join();
     _clearSelection();
     widget.controller.sendInput(sequence);
   }

@@ -78,7 +78,13 @@ class _NetworkInterfaceChangeMonitor {
 }
 
 class NativeTerminalDriver implements TerminalDriver {
-  NativeTerminalDriver._(this._bindings, this._sessionId);
+  NativeTerminalDriver._(
+    this._bindings,
+    this._sessionId, {
+    this.shellIntegrationToken,
+  });
+
+  final String? shellIntegrationToken;
 
   NativeCallable<_WakeupNative>? _wakeupCallable;
 
@@ -93,6 +99,9 @@ class NativeTerminalDriver implements TerminalDriver {
     TerminalTheme theme = defaultTerminalTheme,
   }) {
     final bindings = _TerminalBindings.open();
+    final shellIntegrationToken = _supportsStartupShellIntegration(shellPath)
+        ? _newShellIntegrationToken()
+        : null;
     final terminalType = config.emulation.type.term.toNativeUtf8();
     final nativeShellPath = shellPath == null
         ? nullptr
@@ -100,7 +109,10 @@ class NativeTerminalDriver implements TerminalDriver {
     final nativeWorkingDirectory = workingDirectory == null
         ? nullptr
         : workingDirectory.toNativeUtf8();
-    final nativeEnvironment = _environmentToNative(environment);
+    final nativeEnvironment = _environmentToNative({
+      ...environment,
+      'NAUTERM_SHELL_INTEGRATION_TOKEN': ?shellIntegrationToken,
+    });
     final int sessionId;
     try {
       sessionId = bindings.createLocalSessionConfigured(
@@ -138,9 +150,31 @@ class NativeTerminalDriver implements TerminalDriver {
       );
     }
 
-    final driver = NativeTerminalDriver._(bindings, sessionId);
+    final driver = NativeTerminalDriver._(
+      bindings,
+      sessionId,
+      shellIntegrationToken: shellIntegrationToken,
+    );
     driver._setWakeupCallback(onWakeup);
     return driver;
+  }
+
+  static String _newShellIntegrationToken() {
+    final random = Random.secure();
+    return List.generate(
+      4,
+      (_) => random.nextInt(0x100000000).toRadixString(16).padLeft(8, '0'),
+    ).join();
+  }
+
+  static bool _supportsStartupShellIntegration(String? shellPath) {
+    final normalized = (shellPath ?? '').trim().replaceAll('\\', '/');
+    final name = normalized.split('/').last.toLowerCase();
+    return switch (name) {
+      'zsh' || 'fish' => true,
+      'bash' => !(Platform.isMacOS && normalized == '/bin/bash'),
+      _ => false,
+    };
   }
 
   factory NativeTerminalDriver.createCommand({
@@ -770,6 +804,19 @@ class NativeTerminalDriver implements TerminalDriver {
     return _commandBlockFromNative(
       _bindings,
       _bindings.commandBlockAt(
+        _sessionId,
+        terminalCellOffset(currentSnapshot, position),
+      ),
+    );
+  }
+
+  @override
+  TerminalPromptClickMove? promptClickMove(TerminalCellPosition position) {
+    if (_sessionId == 0) return null;
+    final currentSnapshot = snapshot;
+    return _promptClickMoveFromNative(
+      _bindings,
+      _bindings.promptClickMove(
         _sessionId,
         terminalCellOffset(currentSnapshot, position),
       ),

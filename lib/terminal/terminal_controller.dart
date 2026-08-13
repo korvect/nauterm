@@ -652,10 +652,18 @@ class TerminalController extends ChangeNotifier {
     return _driver.commandBlockAt(position);
   }
 
+  TerminalPromptClickMove? promptClickMove(TerminalCellPosition position) {
+    return _driver.promptClickMove(position);
+  }
+
   bool get isLocalTerminal =>
       _sshProfile == null && _serialProfile == null && _telnetProfile == null;
 
   bool get supportsShellIntegration => _driver is NativeTerminalDriver;
+  String? get shellIntegrationToken => switch (_driver) {
+    final NativeTerminalDriver driver => driver.shellIntegrationToken,
+    _ => null,
+  };
 
   String _selectedText = '';
   TerminalCommandBlock? _selectedCommandBlock;

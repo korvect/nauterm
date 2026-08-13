@@ -618,6 +618,16 @@ typedef _TerminalCommandBlockNative =
 typedef _TerminalCommandBlockDart =
     Pointer<Utf8> Function(Pointer<Void> handle, int offset);
 
+typedef _PromptClickMoveSessionNative =
+    Pointer<Utf8> Function(Uint64 sessionId, Int64 offset);
+typedef _PromptClickMoveSessionDart =
+    Pointer<Utf8> Function(int sessionId, int offset);
+
+typedef _TerminalPromptClickMoveNative =
+    Pointer<Utf8> Function(Pointer<Void> handle, Int64 offset);
+typedef _TerminalPromptClickMoveDart =
+    Pointer<Utf8> Function(Pointer<Void> handle, int offset);
+
 typedef _WakeupNative = Void Function(Pointer<Void> userData);
 
 typedef _SetWakeupNative =

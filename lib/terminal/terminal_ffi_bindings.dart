@@ -191,6 +191,16 @@ class _TerminalBindings {
             _TerminalCommandBlockNative,
             _TerminalCommandBlockDart
           >('nauterm_terminal_command_block_at'),
+      promptClickMove = library
+          .lookupFunction<
+            _PromptClickMoveSessionNative,
+            _PromptClickMoveSessionDart
+          >('nauterm_session_prompt_click_move'),
+      terminalPromptClickMove = library
+          .lookupFunction<
+            _TerminalPromptClickMoveNative,
+            _TerminalPromptClickMoveDart
+          >('nauterm_terminal_prompt_click_move'),
       terminalPlainText = library
           .lookupFunction<_TerminalPlainTextNative, _TerminalPlainTextDart>(
             'nauterm_terminal_plain_text',
@@ -407,6 +417,8 @@ class _TerminalBindings {
   final _TerminalSelectionTextDart terminalSelectionText;
   final _CommandBlockSessionDart commandBlockAt;
   final _TerminalCommandBlockDart terminalCommandBlockAt;
+  final _PromptClickMoveSessionDart promptClickMove;
+  final _TerminalPromptClickMoveDart terminalPromptClickMove;
   final _TerminalPlainTextDart terminalPlainText;
   final _SetWakeupDart setWakeupCallback;
   final _PollSessionDart poll;
@@ -578,6 +590,25 @@ TerminalCommandBlock? _commandBlockFromNative(
       completed: completed == true,
       shellIntegrated: shellIntegrated == true,
     );
+  } on Object {
+    return null;
+  } finally {
+    bindings.freeString(pointer);
+  }
+}
+
+TerminalPromptClickMove? _promptClickMoveFromNative(
+  _TerminalBindings bindings,
+  Pointer<Utf8> pointer,
+) {
+  if (pointer == nullptr) return null;
+  try {
+    final decoded = jsonDecode(pointer.toDartString());
+    if (decoded is! Map<Object?, Object?>) return null;
+    final left = decoded['left'];
+    final right = decoded['right'];
+    if (left is! int || right is! int || left < 0 || right < 0) return null;
+    return TerminalPromptClickMove(left: left, right: right);
   } on Object {
     return null;
   } finally {

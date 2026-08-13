@@ -73,6 +73,8 @@ abstract interface class TerminalDriver {
 
   TerminalCommandBlock? commandBlockAt(TerminalCellPosition position);
 
+  TerminalPromptClickMove? promptClickMove(TerminalCellPosition position);
+
   void clear();
 
   void reset();
@@ -213,6 +215,10 @@ class MemoryTerminalDriver implements TerminalDriver {
         ? null
         : TerminalCommandBlock(selection: selection);
   }
+
+  @override
+  TerminalPromptClickMove? promptClickMove(TerminalCellPosition position) =>
+      null;
 
   @override
   void clear() {

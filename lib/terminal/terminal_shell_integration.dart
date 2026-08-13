@@ -97,7 +97,10 @@ String terminalShellSetupCommand(TerminalShellKind kind, String token) {
     TerminalShellKind.fish => _fishSetup,
     _ => '',
   };
-  return template.replaceAll('{{TOKEN}}', token).replaceAll('{{READY}}', ready);
+  return template
+      .replaceAll(r'\033]133;A\007', r'\033]133;A;cl=line\007')
+      .replaceAll('{{TOKEN}}', token)
+      .replaceAll('{{READY}}', ready);
 }
 
 const String _zshSetup =

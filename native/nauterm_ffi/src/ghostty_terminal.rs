@@ -12,8 +12,9 @@ use std::sync::Once;
 use crate::ffi::FfiTerminalCell;
 use crate::pty::{LocalPty, WakeupCallback};
 use crate::terminal::{
-    TerminalCommandBlock, TerminalEmulator, TerminalEmulatorBackend, TerminalGeometry,
-    TerminalGraphicImage, TerminalGraphicPlacement, TerminalOptions, TerminalSearchDirection,
+    prompt_click_fallback_move, prompt_click_nested_shell_move, TerminalCommandBlock,
+    TerminalEmulator, TerminalEmulatorBackend, TerminalGeometry, TerminalGraphicImage,
+    TerminalGraphicPlacement, TerminalOptions, TerminalPromptClickMove, TerminalSearchDirection,
     TerminalSearchResult, TerminalSnapshot,
 };
 use base64::Engine as _;
@@ -75,8 +76,13 @@ const RENDER_CELL_DATA_FG_COLOR: c_int = 6;
 const RENDER_CELL_DATA_GRAPHEMES_UTF8: c_int = 9;
 
 const CELL_DATA_WIDE: c_int = 3;
+const CELL_DATA_SEMANTIC_CONTENT: c_int = 9;
+const CELL_SEMANTIC_INPUT: c_int = 1;
+const ROW_DATA_WRAP: c_int = 1;
+const ROW_DATA_WRAP_CONTINUATION: c_int = 2;
 const ROW_DATA_SEMANTIC_PROMPT: c_int = 6;
 const ROW_SEMANTIC_PROMPT: c_int = 1;
+const ROW_SEMANTIC_PROMPT_CONTINUATION: c_int = 2;
 const CELL_WIDE_WIDE: c_int = 1;
 const CELL_WIDE_SPACER_TAIL: c_int = 2;
 const CELL_WIDE_SPACER_HEAD: c_int = 3;
@@ -454,6 +460,7 @@ unsafe extern "C" {
         buffer_len: usize,
         out_len: *mut usize,
     ) -> c_int;
+    fn ghostty_grid_ref_cell(grid_ref: *const GhosttyGridRef, cell: *mut u64) -> c_int;
     fn ghostty_grid_ref_row(grid_ref: *const GhosttyGridRef, row: *mut u64) -> c_int;
     fn ghostty_row_get(row: u64, data: c_int, value: *mut c_void) -> c_int;
     fn ghostty_grid_ref_hyperlink_uri(
@@ -563,6 +570,8 @@ pub struct GhosttyTerminalEngine {
     command_block_id: u64,
     command_blocks: VecDeque<GhosttyCommandBlockRecord>,
     current_working_directory: Option<String>,
+    prompt_click_enabled: bool,
+    prompt_input_active: bool,
     last_snapshot: RefCell<Option<TerminalSnapshot>>,
     #[cfg(test)]
     force_snapshot_failure: bool,
@@ -613,6 +622,8 @@ impl GhosttyTerminalEngine {
             command_block_id: 0,
             command_blocks: VecDeque::new(),
             current_working_directory: None,
+            prompt_click_enabled: false,
+            prompt_input_active: false,
             last_snapshot: RefCell::new(None),
             #[cfg(test)]
             force_snapshot_failure: false,
@@ -843,7 +854,8 @@ impl GhosttyTerminalEngine {
         if self.is_alt_screen() {
             return;
         }
-        if payload == b"133;B" {
+        if payload == b"133;B" || payload.starts_with(b"133;B;") {
+            self.prompt_input_active = true;
             let Some(block) = self.command_blocks.back_mut() else {
                 return;
             };
@@ -869,9 +881,21 @@ impl GhosttyTerminalEngine {
             }
             return;
         }
-        if payload != b"133;A" {
+        if payload == b"133;C"
+            || payload.starts_with(b"133;C;")
+            || payload == b"133;D"
+            || payload.starts_with(b"133;D;")
+        {
+            self.prompt_input_active = false;
             return;
         }
+        if payload != b"133;A" && !payload.starts_with(b"133;A;") {
+            return;
+        }
+        self.prompt_click_enabled = payload
+            .split(|byte| *byte == b';')
+            .any(|option| option == b"cl=line");
+        self.prompt_input_active = false;
         let cursor_y = terminal_get_u16(self.terminal, 4).unwrap_or(0) as usize;
         let point = GhosttyPoint {
             tag: 0,
@@ -987,6 +1011,129 @@ impl GhosttyTerminalEngine {
                     .collect()
             })
             .collect()
+    }
+
+    fn prompt_click_move_internal(&self, offset: i64) -> Option<TerminalPromptClickMove> {
+        if self.is_alt_screen() || self.size.columns == 0 {
+            return None;
+        }
+
+        let columns = self.size.columns;
+        let target_row = offset.div_euclid(columns as i64);
+        if target_row < 0 || target_row >= self.size.rows as i64 {
+            return None;
+        }
+        let scrollback = terminal_get_usize(self.terminal, TERMINAL_DATA_SCROLLBACK_ROWS)?;
+        let cursor_column = terminal_get_u16(self.terminal, 3)? as usize;
+        let cursor_viewport_row = terminal_get_u16(self.terminal, 4)? as usize;
+        if !self.prompt_click_enabled {
+            return prompt_click_fallback_move(
+                &self.options,
+                offset,
+                (cursor_viewport_row * columns + cursor_column) as i64,
+                columns,
+                self.size.rows,
+            );
+        }
+        if !self.prompt_input_active {
+            let command = self
+                .command_blocks
+                .back()
+                .filter(|block| block.exit_code.is_none())
+                .and_then(|block| block.command.as_deref());
+            return prompt_click_nested_shell_move(
+                command,
+                offset,
+                (cursor_viewport_row * columns + cursor_column) as i64,
+                columns,
+                self.size.rows,
+            );
+        }
+        let cursor_row = scrollback + cursor_viewport_row;
+        let target_column = offset.rem_euclid(columns as i64) as usize;
+        let target_row = scrollback + target_row as usize;
+
+        let prompt = self.command_blocks.back()?;
+        let prompt_point = tracked_screen_point(prompt.anchor)?;
+        if (target_row, target_column) < (prompt_point.y as usize, prompt_point.x as usize) {
+            return None;
+        }
+
+        if !ghostty_cell_is_input(self.terminal, cursor_column, cursor_row) {
+            // The C API exposes stored cell semantics but not the cursor's
+            // transient semantic state. OSC 133 B is tracked separately and
+            // covers the empty insertion cell at the end of the input.
+            if !self.prompt_input_active {
+                return None;
+            }
+        }
+        if (cursor_row, cursor_column) == (target_row, target_column) {
+            return Some(TerminalPromptClickMove::default());
+        }
+
+        if (cursor_row, cursor_column) < (target_row, target_column) {
+            let mut count = 0usize;
+            'rows: for row in cursor_row..=target_row {
+                let is_cursor_row = row == cursor_row;
+                if !is_cursor_row
+                    && ghostty_row_semantic(self.terminal, row)
+                        != Some(ROW_SEMANTIC_PROMPT_CONTINUATION)
+                {
+                    break;
+                }
+                let start = if is_cursor_row {
+                    cursor_column.saturating_add(1)
+                } else {
+                    (0..columns)
+                        .find(|column| ghostty_cell_is_input(self.terminal, *column, row))
+                        .unwrap_or(columns)
+                };
+                for column in start..columns {
+                    if !ghostty_cell_is_input(self.terminal, column, row) {
+                        continue;
+                    }
+                    count += 1;
+                    if (row, column) == (target_row, target_column) {
+                        break 'rows;
+                    }
+                }
+                if !ghostty_row_bool(self.terminal, row, ROW_DATA_WRAP) {
+                    if ghostty_cell_is_input(self.terminal, cursor_column, cursor_row) {
+                        count += 1;
+                    }
+                    break;
+                }
+            }
+            return Some(TerminalPromptClickMove {
+                left: 0,
+                right: count,
+            });
+        }
+
+        let mut count = 0usize;
+        'rows: for row in (target_row..=cursor_row).rev() {
+            let end = if row == cursor_row {
+                cursor_column
+            } else {
+                columns
+            };
+            for column in (0..end).rev() {
+                if !ghostty_cell_is_input(self.terminal, column, row) {
+                    continue;
+                }
+                count += 1;
+                if (row, column) == (target_row, target_column) {
+                    break 'rows;
+                }
+            }
+            if !ghostty_row_bool(self.terminal, row, ROW_DATA_WRAP_CONTINUATION) {
+                break;
+            }
+        }
+        Some(TerminalPromptClickMove {
+            left: count,
+            right: 0,
+        })
     }
 
     fn keyboard_mode(&self) -> u32 {
@@ -1741,6 +1888,10 @@ impl TerminalEmulator for GhosttyTerminalEngine {
         })
     }
 
+    fn prompt_click_move(&self, offset: i64) -> Option<TerminalPromptClickMove> {
+        self.prompt_click_move_internal(offset)
+    }
+
     fn clipboard(&self) -> String {
         self.callbacks
             .lock()
@@ -2266,6 +2417,57 @@ fn row_semantic_prompt(terminal: GhosttyTerminal, row: usize) -> bool {
     }
 }
 
+fn ghostty_cell_is_input(terminal: GhosttyTerminal, column: usize, row: usize) -> bool {
+    let Some(grid_ref) = grid_ref(terminal, POINT_TAG_SCREEN, column, row) else {
+        return false;
+    };
+    let mut raw_cell = 0u64;
+    if unsafe { ghostty_grid_ref_cell(&grid_ref, &mut raw_cell) } != GHOSTTY_SUCCESS {
+        return false;
+    }
+    let mut semantic = 0i32;
+    unsafe {
+        ghostty_cell_get(
+            raw_cell,
+            CELL_DATA_SEMANTIC_CONTENT,
+            &mut semantic as *mut _ as *mut c_void,
+        ) == GHOSTTY_SUCCESS
+            && semantic == CELL_SEMANTIC_INPUT
+    }
+}
+
+fn ghostty_row_bool(terminal: GhosttyTerminal, row: usize, data: c_int) -> bool {
+    let Some(grid_ref) = grid_ref(terminal, POINT_TAG_SCREEN, 0, row) else {
+        return false;
+    };
+    let mut raw_row = 0u64;
+    if unsafe { ghostty_grid_ref_row(&grid_ref, &mut raw_row) } != GHOSTTY_SUCCESS {
+        return false;
+    }
+    let mut value = false;
+    unsafe {
+        ghostty_row_get(raw_row, data, &mut value as *mut _ as *mut c_void) == GHOSTTY_SUCCESS
+            && value
+    }
+}
+
+fn ghostty_row_semantic(terminal: GhosttyTerminal, row: usize) -> Option<c_int> {
+    let grid_ref = grid_ref(terminal, POINT_TAG_SCREEN, 0, row)?;
+    let mut raw_row = 0u64;
+    if unsafe { ghostty_grid_ref_row(&grid_ref, &mut raw_row) } != GHOSTTY_SUCCESS {
+        return None;
+    }
+    let mut semantic = 0i32;
+    (unsafe {
+        ghostty_row_get(
+            raw_row,
+            ROW_DATA_SEMANTIC_PROMPT,
+            &mut semantic as *mut _ as *mut c_void,
+        )
+    } == GHOSTTY_SUCCESS)
+        .then_some(semantic)
+}
+
 fn tracked_screen_point(grid_ref: GhosttyTrackedGridRef) -> Option<GhosttyPointCoordinate> {
     if grid_ref.is_null() {
         return None;
@@ -2763,6 +2965,100 @@ mod tests {
         assert_eq!(fallback.emulator_backend, TerminalEmulatorBackend::Ghostty);
         assert_eq!(fallback.text, valid.text);
         assert_eq!(fallback.cells.len(), valid.cells.len());
+    }
+
+    #[test]
+    fn prompt_click_move_uses_ghostty_semantic_input_cells() {
+        let mut terminal = GhosttyTerminalEngine::new(20, 4, TerminalOptions::default()).unwrap();
+        terminal.write_bytes(b"previous\r\n\x1b]133;A;cl=line\x07$ \x1b]133;B\x07hello");
+
+        assert_eq!(
+            terminal.prompt_click_move(20 + 3),
+            Some(TerminalPromptClickMove { left: 4, right: 0 })
+        );
+        assert_eq!(
+            terminal.prompt_click_move(20),
+            Some(TerminalPromptClickMove { left: 5, right: 0 })
+        );
+        assert_eq!(
+            terminal.prompt_click_move(20 + 15),
+            Some(TerminalPromptClickMove::default())
+        );
+        assert_eq!(terminal.prompt_click_move(0), None);
+    }
+
+    #[test]
+    fn prompt_click_move_falls_back_for_known_line_editors() {
+        let options = TerminalOptions {
+            shell_path: Some("/usr/local/bin/fish".to_owned()),
+            ..TerminalOptions::default()
+        };
+        let mut terminal = GhosttyTerminalEngine::new(20, 4, options).unwrap();
+        terminal.write_bytes(b"> hello");
+
+        assert_eq!(
+            terminal.prompt_click_move(3),
+            Some(TerminalPromptClickMove { left: 4, right: 0 })
+        );
+        assert_eq!(
+            terminal.prompt_click_move(15),
+            Some(TerminalPromptClickMove { left: 0, right: 8 })
+        );
+    }
+
+    #[test]
+    fn semantic_prompt_click_does_not_fall_back_outside_shell_input() {
+        let options = TerminalOptions {
+            shell_path: Some("/usr/local/bin/fish".to_owned()),
+            ..TerminalOptions::default()
+        };
+        let mut terminal = GhosttyTerminalEngine::new(20, 4, options).unwrap();
+        terminal.write_bytes(b"\x1b]133;A;cl=line\x07> \x1b]133;B\x07hello\x1b]133;C\x07");
+
+        assert_eq!(terminal.prompt_click_move(3), None);
+    }
+
+    #[test]
+    fn semantic_prompt_click_falls_back_inside_a_nested_bash() {
+        let options = TerminalOptions {
+            shell_path: Some("/usr/local/bin/zsh".to_owned()),
+            ..TerminalOptions::default()
+        };
+        let mut terminal = GhosttyTerminalEngine::new(20, 4, options).unwrap();
+        terminal.write_bytes(
+            b"\x1b]133;A;cl=line\x07$ \x1b]133;B\x07bash\x1b]4545;CommandStarted;YmFzaA==\x07\x1b]133;C\x07\r\nnested$ hello",
+        );
+
+        assert_eq!(
+            terminal.prompt_click_move(20 + 9),
+            Some(TerminalPromptClickMove { left: 4, right: 0 })
+        );
+    }
+
+    #[test]
+    fn semantic_prompt_click_does_not_fall_back_for_a_shell_script() {
+        let options = TerminalOptions {
+            shell_path: Some("/usr/local/bin/zsh".to_owned()),
+            ..TerminalOptions::default()
+        };
+        let mut terminal = GhosttyTerminalEngine::new(20, 4, options).unwrap();
+        terminal.write_bytes(
+            b"\x1b]133;A;cl=line\x07$ \x1b]133;B\x07bash script.sh\x1b]4545;CommandStarted;YmFzaCBzY3JpcHQuc2g=\x07\x1b]133;C\x07\r\noutput",
+        );
+
+        assert_eq!(terminal.prompt_click_move(20 + 3), None);
+    }
+
+    #[test]
+    fn prompt_click_move_does_not_fall_back_for_dash() {
+        let options = TerminalOptions {
+            shell_path: Some("/bin/dash".to_owned()),
+            ..TerminalOptions::default()
+        };
+        let mut terminal = GhosttyTerminalEngine::new(20, 4, options).unwrap();
+        terminal.write_bytes(b"$ hello");
+
+        assert_eq!(terminal.prompt_click_move(3), None);
     }
 
     #[cfg(unix)]

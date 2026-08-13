@@ -35,6 +35,7 @@ pub struct LocalPty {
     output: Arc<Mutex<Vec<u8>>>,
     wakeup: WakeupSlot,
     worker: Option<JoinHandle<()>>,
+    _shell_integration: Option<ShellIntegrationFiles>,
 }
 
 pub struct PtyPump {
@@ -51,6 +52,7 @@ pub struct WakeupCallback {
 
 type WakeupSlot = Arc<Mutex<Option<WakeupCallback>>>;
 static WAKEUP_CALLBACKS_ENABLED: AtomicBool = AtomicBool::new(true);
+static SHELL_INTEGRATION_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 
 enum PtyCommand {
     Input(Vec<u8>),
@@ -94,7 +96,14 @@ impl LocalPty {
             }
             options.env.insert(variable.to_owned(), entry.value.clone());
         }
-        configure_history_filtering(&mut options, terminal_options.shell_path.as_deref());
+        let shell_integration = if terminal_options.command.is_none() {
+            configure_shell_integration(&mut options, terminal_options.shell_path.as_deref())?
+        } else {
+            None
+        };
+        if shell_integration.is_none() {
+            configure_history_filtering(&mut options, terminal_options.shell_path.as_deref());
+        }
 
         let pty = tty::new(&options, window_size(geometry), 0)?;
         let poller = Arc::new(Poller::new()?);
@@ -121,6 +130,7 @@ impl LocalPty {
             output,
             wakeup,
             worker: Some(worker),
+            _shell_integration: shell_integration,
         })
     }
 
@@ -188,7 +198,7 @@ fn shell_for_local_session(shell_path: &str) -> Option<Shell> {
 #[cfg(target_os = "macos")]
 fn macos_login_shell_args(shell_program: &str) -> Vec<String> {
     match shell_name(shell_program) {
-        Some("zsh") => vec!["-l".to_owned(), "--histignorespace".to_owned()],
+        Some("zsh") => vec!["-l".to_owned()],
         Some("fish") => vec!["--login".to_owned()],
         Some("bash" | "dash" | "sh" | "ksh" | "ksh93" | "mksh" | "csh" | "tcsh" | "ash") => {
             vec!["-l".to_owned()]
@@ -200,14 +210,7 @@ fn macos_login_shell_args(shell_program: &str) -> Vec<String> {
 
 #[cfg(not(target_os = "macos"))]
 fn shell_for_local_session(shell_path: &str) -> Option<Shell> {
-    resolve_shell_program(shell_path).map(|program| {
-        let args = if shell_name(&program) == Some("zsh") {
-            vec!["--histignorespace".to_owned()]
-        } else {
-            Vec::new()
-        };
-        Shell::new(program, args)
-    })
+    resolve_shell_program(shell_path).map(|program| Shell::new(program, Vec::new()))
 }
 
 fn configure_history_filtering(options: &mut Options, shell_path: Option<&str>) {
@@ -233,6 +236,410 @@ fn configure_history_filtering(options: &mut Options, shell_path: Option<&str>) 
         }
     }
 }
+
+struct ShellIntegrationFiles {
+    root: PathBuf,
+}
+
+impl Drop for ShellIntegrationFiles {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.root);
+    }
+}
+
+fn configure_shell_integration(
+    options: &mut Options,
+    shell_path: Option<&str>,
+) -> io::Result<Option<ShellIntegrationFiles>> {
+    let Some(shell_path) = shell_path else {
+        return Ok(None);
+    };
+    match shell_name(shell_path) {
+        Some("zsh") => configure_zsh_integration(options).map(Some),
+        Some("bash") => configure_bash_integration(options, shell_path),
+        Some("fish") => configure_fish_integration(options).map(Some),
+        _ => Ok(None),
+    }
+}
+
+fn create_shell_integration_root() -> io::Result<PathBuf> {
+    let root = loop {
+        let id = SHELL_INTEGRATION_ID.fetch_add(1, Ordering::Relaxed);
+        let candidate = std::env::temp_dir().join(format!(
+            "nauterm-shell-integration-{}-{id}",
+            std::process::id()
+        ));
+        match std::fs::create_dir(&candidate) {
+            Ok(()) => break candidate,
+            Err(error) if error.kind() == ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error),
+        }
+    };
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Err(error) = std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700))
+        {
+            let _ = std::fs::remove_dir_all(&root);
+            return Err(error);
+        }
+    }
+    Ok(root)
+}
+
+fn write_shell_integration_file(root: &Path, relative: &str, content: &str) -> io::Result<PathBuf> {
+    let path = root.join(relative);
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(&path, content)?;
+    Ok(path)
+}
+
+fn configure_zsh_integration(options: &mut Options) -> io::Result<ShellIntegrationFiles> {
+    let root = create_shell_integration_root()?;
+    if let Err(error) = write_shell_integration_file(&root, ".zshenv", ZSH_INTEGRATION) {
+        let _ = std::fs::remove_dir_all(&root);
+        return Err(error);
+    }
+
+    if let Some(original) = options
+        .env
+        .get("ZDOTDIR")
+        .cloned()
+        .or_else(|| std::env::var("ZDOTDIR").ok())
+    {
+        options
+            .env
+            .insert("NAUTERM_ZSH_ZDOTDIR".to_owned(), original);
+        options
+            .env
+            .insert("NAUTERM_ZSH_ZDOTDIR_SET".to_owned(), "1".to_owned());
+    }
+    options
+        .env
+        .insert("ZDOTDIR".to_owned(), root.to_string_lossy().into_owned());
+    Ok(ShellIntegrationFiles { root })
+}
+
+fn configure_bash_integration(
+    options: &mut Options,
+    shell_path: &str,
+) -> io::Result<Option<ShellIntegrationFiles>> {
+    let Some(shell) = bash_integration_shell(shell_path) else {
+        return Ok(None);
+    };
+    let root = create_shell_integration_root()?;
+    let script = match write_shell_integration_file(&root, "nauterm.bash", BASH_INTEGRATION) {
+        Ok(script) => script,
+        Err(error) => {
+            let _ = std::fs::remove_dir_all(&root);
+            return Err(error);
+        }
+    };
+
+    if let Some(original) = options
+        .env
+        .get("ENV")
+        .cloned()
+        .or_else(|| std::env::var("ENV").ok())
+    {
+        options.env.insert("NAUTERM_BASH_ENV".to_owned(), original);
+        options
+            .env
+            .insert("NAUTERM_BASH_ENV_SET".to_owned(), "1".to_owned());
+    }
+    if !options.env.contains_key("HISTFILE") && std::env::var_os("HISTFILE").is_none() {
+        if let Some(home) = user_home_dir() {
+            options.env.insert(
+                "HISTFILE".to_owned(),
+                Path::new(&home)
+                    .join(".bash_history")
+                    .to_string_lossy()
+                    .into_owned(),
+            );
+            options
+                .env
+                .insert("NAUTERM_BASH_UNEXPORT_HISTFILE".to_owned(), "1".to_owned());
+        }
+    }
+    options
+        .env
+        .insert("ENV".to_owned(), script.to_string_lossy().into_owned());
+    options.shell = Some(shell);
+    Ok(Some(ShellIntegrationFiles { root }))
+}
+
+#[cfg(target_os = "macos")]
+fn bash_integration_shell(shell_path: &str) -> Option<Shell> {
+    let shell_program = resolve_shell_program(shell_path)?;
+    if shell_program == "/bin/bash" {
+        return None;
+    }
+    let Some(user) = std::env::var("USER").ok().filter(|user| !user.is_empty()) else {
+        return Some(Shell::new(shell_program, vec!["--posix".to_owned()]));
+    };
+    let home = std::env::var("HOME").unwrap_or_default();
+    let has_home_hushlogin = !home.is_empty() && Path::new(&home).join(".hushlogin").exists();
+    let flags = if has_home_hushlogin { "-qflp" } else { "-flp" };
+    Some(Shell::new(
+        "/usr/bin/login".to_owned(),
+        vec![
+            flags.to_owned(),
+            user,
+            shell_program,
+            "-l".to_owned(),
+            "--posix".to_owned(),
+        ],
+    ))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn bash_integration_shell(shell_path: &str) -> Option<Shell> {
+    resolve_shell_program(shell_path).map(|program| Shell::new(program, vec!["--posix".to_owned()]))
+}
+
+fn configure_fish_integration(options: &mut Options) -> io::Result<ShellIntegrationFiles> {
+    let root = create_shell_integration_root()?;
+    if let Err(error) = write_shell_integration_file(
+        &root,
+        "fish/vendor_conf.d/nauterm-shell-integration.fish",
+        FISH_INTEGRATION,
+    ) {
+        let _ = std::fs::remove_dir_all(&root);
+        return Err(error);
+    }
+
+    let integration_dir = root.to_string_lossy().into_owned();
+    let original = options
+        .env
+        .get("XDG_DATA_DIRS")
+        .cloned()
+        .or_else(|| std::env::var("XDG_DATA_DIRS").ok())
+        .unwrap_or_else(|| "/usr/local/share:/usr/share".to_owned());
+    options.env.insert(
+        "XDG_DATA_DIRS".to_owned(),
+        format!("{integration_dir}:{original}"),
+    );
+    options
+        .env
+        .insert("NAUTERM_FISH_XDG_DIR".to_owned(), integration_dir);
+    Ok(ShellIntegrationFiles { root })
+}
+
+const ZSH_INTEGRATION: &str = r#"if [[ -n ${NAUTERM_ZSH_ZDOTDIR_SET+x} ]]; then
+  builtin export ZDOTDIR="$NAUTERM_ZSH_ZDOTDIR"
+  builtin unset NAUTERM_ZSH_ZDOTDIR NAUTERM_ZSH_ZDOTDIR_SET
+else
+  builtin unset ZDOTDIR
+fi
+{
+  builtin typeset __nauterm_zshenv=${ZDOTDIR-$HOME}/.zshenv
+  [[ ! -r "$__nauterm_zshenv" ]] || builtin source -- "$__nauterm_zshenv"
+} always {
+  builtin unset __nauterm_zshenv
+}
+if [[ -o interactive && -z ${__nauterm_shell_integration+x} ]]; then
+  builtin typeset -gi __nauterm_shell_integration=1
+  builtin typeset -gi __nauterm_command_active=0
+  builtin typeset -gi __nauterm_ai_armed=0
+  builtin typeset -g __nauterm_ai_token="$NAUTERM_SHELL_INTEGRATION_TOKEN"
+  builtin unset NAUTERM_SHELL_INTEGRATION_TOKEN
+  builtin autoload -Uz add-zsh-hook add-zle-hook-widget
+  __nauterm_command_preexec() {
+    builtin local __nauterm_command_encoded
+    __nauterm_command_encoded=$(builtin print -rn -- "$1" | command base64 2>/dev/null | command tr -d '\r\n')
+    builtin print -rn -- $'\e]4545;CommandStarted;'${__nauterm_command_encoded}$'\a\e]133;C\a'
+    __nauterm_command_active=1
+  }
+  __nauterm_prompt_precmd() {
+    builtin local -i __nauterm_status=$?
+    if (( __nauterm_command_active )); then
+      builtin print -rn -- $'\e]4545;CommandExited;'${__nauterm_status}$'\a\e]133;D;'${__nauterm_status}$'\a'
+      __nauterm_command_active=0
+    fi
+    if (( __nauterm_ai_armed )); then
+      builtin print -rn -- $'\e]777;nauterm-command-end='${__nauterm_ai_token}$';'${__nauterm_status}$'\a'
+      __nauterm_ai_armed=0
+    fi
+    builtin print -rn -- $'\e]7;file://localhost'${PWD}$'\a\e]133;A;cl=line\a'
+  }
+  __nauterm_line_init() {
+    builtin print -rn -- $'\e]133;B\a'
+  }
+  __nauterm_ai_park_line() {
+    if [[ -n "$BUFFER" ]]; then
+      zle -I
+      builtin print -r -- ''
+      BUFFER=''
+      CURSOR=0
+    fi
+    __nauterm_ai_armed=1
+    builtin print -rn -- $'\e]777;nauterm-line-ready='${__nauterm_ai_token}$'\a'
+  }
+  __nauterm_deferred_init() {
+    add-zsh-hook -d precmd __nauterm_deferred_init
+    add-zsh-hook precmd __nauterm_prompt_precmd
+    add-zsh-hook preexec __nauterm_command_preexec
+    add-zle-hook-widget line-init __nauterm_line_init
+    zle -N __nauterm_ai_park_line
+    bindkey '^X^]' __nauterm_ai_park_line
+    __nauterm_prompt_precmd
+  }
+  add-zsh-hook precmd __nauterm_deferred_init
+fi
+"#;
+
+const BASH_INTEGRATION: &str = r#"if [[ $- != *i* ]]; then
+  return
+fi
+
+__nauterm_bootstrap_token="$NAUTERM_SHELL_INTEGRATION_TOKEN"
+unset NAUTERM_SHELL_INTEGRATION_TOKEN
+if [[ -n ${NAUTERM_BASH_ENV_SET+x} ]]; then
+  export ENV="$NAUTERM_BASH_ENV"
+else
+  unset ENV
+fi
+unset NAUTERM_BASH_ENV NAUTERM_BASH_ENV_SET
+set +o posix
+shopt -u inherit_errexit 2>/dev/null
+if [[ -n ${NAUTERM_BASH_UNEXPORT_HISTFILE+x} ]]; then
+  export -n HISTFILE
+  unset NAUTERM_BASH_UNEXPORT_HISTFILE
+fi
+
+if shopt -q login_shell; then
+  [[ -r /etc/profile ]] && source /etc/profile
+  for __nauterm_profile in "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.profile"; do
+    if [[ -r "$__nauterm_profile" ]]; then
+      source "$__nauterm_profile"
+      break
+    fi
+  done
+else
+  for __nauterm_profile in /etc/bash.bashrc /etc/bash/bashrc /etc/bashrc; do
+    if [[ -r "$__nauterm_profile" ]]; then
+      source "$__nauterm_profile"
+      break
+    fi
+  done
+  [[ -r "$HOME/.bashrc" ]] && source "$HOME/.bashrc"
+fi
+unset __nauterm_profile
+
+if [[ -z ${__nauterm_shell_integration+x} ]]; then
+  __nauterm_shell_integration=1
+  __nauterm_ai_armed=0
+  __nauterm_ai_token="$__nauterm_bootstrap_token"
+  __nauterm_last_histcmd=${HISTCMD:-0}
+  unset __nauterm_bootstrap_token
+
+  __nauterm_ai_precmd() {
+    local __nauterm_status=$? __nauterm_command __nauterm_encoded
+    if [[ ${HISTCMD:-0} -gt ${__nauterm_last_histcmd:-0} ]]; then
+      __nauterm_command=$(builtin fc -ln -1 2>/dev/null)
+      if [[ -n "$__nauterm_command" ]]; then
+        __nauterm_encoded=$(printf '%s' "$__nauterm_command" | command base64 2>/dev/null | command tr -d '\r\n')
+        printf '\033]4545;CommandStarted;%s\007\033]133;C\007' "$__nauterm_encoded"
+        printf '\033]4545;CommandExited;%s\007\033]133;D;%s\007' "$__nauterm_status" "$__nauterm_status"
+      fi
+      __nauterm_last_histcmd=$HISTCMD
+    fi
+    if [[ ${__nauterm_ai_armed:-0} -eq 1 ]]; then
+      printf '\033]777;nauterm-command-end=%s;%s\007' "$__nauterm_ai_token" "$__nauterm_status"
+      __nauterm_ai_armed=0
+    fi
+    printf '\033]7;file://localhost%s\007\033]133;A;cl=line\007' "$PWD"
+    return "$__nauterm_status"
+  }
+  __nauterm_ai_park_begin() {
+    printf '\n'
+    __nauterm_ai_armed=1
+  }
+  __nauterm_ai_park_ready() {
+    printf '\033]777;nauterm-line-ready=%s\007' "$__nauterm_ai_token"
+  }
+  bind -x '"\C-x\C-p":__nauterm_ai_park_begin'
+  bind -x '"\C-x\C-o":__nauterm_ai_park_ready'
+  bind '"\C-x\C-]":"\C-x\C-p\C-u\C-x\C-o"'
+
+  if [[ $(declare -p PROMPT_COMMAND 2>/dev/null) == "declare -a"* ]]; then
+    __nauterm_prompt_commands=("${PROMPT_COMMAND[@]}")
+    PROMPT_COMMAND=(__nauterm_ai_precmd "${__nauterm_prompt_commands[@]}")
+    unset __nauterm_prompt_commands
+  else
+    __nauterm_prompt_command=${PROMPT_COMMAND:-}
+    PROMPT_COMMAND="__nauterm_ai_precmd${__nauterm_prompt_command:+;$__nauterm_prompt_command}"
+    unset __nauterm_prompt_command
+  fi
+  [[ "$PS1" == *'\[\e]133;B\a\]' ]] || PS1="${PS1}"'\[\e]133;B\a\]'
+  [[ "$PS2" == *'\[\e]133;B\a\]' ]] || PS2="${PS2}"'\[\e]133;B\a\]'
+fi
+"#;
+
+const FISH_INTEGRATION: &str = r#"if set -q NAUTERM_FISH_XDG_DIR
+    set -l __nauterm_xdg_dirs
+    if set -q XDG_DATA_DIRS
+        for __nauterm_xdg_dir in (string split : -- "$XDG_DATA_DIRS")
+            if test "$__nauterm_xdg_dir" != "$NAUTERM_FISH_XDG_DIR"
+                set -a __nauterm_xdg_dirs "$__nauterm_xdg_dir"
+            end
+        end
+    end
+    if test (count $__nauterm_xdg_dirs) -gt 0
+        set -gx XDG_DATA_DIRS (string join : -- $__nauterm_xdg_dirs)
+    else
+        set -e XDG_DATA_DIRS
+    end
+    set -e NAUTERM_FISH_XDG_DIR
+end
+
+status --is-interactive; or return
+set -q __nauterm_shell_integration; and return
+set -g __nauterm_shell_integration 1
+set -g __nauterm_ai_armed 0
+set -g __nauterm_ai_token "$NAUTERM_SHELL_INTEGRATION_TOKEN"
+set -e NAUTERM_SHELL_INTEGRATION_TOKEN
+
+function __nauterm_setup --on-event fish_prompt
+    functions -e __nauterm_setup
+
+    function __nauterm_prompt_start --on-event fish_prompt
+        printf '\033]7;file://localhost%s\007\033]133;A;cl=line\007' $PWD
+    end
+    function __nauterm_command_preexec --on-event fish_preexec
+        set -l __nauterm_encoded (printf '%s' "$argv[1]" | command base64 2>/dev/null | string collect | string replace -a \n '')
+        printf '\033]4545;CommandStarted;%s\007\033]133;C\007' $__nauterm_encoded
+    end
+    function __nauterm_command_postexec --on-event fish_postexec
+        set -l __nauterm_status $status
+        printf '\033]4545;CommandExited;%s\007\033]133;D;%s\007' $__nauterm_status $__nauterm_status
+        if test $__nauterm_ai_armed -eq 1
+            printf '\033]777;nauterm-command-end=%s;%s\007' $__nauterm_ai_token $__nauterm_status
+            set -g __nauterm_ai_armed 0
+        end
+    end
+    function __nauterm_ai_park_line
+        if test -n (commandline)
+            echo
+            commandline -r ''
+            commandline -f repaint
+        end
+        set -g __nauterm_ai_armed 1
+        printf '\033]777;nauterm-line-ready=%s\007' $__nauterm_ai_token
+    end
+
+    functions -e __nauterm_original_fish_prompt 2>/dev/null
+    functions -c fish_prompt __nauterm_original_fish_prompt
+    function fish_prompt
+        __nauterm_original_fish_prompt
+        printf '\033]133;B\007'
+    end
+    bind \cx\c] __nauterm_ai_park_line
+    __nauterm_prompt_start
+end
+"#;
 
 fn shell_name(shell_path: &str) -> Option<&str> {
     Path::new(shell_path).file_name()?.to_str()
@@ -716,7 +1123,7 @@ fn window_size(geometry: TerminalGeometry) -> WindowSize {
 mod shutdown_tests {
     #[cfg(target_os = "macos")]
     use super::LocalPty;
-    use super::{configure_history_filtering, join_worker};
+    use super::{configure_history_filtering, configure_shell_integration, join_worker};
     #[cfg(target_os = "macos")]
     use crate::terminal::{TerminalGeometry, TerminalOptions};
     use alacritty_terminal::tty::Options;
@@ -760,6 +1167,202 @@ mod shutdown_tests {
             options.env.get("HISTCONTROL").map(String::as_str),
             Some("ignorespace:ignoredups")
         );
+    }
+
+    #[test]
+    fn zsh_integration_is_loaded_before_the_shell_without_typing_a_command() {
+        let mut options = Options::default();
+        options
+            .env
+            .insert("ZDOTDIR".to_owned(), "/custom/zsh".to_owned());
+
+        let files = configure_shell_integration(&mut options, Some("/bin/zsh"))
+            .expect("configure shell integration")
+            .expect("zsh integration files");
+        let temporary_zdotdir = options
+            .env
+            .get("ZDOTDIR")
+            .expect("temporary ZDOTDIR")
+            .clone();
+
+        assert_eq!(
+            options.env.get("NAUTERM_ZSH_ZDOTDIR").map(String::as_str),
+            Some("/custom/zsh")
+        );
+        assert_eq!(
+            options
+                .env
+                .get("NAUTERM_ZSH_ZDOTDIR_SET")
+                .map(String::as_str),
+            Some("1")
+        );
+        assert!(std::path::Path::new(&temporary_zdotdir)
+            .join(".zshenv")
+            .is_file());
+
+        drop(files);
+        assert!(!std::path::Path::new(&temporary_zdotdir).exists());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn zsh_accepts_the_generated_startup_integration() {
+        let mut options = Options::default();
+        options.env.insert(
+            "ZDOTDIR".to_owned(),
+            "/dev/null/nauterm-no-user-config".to_owned(),
+        );
+        options.env.insert(
+            "NAUTERM_SHELL_INTEGRATION_TOKEN".to_owned(),
+            "test-token".to_owned(),
+        );
+        let _files = configure_shell_integration(&mut options, Some("/bin/zsh"))
+            .expect("configure shell integration")
+            .expect("zsh integration files");
+
+        let output = std::process::Command::new("/bin/zsh")
+            .args([
+                "-dic",
+                "[[ $__nauterm_ai_token == test-token ]] && [[ $(whence -w __nauterm_ai_park_line) == *function* ]]",
+            ])
+            .envs(&options.env)
+            .output()
+            .expect("start zsh");
+
+        assert!(
+            output.status.success(),
+            "zsh rejected startup integration: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[test]
+    fn unsupported_shell_does_not_mutate_startup_environment() {
+        let mut options = Options::default();
+        let files = configure_shell_integration(&mut options, Some("/bin/dash"))
+            .expect("configure shell integration");
+
+        assert!(files.is_none());
+        assert!(!options.env.contains_key("ZDOTDIR"));
+    }
+
+    #[test]
+    fn fish_integration_uses_and_then_restores_xdg_data_dirs() {
+        let mut options = Options::default();
+        options
+            .env
+            .insert("XDG_DATA_DIRS".to_owned(), "/custom/share".to_owned());
+        options.env.insert(
+            "NAUTERM_SHELL_INTEGRATION_TOKEN".to_owned(),
+            "test-token".to_owned(),
+        );
+        let files = configure_shell_integration(&mut options, Some("/usr/local/bin/fish"))
+            .expect("configure fish integration")
+            .expect("fish integration files");
+        let integration_dir = options
+            .env
+            .get("NAUTERM_FISH_XDG_DIR")
+            .expect("fish integration directory");
+
+        let expected_xdg_data_dirs = format!("{integration_dir}:/custom/share");
+        assert_eq!(
+            options.env.get("XDG_DATA_DIRS").map(String::as_str),
+            Some(expected_xdg_data_dirs.as_str())
+        );
+        assert!(files
+            .root
+            .join("fish/vendor_conf.d/nauterm-shell-integration.fish")
+            .is_file());
+
+        let Some(fish) = super::resolve_shell_program("fish") else {
+            return;
+        };
+        let output = std::process::Command::new(fish)
+            .args([
+                "-i",
+                "-c",
+                "emit fish_prompt; fish_prompt; functions -q __nauterm_ai_park_line; and test \"$__nauterm_ai_token\" = test-token; and test \"$XDG_DATA_DIRS\" = /custom/share",
+            ])
+            .envs(&options.env)
+            .output()
+            .expect("start fish with integration");
+        assert!(
+            output.status.success(),
+            "fish did not load startup integration: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(output
+            .stdout
+            .windows(b"\x1b]133;A;cl=line\x07".len())
+            .any(|window| window == b"\x1b]133;A;cl=line\x07"));
+        assert!(output
+            .stdout
+            .windows(b"\x1b]133;B\x07".len())
+            .any(|window| window == b"\x1b]133;B\x07"));
+    }
+
+    #[test]
+    fn generated_bash_and_fish_scripts_pass_available_shell_syntax_checks() {
+        let bash = std::process::Command::new("/bin/bash")
+            .args(["-n", "-c", super::BASH_INTEGRATION])
+            .status()
+            .expect("check bash integration syntax");
+        assert!(bash.success());
+
+        let bash_root = super::create_shell_integration_root().expect("create bash test root");
+        let bash_files = super::ShellIntegrationFiles { root: bash_root };
+        let bash_script = super::write_shell_integration_file(
+            &bash_files.root,
+            "nauterm.bash",
+            super::BASH_INTEGRATION,
+        )
+        .expect("write bash integration");
+        let bash = std::process::Command::new("/bin/bash")
+            .args([
+                "--noprofile",
+                "--norc",
+                "-ic",
+                "source \"$NAUTERM_TEST_SCRIPT\"; [[ $(type -t __nauterm_ai_precmd) == function ]] && [[ $__nauterm_ai_token == test-token ]] && ! shopt -qo posix",
+            ])
+            .env("HOME", &bash_files.root)
+            .env("NAUTERM_TEST_SCRIPT", bash_script)
+            .env("NAUTERM_SHELL_INTEGRATION_TOKEN", "test-token")
+            .output()
+            .expect("start bash with integration");
+        assert!(
+            bash.status.success(),
+            "bash did not load startup integration: {}",
+            String::from_utf8_lossy(&bash.stderr)
+        );
+
+        let Some(fish) = super::resolve_shell_program("fish") else {
+            return;
+        };
+        let root = super::create_shell_integration_root().expect("create integration root");
+        let files = super::ShellIntegrationFiles { root };
+        let script = super::write_shell_integration_file(
+            &files.root,
+            "nauterm.fish",
+            super::FISH_INTEGRATION,
+        )
+        .expect("write fish integration");
+        let fish = std::process::Command::new(fish)
+            .arg("-n")
+            .arg(script)
+            .status()
+            .expect("check fish integration syntax");
+        assert!(fish.success());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn apple_system_bash_keeps_the_safe_fallback_path() {
+        let mut options = Options::default();
+        let files = configure_shell_integration(&mut options, Some("/bin/bash"))
+            .expect("configure bash integration");
+
+        assert!(files.is_none());
+        assert!(!options.env.contains_key("ENV"));
     }
 
     #[cfg(target_os = "macos")]

@@ -630,6 +630,19 @@ pub extern "C" fn nauterm_session_command_block_at(
 }
 
 #[no_mangle]
+pub extern "C" fn nauterm_session_prompt_click_move(
+    session_id: SessionId,
+    offset: i64,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let movement = with_session_manager(None, |manager| {
+            manager.prompt_click_move(session_id, offset)
+        });
+        string_to_c_ptr(serde_json::to_string(&movement).unwrap_or_else(|_| "null".to_owned()))
+    })
+}
+
+#[no_mangle]
 pub extern "C" fn nauterm_session_set_wakeup_callback(
     session_id: SessionId,
     callback: Option<extern "C" fn(*mut c_void)>,

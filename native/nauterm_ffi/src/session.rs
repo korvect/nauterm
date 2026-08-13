@@ -1011,6 +1011,17 @@ impl SessionManager {
             .flatten()
     }
 
+    pub fn prompt_click_move(
+        &self,
+        id: SessionId,
+        offset: i64,
+    ) -> Option<crate::terminal::TerminalPromptClickMove> {
+        self.sessions
+            .get(&id)?
+            .call(move |session| session.engine.prompt_click_move(offset))
+            .flatten()
+    }
+
     pub fn set_wakeup_callback(&mut self, id: SessionId, callback: Option<WakeupCallback>) -> bool {
         let Some(actor) = self.sessions.get(&id) else {
             return false;

@@ -210,6 +210,10 @@ class NativeReplayTerminalDriver implements TerminalDriver {
   }
 
   @override
+  TerminalPromptClickMove? promptClickMove(TerminalCellPosition position) =>
+      null;
+
+  @override
   void clear() {
     write('\x1b[2J\x1b[3J\x1b[H');
   }

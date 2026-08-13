@@ -378,6 +378,8 @@ pub struct TerminalEngine {
     command_block_order: VecDeque<u64>,
     command_block_marker_cache: RefCell<Option<CommandBlockMarkers>>,
     current_working_directory: Option<String>,
+    prompt_click_enabled: bool,
+    prompt_input_active: bool,
     size: TerminalGeometry,
     options: TerminalOptions,
     alt_screen_cursor_style: Option<CursorStyle>,
@@ -483,6 +485,117 @@ pub struct TerminalCommandBlock {
     pub shell_integrated: bool,
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Serialize)]
+pub struct TerminalPromptClickMove {
+    pub left: usize,
+    pub right: usize,
+}
+
+const MAX_PROMPT_CLICK_FALLBACK_CELLS: i64 = 500;
+
+pub(crate) fn prompt_click_fallback_move(
+    options: &TerminalOptions,
+    offset: i64,
+    cursor_offset: i64,
+    columns: usize,
+    rows: usize,
+) -> Option<TerminalPromptClickMove> {
+    if options.command.is_some()
+        || !shell_supports_prompt_click_fallback(options.shell_path.as_deref())
+        || columns == 0
+        || rows == 0
+        || offset < 0
+        || offset >= (columns * rows) as i64
+    {
+        return None;
+    }
+
+    prompt_click_geometric_move(offset, cursor_offset, columns, rows)
+}
+
+pub(crate) fn prompt_click_nested_shell_move(
+    command: Option<&str>,
+    offset: i64,
+    cursor_offset: i64,
+    columns: usize,
+    rows: usize,
+) -> Option<TerminalPromptClickMove> {
+    if !command.is_some_and(command_launches_interactive_shell) {
+        return None;
+    }
+
+    prompt_click_geometric_move(offset, cursor_offset, columns, rows)
+}
+
+fn prompt_click_geometric_move(
+    offset: i64,
+    cursor_offset: i64,
+    columns: usize,
+    rows: usize,
+) -> Option<TerminalPromptClickMove> {
+    if columns == 0 || rows == 0 || offset < 0 || offset >= (columns * rows) as i64 {
+        return None;
+    }
+
+    let distance = (offset - cursor_offset).clamp(
+        -MAX_PROMPT_CLICK_FALLBACK_CELLS,
+        MAX_PROMPT_CLICK_FALLBACK_CELLS,
+    );
+    Some(if distance < 0 {
+        TerminalPromptClickMove {
+            left: (-distance) as usize,
+            right: 0,
+        }
+    } else {
+        TerminalPromptClickMove {
+            left: 0,
+            right: distance as usize,
+        }
+    })
+}
+
+fn command_launches_interactive_shell(command: &str) -> bool {
+    let mut words = command.split_ascii_whitespace();
+    let mut program = words.next().unwrap_or_default();
+    if matches!(program, "command" | "exec") {
+        program = words.next().unwrap_or_default();
+    }
+    let name = std::path::Path::new(program)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    if !matches!(name.as_str(), "zsh" | "rzsh" | "bash" | "rbash" | "fish") {
+        #[cfg(target_os = "macos")]
+        if name != "sh" {
+            return false;
+        }
+        #[cfg(not(target_os = "macos"))]
+        return false;
+    }
+
+    words.all(|argument| matches!(argument, "-i" | "-l" | "--interactive" | "--login"))
+}
+
+fn shell_supports_prompt_click_fallback(shell_path: Option<&str>) -> bool {
+    let Some(shell_path) = shell_path else {
+        return false;
+    };
+    let name = std::path::Path::new(shell_path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    if matches!(name.as_str(), "zsh" | "rzsh" | "bash" | "rbash" | "fish") {
+        return true;
+    }
+    #[cfg(target_os = "macos")]
+    if name == "sh" && shell_path == "/bin/sh" {
+        return true;
+    }
+    false
+}
+
 impl TerminalSearchResult {
     pub fn not_found(columns: usize, rows: usize) -> Self {
         Self {
@@ -543,6 +656,7 @@ pub trait TerminalEmulator {
     fn plain_text(&self) -> String;
     fn selection_text(&self, start: i64, end: i64) -> String;
     fn command_block_at(&self, offset: i64) -> Option<TerminalCommandBlock>;
+    fn prompt_click_move(&self, offset: i64) -> Option<TerminalPromptClickMove>;
     fn clipboard(&self) -> String;
     fn bell_count(&self) -> u64;
 }
@@ -600,6 +714,8 @@ impl TerminalEngine {
             command_block_order: VecDeque::new(),
             command_block_marker_cache: RefCell::new(None),
             current_working_directory: None,
+            prompt_click_enabled: false,
+            prompt_input_active: false,
             size,
             options,
             alt_screen_cursor_style: None,
@@ -990,10 +1106,21 @@ impl TerminalEngine {
         if self.is_alt_screen() {
             return;
         }
-        match payload {
-            b"133;A" => self.mark_command_block_start(),
-            b"133;B" => self.mark_command_input_start(),
-            _ => {}
+        if payload == b"133;A" || payload.starts_with(b"133;A;") {
+            self.prompt_click_enabled = payload
+                .split(|byte| *byte == b';')
+                .any(|option| option == b"cl=line");
+            self.prompt_input_active = false;
+            self.mark_command_block_start();
+        } else if payload == b"133;B" || payload.starts_with(b"133;B;") {
+            self.prompt_input_active = true;
+            self.mark_command_input_start();
+        } else if payload == b"133;C"
+            || payload.starts_with(b"133;C;")
+            || payload == b"133;D"
+            || payload.starts_with(b"133;D;")
+        {
+            self.prompt_input_active = false;
         }
     }
 
@@ -1312,6 +1439,93 @@ impl TerminalEngine {
         })
     }
 
+    pub fn prompt_click_move(&self, offset: i64) -> Option<TerminalPromptClickMove> {
+        if self.is_alt_screen() || self.size.columns == 0 {
+            return None;
+        }
+
+        let grid = self.term.grid();
+        let cursor = grid.cursor.point;
+        let cursor_offset =
+            cursor.line.0 as i64 * self.size.columns as i64 + cursor.column.0 as i64;
+        if !self.prompt_click_enabled {
+            return prompt_click_fallback_move(
+                &self.options,
+                offset,
+                cursor_offset,
+                self.size.columns,
+                self.size.rows,
+            );
+        }
+        if !self.prompt_input_active {
+            let command = (!self
+                .command_block_exit_codes
+                .contains_key(&self.command_block_id))
+            .then(|| self.command_block_commands.get(&self.command_block_id))
+            .flatten()
+            .map(String::as_str);
+            return prompt_click_nested_shell_move(
+                command,
+                offset,
+                cursor_offset,
+                self.size.columns,
+                self.size.rows,
+            );
+        }
+        let block = self.integrated_command_block_at(cursor_offset)?;
+        let input_start = block.input_start?;
+        if block.completed || offset < block.start || cursor_offset < input_start {
+            return None;
+        }
+
+        // Alacritty doesn't retain OSC 133 semantic content per cell. Rebuild
+        // the active input interval from the tracked B marker, the current
+        // logical (soft-wrapped) line, and the cursor. This keeps the same
+        // contract as Ghostty while remaining stable through reflow.
+        let input_row = input_start.div_euclid(self.size.columns as i64);
+        let mut end_row = cursor.line.0 as i64;
+        if input_row > end_row {
+            return None;
+        }
+        while end_row + 1 < self.size.rows as i64 {
+            let line = Line(end_row as i32);
+            let last = Column(self.size.columns - 1);
+            if !grid[line][last].flags.contains(Flags::WRAPLINE) {
+                break;
+            }
+            end_row += 1;
+        }
+
+        let mut input_end = cursor_offset;
+        let scan_end = ((end_row + 1) * self.size.columns as i64).min(block.end);
+        for candidate in input_start.max(0)..scan_end {
+            let line = Line((candidate / self.size.columns as i64) as i32);
+            let column = Column((candidate % self.size.columns as i64) as usize);
+            let cell = &grid[line][column];
+            if cell.c != ' '
+                || cell
+                    .zerowidth()
+                    .is_some_and(|characters| !characters.is_empty())
+            {
+                input_end = input_end.max(candidate + 1);
+            }
+        }
+
+        let destination = offset.clamp(input_start, input_end);
+        let distance = destination - cursor_offset;
+        Some(if distance < 0 {
+            TerminalPromptClickMove {
+                left: (-distance) as usize,
+                right: 0,
+            }
+        } else {
+            TerminalPromptClickMove {
+                left: 0,
+                right: distance as usize,
+            }
+        })
+    }
+
     fn integrated_command_block_at(&self, offset: i64) -> Option<TerminalCommandBlock> {
         let grid = self.term.grid();
         let columns = grid.columns() as i64;
@@ -1484,6 +1698,10 @@ impl TerminalEmulator for TerminalEngine {
 
     fn command_block_at(&self, offset: i64) -> Option<TerminalCommandBlock> {
         TerminalEngine::command_block_at(self, offset)
+    }
+
+    fn prompt_click_move(&self, offset: i64) -> Option<TerminalPromptClickMove> {
+        TerminalEngine::prompt_click_move(self, offset)
     }
 
     fn clipboard(&self) -> String {
@@ -2925,5 +3143,122 @@ mod tests {
         }
 
         output
+    }
+
+    #[test]
+    fn prompt_click_move_matches_ghostty_line_navigation_contract() {
+        let mut terminal = TerminalEngine::new(20, 4);
+        terminal.write_bytes(b"previous\r\n\x1b]133;A;cl=line\x07$ \x1b]133;B\x07hello");
+
+        assert_eq!(
+            terminal.prompt_click_move(20 + 3),
+            Some(TerminalPromptClickMove { left: 4, right: 0 })
+        );
+        assert_eq!(
+            terminal.prompt_click_move(20),
+            Some(TerminalPromptClickMove { left: 5, right: 0 })
+        );
+        assert_eq!(
+            terminal.prompt_click_move(20 + 15),
+            Some(TerminalPromptClickMove::default())
+        );
+        assert_eq!(terminal.prompt_click_move(0), None);
+    }
+
+    #[test]
+    fn prompt_click_move_falls_back_for_known_line_editors() {
+        let options = TerminalOptions {
+            shell_path: Some("/usr/local/bin/bash".to_owned()),
+            ..TerminalOptions::default()
+        };
+        let mut terminal = TerminalEngine::new_with_options(20, 4, options);
+        terminal.write_bytes(b"$ hello");
+
+        assert_eq!(
+            terminal.prompt_click_move(3),
+            Some(TerminalPromptClickMove { left: 4, right: 0 })
+        );
+        assert_eq!(
+            terminal.prompt_click_move(15),
+            Some(TerminalPromptClickMove { left: 0, right: 8 })
+        );
+    }
+
+    #[test]
+    fn semantic_prompt_click_does_not_fall_back_outside_shell_input() {
+        let options = TerminalOptions {
+            shell_path: Some("/usr/local/bin/bash".to_owned()),
+            ..TerminalOptions::default()
+        };
+        let mut terminal = TerminalEngine::new_with_options(20, 4, options);
+        terminal.write_bytes(b"\x1b]133;A;cl=line\x07$ \x1b]133;B\x07hello\x1b]133;C\x07");
+
+        assert_eq!(terminal.prompt_click_move(3), None);
+    }
+
+    #[test]
+    fn semantic_prompt_click_falls_back_inside_a_nested_bash() {
+        let options = TerminalOptions {
+            shell_path: Some("/usr/local/bin/zsh".to_owned()),
+            ..TerminalOptions::default()
+        };
+        let mut terminal = TerminalEngine::new_with_options(20, 4, options);
+        terminal.write_bytes(
+            b"\x1b]133;A;cl=line\x07$ \x1b]133;B\x07bash\x1b]4545;CommandStarted;YmFzaA==\x07\x1b]133;C\x07\r\nnested$ hello",
+        );
+
+        assert_eq!(
+            terminal.prompt_click_move(20 + 9),
+            Some(TerminalPromptClickMove { left: 4, right: 0 })
+        );
+    }
+
+    #[test]
+    fn semantic_prompt_click_does_not_fall_back_for_a_shell_script() {
+        let options = TerminalOptions {
+            shell_path: Some("/usr/local/bin/zsh".to_owned()),
+            ..TerminalOptions::default()
+        };
+        let mut terminal = TerminalEngine::new_with_options(20, 4, options);
+        terminal.write_bytes(
+            b"\x1b]133;A;cl=line\x07$ \x1b]133;B\x07bash script.sh\x1b]4545;CommandStarted;YmFzaCBzY3JpcHQuc2g=\x07\x1b]133;C\x07\r\noutput",
+        );
+
+        assert_eq!(terminal.prompt_click_move(20 + 3), None);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn semantic_prompt_click_falls_back_inside_macos_sh() {
+        assert!(command_launches_interactive_shell("sh"));
+        assert!(command_launches_interactive_shell("exec /bin/sh -l"));
+    }
+
+    #[test]
+    fn prompt_click_move_does_not_fall_back_for_dash() {
+        let options = TerminalOptions {
+            shell_path: Some("/bin/dash".to_owned()),
+            ..TerminalOptions::default()
+        };
+        let mut terminal = TerminalEngine::new_with_options(20, 4, options);
+        terminal.write_bytes(b"$ hello");
+
+        assert_eq!(terminal.prompt_click_move(3), None);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn prompt_click_move_supports_the_macos_system_sh_line_editor() {
+        let options = TerminalOptions {
+            shell_path: Some("/bin/sh".to_owned()),
+            ..TerminalOptions::default()
+        };
+        let mut terminal = TerminalEngine::new_with_options(20, 4, options);
+        terminal.write_bytes(b"$ hello");
+
+        assert_eq!(
+            terminal.prompt_click_move(3),
+            Some(TerminalPromptClickMove { left: 4, right: 0 })
+        );
     }
 }

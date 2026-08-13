@@ -2669,6 +2669,10 @@ class _ExitingTerminalDriver implements TerminalDriver {
   }
 
   @override
+  TerminalPromptClickMove? promptClickMove(TerminalCellPosition position) =>
+      null;
+
+  @override
   void clear() {}
 
   @override

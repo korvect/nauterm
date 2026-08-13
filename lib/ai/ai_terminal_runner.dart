@@ -259,6 +259,15 @@ class AiTerminalCommandRunner {
     if (kind == null || !terminalShellSupportsStructuredIntegration(kind)) {
       return null;
     }
+    if (!remoteSession) {
+      final token = controller.shellIntegrationToken;
+      if (token != null) {
+        if (_currentTerminalLine(controller.snapshot).trim().isEmpty) {
+          await _waitForInitialShellOutput(controller);
+        }
+        return TerminalShellIntegration(kind, token);
+      }
+    }
     if (controller.supportsShellIntegration &&
         _currentTerminalLine(controller.snapshot).trim().isEmpty) {
       await _waitForInitialShellOutput(controller);

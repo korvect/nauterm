@@ -128,6 +128,16 @@ class TerminalCommandBlock {
   final bool shellIntegrated;
 }
 
+@immutable
+class TerminalPromptClickMove {
+  const TerminalPromptClickMove({required this.left, required this.right});
+
+  final int left;
+  final int right;
+
+  bool get isEmpty => left == 0 && right == 0;
+}
+
 TerminalSelection? terminalWordSelectionAt(
   TerminalSnapshot snapshot,
   TerminalCellPosition position,

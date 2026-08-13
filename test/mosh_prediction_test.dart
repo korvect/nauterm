@@ -315,6 +315,10 @@ class _PredictionDriver implements TerminalDriver {
   }
 
   @override
+  TerminalPromptClickMove? promptClickMove(TerminalCellPosition position) =>
+      null;
+
+  @override
   bool suppressOutputUntil(Uint8List marker) => false;
 
   @override

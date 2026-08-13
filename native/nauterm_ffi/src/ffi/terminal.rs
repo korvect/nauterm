@@ -317,6 +317,27 @@ pub unsafe extern "C" fn nauterm_terminal_command_block_at(
 /// # Safety
 ///
 /// `handle` must either be null or a live pointer returned by
+/// `nauterm_terminal_create`. The returned string must be released with
+/// `nauterm_string_free`.
+#[no_mangle]
+pub unsafe extern "C" fn nauterm_terminal_prompt_click_move(
+    handle: *mut TerminalHandle,
+    offset: i64,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let Some(handle) = handle_ref(handle) else {
+            return ptr::null_mut();
+        };
+        let movement = handle
+            .call(move |terminal| terminal.prompt_click_move(offset))
+            .flatten();
+        string_to_c_ptr(serde_json::to_string(&movement).unwrap_or_else(|_| "null".to_owned()))
+    })
+}
+
+/// # Safety
+///
+/// `handle` must either be null or a live pointer returned by
 /// `nauterm_terminal_create`.
 #[no_mangle]
 pub unsafe extern "C" fn nauterm_terminal_start_local_pty(handle: *mut TerminalHandle) -> bool {

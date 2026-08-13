@@ -862,6 +862,7 @@ void main() {
       driver: _SnapshotDriver(
         memory.snapshot,
         commandBlock: commandBlock,
+        promptClickMovement: const TerminalPromptClickMove(left: 4, right: 0),
         preserveSnapshotOnResize: true,
       ),
       onInput: inputs.add,
@@ -881,7 +882,7 @@ void main() {
     expect(_terminalPainter(tester).commandBlockSelection, isNull);
   });
 
-  testWidgets('option click moves on pointer down despite release drift', (
+  testWidgets('option click does not move after dragging to another cell', (
     tester,
   ) async {
     final inputs = <String>[];
@@ -891,6 +892,7 @@ void main() {
       driver: _SnapshotDriver(
         memory.snapshot,
         preserveSnapshotOnResize: true,
+        promptClickMovement: const TerminalPromptClickMove(left: 4, right: 0),
         commandBlock: const TerminalCommandBlock(
           id: 1,
           selection: TerminalSelection(start: 0, end: 80 * 8),
@@ -910,16 +912,16 @@ void main() {
     await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
     await gesture.down(_cellCenter(metrics, column: 15, row: 0));
     await tester.pump();
-    expect(inputs, ['\x1b[D\x1b[D\x1b[D\x1b[D']);
+    expect(inputs, isEmpty);
 
     await gesture.moveTo(_cellCenter(metrics, column: 17, row: 0));
     await gesture.up();
     await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
     await tester.pump();
-    expect(inputs, hasLength(1));
+    expect(inputs, isEmpty);
   });
 
-  testWidgets('option click clamps positions to current command input', (
+  testWidgets('option click ignores positions before current command input', (
     tester,
   ) async {
     final inputs = <String>[];
@@ -952,7 +954,7 @@ void main() {
     await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
     await tester.pump();
 
-    expect(inputs, [List.filled(6, '\x1b[D').join()]);
+    expect(inputs, isEmpty);
   });
 
   testWidgets('option click cursor movement can be disabled', (tester) async {
@@ -983,41 +985,76 @@ void main() {
     expect(inputs, isEmpty);
   });
 
-  testWidgets(
-    'option click falls back to horizontal movement without a boundary',
-    (tester) async {
-      final inputs = <String>[];
-      final memory = MemoryTerminalDriver(columns: 80, rows: 8);
-      memory.write('custom prompt abcdef');
-      final controller = TerminalController(
-        driver: _SnapshotDriver(
-          memory.snapshot,
-          preserveSnapshotOnResize: true,
-          commandBlock: const TerminalCommandBlock(
-            id: 1,
-            selection: TerminalSelection(start: 0, end: 80 * 8),
-            shellIntegrated: true,
-          ),
+  testWidgets('option click is ignored without a shell input boundary', (
+    tester,
+  ) async {
+    final inputs = <String>[];
+    final memory = MemoryTerminalDriver(columns: 80, rows: 8);
+    memory.write('custom prompt abcdef');
+    final controller = TerminalController(
+      driver: _SnapshotDriver(
+        memory.snapshot,
+        preserveSnapshotOnResize: true,
+        commandBlock: const TerminalCommandBlock(
+          id: 1,
+          selection: TerminalSelection(start: 0, end: 80 * 8),
+          shellIntegrated: true,
         ),
-        onInput: inputs.add,
-      );
-      addTearDown(controller.dispose);
-      await _pumpTerminal(tester, controller);
+      ),
+      onInput: inputs.add,
+    );
+    addTearDown(controller.dispose);
+    await _pumpTerminal(tester, controller);
 
-      final metrics = TerminalMetrics.measure(
-        defaultTerminalConfig.font.textStyle(),
-      );
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
-      await tester.tapAt(
-        _cellCenter(metrics, column: 3, row: 0),
-        kind: PointerDeviceKind.mouse,
-      );
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
-      await tester.pump();
+    final metrics = TerminalMetrics.measure(
+      defaultTerminalConfig.font.textStyle(),
+    );
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+    await tester.tapAt(
+      _cellCenter(metrics, column: 3, row: 0),
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+    await tester.pump();
 
-      expect(inputs, [List.filled(17, '\x1b[D').join()]);
-    },
-  );
+    expect(inputs, isEmpty);
+  });
+
+  testWidgets('option click ignores positions after current command input', (
+    tester,
+  ) async {
+    final inputs = <String>[];
+    final memory = MemoryTerminalDriver(columns: 80, rows: 8);
+    memory.write('user@host:~\$ abcdef');
+    final controller = TerminalController(
+      driver: _SnapshotDriver(
+        memory.snapshot,
+        preserveSnapshotOnResize: true,
+        commandBlock: const TerminalCommandBlock(
+          id: 1,
+          selection: TerminalSelection(start: 0, end: 80 * 8),
+          inputStart: 13,
+          shellIntegrated: true,
+        ),
+      ),
+      onInput: inputs.add,
+    );
+    addTearDown(controller.dispose);
+    await _pumpTerminal(tester, controller);
+
+    final metrics = TerminalMetrics.measure(
+      defaultTerminalConfig.font.textStyle(),
+    );
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+    await tester.tapAt(
+      _cellCenter(metrics, column: 30, row: 0),
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+    await tester.pump();
+
+    expect(inputs, isEmpty);
+  });
 
   testWidgets('option click is ignored on the alternate screen', (
     tester,
@@ -1045,6 +1082,39 @@ void main() {
 
     expect(inputs, isEmpty);
   });
+
+  testWidgets(
+    'option click is ignored while an application reports mouse input',
+    (tester) async {
+      final inputs = <String>[];
+      final controller = TerminalController(
+        driver: _SnapshotDriver(
+          TerminalSnapshot.blank(
+            columns: 80,
+            rows: 8,
+            keyboardMode: const TerminalKeyboardMode(mouseReportClick: true),
+          ),
+          promptClickMovement: const TerminalPromptClickMove(left: 4, right: 0),
+        ),
+        onInput: inputs.add,
+      );
+      addTearDown(controller.dispose);
+      await _pumpTerminal(tester, controller);
+
+      final metrics = TerminalMetrics.measure(
+        defaultTerminalConfig.font.textStyle(),
+      );
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+      await tester.tapAt(
+        _cellCenter(metrics, column: 1, row: 0),
+        kind: PointerDeviceKind.mouse,
+      );
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+      await tester.pump();
+
+      expect(inputs, isEmpty);
+    },
+  );
 
   test('cursor movement uses application cursor sequences', () {
     final snapshot = TerminalSnapshot(
@@ -2326,12 +2396,14 @@ class _SnapshotDriver implements TerminalDriver {
     this._snapshot, {
     this.selectionTextValue,
     this.commandBlock,
+    this.promptClickMovement,
     this.preserveSnapshotOnResize = false,
   });
 
   TerminalSnapshot _snapshot;
   final String? selectionTextValue;
   final TerminalCommandBlock? commandBlock;
+  final TerminalPromptClickMove? promptClickMovement;
   final bool preserveSnapshotOnResize;
   int scrolledLines = 0;
 
@@ -2434,6 +2506,10 @@ class _SnapshotDriver implements TerminalDriver {
         ? null
         : TerminalCommandBlock(selection: selection);
   }
+
+  @override
+  TerminalPromptClickMove? promptClickMove(TerminalCellPosition position) =>
+      promptClickMovement;
 
   @override
   void clear() {}
