@@ -37,6 +37,17 @@ void initializeNativeTerminalRuntime() {
   }
 }
 
+bool writeNativeShellIntegrationResources(String dataDirectory) {
+  final nativeDirectory = dataDirectory.toNativeUtf8();
+  try {
+    return _TerminalBindings.open().writeShellIntegrationResources(
+      nativeDirectory,
+    );
+  } finally {
+    calloc.free(nativeDirectory);
+  }
+}
+
 void shutdownNativeTerminalRuntime() {
   if (_nativeTerminalRuntimeShutdown) {
     return;

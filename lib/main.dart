@@ -16,6 +16,7 @@ import 'data/nauterm_data_store.dart';
 import 'data/nauterm_paths.dart';
 import 'terminal/terminal_config.dart';
 import 'terminal/terminal_ffi.dart';
+import 'terminal/shell_integration_installer.dart';
 import 'window/native_windowing.dart';
 import 'window/nauterm_root.dart';
 
@@ -48,6 +49,22 @@ Future<void> main() async {
   } on Object catch (error, stackTrace) {
     // Keep the bundled defaults when the user config cannot be loaded.
     configOperation.fail(error, stackTrace: stackTrace);
+  }
+  if (!Platform.isWindows) {
+    try {
+      if (!writeNativeShellIntegrationResources(paths.dataDirectory.path)) {
+        throw StateError('Native resource writer returned false.');
+      }
+      final installer = ShellIntegrationInstaller(paths: paths);
+      await installer.install();
+    } on Object catch (error, stackTrace) {
+      NautermLog.warning(
+        'shell-integration',
+        'Unable to synchronize nested shell integration.',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
   }
   configureNativeWindowing();
   runWidget(const NautermRoot());

@@ -31,6 +31,9 @@ class NautermPaths {
 
   File get shellHistoryFile => File(_join(dataDirectory.path, 'shell-history'));
 
+  Directory get shellIntegrationDirectory =>
+      Directory(_join(dataDirectory.path, 'shell-integration'));
+
   String get databasePath => databaseFile.path;
 
   Future<void> ensureCreated() async {

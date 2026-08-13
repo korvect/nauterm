@@ -375,6 +375,7 @@ pub struct TerminalEngine {
     command_block_directories: HashMap<u64, String>,
     command_block_commands: HashMap<u64, String>,
     command_block_exit_codes: HashMap<u64, i32>,
+    shell_command_blocks: HashMap<String, u64>,
     command_block_order: VecDeque<u64>,
     command_block_marker_cache: RefCell<Option<CommandBlockMarkers>>,
     current_working_directory: Option<String>,
@@ -711,6 +712,7 @@ impl TerminalEngine {
             command_block_directories: HashMap::new(),
             command_block_commands: HashMap::new(),
             command_block_exit_codes: HashMap::new(),
+            shell_command_blocks: HashMap::new(),
             command_block_order: VecDeque::new(),
             command_block_marker_cache: RefCell::new(None),
             current_working_directory: None,
@@ -1081,23 +1083,29 @@ impl TerminalEngine {
             return;
         }
         if let Some(encoded) = payload.strip_prefix(b"4545;CommandStarted;") {
+            let (aid, encoded) = shell_event_payload(encoded);
             if let Ok(decoded) = base64::engine::general_purpose::STANDARD.decode(encoded) {
                 if let Ok(command) = String::from_utf8(decoded) {
                     let command = command.trim().to_owned();
-                    if !command.is_empty() && self.command_block_id > 0 {
-                        self.command_block_commands
-                            .insert(self.command_block_id, command);
+                    let block_id = aid
+                        .and_then(|aid| self.shell_command_blocks.get(aid).copied())
+                        .unwrap_or(self.command_block_id);
+                    if !command.is_empty() && block_id > 0 {
+                        self.command_block_commands.insert(block_id, command);
                     }
                 }
             }
             return;
         }
         if let Some(status) = payload.strip_prefix(b"4545;CommandExited;") {
+            let (aid, status) = shell_event_payload(status);
             if let Ok(status) = std::str::from_utf8(status) {
                 if let Ok(exit_code) = status.trim().parse::<i32>() {
-                    if self.command_block_id > 0 {
-                        self.command_block_exit_codes
-                            .insert(self.command_block_id, exit_code);
+                    let block_id = aid
+                        .and_then(|aid| self.shell_command_blocks.get(aid).copied())
+                        .unwrap_or(self.command_block_id);
+                    if block_id > 0 {
+                        self.command_block_exit_codes.insert(block_id, exit_code);
                     }
                 }
             }
@@ -1111,10 +1119,16 @@ impl TerminalEngine {
                 .split(|byte| *byte == b';')
                 .any(|option| option == b"cl=line");
             self.prompt_input_active = false;
-            self.mark_command_block_start();
+            let block_id = self.mark_command_block_start();
+            if let Some(aid) = shell_event_aid(payload) {
+                self.shell_command_blocks.insert(aid.to_owned(), block_id);
+            }
         } else if payload == b"133;B" || payload.starts_with(b"133;B;") {
             self.prompt_input_active = true;
-            self.mark_command_input_start();
+            let block_id = shell_event_aid(payload)
+                .and_then(|aid| self.shell_command_blocks.get(aid).copied())
+                .unwrap_or(self.command_block_id);
+            self.mark_command_input_start(block_id);
         } else if payload == b"133;C"
             || payload.starts_with(b"133;C;")
             || payload == b"133;D"
@@ -1124,7 +1138,7 @@ impl TerminalEngine {
         }
     }
 
-    fn mark_command_block_start(&mut self) {
+    fn mark_command_block_start(&mut self) -> u64 {
         let grid = self.term.grid();
         let cursor = grid.cursor.point;
         let first_line = -(grid.history_size() as i32);
@@ -1162,12 +1176,15 @@ impl TerminalEngine {
                 self.command_block_directories.remove(&expired);
                 self.command_block_commands.remove(&expired);
                 self.command_block_exit_codes.remove(&expired);
+                self.shell_command_blocks
+                    .retain(|_, block_id| *block_id != expired);
             }
         }
+        id
     }
 
-    fn mark_command_input_start(&mut self) {
-        if self.command_block_id == 0 {
+    fn mark_command_input_start(&mut self, block_id: u64) {
+        if block_id == 0 {
             return;
         }
         let grid = self.term.grid();
@@ -1180,11 +1197,8 @@ impl TerminalEngine {
         } else {
             (cursor.line, 0, false)
         };
-        let marker = command_block_marker(
-            COMMAND_INPUT_MARKER_PREFIX,
-            self.command_block_id,
-            starts_on_next_line,
-        );
+        let marker =
+            command_block_marker(COMMAND_INPUT_MARKER_PREFIX, block_id, starts_on_next_line);
         let cell = &mut self.term.grid_mut()[marker_line][Column(marker_column)];
         cell.flags.insert(COMMAND_BLOCK_MARKER_FLAG);
         for character in marker {
@@ -1809,6 +1823,25 @@ fn terminal_structured_prompt_prefix(prefix: &str) -> bool {
     path.starts_with('~')
         || path.starts_with('/')
         || path_bytes.len() >= 3 && path_bytes[1] == b':' && matches!(path_bytes[2], b'\\' | b'/')
+}
+
+pub(crate) fn shell_event_payload(payload: &[u8]) -> (Option<&str>, &[u8]) {
+    let Some(separator) = payload.iter().position(|byte| *byte == b';') else {
+        return (None, payload);
+    };
+    let aid = std::str::from_utf8(&payload[..separator])
+        .ok()
+        .filter(|aid| !aid.is_empty());
+    (aid, &payload[separator + 1..])
+}
+
+pub(crate) fn shell_event_aid(payload: &[u8]) -> Option<&str> {
+    payload
+        .split(|byte| *byte == b';')
+        .skip(1)
+        .find_map(|option| option.strip_prefix(b"aid="))
+        .and_then(|aid| std::str::from_utf8(aid).ok())
+        .filter(|aid| !aid.is_empty())
 }
 
 fn shell_integration_directory(payload: &[u8]) -> Option<String> {
@@ -2448,6 +2481,30 @@ mod tests {
             .collect::<Vec<_>>();
         assert!(directories.iter().any(|directory| directory == "/first"));
         assert!(directories.iter().any(|directory| directory == "/second"));
+    }
+
+    #[test]
+    fn nested_shell_events_update_their_own_command_blocks() {
+        let mut terminal = TerminalEngine::new(20, 6);
+        terminal.write_bytes(
+            concat!(
+                "\x1b]133;A;cl=line;aid=outer\x07$ \x1b]133;B;aid=outer\x07bash",
+                "\x1b]4545;CommandStarted;outer;YmFzaA==\x07\x1b]133;C;aid=outer\x07\r\n",
+                "\x1b]133;A;cl=line;aid=child\x07$ \x1b]133;B;aid=child\x07echo hi",
+                "\x1b]4545;CommandStarted;child;ZWNobyBoaQ==\x07\x1b]133;C;aid=child\x07\r\nhi\r\n",
+                "\x1b]4545;CommandExited;child;0\x07\x1b]133;D;0;aid=child\x07",
+                "\x1b]4545;CommandExited;outer;7\x07\x1b]133;D;7;aid=outer\x07",
+            )
+            .as_bytes(),
+        );
+
+        let outer = terminal.shell_command_blocks["outer"];
+        let child = terminal.shell_command_blocks["child"];
+        assert_ne!(outer, child);
+        assert_eq!(terminal.command_block_commands[&outer], "bash");
+        assert_eq!(terminal.command_block_commands[&child], "echo hi");
+        assert_eq!(terminal.command_block_exit_codes[&outer], 7);
+        assert_eq!(terminal.command_block_exit_codes[&child], 0);
     }
 
     #[test]

@@ -90,6 +90,18 @@ void main() {
     ]);
   });
 
+  test('records commands carrying a nested shell instance id', () {
+    final recorder = TerminalSessionRecorder(title: 'Local');
+
+    recorder.recordShellIntegrationOutput(
+      Uint8List.fromList(
+        latin1.encode('\x1b]4545;CommandStarted;child-42;ZWNobyBuZXN0ZWQ=\x07'),
+      ),
+    );
+
+    expect(recorder.snapshot().shellHistory.single.command, 'echo nested');
+  });
+
   test('does not record input that was never executed by the shell', () {
     final recorder = TerminalSessionRecorder(title: 'Local');
 

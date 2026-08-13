@@ -84,6 +84,9 @@ impl LocalPty {
             "TERM".to_owned(),
             terminal_options.terminal_type.term().to_owned(),
         );
+        options
+            .env
+            .insert("NAUTERM_SESSION".to_owned(), "1".to_owned());
         if let Some(color_term) = terminal_options.color_term.env_value() {
             options
                 .env
@@ -319,6 +322,10 @@ fn configure_zsh_integration(options: &mut Options) -> io::Result<ShellIntegrati
     options
         .env
         .insert("ZDOTDIR".to_owned(), root.to_string_lossy().into_owned());
+    options.env.insert(
+        "NAUTERM_SHELL_INTEGRATION_INJECT".to_owned(),
+        "1".to_owned(),
+    );
     Ok(ShellIntegrationFiles { root })
 }
 
@@ -366,6 +373,10 @@ fn configure_bash_integration(
     options
         .env
         .insert("ENV".to_owned(), script.to_string_lossy().into_owned());
+    options.env.insert(
+        "NAUTERM_SHELL_INTEGRATION_INJECT".to_owned(),
+        "1".to_owned(),
+    );
     options.shell = Some(shell);
     Ok(Some(ShellIntegrationFiles { root }))
 }
@@ -424,10 +435,15 @@ fn configure_fish_integration(options: &mut Options) -> io::Result<ShellIntegrat
     options
         .env
         .insert("NAUTERM_FISH_XDG_DIR".to_owned(), integration_dir);
+    options.env.insert(
+        "NAUTERM_SHELL_INTEGRATION_INJECT".to_owned(),
+        "1".to_owned(),
+    );
     Ok(ShellIntegrationFiles { root })
 }
 
-const ZSH_INTEGRATION: &str = r#"if [[ -n ${NAUTERM_ZSH_ZDOTDIR_SET+x} ]]; then
+pub(crate) const ZSH_INTEGRATION: &str = r#"if [[ -n ${NAUTERM_SHELL_INTEGRATION_INJECT+x} ]]; then
+if [[ -n ${NAUTERM_ZSH_ZDOTDIR_SET+x} ]]; then
   builtin export ZDOTDIR="$NAUTERM_ZSH_ZDOTDIR"
   builtin unset NAUTERM_ZSH_ZDOTDIR NAUTERM_ZSH_ZDOTDIR_SET
 else
@@ -439,33 +455,34 @@ fi
 } always {
   builtin unset __nauterm_zshenv
 }
+  builtin unset NAUTERM_SHELL_INTEGRATION_INJECT
+fi
 if [[ -o interactive && -z ${__nauterm_shell_integration+x} ]]; then
   builtin typeset -gi __nauterm_shell_integration=1
   builtin typeset -gi __nauterm_command_active=0
   builtin typeset -gi __nauterm_ai_armed=0
-  builtin typeset -g __nauterm_ai_token="$NAUTERM_SHELL_INTEGRATION_TOKEN"
-  builtin unset NAUTERM_SHELL_INTEGRATION_TOKEN
+  builtin typeset -g __nauterm_ai_token="${NAUTERM_SHELL_INTEGRATION_TOKEN:-$$}"
   builtin autoload -Uz add-zsh-hook add-zle-hook-widget
   __nauterm_command_preexec() {
     builtin local __nauterm_command_encoded
     __nauterm_command_encoded=$(builtin print -rn -- "$1" | command base64 2>/dev/null | command tr -d '\r\n')
-    builtin print -rn -- $'\e]4545;CommandStarted;'${__nauterm_command_encoded}$'\a\e]133;C\a'
+    builtin print -rn -- $'\e]4545;CommandStarted;'$$';'${__nauterm_command_encoded}$'\a\e]133;C;aid='$$$'\a'
     __nauterm_command_active=1
   }
   __nauterm_prompt_precmd() {
     builtin local -i __nauterm_status=$?
     if (( __nauterm_command_active )); then
-      builtin print -rn -- $'\e]4545;CommandExited;'${__nauterm_status}$'\a\e]133;D;'${__nauterm_status}$'\a'
+      builtin print -rn -- $'\e]4545;CommandExited;'$$';'${__nauterm_status}$'\a\e]133;D;'${__nauterm_status}$';aid='$$$'\a'
       __nauterm_command_active=0
     fi
     if (( __nauterm_ai_armed )); then
       builtin print -rn -- $'\e]777;nauterm-command-end='${__nauterm_ai_token}$';'${__nauterm_status}$'\a'
       __nauterm_ai_armed=0
     fi
-    builtin print -rn -- $'\e]7;file://localhost'${PWD}$'\a\e]133;A;cl=line\a'
+    builtin print -rn -- $'\e]7;file://localhost'${PWD}$'\a\e]133;A;cl=line;aid='$$$'\a'
   }
   __nauterm_line_init() {
-    builtin print -rn -- $'\e]133;B\a'
+    builtin print -rn -- $'\e]133;B;aid='$$$'\a'
   }
   __nauterm_ai_park_line() {
     if [[ -n "$BUFFER" ]]; then
@@ -490,12 +507,12 @@ if [[ -o interactive && -z ${__nauterm_shell_integration+x} ]]; then
 fi
 "#;
 
-const BASH_INTEGRATION: &str = r#"if [[ $- != *i* ]]; then
+pub(crate) const BASH_INTEGRATION: &str = r#"if [[ $- != *i* ]]; then
   return
 fi
 
-__nauterm_bootstrap_token="$NAUTERM_SHELL_INTEGRATION_TOKEN"
-unset NAUTERM_SHELL_INTEGRATION_TOKEN
+__nauterm_bootstrap_token="${NAUTERM_SHELL_INTEGRATION_TOKEN:-$BASHPID}"
+if [[ -n ${NAUTERM_SHELL_INTEGRATION_INJECT+x} ]]; then
 if [[ -n ${NAUTERM_BASH_ENV_SET+x} ]]; then
   export ENV="$NAUTERM_BASH_ENV"
 else
@@ -527,6 +544,8 @@ else
   [[ -r "$HOME/.bashrc" ]] && source "$HOME/.bashrc"
 fi
 unset __nauterm_profile
+unset NAUTERM_SHELL_INTEGRATION_INJECT
+fi
 
 if [[ -z ${__nauterm_shell_integration+x} ]]; then
   __nauterm_shell_integration=1
@@ -541,8 +560,8 @@ if [[ -z ${__nauterm_shell_integration+x} ]]; then
       __nauterm_command=$(builtin fc -ln -1 2>/dev/null)
       if [[ -n "$__nauterm_command" ]]; then
         __nauterm_encoded=$(printf '%s' "$__nauterm_command" | command base64 2>/dev/null | command tr -d '\r\n')
-        printf '\033]4545;CommandStarted;%s\007\033]133;C\007' "$__nauterm_encoded"
-        printf '\033]4545;CommandExited;%s\007\033]133;D;%s\007' "$__nauterm_status" "$__nauterm_status"
+        printf '\033]4545;CommandStarted;%s;%s\007\033]133;C;aid=%s\007' "$BASHPID" "$__nauterm_encoded" "$BASHPID"
+        printf '\033]4545;CommandExited;%s;%s\007\033]133;D;%s;aid=%s\007' "$BASHPID" "$__nauterm_status" "$__nauterm_status" "$BASHPID"
       fi
       __nauterm_last_histcmd=$HISTCMD
     fi
@@ -550,7 +569,7 @@ if [[ -z ${__nauterm_shell_integration+x} ]]; then
       printf '\033]777;nauterm-command-end=%s;%s\007' "$__nauterm_ai_token" "$__nauterm_status"
       __nauterm_ai_armed=0
     fi
-    printf '\033]7;file://localhost%s\007\033]133;A;cl=line\007' "$PWD"
+    printf '\033]7;file://localhost%s\007\033]133;A;cl=line;aid=%s\007' "$PWD" "$BASHPID"
     return "$__nauterm_status"
   }
   __nauterm_ai_park_begin() {
@@ -573,12 +592,13 @@ if [[ -z ${__nauterm_shell_integration+x} ]]; then
     PROMPT_COMMAND="__nauterm_ai_precmd${__nauterm_prompt_command:+;$__nauterm_prompt_command}"
     unset __nauterm_prompt_command
   fi
-  [[ "$PS1" == *'\[\e]133;B\a\]' ]] || PS1="${PS1}"'\[\e]133;B\a\]'
-  [[ "$PS2" == *'\[\e]133;B\a\]' ]] || PS2="${PS2}"'\[\e]133;B\a\]'
+  [[ "$PS1" == *'133;B;aid='* ]] || PS1="${PS1}"'\[\e]133;B;aid='"$BASHPID"'\a\]'
+  [[ "$PS2" == *'133;B;aid='* ]] || PS2="${PS2}"'\[\e]133;B;aid='"$BASHPID"'\a\]'
 fi
 "#;
 
-const FISH_INTEGRATION: &str = r#"if set -q NAUTERM_FISH_XDG_DIR
+pub(crate) const FISH_INTEGRATION: &str = r#"if set -q NAUTERM_SHELL_INTEGRATION_INJECT
+if set -q NAUTERM_FISH_XDG_DIR
     set -l __nauterm_xdg_dirs
     if set -q XDG_DATA_DIRS
         for __nauterm_xdg_dir in (string split : -- "$XDG_DATA_DIRS")
@@ -594,27 +614,31 @@ const FISH_INTEGRATION: &str = r#"if set -q NAUTERM_FISH_XDG_DIR
     end
     set -e NAUTERM_FISH_XDG_DIR
 end
+set -e NAUTERM_SHELL_INTEGRATION_INJECT
+end
 
 status --is-interactive; or return
 set -q __nauterm_shell_integration; and return
 set -g __nauterm_shell_integration 1
 set -g __nauterm_ai_armed 0
-set -g __nauterm_ai_token "$NAUTERM_SHELL_INTEGRATION_TOKEN"
-set -e NAUTERM_SHELL_INTEGRATION_TOKEN
+set -g __nauterm_ai_token $fish_pid
+if set -q NAUTERM_SHELL_INTEGRATION_TOKEN
+    set -g __nauterm_ai_token "$NAUTERM_SHELL_INTEGRATION_TOKEN"
+end
 
 function __nauterm_setup --on-event fish_prompt
     functions -e __nauterm_setup
 
     function __nauterm_prompt_start --on-event fish_prompt
-        printf '\033]7;file://localhost%s\007\033]133;A;cl=line\007' $PWD
+        printf '\033]7;file://localhost%s\007\033]133;A;cl=line;aid=%s\007' $PWD $fish_pid
     end
     function __nauterm_command_preexec --on-event fish_preexec
         set -l __nauterm_encoded (printf '%s' "$argv[1]" | command base64 2>/dev/null | string collect | string replace -a \n '')
-        printf '\033]4545;CommandStarted;%s\007\033]133;C\007' $__nauterm_encoded
+        printf '\033]4545;CommandStarted;%s;%s\007\033]133;C;aid=%s\007' $fish_pid $__nauterm_encoded $fish_pid
     end
     function __nauterm_command_postexec --on-event fish_postexec
         set -l __nauterm_status $status
-        printf '\033]4545;CommandExited;%s\007\033]133;D;%s\007' $__nauterm_status $__nauterm_status
+        printf '\033]4545;CommandExited;%s;%s\007\033]133;D;%s;aid=%s\007' $fish_pid $__nauterm_status $__nauterm_status $fish_pid
         if test $__nauterm_ai_armed -eq 1
             printf '\033]777;nauterm-command-end=%s;%s\007' $__nauterm_ai_token $__nauterm_status
             set -g __nauterm_ai_armed 0
@@ -634,7 +658,7 @@ function __nauterm_setup --on-event fish_prompt
     functions -c fish_prompt __nauterm_original_fish_prompt
     function fish_prompt
         __nauterm_original_fish_prompt
-        printf '\033]133;B\007'
+        printf '\033]133;B;aid=%s\007' $fish_pid
     end
     bind \cx\c] __nauterm_ai_park_line
     __nauterm_prompt_start
@@ -1293,12 +1317,12 @@ mod shutdown_tests {
         );
         assert!(output
             .stdout
-            .windows(b"\x1b]133;A;cl=line\x07".len())
-            .any(|window| window == b"\x1b]133;A;cl=line\x07"));
+            .windows(b"\x1b]133;A;cl=line;aid=".len())
+            .any(|window| window == b"\x1b]133;A;cl=line;aid="));
         assert!(output
             .stdout
-            .windows(b"\x1b]133;B\x07".len())
-            .any(|window| window == b"\x1b]133;B\x07"));
+            .windows(b"\x1b]133;B;aid=".len())
+            .any(|window| window == b"\x1b]133;B;aid="));
     }
 
     #[test]

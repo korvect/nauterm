@@ -12,10 +12,10 @@ use std::sync::Once;
 use crate::ffi::FfiTerminalCell;
 use crate::pty::{LocalPty, WakeupCallback};
 use crate::terminal::{
-    prompt_click_fallback_move, prompt_click_nested_shell_move, TerminalCommandBlock,
-    TerminalEmulator, TerminalEmulatorBackend, TerminalGeometry, TerminalGraphicImage,
-    TerminalGraphicPlacement, TerminalOptions, TerminalPromptClickMove, TerminalSearchDirection,
-    TerminalSearchResult, TerminalSnapshot,
+    prompt_click_fallback_move, prompt_click_nested_shell_move, shell_event_aid,
+    shell_event_payload, TerminalCommandBlock, TerminalEmulator, TerminalEmulatorBackend,
+    TerminalGeometry, TerminalGraphicImage, TerminalGraphicPlacement, TerminalOptions,
+    TerminalPromptClickMove, TerminalSearchDirection, TerminalSearchResult, TerminalSnapshot,
 };
 use base64::Engine as _;
 
@@ -569,6 +569,7 @@ pub struct GhosttyTerminalEngine {
     osc_pending: Vec<u8>,
     command_block_id: u64,
     command_blocks: VecDeque<GhosttyCommandBlockRecord>,
+    shell_command_blocks: HashMap<String, u64>,
     current_working_directory: Option<String>,
     prompt_click_enabled: bool,
     prompt_input_active: bool,
@@ -621,6 +622,7 @@ impl GhosttyTerminalEngine {
             osc_pending: Vec::new(),
             command_block_id: 0,
             command_blocks: VecDeque::new(),
+            shell_command_blocks: HashMap::new(),
             current_working_directory: None,
             prompt_click_enabled: false,
             prompt_input_active: false,
@@ -827,11 +829,20 @@ impl GhosttyTerminalEngine {
             return;
         }
         if let Some(encoded) = payload.strip_prefix(b"4545;CommandStarted;") {
+            let (aid, encoded) = shell_event_payload(encoded);
             if let Ok(decoded) = base64::engine::general_purpose::STANDARD.decode(encoded) {
                 if let Ok(command) = String::from_utf8(decoded) {
                     let command = command.trim();
                     if !command.is_empty() {
-                        if let Some(block) = self.command_blocks.back_mut() {
+                        let block_id = aid
+                            .and_then(|aid| self.shell_command_blocks.get(aid).copied())
+                            .unwrap_or(self.command_block_id);
+                        if let Some(block) = self
+                            .command_blocks
+                            .iter_mut()
+                            .rev()
+                            .find(|block| block.id == block_id)
+                        {
                             block.command = Some(command.to_owned());
                         }
                     }
@@ -840,12 +851,21 @@ impl GhosttyTerminalEngine {
             return;
         }
         if let Some(status) = payload.strip_prefix(b"4545;CommandExited;") {
+            let (aid, status) = shell_event_payload(status);
             if let Ok(exit_code) = std::str::from_utf8(status)
                 .unwrap_or_default()
                 .trim()
                 .parse::<i32>()
             {
-                if let Some(block) = self.command_blocks.back_mut() {
+                let block_id = aid
+                    .and_then(|aid| self.shell_command_blocks.get(aid).copied())
+                    .unwrap_or(self.command_block_id);
+                if let Some(block) = self
+                    .command_blocks
+                    .iter_mut()
+                    .rev()
+                    .find(|block| block.id == block_id)
+                {
                     block.exit_code = Some(exit_code);
                 }
             }
@@ -856,7 +876,15 @@ impl GhosttyTerminalEngine {
         }
         if payload == b"133;B" || payload.starts_with(b"133;B;") {
             self.prompt_input_active = true;
-            let Some(block) = self.command_blocks.back_mut() else {
+            let block_id = shell_event_aid(payload)
+                .and_then(|aid| self.shell_command_blocks.get(aid).copied())
+                .unwrap_or(self.command_block_id);
+            let Some(block) = self
+                .command_blocks
+                .iter_mut()
+                .rev()
+                .find(|block| block.id == block_id)
+            else {
                 return;
             };
             let cursor_x = terminal_get_u16(self.terminal, 3).unwrap_or(0);
@@ -922,8 +950,14 @@ impl GhosttyTerminalEngine {
             command: None,
             exit_code: None,
         });
+        if let Some(aid) = shell_event_aid(payload) {
+            self.shell_command_blocks
+                .insert(aid.to_owned(), self.command_block_id);
+        }
         while self.command_blocks.len() > MAX_COMMAND_BLOCK_METADATA {
             if let Some(expired) = self.command_blocks.pop_front() {
+                self.shell_command_blocks
+                    .retain(|_, block_id| *block_id != expired.id);
                 unsafe { ghostty_tracked_grid_ref_free(expired.anchor) };
                 if let Some(input_anchor) = expired.input_anchor {
                     unsafe { ghostty_tracked_grid_ref_free(input_anchor) };
@@ -2892,6 +2926,39 @@ mod tests {
         assert_eq!(block.command.as_deref(), Some("echo hi"));
         assert_eq!(block.exit_code, Some(0));
         assert!(block.completed);
+    }
+
+    #[test]
+    fn nested_shell_events_update_their_own_ghostty_command_blocks() {
+        let mut terminal = GhosttyTerminalEngine::new(20, 6, TerminalOptions::default()).unwrap();
+        terminal.write_bytes(
+            concat!(
+                "\x1b]133;A;cl=line;aid=outer\x07$ \x1b]133;B;aid=outer\x07bash",
+                "\x1b]4545;CommandStarted;outer;YmFzaA==\x07\x1b]133;C;aid=outer\x07\r\n",
+                "\x1b]133;A;cl=line;aid=child\x07$ \x1b]133;B;aid=child\x07echo hi",
+                "\x1b]4545;CommandStarted;child;ZWNobyBoaQ==\x07\x1b]133;C;aid=child\x07\r\nhi\r\n",
+                "\x1b]4545;CommandExited;child;0\x07\x1b]133;D;0;aid=child\x07",
+                "\x1b]4545;CommandExited;outer;7\x07\x1b]133;D;7;aid=outer\x07",
+            )
+            .as_bytes(),
+        );
+
+        let outer = terminal.shell_command_blocks["outer"];
+        let child = terminal.shell_command_blocks["child"];
+        let outer = terminal
+            .command_blocks
+            .iter()
+            .find(|block| block.id == outer)
+            .unwrap();
+        let child = terminal
+            .command_blocks
+            .iter()
+            .find(|block| block.id == child)
+            .unwrap();
+        assert_eq!(outer.command.as_deref(), Some("bash"));
+        assert_eq!(child.command.as_deref(), Some("echo hi"));
+        assert_eq!(outer.exit_code, Some(7));
+        assert_eq!(child.exit_code, Some(0));
     }
 
     #[test]

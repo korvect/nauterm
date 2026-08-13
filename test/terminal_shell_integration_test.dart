@@ -44,6 +44,7 @@ void main() {
         expect(command, contains('133;B'));
         expect(command, contains(r'\033]133;C'));
         expect(command, contains(r'\033]133;D;'));
+        expect(command, contains('aid='));
       }
     });
 

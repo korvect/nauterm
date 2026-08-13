@@ -1,5 +1,8 @@
 part of 'terminal_ffi.dart';
 
+typedef _WriteShellIntegrationResourcesNative = Bool Function(Pointer<Utf8>);
+typedef _WriteShellIntegrationResourcesDart = bool Function(Pointer<Utf8>);
+
 final class _NativeTerminalCell extends Struct {
   @Uint32()
   external int textOffset;

@@ -1,7 +1,7 @@
 part of 'terminal_ffi.dart';
 
 class _TerminalBindings {
-  static const _expectedAbiVersion = 2;
+  static const _expectedAbiVersion = 3;
 
   _TerminalBindings(this.library)
     : createLocalSessionConfigured = library
@@ -59,6 +59,11 @@ class _TerminalBindings {
           .lookupFunction<_RuntimeLifecycleNative, _RuntimeLifecycleDart>(
             'nauterm_runtime_prepare_shutdown',
           ),
+      writeShellIntegrationResources = library
+          .lookupFunction<
+            _WriteShellIntegrationResourcesNative,
+            _WriteShellIntegrationResourcesDart
+          >('nauterm_shell_integration_write_resources'),
       capturePrepareDirectory = library
           .lookupFunction<
             _CapturePrepareDirectoryNative,
@@ -384,6 +389,7 @@ class _TerminalBindings {
   final _CloseSessionDart close;
   final _RuntimeLifecycleDart initializeRuntime;
   final _RuntimeLifecycleDart prepareRuntimeShutdown;
+  final _WriteShellIntegrationResourcesDart writeShellIntegrationResources;
   final _CapturePrepareDirectoryDart capturePrepareDirectory;
   final _CaptureOpenDart captureWriterOpen;
   final _CaptureAppendDart captureWriterAppend;

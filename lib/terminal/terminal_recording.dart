@@ -376,8 +376,9 @@ class TerminalSessionRecorder {
   /// Records commands reported by Nauterm shell integration.
   ///
   /// The Nauterm protocol lets an interactive shell emit
-  /// `OSC 4545;CommandStarted;<base64 UTF-8 command>` immediately before it
-  /// runs a command. This is authoritative after completion and editing.
+  /// `OSC 4545;CommandStarted;[shell instance;]<base64 UTF-8 command>`
+  /// immediately before it runs a command. This is authoritative after
+  /// completion and editing.
   void recordShellIntegrationOutput(Uint8List bytes) {
     if (!isActive || bytes.isEmpty) {
       return;
@@ -514,7 +515,9 @@ class TerminalSessionRecorder {
     if (!payload.startsWith(commandStarted)) {
       return;
     }
-    final encoded = payload.substring(commandStarted.length);
+    final value = payload.substring(commandStarted.length);
+    final separator = value.indexOf(';');
+    final encoded = separator < 0 ? value : value.substring(separator + 1);
     String command;
     try {
       command = utf8.decode(base64Decode(encoded)).trim();
