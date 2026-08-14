@@ -1295,6 +1295,7 @@ mod shutdown_tests {
                 "emit fish_prompt; fish_prompt; functions -q __nauterm_ai_park_line; and test \"$__nauterm_ai_token\" = test-token; and test \"$XDG_DATA_DIRS\" = /custom/share",
             ])
             .envs(&options.env)
+            .env("TERM", "xterm-256color")
             .output()
             .expect("start fish with integration");
         assert!(
@@ -1319,7 +1320,11 @@ mod shutdown_tests {
         assert!(!super::BASH_INTEGRATION.contains("bind -x"));
         assert!(!super::BASH_INTEGRATION.contains("READLINE_LINE"));
 
-        let bash = std::process::Command::new("/bin/bash")
+        let bash_name = if cfg!(windows) { "bash.exe" } else { "bash" };
+        let Some(bash_program) = super::resolve_shell_program(bash_name) else {
+            return;
+        };
+        let bash = std::process::Command::new(&bash_program)
             .args(["-n", "-c", super::BASH_INTEGRATION])
             .status()
             .expect("check bash integration syntax");
@@ -1333,16 +1338,18 @@ mod shutdown_tests {
             super::BASH_INTEGRATION,
         )
         .expect("write bash integration");
-        let bash = std::process::Command::new("/bin/bash")
+        let bash = std::process::Command::new(bash_program)
             .args([
                 "--noprofile",
                 "--norc",
                 "-ic",
-                "source \"$NAUTERM_TEST_SCRIPT\"; [[ $(type -t __nauterm_ai_precmd) == function ]] && [[ $__nauterm_ai_token == test-token ]] && ! shopt -qo posix",
+                "source \"$1\"; [[ $(type -t __nauterm_ai_precmd) == function ]] && [[ $__nauterm_ai_token == test-token ]] && ! shopt -qo posix",
+                "nauterm-test",
             ])
+            .arg(bash_script)
             .env("HOME", &bash_files.root)
-            .env("NAUTERM_TEST_SCRIPT", bash_script)
             .env("NAUTERM_SHELL_INTEGRATION_TOKEN", "test-token")
+            .env("TERM", "xterm-256color")
             .output()
             .expect("start bash with integration");
         assert!(
