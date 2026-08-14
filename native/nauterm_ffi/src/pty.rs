@@ -1284,6 +1284,9 @@ mod shutdown_tests {
             .root
             .join("fish/vendor_conf.d/nauterm-shell-integration.fish")
             .is_file());
+        let integration_script = files
+            .root
+            .join("fish/vendor_conf.d/nauterm-shell-integration.fish");
 
         let Some(fish) = super::resolve_shell_program("fish") else {
             return;
@@ -1292,15 +1295,20 @@ mod shutdown_tests {
             .args([
                 "-i",
                 "-c",
-                "emit fish_prompt; fish_prompt; functions -q __nauterm_ai_park_line; and test \"$__nauterm_ai_token\" = test-token; and test \"$XDG_DATA_DIRS\" = /custom/share",
+                "source \"$argv[1]\"; or exit 10; emit fish_prompt; fish_prompt; functions -q __nauterm_ai_park_line; or exit 11; test \"$__nauterm_ai_token\" = test-token; or exit 12; test \"$XDG_DATA_DIRS\" = /custom/share; or exit 13",
             ])
+            .arg(integration_script)
             .envs(&options.env)
+            .env("HOME", &files.root)
+            .env("XDG_CONFIG_HOME", files.root.join("config"))
             .env("TERM", "xterm-256color")
             .output()
             .expect("start fish with integration");
         assert!(
             output.status.success(),
-            "fish did not load startup integration: {}",
+            "fish did not load startup integration (status {}): stdout: {} stderr: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
         );
         assert!(output
