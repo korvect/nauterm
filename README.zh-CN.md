@@ -18,20 +18,6 @@
   <a href="README.md">English</a> · 简体中文
 </p>
 
-> [!CAUTION]
-> **安全警告：目前存在冒充 Nauterm 分发恶意软件的仓库和下载站。**
->
-> `github.com/gansupomatomidae135/nauterm` 和
-> `gansupomatomidae135.github.io` **与 Nauterm 或 Korvect 没有任何关系**。
-> 对方曾以 Nauterm 名义分发植入木马的压缩包；多家杀毒厂商已将其识别为恶意软件，
-> 检测结果包括 StealC、SmartLoader 和 Matanbuchus。详见
-> [VirusTotal 报告](https://www.virustotal.com/gui/file/f2cc32731fe6898e50dd28d572a8c93110ed9db8fd54d88258f1d984bac35e29)。
->
-> **请只信任本仓库 `github.com/korvect/nauterm`，并且只从本仓库的
-> [官方 GitHub Releases](https://github.com/korvect/nauterm/releases)
-> 下载二进制文件。** 官方版本均提供 `SHA256SUMS.txt`。请勿运行非官方镜像提供的文件，
-> 不要绕过杀毒软件警告，也不要将来源不明的构建加入杀毒软件白名单。
-
 Nauterm 将本地终端、远程连接、文件传输、端口转发、可复用命令和加密同步整合到一个桌面应用中。界面使用 Flutter 编写，对延迟敏感的终端、传输、数据库和密码学操作则由原生 Rust 层负责。
 
 Nauterm 受到 Termius 精致远程访问体验的启发，目标是为重视透明本地存储、数据和同步服务控制权、原生高性能核心以及源码访问的开发者打造更好的工具。Nauterm 是独立项目，与 Termius 不存在关联，也未获得其认可或背书。
