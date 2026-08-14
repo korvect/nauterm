@@ -35,15 +35,32 @@ void main() {
       NautermConfig.fromJson(const {
         'schemaVersion': 1,
       }).terminal.emulationEngine,
-      TerminalEmulatorBackend.alacritty,
+      TerminalEmulatorBackend.ghostty,
     );
     expect(
       NautermConfig.fromJson(const {
         'schemaVersion': 1,
         'terminal': {'emulator': 'ghostty'},
       }).terminal.emulationEngine,
-      TerminalEmulatorBackend.alacritty,
+      TerminalEmulatorBackend.ghostty,
     );
+  });
+
+  test('platform defaults use Ghostty as the terminal engine', () async {
+    for (final assetPath in <String>[
+      nautermLinuxDefaultConfigAsset,
+      nautermMacOSDefaultConfigAsset,
+      nautermWindowsDefaultConfigAsset,
+    ]) {
+      final json = jsonDecode(await rootBundle.loadString(assetPath));
+      final config = NautermConfig.fromJson(json);
+
+      expect(
+        config.terminal.emulationEngine,
+        TerminalEmulatorBackend.ghostty,
+        reason: assetPath,
+      );
+    }
   });
 
   test('selecting a command block on click defaults to enabled', () {

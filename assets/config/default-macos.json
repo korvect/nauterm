@@ -15,7 +15,7 @@
   "terminal": {
     "shellPath": null,
     "emulation": "xterm-256color",
-    "emulationEngine": "alacritty",
+    "emulationEngine": "ghostty",
     "appearance": {
       "theme": {
         "id": "default"

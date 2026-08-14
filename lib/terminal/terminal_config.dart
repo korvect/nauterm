@@ -24,7 +24,7 @@ int terminalScrollbackLines = 10000;
 int terminalSshKeepaliveIntervalSeconds = 20;
 TerminalType terminalEmulationType = TerminalType.xterm256Color;
 TerminalEmulatorBackend terminalEmulatorBackend =
-    TerminalEmulatorBackend.alacritty;
+    TerminalEmulatorBackend.ghostty;
 String? terminalThemeId;
 TerminalTheme terminalCustomTheme = defaultTerminalTheme;
 
@@ -440,7 +440,7 @@ class NautermRuntimeSettings {
     this.sshKeepaliveIntervalSeconds = 20,
     this.sshPredictionMode = TerminalSshPredictionMode.adaptive,
     this.emulationType = TerminalType.xterm256Color,
-    this.emulatorBackend = TerminalEmulatorBackend.alacritty,
+    this.emulatorBackend = TerminalEmulatorBackend.ghostty,
     this.themeId,
     this.customThemeJson,
     this.cursor = const TerminalCursorConfig(),
@@ -613,7 +613,7 @@ class TerminalConfig {
   const TerminalConfig({
     this.font = const TerminalFontConfig(),
     this.emulation = const TerminalEmulationConfig(),
-    this.emulatorBackend = TerminalEmulatorBackend.alacritty,
+    this.emulatorBackend = TerminalEmulatorBackend.ghostty,
     this.cursor = const TerminalCursorConfig(),
     this.keyboard = const TerminalKeyboardConfig(),
     this.composer = const TerminalComposerConfig(),

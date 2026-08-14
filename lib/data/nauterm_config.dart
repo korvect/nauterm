@@ -194,7 +194,7 @@ class NautermTerminalConfig {
   const NautermTerminalConfig({
     this.shellPath,
     this.emulation = TerminalType.xterm256Color,
-    this.emulationEngine = TerminalEmulatorBackend.alacritty,
+    this.emulationEngine = TerminalEmulatorBackend.ghostty,
     this.appearance = const NautermTerminalAppearanceConfig(),
     this.behavior = const NautermTerminalBehaviorConfig(),
     this.features = const NautermTerminalFeaturesConfig(),

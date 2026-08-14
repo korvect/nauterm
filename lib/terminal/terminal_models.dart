@@ -26,8 +26,9 @@ enum TerminalEmulatorBackend {
   ghostty;
 
   static TerminalEmulatorBackend fromString(String? value) => switch (value) {
+    'alacritty' => TerminalEmulatorBackend.alacritty,
     'ghostty' => TerminalEmulatorBackend.ghostty,
-    _ => TerminalEmulatorBackend.alacritty,
+    _ => TerminalEmulatorBackend.ghostty,
   };
 
   int get nativeValue => index;
