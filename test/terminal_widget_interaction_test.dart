@@ -58,6 +58,20 @@ void main() {
     );
   });
 
+  testWidgets('terminal text area uses the text mouse cursor', (tester) async {
+    final controller = TerminalController(
+      driver: MemoryTerminalDriver(columns: 80, rows: 8),
+    );
+    addTearDown(controller.dispose);
+    await _pumpTerminal(tester, controller);
+
+    final region = tester.widget<MouseRegion>(
+      find.byKey(const ValueKey('terminal-text-region')),
+    );
+
+    expect(region.cursor, SystemMouseCursors.text);
+  });
+
   testWidgets('terminal context menu follows the terminal theme', (
     tester,
   ) async {

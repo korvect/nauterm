@@ -1147,8 +1147,9 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
     EdgeInsets padding,
   ) {
     return MouseRegion(
+      key: const ValueKey('terminal-text-region'),
       cursor: _hoveredOpenTarget == null
-          ? SystemMouseCursors.basic
+          ? SystemMouseCursors.text
           : SystemMouseCursors.click,
       onExit: (_) => _clearOpenTargetHover(),
       child: Focus(
