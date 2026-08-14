@@ -549,7 +549,6 @@ fi
 
 if [[ -z ${__nauterm_shell_integration+x} ]]; then
   __nauterm_shell_integration=1
-  __nauterm_ai_armed=0
   __nauterm_ai_token="$__nauterm_bootstrap_token"
   __nauterm_last_histcmd=${HISTCMD:-0}
   unset __nauterm_bootstrap_token
@@ -565,23 +564,11 @@ if [[ -z ${__nauterm_shell_integration+x} ]]; then
       fi
       __nauterm_last_histcmd=$HISTCMD
     fi
-    if [[ ${__nauterm_ai_armed:-0} -eq 1 ]]; then
-      printf '\033]777;nauterm-command-end=%s;%s\007' "$__nauterm_ai_token" "$__nauterm_status"
-      __nauterm_ai_armed=0
-    fi
+    printf '\033]777;nauterm-command-end=%s;%s\033\\' "$__nauterm_ai_token" "$__nauterm_status"
     printf '\033]7;file://localhost%s\007\033]133;A;cl=line;aid=%s\007' "$PWD" "$BASHPID"
     return "$__nauterm_status"
   }
-  __nauterm_ai_park_begin() {
-    printf '\n'
-    __nauterm_ai_armed=1
-  }
-  __nauterm_ai_park_ready() {
-    printf '\033]777;nauterm-line-ready=%s\007' "$__nauterm_ai_token"
-  }
-  bind -x '"\C-x\C-p":__nauterm_ai_park_begin'
-  bind -x '"\C-x\C-o":__nauterm_ai_park_ready'
-  bind '"\C-x\C-]":"\C-x\C-p\C-u\C-x\C-o"'
+  bind '"\C-x\C-]":"\C-a\C-k"'
 
   if [[ $(declare -p PROMPT_COMMAND 2>/dev/null) == "declare -a"* ]]; then
     __nauterm_prompt_commands=("${PROMPT_COMMAND[@]}")
@@ -1327,6 +1314,11 @@ mod shutdown_tests {
 
     #[test]
     fn generated_bash_and_fish_scripts_pass_available_shell_syntax_checks() {
+        assert!(super::BASH_INTEGRATION.contains(r#"\C-x\C-]":"\C-a\C-k"#));
+        assert!(!super::BASH_INTEGRATION.contains(r#"\C-u"#));
+        assert!(!super::BASH_INTEGRATION.contains("bind -x"));
+        assert!(!super::BASH_INTEGRATION.contains("READLINE_LINE"));
+
         let bash = std::process::Command::new("/bin/bash")
             .args(["-n", "-c", super::BASH_INTEGRATION])
             .status()

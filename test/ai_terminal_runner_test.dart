@@ -317,9 +317,8 @@ void main() {
       r'nauterm-integration-ready=([a-f0-9]+)',
     ).firstMatch(inputs.single)!.group(1)!;
     controller.write('\x1b]777;nauterm-integration-ready=$token\x07');
-    await _waitForInput(inputs, '\x18\x1d');
-    controller.write('\x1b]777;nauterm-line-ready=$token\x07');
-    await Future<void>.delayed(Duration.zero);
+    await _waitForInput(inputs, '$command\r');
+    expect(inputs, containsAllInOrder(['\x18\x1d', '$command\r']));
 
     controller.write(
       'printf " \${NAUTERM_DRAFT_EXECUTED:-clean}"\r\n'
@@ -389,18 +388,17 @@ nc -zv 127.0.0.1 2323 2>&1''';
       r'nauterm-integration-ready=([a-f0-9]+)',
     ).firstMatch(setup)!.group(1)!;
     expect(setup, contains('__nauterm_ai_prompt_commands'));
-    expect(setup, contains('__nauterm_ai_park_begin'));
-    expect(setup, contains(r'\C-u'));
-    expect(setup, contains(r'bind -x'));
+    expect(setup, contains(r'\C-x\C-]":"\C-a\C-k'));
+    expect(setup, isNot(contains(r'\C-u')));
+    expect(setup, isNot(contains('READLINE_LINE')));
+    expect(setup, isNot(contains(r'bind -x')));
     expect(setup, contains(r'\033]7;file://localhost%s'));
     expect(setup, contains(r'\033]133;A'));
     controller.write('\x1b]777;nauterm-integration-ready=$setupToken\x07');
-    await _waitForInput(inputs, '\x18\x1d');
+    await _waitForInput(inputs, 'pwd\r');
 
-    expect(inputs.last, '\x18\x1d');
-    controller.write('\x1b]777;nauterm-line-ready=$setupToken\x07');
-    await Future<void>.delayed(Duration.zero);
-    controller.write('\x1b]777;nauterm-command-end=$setupToken;0\x07');
+    expect(inputs, containsAllInOrder(['\x18\x1d', 'pwd\r']));
+    controller.write('\x1b]777;nauterm-command-end=$setupToken;0\x1b\\');
 
     expect((await resultFuture).exitCode, 0);
   });

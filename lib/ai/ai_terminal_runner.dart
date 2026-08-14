@@ -460,6 +460,13 @@ class AiTerminalCommandRunner {
     TerminalController controller,
     TerminalShellIntegration integration,
   ) async {
+    if (integration.kind == TerminalShellKind.bash) {
+      // Bash 3.2 starts a fresh display line whenever a `bind -x` command
+      // writes the ready marker. Its Readline macro is synchronous, so a
+      // pure editing macro can clear the line without a visible prompt redraw.
+      controller.sendInput(integration.parkLineSequence, sensitive: true);
+      return;
+    }
     final token = integration.token;
     final marker = utf8.encode('\x1b]777;nauterm-line-ready=$token\x07');
     final pending = <int>[];
@@ -606,7 +613,21 @@ class _IntegratedCommandParser {
       return null;
     }
     final codeStart = endIndex + _endPrefix.length;
-    final terminatorIndex = _pending.indexOf(0x07, codeStart);
+    final bellIndex = _pending.indexOf(0x07, codeStart);
+    var stringTerminatorIndex = -1;
+    for (var index = codeStart; index + 1 < _pending.length; index++) {
+      if (_pending[index] == 0x1b && _pending[index + 1] == 0x5c) {
+        stringTerminatorIndex = index;
+        break;
+      }
+    }
+    final terminatorIndex = switch ((bellIndex, stringTerminatorIndex)) {
+      (-1, -1) => -1,
+      (-1, final index) => index,
+      (final index, -1) => index,
+      (final bell, final stringTerminator) =>
+        bell < stringTerminator ? bell : stringTerminator,
+    };
     if (terminatorIndex == -1) {
       return null;
     }
