@@ -1293,9 +1293,10 @@ mod shutdown_tests {
         };
         let output = std::process::Command::new(fish)
             .args([
+                "--no-config",
                 "-i",
                 "-c",
-                "source \"$argv[1]\"; or exit 10; emit fish_prompt; fish_prompt; functions -q __nauterm_ai_park_line; or exit 11; test \"$__nauterm_ai_token\" = test-token; or exit 12; test \"$XDG_DATA_DIRS\" = /custom/share; or exit 13",
+                "function fish_prompt; end; source \"$argv[1]\"; or exit 10; emit fish_prompt; fish_prompt; functions -q __nauterm_ai_park_line; or exit 11; test \"$__nauterm_ai_token\" = test-token; or exit 12; test \"$XDG_DATA_DIRS\" = /custom/share; or exit 13",
             ])
             .arg(integration_script)
             .envs(&options.env)
