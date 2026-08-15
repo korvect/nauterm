@@ -44,11 +44,8 @@ class _MainWindowState extends State<MainWindow> with WidgetsBindingObserver {
 
   late final RegularWindowController _windowController =
       RegularWindowController(
-        preferredSize: _resolvedWindowSize,
-        preferredConstraints: const BoxConstraints(
-          minWidth: 750,
-          minHeight: 440,
-        ),
+        size: _resolvedWindowSize,
+        constraints: const BoxConstraints(minWidth: 750, minHeight: 440),
         title: mainWindowTitle,
         delegate: _MainWindowDelegate(
           onCloseRequested: widget.onWindowCloseRequested,

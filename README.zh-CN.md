@@ -155,7 +155,7 @@ Nauterm 的设计目标是避免以明文保存凭据和同步数据：
 
 ### 前置条件
 
-- Flutter `3.44.6`
+- Flutter `3.47.0`
 - Rust `1.97.0`，并安装 `rustfmt` 和 `clippy`
 - Zig `0.16.0`，用于构建固定版本的 `libghostty-vt`
 - Git、CMake 以及目标平台的原生桌面工具链

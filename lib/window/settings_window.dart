@@ -100,8 +100,8 @@ RegularWindowController createSettingsWindowController({
   required VoidCallback onDestroyed,
 }) {
   return RegularWindowController(
-    preferredSize: settingsWindowSize,
-    preferredConstraints: const BoxConstraints(minWidth: 950, minHeight: 620),
+    size: settingsWindowSize,
+    constraints: const BoxConstraints(minWidth: 950, minHeight: 620),
     title: settingsWindowTitle,
     delegate: _SettingsWindowDelegate(
       onCloseRequested: onCloseRequested,

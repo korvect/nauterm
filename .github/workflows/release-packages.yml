@@ -28,7 +28,7 @@ permissions:
   contents: read
 
 env:
-  FLUTTER_VERSION: 3.44.6
+  FLUTTER_VERSION: 3.47.0
   RUST_TOOLCHAIN: 1.97.0
   ZIG_VERSION: 0.16.0
   NAUTERM_BUILD_NUMBER: ${{ github.run_number }}
