@@ -22,6 +22,12 @@ static const wchar_t* kOriginalWndProcProperty = L"NativeAPIOriginalWndProc";
 static const wchar_t* kOriginalFlutterViewWndProcProperty =
     L"NativeAPIOriginalFlutterViewWndProc";
 
+// Keep this numeric value local so cnativeapi can still be built with a
+// Windows 10 SDK. The attribute is ignored by DWM on older Windows builds.
+constexpr DWORD kDwmWindowCornerPreference = 33;
+constexpr int kDwmWindowCornerPreferenceRound = 2;
+constexpr int kHiddenTitleBarNonClientBorder = 1;
+
 // Forward declaration
 static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 static LRESULT CALLBACK HiddenTitleBarWindowProc(HWND hwnd,
@@ -41,6 +47,13 @@ static bool IsWindowMaximized(HWND hwnd) {
   WINDOWPLACEMENT placement = {};
   placement.length = sizeof(WINDOWPLACEMENT);
   return GetWindowPlacement(hwnd, &placement) && placement.showCmd == SW_MAXIMIZE;
+}
+
+static void ApplyHiddenTitleBarDwmAttributes(HWND hwnd) {
+  const int corner_preference = kDwmWindowCornerPreferenceRound;
+  DwmSetWindowAttribute(
+      hwnd, static_cast<DWMWINDOWATTRIBUTE>(kDwmWindowCornerPreference),
+      &corner_preference, sizeof(corner_preference));
 }
 
 static int ResizeBorderThickness(HWND hwnd) {
@@ -92,6 +105,23 @@ static bool HandleHiddenTitleBarMessage(HWND hwnd,
           if (GetMonitorInfo(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &monitor_info)) {
             params->rgrc[0] = monitor_info.rcWork;
           }
+        } else if (params) {
+          // A completely empty non-client area is no longer reliably treated
+          // as a framed window by DWM. Preserve a one-pixel ring so Windows can
+          // draw its normal border and clip the Flutter surface to rounded
+          // corners while the app continues to own the title bar.
+          params->rgrc[0].left += kHiddenTitleBarNonClientBorder;
+          params->rgrc[0].top += kHiddenTitleBarNonClientBorder;
+          params->rgrc[0].right -= kHiddenTitleBarNonClientBorder;
+          params->rgrc[0].bottom -= kHiddenTitleBarNonClientBorder;
+        }
+      } else if (!IsWindowMaximized(hwnd)) {
+        auto rect = reinterpret_cast<RECT*>(lParam);
+        if (rect) {
+          rect->left += kHiddenTitleBarNonClientBorder;
+          rect->top += kHiddenTitleBarNonClientBorder;
+          rect->right -= kHiddenTitleBarNonClientBorder;
+          rect->bottom -= kHiddenTitleBarNonClientBorder;
         }
       }
       *result = 0;
@@ -200,6 +230,7 @@ static void InstallHiddenTitleBarSubclass(HWND hwnd) {
   }
 
   SetPropW(hwnd, kHiddenTitleBarProperty, reinterpret_cast<HANDLE>(1));
+  ApplyHiddenTitleBarDwmAttributes(hwnd);
   if (!GetPropW(hwnd, kOriginalWndProcProperty)) {
     auto original = reinterpret_cast<WNDPROC>(
         SetWindowLongPtrW(
