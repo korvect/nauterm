@@ -4,7 +4,7 @@ use std::process::Command;
 
 const REQUIRED_ZIG_VERSION: &str = "0.16.0";
 const GHOSTTY_REPOSITORY: &str = "https://github.com/ghostty-org/ghostty.git";
-const GHOSTTY_COMMIT: &str = "f64f4aca2c29b554d111b36c3d946a9bddd159ff";
+const GHOSTTY_COMMIT: &str = "ad6e72ddc4e9e259c9b70bff6e2b389e0ce91949";
 const GHOSTTY_VERSION: &str = "1.3.2-dev";
 
 fn main() {
