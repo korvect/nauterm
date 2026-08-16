@@ -379,18 +379,22 @@ class _WorkspaceInlineMessage extends StatelessWidget {
 
 class _WorkspaceEmptyState extends StatelessWidget {
   const _WorkspaceEmptyState({
+    super.key,
     required this.icon,
     required this.title,
-    required this.description,
-    required this.actionLabel,
-    required this.onAction,
-  });
+    this.description,
+    this.actionLabel,
+    this.onAction,
+  }) : assert(
+         (actionLabel == null) == (onAction == null),
+         'actionLabel and onAction must be provided together',
+       );
 
   final IconData icon;
   final String title;
-  final String description;
-  final String actionLabel;
-  final VoidCallback onAction;
+  final String? description;
+  final String? actionLabel;
+  final VoidCallback? onAction;
 
   @override
   Widget build(BuildContext context) {
@@ -422,30 +426,34 @@ class _WorkspaceEmptyState extends StatelessWidget {
                   letterSpacing: 0,
                 ),
               ),
-              SizedBox(height: 6),
-              Text(
-                tr(description),
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: _mutedText,
-                  fontSize: NautermFontSizes.labelLarge,
-                  fontWeight: NautermFontWeights.regular,
-                  height: 1.4,
-                  letterSpacing: 0,
+              if (description != null) ...[
+                SizedBox(height: 6),
+                Text(
+                  tr(description!),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: _mutedText,
+                    fontSize: NautermFontSizes.labelLarge,
+                    fontWeight: NautermFontWeights.regular,
+                    height: 1.4,
+                    letterSpacing: 0,
+                  ),
                 ),
-              ),
-              SizedBox(height: 18),
-              KeyedSubtree(
-                key: ValueKey('empty-state-action:$actionLabel'),
-                child: _WorkspaceButton(
-                  icon: Icons.add_rounded,
-                  label: actionLabel,
-                  type: _WorkspaceButtonType.primary,
-                  variant: _WorkspaceButtonVariant.solid,
-                  size: _WorkspaceControlSize.medium,
-                  onPressed: onAction,
+              ],
+              if (actionLabel != null) ...[
+                SizedBox(height: 18),
+                KeyedSubtree(
+                  key: ValueKey('empty-state-action:$actionLabel'),
+                  child: _WorkspaceButton(
+                    icon: Icons.add_rounded,
+                    label: actionLabel!,
+                    type: _WorkspaceButtonType.primary,
+                    variant: _WorkspaceButtonVariant.solid,
+                    size: _WorkspaceControlSize.medium,
+                    onPressed: onAction!,
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
         ),

@@ -1393,28 +1393,18 @@ class _LogsPaneState extends State<_LogsPane> {
               ),
               SizedBox(height: 12),
               Expanded(
-                child: sortedLogs.isEmpty
-                    ? Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 26),
-                        child: Align(
-                          alignment: Alignment.topLeft,
-                          child: _WorkspaceInlineMessage(
-                            'No terminal sessions recorded yet.',
-                          ),
-                        ),
-                      )
-                    : _LogsTableCard(
-                        terminalLogs: sortedLogs,
-                        selectedLogId: widget.selectedLogId,
-                        onLogReplay: widget.onLogReplay,
-                        onLogSelected: widget.onLogSelected,
-                        onLogDelete: widget.onLogDelete,
-                        onLogExport: widget.onLogExport,
-                        hasMore: widget.hasMore,
-                        loadingMore: widget.loadingMore,
-                        onLoadMore: widget.onLoadMore,
-                        dataStore: widget.dataStore,
-                      ),
+                child: _LogsTableCard(
+                  terminalLogs: sortedLogs,
+                  selectedLogId: widget.selectedLogId,
+                  onLogReplay: widget.onLogReplay,
+                  onLogSelected: widget.onLogSelected,
+                  onLogDelete: widget.onLogDelete,
+                  onLogExport: widget.onLogExport,
+                  hasMore: widget.hasMore,
+                  loadingMore: widget.loadingMore,
+                  onLoadMore: widget.onLoadMore,
+                  dataStore: widget.dataStore,
+                ),
               ),
               SizedBox(height: 8),
               _LogsFooter(captureDiskUsage: widget.captureDiskUsage),
@@ -1599,6 +1589,7 @@ class _LogsTableCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ClipRRect(
+      key: const ValueKey('logs-table-body'),
       borderRadius: BorderRadius.circular(7),
       child: DecoratedBox(
         decoration: BoxDecoration(
@@ -1608,41 +1599,48 @@ class _LogsTableCard extends StatelessWidget {
         ),
         child: Material(
           type: MaterialType.transparency,
-          child: NotificationListener<ScrollNotification>(
-            onNotification: (notification) {
-              if (hasMore &&
-                  !loadingMore &&
-                  notification.metrics.extentAfter < 240) {
-                onLoadMore();
-              }
-              return false;
-            },
-            child: ListView.separated(
-              padding: EdgeInsets.zero,
-              itemCount: terminalLogs.length + (loadingMore ? 1 : 0),
-              separatorBuilder: (context, index) =>
-                  Divider(height: 1, color: _sidebarDivider),
-              itemBuilder: (context, index) {
-                if (index == terminalLogs.length) {
-                  return const _WorkspaceLoadingLine();
-                }
-                final log = terminalLogs[index];
-                return _LogsTableRow(
-                  key: ValueKey(log.id),
-                  log: log,
-                  selected: log.id == selectedLogId,
-                  dataStore: dataStore,
-                  onTap: () => onLogSelected(log),
-                  onReplay: () {
-                    onLogSelected(log);
-                    onLogReplay(log);
+          child: terminalLogs.isEmpty
+              ? const _WorkspaceEmptyState(
+                  key: ValueKey('logs-table-empty-state'),
+                  icon: LucideIcons.clock,
+                  title: 'workspace.label.noTerminalSessionsRecorded',
+                )
+              : NotificationListener<ScrollNotification>(
+                  onNotification: (notification) {
+                    if (hasMore &&
+                        !loadingMore &&
+                        notification.metrics.extentAfter < 240) {
+                      onLoadMore();
+                    }
+                    return false;
                   },
-                  onDelete: () => onLogDelete(log),
-                  onExport: (format) => onLogExport(log, format),
-                );
-              },
-            ),
-          ),
+                  child: ListView.separated(
+                    padding: EdgeInsets.zero,
+                    itemCount:
+                        terminalLogs.length + (loadingMore ? 1 : 0),
+                    separatorBuilder: (context, index) =>
+                        Divider(height: 1, color: _sidebarDivider),
+                    itemBuilder: (context, index) {
+                      if (index == terminalLogs.length) {
+                        return const _WorkspaceLoadingLine();
+                      }
+                      final log = terminalLogs[index];
+                      return _LogsTableRow(
+                        key: ValueKey(log.id),
+                        log: log,
+                        selected: log.id == selectedLogId,
+                        dataStore: dataStore,
+                        onTap: () => onLogSelected(log),
+                        onReplay: () {
+                          onLogSelected(log);
+                          onLogReplay(log);
+                        },
+                        onDelete: () => onLogDelete(log),
+                        onExport: (format) => onLogExport(log, format),
+                      );
+                    },
+                  ),
+                ),
         ),
       ),
     );

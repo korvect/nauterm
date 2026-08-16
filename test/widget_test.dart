@@ -1815,6 +1815,31 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('empty logs page shows an empty state in the table body', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(NautermApp(onOpenSettings: () {}));
+
+    await tester.tap(find.text('Logs'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    final tableBody = find.byKey(const ValueKey('logs-table-body'));
+    final emptyState = find.byKey(const ValueKey('logs-table-empty-state'));
+    expect(tableBody, findsOneWidget);
+    expect(emptyState, findsOneWidget);
+    expect(
+      find.descendant(of: tableBody, matching: emptyState),
+      findsOneWidget,
+    );
+    expect(find.text('No terminal sessions recorded yet.'), findsOneWidget);
+    for (final label in const ['Date', 'User', 'Host', 'Actions']) {
+      expect(find.text(label), findsOneWidget);
+    }
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('settings button invokes opener', (WidgetTester tester) async {
     var openedSettings = false;
 
