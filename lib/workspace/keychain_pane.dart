@@ -5,6 +5,7 @@ class _KeychainPane extends StatefulWidget {
     required this.keys,
     required this.identities,
     required this.onCreateKey,
+    required this.onCreateCertificate,
     required this.onGenerateKey,
     required this.onCreateIdentity,
     required this.onKeyContextAction,
@@ -16,6 +17,7 @@ class _KeychainPane extends StatefulWidget {
   final List<_KeyItem> keys;
   final List<_IdentityItem> identities;
   final VoidCallback onCreateKey;
+  final VoidCallback onCreateCertificate;
   final VoidCallback onGenerateKey;
   final VoidCallback onCreateIdentity;
   final _WorkspaceContextAction<_KeyItem> onKeyContextAction;
@@ -67,6 +69,7 @@ class _KeychainPaneState extends State<_KeychainPane> {
       children: [
         _KeychainToolbar(
           onCreateKey: widget.onCreateKey,
+          onCreateCertificate: widget.onCreateCertificate,
           onGenerateKey: widget.onGenerateKey,
           onCreateIdentity: widget.onCreateIdentity,
           sortOrder: _sortOrder,
@@ -141,6 +144,7 @@ class _KeychainPaneState extends State<_KeychainPane> {
 class _KeychainToolbar extends StatelessWidget {
   const _KeychainToolbar({
     required this.onCreateKey,
+    required this.onCreateCertificate,
     required this.onGenerateKey,
     required this.onCreateIdentity,
     required this.sortOrder,
@@ -152,6 +156,7 @@ class _KeychainToolbar extends StatelessWidget {
   });
 
   final VoidCallback onCreateKey;
+  final VoidCallback onCreateCertificate;
   final VoidCallback onGenerateKey;
   final VoidCallback onCreateIdentity;
   final _WorkspaceSortOrder sortOrder;
@@ -174,7 +179,7 @@ class _KeychainToolbar extends StatelessWidget {
         _ModeButton(
           icon: Icons.workspace_premium_rounded,
           label: 'Certificate',
-          onTap: onCreateKey,
+          onTap: onCreateCertificate,
         ),
         Expanded(
           child: _ToolbarTrailingActions(

@@ -828,6 +828,10 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
     _openEditor(const _KeyEditorRequest());
   }
 
+  void _createCertificate() {
+    _openEditor(const _KeyEditorRequest(certificateMode: true));
+  }
+
   void _generateKey() {
     _openEditor(const _KeyEditorRequest(generate: true));
   }

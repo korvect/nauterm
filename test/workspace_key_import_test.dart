@@ -90,7 +90,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('certificate toolbar action opens the new key drawer', (
+  testWidgets('certificate toolbar action opens the certificate form', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1440, 900);
@@ -108,7 +108,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 250));
 
     expect(find.text('New Key'), findsOneWidget);
-    expect(find.text('Certificate'), findsWidgets);
+    expect(_keyFieldDecorator('Certificate'), findsOneWidget);
+    expect(_keyField('Certificate'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
   });

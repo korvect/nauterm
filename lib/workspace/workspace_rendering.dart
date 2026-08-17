@@ -152,6 +152,7 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
         onImportHosts: _importHosts,
         onExportHosts: _exportHosts,
         onCreateKey: _createKey,
+        onCreateCertificate: _createCertificate,
         onGenerateKey: _generateKey,
         onCreateIdentity: _createIdentity,
         onCreateSnippet: (packageId) => _createSnippet(packageId),
