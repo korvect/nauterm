@@ -68,6 +68,7 @@ const RENDER_DATA_CURSOR_VIEWPORT_HAS_VALUE: c_int = 14;
 const RENDER_DATA_CURSOR_VIEWPORT_X: c_int = 15;
 const RENDER_DATA_CURSOR_VIEWPORT_Y: c_int = 16;
 
+const RENDER_ROW_DATA_RAW: c_int = 2;
 const RENDER_ROW_DATA_CELLS: c_int = 3;
 const RENDER_CELL_DATA_RAW: c_int = 1;
 const RENDER_CELL_DATA_STYLE: c_int = 2;
@@ -76,10 +77,12 @@ const RENDER_CELL_DATA_FG_COLOR: c_int = 6;
 const RENDER_CELL_DATA_GRAPHEMES_UTF8: c_int = 9;
 
 const CELL_DATA_WIDE: c_int = 3;
+const CELL_DATA_HAS_HYPERLINK: c_int = 7;
 const CELL_DATA_SEMANTIC_CONTENT: c_int = 9;
 const CELL_SEMANTIC_INPUT: c_int = 1;
 const ROW_DATA_WRAP: c_int = 1;
 const ROW_DATA_WRAP_CONTINUATION: c_int = 2;
+const ROW_DATA_HYPERLINK: c_int = 5;
 const ROW_DATA_SEMANTIC_PROMPT: c_int = 6;
 const ROW_SEMANTIC_PROMPT: c_int = 1;
 const ROW_SEMANTIC_PROMPT_CONTINUATION: c_int = 2;
@@ -1281,6 +1284,7 @@ impl GhosttyTerminalEngine {
                 if !row_ready {
                     break;
                 }
+                let row_has_hyperlinks = render_row_has_hyperlinks(row_iterator);
                 let mut column = 0usize;
                 let mut previous_virtual = None;
                 while column < columns
@@ -1290,6 +1294,7 @@ impl GhosttyTerminalEngine {
                         cells_iterator,
                         column,
                         row,
+                        row_has_hyperlinks,
                         previous_virtual.as_ref(),
                         &mut cell_context,
                     );
@@ -1945,6 +1950,7 @@ fn export_cell(
     iterator: GhosttyRowCells,
     viewport_column: usize,
     viewport_row: usize,
+    row_has_hyperlinks: bool,
     previous_virtual: Option<&VirtualPlaceholder>,
     context: &mut ExportCellContext<'_>,
 ) -> (FfiTerminalCell, Option<VirtualPlaceholder>) {
@@ -2025,12 +2031,26 @@ fn export_cell(
     };
 
     let hyperlink_offset = context.hyperlink_text.len() as u32;
-    let hyperlink = grid_hyperlink(
-        context.terminal,
-        POINT_TAG_VIEWPORT,
-        viewport_column,
-        viewport_row,
-    );
+    let mut has_hyperlink = false;
+    if row_has_hyperlinks && raw_cell != 0 {
+        let _ = unsafe {
+            ghostty_cell_get(
+                raw_cell,
+                CELL_DATA_HAS_HYPERLINK,
+                &mut has_hyperlink as *mut _ as *mut c_void,
+            )
+        };
+    }
+    let hyperlink = if has_hyperlink {
+        grid_hyperlink(
+            context.terminal,
+            POINT_TAG_VIEWPORT,
+            viewport_column,
+            viewport_row,
+        )
+    } else {
+        Vec::new()
+    };
     context.hyperlink_text.extend_from_slice(&hyperlink);
 
     (
@@ -2049,6 +2069,30 @@ fn export_cell(
         },
         virtual_placeholder,
     )
+}
+
+fn render_row_has_hyperlinks(iterator: GhosttyRowIterator) -> bool {
+    let mut raw_row = 0u64;
+    if unsafe {
+        ghostty_render_state_row_get(
+            iterator,
+            RENDER_ROW_DATA_RAW,
+            &mut raw_row as *mut _ as *mut c_void,
+        )
+    } != GHOSTTY_SUCCESS
+    {
+        return false;
+    }
+
+    let mut has_hyperlinks = false;
+    unsafe {
+        ghostty_row_get(
+            raw_row,
+            ROW_DATA_HYPERLINK,
+            &mut has_hyperlinks as *mut _ as *mut c_void,
+        ) == GHOSTTY_SUCCESS
+            && has_hyperlinks
+    }
 }
 
 fn starts_with_kitty_unicode_placeholder(grapheme: &[u8]) -> bool {
