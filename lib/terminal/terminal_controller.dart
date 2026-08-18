@@ -601,6 +601,8 @@ class TerminalController extends ChangeNotifier {
   TerminalConnectionStatus _connectionStatus;
   late TerminalSnapshot _snapshot;
   bool _snapshotRefreshQueued = false;
+  final Stopwatch _snapshotRefreshClock = Stopwatch()..start();
+  Duration _lastSnapshotRefreshAt = Duration.zero;
   Timer? _driverWatchdogTimer;
   bool _driverWakeupPending = false;
   Timer? _snapshotRefreshTimer;
@@ -1786,6 +1788,7 @@ class TerminalController extends ChangeNotifier {
     _pruneConfirmedMoshLineState(nextSnapshot.cursor);
     _recorder?.recordSnapshot(_snapshot);
     _updateFallbackExitStatus();
+    _lastSnapshotRefreshAt = _snapshotRefreshClock.elapsed;
   }
 
   void _pruneConfirmedMoshLineState(TerminalCursor cursor) {
@@ -2239,16 +2242,27 @@ class TerminalController extends ChangeNotifier {
       return;
     }
 
-    _snapshotRefreshQueued = true;
-    _snapshotRefreshTimer = Timer(_snapshotRefreshInterval, () {
-      _snapshotRefreshQueued = false;
-      _snapshotRefreshTimer = null;
-      if (_disposed) {
-        return;
-      }
+    final sinceLastRefresh =
+        _snapshotRefreshClock.elapsed - _lastSnapshotRefreshAt;
+    if (sinceLastRefresh >= _snapshotRefreshInterval) {
       _refreshSnapshot();
       notifyListeners();
-    });
+      return;
+    }
+
+    _snapshotRefreshQueued = true;
+    _snapshotRefreshTimer = Timer(
+      _snapshotRefreshInterval - sinceLastRefresh,
+      () {
+        _snapshotRefreshQueued = false;
+        _snapshotRefreshTimer = null;
+        if (_disposed) {
+          return;
+        }
+        _refreshSnapshot();
+        notifyListeners();
+      },
+    );
   }
 
   void _notifyExitIfNeeded() {

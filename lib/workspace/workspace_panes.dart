@@ -219,7 +219,24 @@ class _TerminalSessionViewState extends State<_TerminalSessionView> {
       color: widget.theme.primary.background,
       child: AnimatedBuilder(
         animation: widget.controller,
-        builder: (context, _) {
+        child: TerminalView(
+          controller: widget.controller,
+          config: widget.config,
+          theme: widget.theme,
+          autofocusTerminal: widget.autofocusTerminal,
+          readOnly: widget.readOnly,
+          composerHistory: widget.composerHistory,
+          composerSuggestions: widget.composerSuggestions,
+          composerSuggestionResolver: widget.composerSuggestionResolver,
+          composerVisible: widget.composerVisible,
+          onComposerVisibilityChanged: widget.onComposerVisibilityChanged,
+          tabToolbar: widget.tabToolbar,
+          onSplitRequested: widget.onSplitRequested,
+          onNewTabRequested: widget.onNewTabRequested,
+          onSettingsRequested: widget.onSettingsRequested,
+          onCloseRequested: widget.onCloseRequested,
+        ),
+        builder: (context, terminalView) {
           _observeBellCount(widget.controller.snapshot.bellCount);
           final status = widget.controller.connectionStatus;
           final profile = widget.controller.sshProfile;
@@ -249,23 +266,7 @@ class _TerminalSessionViewState extends State<_TerminalSessionView> {
           return Stack(
             fit: StackFit.expand,
             children: [
-              TerminalView(
-                controller: widget.controller,
-                config: widget.config,
-                theme: widget.theme,
-                autofocusTerminal: widget.autofocusTerminal,
-                readOnly: widget.readOnly,
-                composerHistory: widget.composerHistory,
-                composerSuggestions: widget.composerSuggestions,
-                composerSuggestionResolver: widget.composerSuggestionResolver,
-                composerVisible: widget.composerVisible,
-                onComposerVisibilityChanged: widget.onComposerVisibilityChanged,
-                tabToolbar: widget.tabToolbar,
-                onSplitRequested: widget.onSplitRequested,
-                onNewTabRequested: widget.onNewTabRequested,
-                onSettingsRequested: widget.onSettingsRequested,
-                onCloseRequested: widget.onCloseRequested,
-              ),
+              terminalView!,
               if (widget.controller.showsReconnectStatus)
                 _TerminalReconnectOverlay(
                   key: ObjectKey(widget.controller),
@@ -567,8 +568,7 @@ class _SnippetsPaneState extends State<_SnippetsPane> {
                 ? _WorkspaceEmptyState(
                     icon: LucideIcons.code,
                     title: 'No snippets yet',
-                    description:
-                        'Save frequently used commands as snippets so they are ready in every terminal.',
+                    description: 'Save frequently used commands as snippets so they are ready in every terminal.',
                     actionLabel: 'Add snippet',
                     onAction: () => widget.onCreateSnippet(currentPackageId),
                   )
@@ -746,8 +746,7 @@ class _PortForwardingPaneState extends State<_PortForwardingPane> {
                 ? _WorkspaceEmptyState(
                     icon: LucideIcons.arrowRightLeft,
                     title: 'No forwarding rules yet',
-                    description:
-                        'Add a forwarding rule to route local, remote, or dynamic traffic through SSH.',
+                    description: 'Add a forwarding rule to route local, remote, or dynamic traffic through SSH.',
                     actionLabel: 'Add forwarding',
                     onAction: () => widget.onCreateForward('local'),
                   )
@@ -853,8 +852,7 @@ class _ProxiesPaneState extends State<_ProxiesPane> {
                 ? _WorkspaceEmptyState(
                     icon: LucideIcons.network,
                     title: 'No proxies yet',
-                    description:
-                        'Add a proxy once and reuse it across hosts that share the same route.',
+                    description: 'Add a proxy once and reuse it across hosts that share the same route.',
                     actionLabel: 'Add proxy',
                     onAction: widget.onCreateProxy,
                   )
@@ -1319,8 +1317,10 @@ class _SnippetsToolbar extends StatelessWidget {
 
 enum _TerminalLogExportFormat { readableText, rawAnsi }
 
-typedef _TerminalLogExportCallback =
-    void Function(TerminalLogEntry log, _TerminalLogExportFormat format);
+typedef _TerminalLogExportCallback = void Function(
+  TerminalLogEntry log,
+  _TerminalLogExportFormat format,
+);
 
 class _LogsPane extends StatefulWidget {
   const _LogsPane({
@@ -1616,8 +1616,7 @@ class _LogsTableCard extends StatelessWidget {
                   },
                   child: ListView.separated(
                     padding: EdgeInsets.zero,
-                    itemCount:
-                        terminalLogs.length + (loadingMore ? 1 : 0),
+                    itemCount: terminalLogs.length + (loadingMore ? 1 : 0),
                     separatorBuilder: (context, index) =>
                         Divider(height: 1, color: _sidebarDivider),
                     itemBuilder: (context, index) {
