@@ -99,6 +99,49 @@ class TerminalWidgetController {
   }
 }
 
+class _TerminalPointerRegion extends StatelessWidget {
+  const _TerminalPointerRegion({
+    required this.child,
+    this.onPointerDown,
+    this.onPointerMove,
+    this.onPointerHover,
+    this.onPointerUp,
+    this.onPointerCancel,
+    this.onPointerSignal,
+    this.onPointerPanZoomUpdate,
+  });
+
+  final Widget child;
+  final ValueChanged<PointerDownEvent>? onPointerDown;
+  final ValueChanged<PointerMoveEvent>? onPointerMove;
+  final ValueChanged<PointerHoverEvent>? onPointerHover;
+  final ValueChanged<PointerUpEvent>? onPointerUp;
+  final ValueChanged<PointerCancelEvent>? onPointerCancel;
+  final ValueChanged<PointerSignalEvent>? onPointerSignal;
+  final ValueChanged<PointerPanZoomUpdateEvent>? onPointerPanZoomUpdate;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      supportedDevices: const {PointerDeviceKind.trackpad},
+      // Claim trackpad scrolling before an ancestor scroll view.
+      onVerticalDragStart: (_) {},
+      child: Listener(
+        behavior: HitTestBehavior.opaque,
+        onPointerDown: onPointerDown,
+        onPointerMove: onPointerMove,
+        onPointerHover: onPointerHover,
+        onPointerUp: onPointerUp,
+        onPointerCancel: onPointerCancel,
+        onPointerSignal: onPointerSignal,
+        onPointerPanZoomUpdate: onPointerPanZoomUpdate,
+        child: child,
+      ),
+    );
+  }
+}
+
 class TerminalWidget extends StatefulWidget {
   const TerminalWidget({
     super.key,
@@ -1156,14 +1199,15 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
         focusNode: _focusNode,
         autofocus: true,
         onKeyEvent: _handleKeyEvent,
-        child: Listener(
-          behavior: HitTestBehavior.opaque,
+        child: _TerminalPointerRegion(
           onPointerDown: (event) => _handlePointerDown(event, metrics),
           onPointerMove: (event) => _handlePointerMove(event, metrics),
           onPointerHover: (event) => _handlePointerHover(event, metrics),
           onPointerUp: (event) => _handlePointerUp(event, metrics),
           onPointerCancel: _handlePointerCancel,
           onPointerSignal: (event) => _handlePointerSignal(event, metrics),
+          onPointerPanZoomUpdate: (event) =>
+              _handleTrackpadPanZoomUpdate(event, metrics),
           child: Stack(
             key: _editableRegionKey,
             children: [
@@ -2774,13 +2818,41 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
     PointerScrollEvent event,
     TerminalMetrics metrics,
   ) {
-    final position = _cellPositionForOffset(event.localPosition, metrics);
-    final scrollButton = event.scrollDelta.dy < 0 ? 64 : 65;
+    _handleTerminalScroll(
+      localPosition: event.localPosition,
+      scrollDeltaY: event.scrollDelta.dy,
+      metrics: metrics,
+    );
+  }
+
+  void _handleTrackpadPanZoomUpdate(
+    PointerPanZoomUpdateEvent event,
+    TerminalMetrics metrics,
+  ) {
+    if (_isPointerInsideSearchOverlay(event.position) ||
+        event.localPanDelta.dy == 0) {
+      return;
+    }
+    _handleTerminalScroll(
+      localPosition: event.localPosition,
+      // macOS pan deltas have the opposite sign from PointerScrollEvent.
+      scrollDeltaY: -event.localPanDelta.dy,
+      metrics: metrics,
+    );
+  }
+
+  void _handleTerminalScroll({
+    required Offset localPosition,
+    required double scrollDeltaY,
+    required TerminalMetrics metrics,
+  }) {
+    final position = _cellPositionForOffset(localPosition, metrics);
+    final scrollButton = scrollDeltaY < 0 ? 64 : 65;
     if (_sendMouseReport(position: position, button: scrollButton)) {
       return;
     }
 
-    _scrollLineRemainder += -event.scrollDelta.dy / metrics.cellSize.height;
+    _scrollLineRemainder += -scrollDeltaY / metrics.cellSize.height;
     final wholeLines = _scrollLineRemainder.truncate();
     if (wholeLines == 0) {
       return;
@@ -2798,7 +2870,7 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
           anchor: anchor,
           extent: terminalCellOffset(
             snapshot,
-            _cellPositionForOffset(event.localPosition, metrics),
+            _cellPositionForOffset(localPosition, metrics),
           ),
         ),
       );

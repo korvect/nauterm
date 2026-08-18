@@ -433,6 +433,61 @@ void main() {
     expect(outerController.offset, 0);
   });
 
+  testWidgets('terminal trackpad scroll wins over an ancestor scroll view', (
+    tester,
+  ) async {
+    final driver = _SnapshotDriver(
+      TerminalSnapshot.blank(
+        columns: 80,
+        rows: 8,
+        historyLines: 92,
+        displayOffset: 40,
+      ),
+    );
+    final controller = TerminalController(driver: driver);
+    final outerController = ScrollController();
+    addTearDown(controller.dispose);
+    addTearDown(outerController.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SizedBox(
+          width: 800,
+          height: 220,
+          child: SingleChildScrollView(
+            controller: outerController,
+            child: Column(
+              children: [
+                SizedBox(
+                  height: 180,
+                  child: TerminalView(
+                    controller: controller,
+                    config: defaultTerminalConfig,
+                    padding: EdgeInsets.zero,
+                  ),
+                ),
+                const SizedBox(height: 500),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byKey(const ValueKey('terminal-renderer-region'))),
+      kind: PointerDeviceKind.trackpad,
+    );
+    await gesture.moveBy(const Offset(0, -30));
+    await gesture.moveBy(const Offset(0, -30));
+    await gesture.up();
+    await tester.pump();
+
+    expect(driver.scrolledLines, lessThan(0));
+    expect(outerController.offset, 0);
+  });
+
   testWidgets('terminal wheel reports the natural scroll direction to apps', (
     tester,
   ) async {
