@@ -346,7 +346,11 @@ class AiTerminalCommandRunner {
       active,
     );
 
-    final parser = _IntegratedCommandParser(token, _maximumCapturedBytes);
+    final parser = _IntegratedCommandParser(
+      token,
+      _maximumCapturedBytes,
+      captureAfterCommandStart: integration.kind == TerminalShellKind.fish,
+    );
     final completer = Completer<AiTerminalExecutionResult>();
     final startedAt = DateTime.now();
     late final ValueChanged<Uint8List> outputListener;
@@ -597,11 +601,18 @@ class _ActiveTerminalCommand {
 }
 
 class _IntegratedCommandParser {
-  _IntegratedCommandParser(String token, this.maximumBytes)
-    : _endPrefix = utf8.encode('\x1b]777;nauterm-command-end=$token;');
+  _IntegratedCommandParser(
+    String token,
+    this.maximumBytes, {
+    this.captureAfterCommandStart = false,
+  }) : _endPrefix = utf8.encode('\x1b]777;nauterm-command-end=$token;');
 
+  static final List<int> _commandStartPrefix = utf8.encode(
+    '\x1b]4545;CommandStarted;',
+  );
   final List<int> _endPrefix;
   final int maximumBytes;
+  final bool captureAfterCommandStart;
   final List<int> _pending = [];
 
   _ParsedTerminalResult? add(Uint8List bytes) {
@@ -636,8 +647,26 @@ class _IntegratedCommandParser {
     if (exitCode == null) {
       return null;
     }
+    var outputStart = 0;
+    if (captureAfterCommandStart) {
+      final commandStart = _lastIndexOf(
+        _pending,
+        _commandStartPrefix,
+        endIndex,
+      );
+      if (commandStart != -1) {
+        final terminatorEnd = _oscTerminatorEnd(
+          _pending,
+          commandStart + _commandStartPrefix.length,
+          endIndex,
+        );
+        if (terminatorEnd != null) {
+          outputStart = terminatorEnd;
+        }
+      }
+    }
     return _ParsedTerminalResult(
-      output: Uint8List.fromList(_pending.sublist(0, endIndex)),
+      output: Uint8List.fromList(_pending.sublist(outputStart, endIndex)),
       exitCode: exitCode,
     );
   }
@@ -682,6 +711,37 @@ int _indexOf(List<int> bytes, List<int> pattern) {
     }
   }
   return -1;
+}
+
+int _lastIndexOf(List<int> bytes, List<int> pattern, int end) {
+  if (pattern.isEmpty || end < pattern.length) {
+    return -1;
+  }
+  for (var index = end - pattern.length; index >= 0; index--) {
+    var matched = true;
+    for (var offset = 0; offset < pattern.length; offset++) {
+      if (bytes[index + offset] != pattern[offset]) {
+        matched = false;
+        break;
+      }
+    }
+    if (matched) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+int? _oscTerminatorEnd(List<int> bytes, int start, int end) {
+  for (var index = start; index < end; index++) {
+    if (bytes[index] == 0x07) {
+      return index + 1;
+    }
+    if (bytes[index] == 0x1b && index + 1 < end && bytes[index + 1] == 0x5c) {
+      return index + 2;
+    }
+  }
+  return null;
 }
 
 void _trimCapturedOutput(List<int> pending, int maximumBytes) {

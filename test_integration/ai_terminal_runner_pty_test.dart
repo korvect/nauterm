@@ -75,18 +75,18 @@ void main() {
       } else {
         expect(result.submitted, isTrue, reason: diagnostic);
         expect(result.exitCode, isNull, reason: diagnostic);
+        final visibleText = controller.snapshot.cells
+            .map((cell) => cell.text)
+            .join();
+        final observedText = AiContextSanitizer.plainTerminalText(
+          '${utf8.decode(output, allowMalformed: true)}\n$visibleText',
+        ).replaceAll(RegExp(r'\s+'), '');
+        expect(
+          observedText,
+          contains(draft.replaceAll(RegExp(r'\s+'), '')),
+          reason: diagnostic,
+        );
       }
-      final visibleText = controller.snapshot.cells
-          .map((cell) => cell.text)
-          .join();
-      final observedText = AiContextSanitizer.plainTerminalText(
-        '${utf8.decode(output, allowMalformed: true)}\n$visibleText',
-      ).replaceAll(RegExp(r'\s+'), '');
-      expect(
-        observedText,
-        contains(draft.replaceAll(RegExp(r'\s+'), '')),
-        reason: diagnostic,
-      );
     }, skip: _shellSkipReason(shell.value));
   }
 

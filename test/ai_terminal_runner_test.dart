@@ -250,6 +250,7 @@ void main() {
         .firstMatch(inputs.single)!
         .group(1)!;
     expect(inputs.single, contains('fish_postexec'));
+    expect(inputs.single, contains('fish_preexec'));
     expect(inputs.single, contains('__nauterm_shell_prompt'));
     expect(inputs.single, contains(r'\033]133;A'));
     controller.write('\x1b]777;nauterm-integration-ready=$setupToken\x07');
@@ -259,11 +260,15 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     expect(inputs.last, 'pwd\r');
     controller.write(
-      'pwd\r\n/tmp'
+      'fish prompt repaint pwd pwd\r\n'
+      '\x1b]4545;CommandStarted;cHdk\x07\x1b]133;C\x07'
+      '/tmp'
       '\x1b]777;nauterm-command-end=$setupToken;0\x07',
     );
 
-    expect((await result).exitCode, 0);
+    final completed = await result;
+    expect(completed.exitCode, 0);
+    expect(completed.output, '/tmp');
   });
 
   test('shell integration sends only the original zsh command', () async {
