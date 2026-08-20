@@ -33,11 +33,19 @@ void main() {
       controller.addOutputListener(output.addAll);
       await _waitForInitialPrompt(controller);
       final isFish = shell.key == 'fish';
+      final shellKind = terminalShellKindFromPath(shell.value);
+      final tracksResult =
+          shellKind != null &&
+          terminalShellSupportsStructuredIntegration(shellKind);
       final draft = isFish
           ? 'set -g NAUTERM_DRAFT_EXECUTED 1'
           : 'NAUTERM_DRAFT_EXECUTED=1';
       controller.sendInput(draft);
-      await Future<void>.delayed(const Duration(milliseconds: 80));
+      if (tracksResult) {
+        await _waitForPtyEcho(output, draft);
+      } else {
+        await Future<void>.delayed(const Duration(milliseconds: 80));
+      }
       final command = isFish
           ? 'if set -q NAUTERM_DRAFT_EXECUTED; echo dirty; else; echo clean; end'
           : r'''printf "${NAUTERM_DRAFT_EXECUTED:-clean}"''';
@@ -54,10 +62,6 @@ void main() {
         );
       }
 
-      final shellKind = terminalShellKindFromPath(shell.value);
-      final tracksResult =
-          shellKind != null &&
-          terminalShellSupportsStructuredIntegration(shellKind);
       final diagnostic =
           '${shell.key} result: '
           'tracked=${result.resultTracked}, '
@@ -138,4 +142,29 @@ Future<void> _waitForInitialPrompt(TerminalController controller) async {
     await Future<void>.delayed(const Duration(milliseconds: 20));
   }
   throw StateError('The test shell did not produce its first prompt.');
+}
+
+Future<void> _waitForPtyEcho(List<int> output, String value) async {
+  final expected = utf8.encode(value);
+  final deadline = DateTime.now().add(const Duration(seconds: 3));
+  while (DateTime.now().isBefore(deadline)) {
+    if (_containsBytes(output, expected)) return;
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
+  throw StateError('The test shell did not echo the draft input.');
+}
+
+bool _containsBytes(List<int> bytes, List<int> pattern) {
+  if (pattern.isEmpty) return true;
+  for (var start = 0; start + pattern.length <= bytes.length; start++) {
+    var matches = true;
+    for (var offset = 0; offset < pattern.length; offset++) {
+      if (bytes[start + offset] != pattern[offset]) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches) return true;
+  }
+  return false;
 }
