@@ -1071,9 +1071,9 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
             ? math.min(640.0, math.max(240.0, constraints.maxWidth - 24))
             : math.min(640.0, math.max(280.0, constraints.maxWidth - 360));
         final minimumPanelWidth = math.min(280.0, maximumPanelWidth);
-        final panelWidth = _aiAssistantWidth(
-          selectedTerminalTab,
-        ).clamp(minimumPanelWidth, maximumPanelWidth).toDouble();
+        final panelWidth = _aiAssistantWidth(selectedTerminalTab)
+            .clamp(minimumPanelWidth, maximumPanelWidth)
+            .toDouble();
         void resizePanel(double delta) {
           _setAiAssistantWidth(
             selectedTerminalTab,
@@ -1150,9 +1150,9 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
                   : null,
               systemTarget: sshProfile?.host,
               loadSystemInfo: terminalTools && sshProfile != null
-                  ? () async => (await _loadTerminalSystemInfo(
-                      sshProfile,
-                    )).withLatency(terminalController?.sshLatencyMs)
+                  ? () async =>
+                        (await _loadTerminalSystemInfo(sshProfile))
+                            .withLatency(terminalController?.sshLatencyMs)
                   : null,
               onRunSnippet: terminalTools && selectedTerminalTab != null
                   ? (snippet) =>
@@ -1361,9 +1361,8 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
     });
     terminalConfigNotifier.value++;
     try {
-      await NautermConfigStore(
-        NautermPaths.resolve(),
-      ).saveRuntimeSettings(currentNautermRuntimeSettings());
+      await NautermConfigStore(NautermPaths.resolve())
+          .saveRuntimeSettings(currentNautermRuntimeSettings());
     } on Object {
       _showWorkspaceMessage(
         'Font applied, but the configuration file could not be updated.',

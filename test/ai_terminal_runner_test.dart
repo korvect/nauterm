@@ -21,9 +21,9 @@ void main() {
       controller: controller,
       command: 'printf hello',
     );
-    final token = RegExp(
-      r'nauterm-integration-ready=([a-f0-9]+)',
-    ).firstMatch(inputs.single)!.group(1)!;
+    final token = RegExp(r'nauterm-integration-ready=([a-f0-9]+)')
+        .firstMatch(inputs.single)!
+        .group(1)!;
     controller.write('\x1b]777;nauterm-integration-ready=$token\x07');
     await _waitForInput(inputs, '\x18\x1d');
     controller.write('\x1b]777;nauterm-line-ready=$token\x07');
@@ -63,9 +63,9 @@ void main() {
       runner.run(controller: controller, command: 'pwd'),
       throwsStateError,
     );
-    final token = RegExp(
-      r'nauterm-integration-ready=([a-f0-9]+)',
-    ).firstMatch(inputs.single)!.group(1)!;
+    final token = RegExp(r'nauterm-integration-ready=([a-f0-9]+)')
+        .firstMatch(inputs.single)!
+        .group(1)!;
     controller.write('\x1b]777;nauterm-integration-ready=$token\x07');
     await _waitForInput(inputs, '\x18\x1d');
     controller.write('\x1b]777;nauterm-line-ready=$token\x07');
@@ -88,9 +88,9 @@ void main() {
       controller: controller,
       command: 'sleep 30',
     );
-    final token = RegExp(
-      r'nauterm-integration-ready=([a-f0-9]+)',
-    ).firstMatch(inputs.single)!.group(1)!;
+    final token = RegExp(r'nauterm-integration-ready=([a-f0-9]+)')
+        .firstMatch(inputs.single)!
+        .group(1)!;
     controller.write('\x1b]777;nauterm-integration-ready=$token\x07');
     await _waitForInput(inputs, '\x18\x1d');
     controller.write('\x1b]777;nauterm-line-ready=$token\x07');
@@ -126,9 +126,9 @@ void main() {
         controller: controller,
         command: 'sleep 30',
       );
-      final token = RegExp(
-        r'nauterm-integration-ready=([a-f0-9]+)',
-      ).firstMatch(inputs.single)!.group(1)!;
+      final token = RegExp(r'nauterm-integration-ready=([a-f0-9]+)')
+          .firstMatch(inputs.single)!
+          .group(1)!;
       controller.write('\x1b]777;nauterm-integration-ready=$token\x07');
       await _waitForInput(inputs, '\x18\x1d');
       controller.write('\x1b]777;nauterm-line-ready=$token\x07');
@@ -246,9 +246,9 @@ void main() {
     final runner = AiTerminalCommandRunner();
 
     final result = runner.run(controller: controller, command: 'pwd');
-    final setupToken = RegExp(
-      r'nauterm-integration-ready=([a-f0-9]+)',
-    ).firstMatch(inputs.single)!.group(1)!;
+    final setupToken = RegExp(r'nauterm-integration-ready=([a-f0-9]+)')
+        .firstMatch(inputs.single)!
+        .group(1)!;
     expect(inputs.single, contains('fish_postexec'));
     expect(inputs.single, contains('__nauterm_shell_prompt'));
     expect(inputs.single, contains(r'\033]133;A'));
@@ -280,9 +280,9 @@ void main() {
       controller: controller,
       command: 'printf hello',
     );
-    final setupToken = RegExp(
-      r'nauterm-integration-ready=([a-f0-9]+)',
-    ).firstMatch(inputs.single)!.group(1)!;
+    final setupToken = RegExp(r'nauterm-integration-ready=([a-f0-9]+)')
+        .firstMatch(inputs.single)!
+        .group(1)!;
     controller.write('\x1b]777;nauterm-integration-ready=$setupToken\x07');
     await _waitForInput(inputs, '\x18\x1d');
 
@@ -313,9 +313,9 @@ void main() {
     const command = r'''printf "${NAUTERM_DRAFT_EXECUTED:-clean}"''';
 
     final resultFuture = runner.run(controller: controller, command: command);
-    final token = RegExp(
-      r'nauterm-integration-ready=([a-f0-9]+)',
-    ).firstMatch(inputs.single)!.group(1)!;
+    final token = RegExp(r'nauterm-integration-ready=([a-f0-9]+)')
+        .firstMatch(inputs.single)!
+        .group(1)!;
     controller.write('\x1b]777;nauterm-integration-ready=$token\x07');
     await _waitForInput(inputs, '$command\r');
     expect(inputs, containsAllInOrder(['\x18\x1d', '$command\r']));
@@ -354,9 +354,9 @@ sleep 1
 nc -zv 127.0.0.1 2323 2>&1''';
 
       final resultFuture = runner.run(controller: controller, command: command);
-      final setupToken = RegExp(
-        r'nauterm-integration-ready=([a-f0-9]+)',
-      ).firstMatch(inputs.single)!.group(1)!;
+      final setupToken = RegExp(r'nauterm-integration-ready=([a-f0-9]+)')
+          .firstMatch(inputs.single)!
+          .group(1)!;
       controller.write('\x1b]777;nauterm-integration-ready=$setupToken\x07');
       await _waitForInput(inputs, '\x18\x1d');
       expect(inputs.last, '\x18\x1d');
@@ -384,9 +384,9 @@ nc -zv 127.0.0.1 2323 2>&1''';
 
     final resultFuture = runner.run(controller: controller, command: 'pwd');
     final setup = inputs.single;
-    final setupToken = RegExp(
-      r'nauterm-integration-ready=([a-f0-9]+)',
-    ).firstMatch(setup)!.group(1)!;
+    final setupToken = RegExp(r'nauterm-integration-ready=([a-f0-9]+)')
+        .firstMatch(setup)!
+        .group(1)!;
     expect(setup, contains('__nauterm_ai_prompt_commands'));
     expect(setup, contains(r'\C-x\C-]":"\C-a\C-k'));
     expect(setup, isNot(contains(r'\C-u')));
@@ -448,9 +448,9 @@ nc -zv 127.0.0.1 2323 2>&1''';
     );
 
     final first = runner.run(controller: controller, command: 'sleep 30');
-    final setupToken = RegExp(
-      r'nauterm-integration-ready=([a-f0-9]+)',
-    ).firstMatch(inputs.single)!.group(1)!;
+    final setupToken = RegExp(r'nauterm-integration-ready=([a-f0-9]+)')
+        .firstMatch(inputs.single)!
+        .group(1)!;
     controller.write('\x1b]777;nauterm-integration-ready=$setupToken\x07');
     await _waitForInput(inputs, '\x18\x1d');
     expect(inputs.last, '\x18\x1d');

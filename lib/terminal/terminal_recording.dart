@@ -756,8 +756,7 @@ String _recordingId() {
   bytes[5] = millis & 0xff;
   bytes[6] = 0x70 | (bytes[6] & 0x0f);
   bytes[8] = 0x80 | (bytes[8] & 0x3f);
-  final hex = [
-    for (final byte in bytes) byte.toRadixString(16).padLeft(2, '0'),
-  ].join();
+  final hex = [for (final byte in bytes) byte.toRadixString(16).padLeft(2, '0')]
+      .join();
   return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}';
 }

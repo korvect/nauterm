@@ -84,8 +84,7 @@ class _KeychainPaneState extends State<_KeychainPane> {
               ? _WorkspaceEmptyState(
                   icon: LucideIcons.key,
                   title: 'No keychain items yet',
-                  description:
-                      'Add keys and identities once, then reuse them across your saved hosts.',
+                  description: 'Add keys and identities once, then reuse them across your saved hosts.',
                   actionLabel: 'Add key',
                   onAction: widget.onCreateKey,
                 )

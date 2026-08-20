@@ -268,8 +268,7 @@ const _settingsSearchEntries = <_SettingsSearchEntry>[
     section: 'terminal-interaction',
     title: 'Composer',
     subtitle: 'Selection, command blocks, composer, and multiple tabs.',
-    keywords:
-        'input suggestions autocomplete selection click command block multi tab',
+    keywords: 'input suggestions autocomplete selection click command block multi tab',
   ),
   _SettingsSearchEntry(
     page: _SettingsPage.terminal,
@@ -384,9 +383,8 @@ Future<void> _preloadNautermSettingsSecureData() async {
   final paths = NautermPaths.resolve();
   try {
     final settings = await NautermConfigStore(paths).loadRuntimeSettings();
-    _cachedSettingsAiProviders = AiProviderStore(
-      paths,
-    ).loadCatalog(settings.aiAssistant);
+    _cachedSettingsAiProviders = AiProviderStore(paths)
+        .loadCatalog(settings.aiAssistant);
     _cachedSettingsAiProvidersDatabasePath = paths.databasePath;
   } on Object {
     // Settings can retry this read if startup preloading is unavailable.
@@ -825,9 +823,8 @@ class _SettingsPanelState extends State<SettingsPanel> {
 
   void _persistRuntimeSettings() {
     unawaited(
-      NautermConfigStore(
-        NautermPaths.resolve(),
-      ).saveRuntimeSettings(currentNautermRuntimeSettings()),
+      NautermConfigStore(NautermPaths.resolve())
+          .saveRuntimeSettings(currentNautermRuntimeSettings()),
     );
     terminalConfigNotifier.value++;
   }
@@ -965,9 +962,8 @@ class _SettingsPanelState extends State<SettingsPanel> {
       return;
     }
     try {
-      final saved = AiProviderStore(
-        NautermPaths.resolve(),
-      ).save(aiAssistantConfig, existing: _aiProviderEntry);
+      final saved = AiProviderStore(NautermPaths.resolve())
+          .save(aiAssistantConfig, existing: _aiProviderEntry);
       _aiProviderEntry = saved;
       final index = _aiProviders.indexWhere((entry) => entry.id == saved.id);
       if (index >= 0) {
@@ -1392,9 +1388,8 @@ class _SettingsPanelState extends State<SettingsPanel> {
   }
 
   Future<void> _resetSettings({required bool all}) async {
-    final defaults = await NautermConfigStore(
-      NautermPaths.resolve(),
-    ).loadDefaultRuntimeSettings();
+    final defaults = await NautermConfigStore(NautermPaths.resolve())
+        .loadDefaultRuntimeSettings();
     if (!mounted) return;
     final pages = all
         ? const {

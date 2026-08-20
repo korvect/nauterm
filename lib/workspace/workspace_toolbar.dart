@@ -595,8 +595,10 @@ class _HostTagRowIconButton extends StatelessWidget {
 }
 
 typedef _WorkspaceDropdownTriggerBuilder = Widget Function(VoidCallback open);
-typedef _WorkspaceCustomDropdownOpen =
-    void Function(BuildContext context, Rect anchor);
+typedef _WorkspaceCustomDropdownOpen = void Function(
+  BuildContext context,
+  Rect anchor,
+);
 
 /// Shared trigger, anchoring, and selection flow for workspace dropdowns.
 class _WorkspaceDropdown<T> extends StatelessWidget {

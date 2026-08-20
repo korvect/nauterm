@@ -847,9 +847,8 @@ _WorkspaceTerminalMonitorStatus _workspaceTerminalMonitorStatus(
     return _WorkspaceTerminalMonitorStatus(
       label: 'Failed',
       color: const Color(0xffca3f37),
-      background: const Color(
-        0xffca3f37,
-      ).withValues(alpha: _workspaceDark ? 0.18 : 0.12),
+      background: const Color(0xffca3f37)
+          .withValues(alpha: _workspaceDark ? 0.18 : 0.12),
     );
   }
   if (phases.any((phase) => phase == TerminalConnectionPhase.exited)) {

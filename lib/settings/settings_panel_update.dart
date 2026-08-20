@@ -153,8 +153,7 @@ class _AboutSettingsPageState extends State<_AboutSettingsPage> {
           _state = _UpdateUiState.ready;
           _message = tr(
             'settings.update.status.installerLaunched',
-            fallback:
-                'The installer is open. Follow its instructions to finish updating.',
+            fallback: 'The installer is open. Follow its instructions to finish updating.',
           );
         });
         return;
@@ -353,8 +352,7 @@ class _AboutSettingsPageState extends State<_AboutSettingsPage> {
                   const SizedBox(height: 18),
                   _SettingsRow(
                     title: 'Third-party licenses',
-                    subtitle:
-                        'Licenses for bundled Flutter, Dart, Rust, and native components.',
+                    subtitle: 'Licenses for bundled Flutter, Dart, Rust, and native components.',
                     trailing: Align(
                       alignment: Alignment.centerRight,
                       child: _SettingsOutlineButton(

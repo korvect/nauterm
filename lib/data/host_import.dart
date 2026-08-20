@@ -74,9 +74,9 @@ List<HostImportKeyCandidate> collectOpenSshKeys(
     ..sort((left, right) => left.name.compareTo(right.name));
 }
 
-bool isOpenSshPrivateKey(String input) => RegExp(
-  r'-----BEGIN (?:OPENSSH |RSA |EC |DSA |ENCRYPTED )?PRIVATE KEY-----',
-).hasMatch(input);
+bool isOpenSshPrivateKey(String input) =>
+    RegExp(r'-----BEGIN (?:OPENSSH |RSA |EC |DSA |ENCRYPTED )?PRIVATE KEY-----')
+        .hasMatch(input);
 
 bool isOpenSshPublicKey(String input) {
   final value = input.trimLeft();

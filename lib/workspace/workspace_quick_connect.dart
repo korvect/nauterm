@@ -17,9 +17,8 @@ List<_QuickConnectShell> _quickConnectShells() {
 
   final shells = shellsByLabel.values.toList(growable: false);
   shells.sort((a, b) {
-    final priority = _quickConnectShellPriority(
-      a.path,
-    ).compareTo(_quickConnectShellPriority(b.path));
+    final priority = _quickConnectShellPriority(a.path)
+        .compareTo(_quickConnectShellPriority(b.path));
     if (priority != 0) {
       return priority;
     }

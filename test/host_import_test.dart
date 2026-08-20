@@ -70,8 +70,7 @@ github.com,192.30.255.113 ssh-ed25519 AAAA
         ),
         OpenSshImportFile(
           path: '/home/me/.ssh/id_ed25519',
-          contents:
-              '-----BEGIN OPENSSH PRIVATE KEY-----\nsecret\n-----END OPENSSH PRIVATE KEY-----',
+          contents: '-----BEGIN OPENSSH PRIVATE KEY-----\nsecret\n-----END OPENSSH PRIVATE KEY-----',
         ),
         OpenSshImportFile(
           path: '/home/me/.ssh/work.pub',

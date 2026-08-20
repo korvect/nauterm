@@ -57,33 +57,29 @@ void main() {
     }
   }, skip: _windowsPtySkipReason);
 
-  test(
-    'local ffi pty reports echo enabled for interactive shell',
-    () async {
-      final driver = NativeTerminalDriver.create(
-        columns: 80,
-        rows: 8,
-        config: defaultTerminalConfig,
-        onWakeup: () {},
+  test('local ffi pty reports echo enabled for interactive shell', () async {
+    final driver = NativeTerminalDriver.create(
+      columns: 80,
+      rows: 8,
+      config: defaultTerminalConfig,
+      onWakeup: () {},
+    );
+    addTearDown(driver.dispose);
+
+    final deadline = DateTime.now().add(const Duration(seconds: 3));
+    while (DateTime.now().isBefore(deadline)) {
+      driver.poll();
+      final hasVisibleText = driver.snapshot.cells.any(
+        (cell) => cell.text.trim().isNotEmpty,
       );
-      addTearDown(driver.dispose);
-
-      final deadline = DateTime.now().add(const Duration(seconds: 3));
-      while (DateTime.now().isBefore(deadline)) {
-        driver.poll();
-        final hasVisibleText = driver.snapshot.cells.any(
-          (cell) => cell.text.trim().isNotEmpty,
-        );
-        if (hasVisibleText) {
-          break;
-        }
-        await Future<void>.delayed(const Duration(milliseconds: 20));
+      if (hasVisibleText) {
+        break;
       }
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
 
-      expect(driver.snapshot.inputEchoEnabled, isTrue);
-    },
-    skip: _windowsPtySkipReason,
-  );
+    expect(driver.snapshot.inputEchoEnabled, isTrue);
+  }, skip: _windowsPtySkipReason);
 
   test('native terminal exports the Nysa ANSI palette', () async {
     final driver = NativeTerminalDriver.createCommand(

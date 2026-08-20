@@ -421,8 +421,7 @@ class _AiProviderEditorState extends State<_AiProviderEditor> {
                       _generationRow(
                         localizationKey: 'settings.ai.provider.maxTokens',
                         title: 'Max Tokens',
-                        subtitle:
-                            'Maximum tokens generated in one response. Leave blank to use the provider default (Anthropic falls back to 4096).',
+                        subtitle: 'Maximum tokens generated in one response. Leave blank to use the provider default (Anthropic falls back to 4096).',
                         controller: _maxTokensController,
                         fieldKey: const ValueKey(
                           'settings-ai-max-tokens-field',
@@ -440,8 +439,7 @@ class _AiProviderEditorState extends State<_AiProviderEditor> {
                       _generationRow(
                         localizationKey: 'settings.ai.provider.temperature',
                         title: 'Temperature',
-                        subtitle:
-                            'Sampling randomness from 0 to 1. Leave blank to use the provider default.',
+                        subtitle: 'Sampling randomness from 0 to 1. Leave blank to use the provider default.',
                         controller: _temperatureController,
                         decimal: true,
                         onChanged: _updateTemperature,
@@ -624,8 +622,7 @@ class _AiPresetDialogState extends State<_AiPresetDialog> {
                             Text(
                               tr(
                                 'settings.ai.providerPreset.description',
-                                fallback:
-                                    'Select a provider preset or create a blank one.',
+                                fallback: 'Select a provider preset or create a blank one.',
                               ),
                               style: TextStyle(
                                 fontSize: 10,
@@ -712,9 +709,9 @@ class _AiPresetDialogState extends State<_AiPresetDialog> {
                             final entry = _filteredPresets[index];
                             return _AiPresetRow(
                               preset: entry.value,
-                              onTap: () => Navigator.of(
-                                context,
-                              ).pop(_AiPresetDialogResult(entry.value)),
+                              onTap: () =>
+                                  Navigator.of(context)
+                                      .pop(_AiPresetDialogResult(entry.value)),
                             );
                           },
                         ),
@@ -728,9 +725,9 @@ class _AiPresetDialogState extends State<_AiPresetDialog> {
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       OutlinedButton(
-                        onPressed: () => Navigator.of(
-                          context,
-                        ).pop(const _AiPresetDialogResult(null)),
+                        onPressed: () =>
+                            Navigator.of(context)
+                                .pop(const _AiPresetDialogResult(null)),
                         style: _settingsOutlinedButtonStyle().copyWith(
                           foregroundColor: WidgetStatePropertyAll(_text),
                         ),

@@ -1914,9 +1914,8 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
     List<_SnippetPackageItem> packages,
     _ContextMenuActionId action,
   ) {
-    final targets = {
-      for (final package in packages) package.id: package,
-    }.values.toList();
+    final targets = {for (final package in packages) package.id: package}.values
+        .toList();
     if (targets.length < 2) {
       if (targets.isNotEmpty) {
         _handleSnippetPackageContextAction(targets.single, action);
@@ -2058,9 +2057,8 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
         for (final entry in _snippets)
           if (entry.id != item.id) entry,
       ];
-      if (_editorRequest case _SnippetEditorRequest(
-        initial: final initial?,
-      ) when initial.id == item.id) {
+      if (_editorRequest case _SnippetEditorRequest(initial: final initial?)
+          when initial.id == item.id) {
         _editorRequest = null;
       }
     });
@@ -2170,9 +2168,8 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
         for (final entry in _snippets)
           if (!ids.contains(entry.id)) entry,
       ];
-      if (_editorRequest case _SnippetEditorRequest(
-        initial: final initial?,
-      ) when ids.contains(initial.id)) {
+      if (_editorRequest case _SnippetEditorRequest(initial: final initial?)
+          when ids.contains(initial.id)) {
         _editorRequest = null;
       }
     });
@@ -2211,9 +2208,9 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
     }
 
     final operation = _shellHistoryPersistence.then(
-      (_) => ShellHistoryFileStore(
-        NautermPaths.resolve().shellHistoryFile,
-      ).clear(),
+      (_) =>
+          ShellHistoryFileStore(NautermPaths.resolve().shellHistoryFile)
+              .clear(),
     );
     _shellHistoryPersistence = operation;
     try {
@@ -2362,9 +2359,8 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       switch (format) {
         case _TerminalLogExportFormat.readableText:
           final text = await _renderTerminalCaptureAsText(store, log);
-          await io.File(
-            outputPath,
-          ).writeAsString(text, encoding: utf8, flush: true);
+          await io.File(outputPath)
+              .writeAsString(text, encoding: utf8, flush: true);
         case _TerminalLogExportFormat.rawAnsi:
           final output = io.File(outputPath).openWrite();
           try {
@@ -3074,9 +3070,8 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
     List<_KnownHostItem> items,
     _ContextMenuActionId action,
   ) {
-    final targets = {
-      for (final item in items) item.lineIndex: item,
-    }.values.toList();
+    final targets = {for (final item in items) item.lineIndex: item}.values
+        .toList();
     if (targets.length < 2) {
       if (targets.isNotEmpty) {
         _handleKnownHostContextAction(targets.single, action);
@@ -3102,9 +3097,8 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
         return;
       }
 
-      await KnownHostsStore(
-        NautermPaths.resolve().knownHostsFile,
-      ).writeText(merge.text);
+      await KnownHostsStore(NautermPaths.resolve().knownHostsFile)
+          .writeText(merge.text);
       if (!mounted) {
         return;
       }
@@ -3249,9 +3243,8 @@ if (\$dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
 
     lines.removeAt(item.lineIndex);
     final updatedText = lines.join('\n');
-    await KnownHostsStore(
-      NautermPaths.resolve().knownHostsFile,
-    ).writeText(updatedText);
+    await KnownHostsStore(NautermPaths.resolve().knownHostsFile)
+        .writeText(updatedText);
     if (!mounted) {
       return;
     }
@@ -3282,9 +3275,8 @@ if (\$dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
       for (var index = 0; index < lines.length; index++)
         if (!lineIndexes.contains(index)) lines[index],
     ].join('\n');
-    await KnownHostsStore(
-      NautermPaths.resolve().knownHostsFile,
-    ).writeText(updatedText);
+    await KnownHostsStore(NautermPaths.resolve().knownHostsFile)
+        .writeText(updatedText);
     if (!mounted) {
       return;
     }

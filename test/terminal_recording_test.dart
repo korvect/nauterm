@@ -331,9 +331,8 @@ void main() {
       await File('${directory.path}/orphan.bin').writeAsBytes(utf8.encode('x'));
       await File('${directory.path}/kept.ntrcap').writeAsBytes([1, 2]);
       await File('${directory.path}/kept.ntrcap.state').writeAsBytes([6]);
-      await File(
-        '${directory.path}/kept.ntrcap.state.deadbeef.tmp',
-      ).writeAsBytes([7]);
+      await File('${directory.path}/kept.ntrcap.state.deadbeef.tmp')
+          .writeAsBytes([7]);
       await File('${directory.path}/orphan.ntrcap').writeAsBytes([3, 4, 5]);
 
       await store.cleanupOrphans(

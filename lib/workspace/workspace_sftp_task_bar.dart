@@ -473,9 +473,8 @@ Map<int, int> _sftpTaskQueuePositions(List<_SftpTask> tasks) {
 int _compareSftpTasksOldestFirst(_SftpTask left, _SftpTask right) {
   final created = left.createdAt.compareTo(right.createdAt);
   if (created != 0) return created;
-  return _sftpTaskStableSequence(
-    left,
-  ).compareTo(_sftpTaskStableSequence(right));
+  return _sftpTaskStableSequence(left)
+      .compareTo(_sftpTaskStableSequence(right));
 }
 
 int _compareFinishedSftpTasksNewestFirst(_SftpTask left, _SftpTask right) {
@@ -485,9 +484,8 @@ int _compareFinishedSftpTasksNewestFirst(_SftpTask left, _SftpTask right) {
   if (finished != 0) return finished;
   final created = right.createdAt.compareTo(left.createdAt);
   if (created != 0) return created;
-  return _sftpTaskStableSequence(
-    right,
-  ).compareTo(_sftpTaskStableSequence(left));
+  return _sftpTaskStableSequence(right)
+      .compareTo(_sftpTaskStableSequence(left));
 }
 
 int _sftpTaskStableSequence(_SftpTask task) => task.historyId ?? task.id;

@@ -1946,32 +1946,32 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
             _WorkspaceButton(
               label: 'Cancel',
               variant: _WorkspaceButtonVariant.text,
-              onPressed: () => Navigator.of(
-                dialogContext,
-              ).pop(_ExternalEditConflictResolution.cancel),
+              onPressed: () =>
+                  Navigator.of(dialogContext)
+                      .pop(_ExternalEditConflictResolution.cancel),
             ),
             if (!remoteMissing)
               _WorkspaceButton(
                 label: 'Keep Remote',
                 variant: _WorkspaceButtonVariant.filled,
-                onPressed: () => Navigator.of(
-                  dialogContext,
-                ).pop(_ExternalEditConflictResolution.keepRemote),
+                onPressed: () =>
+                    Navigator.of(dialogContext)
+                        .pop(_ExternalEditConflictResolution.keepRemote),
               ),
             _WorkspaceButton(
               label: 'Save a Copy',
               variant: _WorkspaceButtonVariant.filled,
-              onPressed: () => Navigator.of(
-                dialogContext,
-              ).pop(_ExternalEditConflictResolution.saveCopy),
+              onPressed: () =>
+                  Navigator.of(dialogContext)
+                      .pop(_ExternalEditConflictResolution.saveCopy),
             ),
             _WorkspaceButton(
               label: 'Overwrite Remote',
               type: _WorkspaceButtonType.error,
               variant: _WorkspaceButtonVariant.solid,
-              onPressed: () => Navigator.of(
-                dialogContext,
-              ).pop(_ExternalEditConflictResolution.overwriteRemote),
+              onPressed: () =>
+                  Navigator.of(dialogContext)
+                      .pop(_ExternalEditConflictResolution.overwriteRemote),
             ),
           ],
         );
@@ -3257,24 +3257,24 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
             _WorkspaceButton(
               label: 'Cancel',
               variant: _WorkspaceButtonVariant.text,
-              onPressed: () => Navigator.of(
-                dialogContext,
-              ).pop(_SftpNameConflictResolution.cancel),
+              onPressed: () =>
+                  Navigator.of(dialogContext)
+                      .pop(_SftpNameConflictResolution.cancel),
             ),
             _WorkspaceButton(
               label: 'Keep Both',
               variant: _WorkspaceButtonVariant.filled,
-              onPressed: () => Navigator.of(
-                dialogContext,
-              ).pop(_SftpNameConflictResolution.keepBoth),
+              onPressed: () =>
+                  Navigator.of(dialogContext)
+                      .pop(_SftpNameConflictResolution.keepBoth),
             ),
             _WorkspaceButton(
               label: 'Replace',
               type: _WorkspaceButtonType.primary,
               variant: _WorkspaceButtonVariant.solid,
-              onPressed: () => Navigator.of(
-                dialogContext,
-              ).pop(_SftpNameConflictResolution.replace),
+              onPressed: () =>
+                  Navigator.of(dialogContext)
+                      .pop(_SftpNameConflictResolution.replace),
             ),
           ],
         );

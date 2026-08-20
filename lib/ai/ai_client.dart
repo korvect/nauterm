@@ -770,8 +770,7 @@ const Map<String, Object?> _terminalCommandParameters = <String, Object?>{
     },
     'explanation': <String, Object?>{
       'type': 'string',
-      'description':
-          'A concise plain-language explanation of what the command does, why it is needed, and any important risk or side effect.',
+      'description': 'A concise plain-language explanation of what the command does, why it is needed, and any important risk or side effect.',
     },
   },
   'required': <String>['command', 'explanation'],

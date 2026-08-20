@@ -219,8 +219,7 @@ class _HostsPaneState extends State<_HostsPane> {
                         ? _WorkspaceEmptyState(
                             icon: LucideIcons.server,
                             title: 'No hosts yet',
-                            description:
-                                'Add a host to save connection details and open remote sessions quickly.',
+                            description: 'Add a host to save connection details and open remote sessions quickly.',
                             actionLabel: 'Add host',
                             onAction: () => widget.onCreateHost(currentGroupId),
                           )
@@ -599,8 +598,7 @@ class _HostSearchBar extends StatelessWidget {
                         border: InputBorder.none,
                         hintText: tr(
                           'workspace.search.hosts.placeholder',
-                          fallback:
-                              'Search host:, group:, username:, tag:, or user@host',
+                          fallback: 'Search host:, group:, username:, tag:, or user@host',
                         ),
                         hintStyle: TextStyle(
                           color: _mutedText,

@@ -11,9 +11,9 @@ void main() {
 
     Map<String, dynamic>? payload;
     server.listen((request) async {
-      payload =
-          jsonDecode(await utf8.decoder.bind(request).join())
-              as Map<String, dynamic>;
+      payload = jsonDecode(
+        await utf8.decoder.bind(request).join(),
+      ) as Map<String, dynamic>;
       request.response.statusCode = HttpStatus.ok;
       await request.response.close();
     });
@@ -70,9 +70,9 @@ void main() {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => server.close(force: true));
     final requestFuture = server.first.then((request) async {
-      payload =
-          jsonDecode(await utf8.decoder.bind(request).join())
-              as Map<String, dynamic>;
+      payload = jsonDecode(
+        await utf8.decoder.bind(request).join(),
+      ) as Map<String, dynamic>;
       request.response.statusCode = HttpStatus.ok;
       await request.response.close();
     });

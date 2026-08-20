@@ -208,12 +208,12 @@ void main() {
   test(
     'English and Chinese resource files contain the same message keys',
     () async {
-      final english =
-          jsonDecode(await rootBundle.loadString('assets/i18n/en.json'))
-              as Map<String, dynamic>;
-      final chinese =
-          jsonDecode(await rootBundle.loadString('assets/i18n/zh_CN.json'))
-              as Map<String, dynamic>;
+      final english = jsonDecode(
+        await rootBundle.loadString('assets/i18n/en.json'),
+      ) as Map<String, dynamic>;
+      final chinese = jsonDecode(
+        await rootBundle.loadString('assets/i18n/zh_CN.json'),
+      ) as Map<String, dynamic>;
       final englishKeys = english.keys
           .where((key) => key != '_patterns')
           .toList(growable: false);

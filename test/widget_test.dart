@@ -311,64 +311,61 @@ void main() {
     controller.dispose();
   });
 
-  test(
-    'Mosh committed snapshot clears only batches through the acknowledged input state',
-    () {
-      final driver = _ExitingTerminalDriver();
-      final controller = TerminalController.mosh(
-        host: 'example.test',
-        port: 22,
-        username: 'user',
-        knownHostsPath: '/tmp/known-hosts',
-        driver: driver,
-      );
-      driver.events.add(
-        const TerminalConnectionEvent(
-          kind: TerminalConnectionEventKind.moshEchoEnabled,
-          message: 'echo enabled',
-        ),
-      );
-      controller.poll();
+  test('Mosh committed snapshot clears only batches through the acknowledged input state', () {
+    final driver = _ExitingTerminalDriver();
+    final controller = TerminalController.mosh(
+      host: 'example.test',
+      port: 22,
+      username: 'user',
+      knownHostsPath: '/tmp/known-hosts',
+      driver: driver,
+    );
+    driver.events.add(
+      const TerminalConnectionEvent(
+        kind: TerminalConnectionEventKind.moshEchoEnabled,
+        message: 'echo enabled',
+      ),
+    );
+    controller.poll();
 
-      controller.sendInput('abc');
-      driver.events.add(
-        const TerminalConnectionEvent(
-          kind: TerminalConnectionEventKind.moshInputStateQueued,
-          message: 'state 1',
-          stateNum: 1,
-        ),
-      );
-      controller.poll();
-      controller.sendInput('def');
-      driver.events.add(
-        const TerminalConnectionEvent(
-          kind: TerminalConnectionEventKind.moshInputStateQueued,
-          message: 'state 2',
-          stateNum: 2,
-        ),
-      );
-      controller.poll();
-      driver.events.add(
-        const TerminalConnectionEvent(
-          kind: TerminalConnectionEventKind.moshPredictionConfirmed,
-          message: 'state 1 confirmed',
-          stateNum: 1,
-        ),
-      );
-      driver.currentSnapshot = _snapshotWithCursor(
-        column: 3,
-        row: 0,
-        textCells: {(0, 0): 'a', (0, 1): 'b', (0, 2): 'c'},
-      );
-      driver.events.add(_moshScreenCommittedEvent(10));
-      driver.changed = true;
-      controller.poll();
+    controller.sendInput('abc');
+    driver.events.add(
+      const TerminalConnectionEvent(
+        kind: TerminalConnectionEventKind.moshInputStateQueued,
+        message: 'state 1',
+        stateNum: 1,
+      ),
+    );
+    controller.poll();
+    controller.sendInput('def');
+    driver.events.add(
+      const TerminalConnectionEvent(
+        kind: TerminalConnectionEventKind.moshInputStateQueued,
+        message: 'state 2',
+        stateNum: 2,
+      ),
+    );
+    controller.poll();
+    driver.events.add(
+      const TerminalConnectionEvent(
+        kind: TerminalConnectionEventKind.moshPredictionConfirmed,
+        message: 'state 1 confirmed',
+        stateNum: 1,
+      ),
+    );
+    driver.currentSnapshot = _snapshotWithCursor(
+      column: 3,
+      row: 0,
+      textCells: {(0, 0): 'a', (0, 1): 'b', (0, 2): 'c'},
+    );
+    driver.events.add(_moshScreenCommittedEvent(10));
+    driver.changed = true;
+    controller.poll();
 
-      expect(controller.moshPrediction, 'def');
-      expect(controller.debugMoshPredictionBatches.single.inputStateNum, 2);
-      controller.dispose();
-    },
-  );
+    expect(controller.moshPrediction, 'def');
+    expect(controller.debugMoshPredictionBatches.single.inputStateNum, 2);
+    controller.dispose();
+  });
 
   test('rejected mosh input does not local-echo or create prediction', () {
     final driver = _BackpressuredTerminalDriver();
@@ -448,99 +445,93 @@ void main() {
     },
   );
 
-  test(
-    'Mosh input ACK without a committed screen snapshot retains every prediction batch',
-    () {
-      final driver = _ExitingTerminalDriver();
-      final controller = TerminalController.mosh(
-        host: 'example.test',
-        port: 22,
-        username: 'user',
-        knownHostsPath: '/tmp/known-hosts',
-        driver: driver,
-      );
-      driver.events.add(
-        const TerminalConnectionEvent(
-          kind: TerminalConnectionEventKind.moshEchoEnabled,
-          message: 'echo enabled',
-        ),
-      );
-      controller.poll();
+  test('Mosh input ACK without a committed screen snapshot retains every prediction batch', () {
+    final driver = _ExitingTerminalDriver();
+    final controller = TerminalController.mosh(
+      host: 'example.test',
+      port: 22,
+      username: 'user',
+      knownHostsPath: '/tmp/known-hosts',
+      driver: driver,
+    );
+    driver.events.add(
+      const TerminalConnectionEvent(
+        kind: TerminalConnectionEventKind.moshEchoEnabled,
+        message: 'echo enabled',
+      ),
+    );
+    controller.poll();
 
-      controller.sendInput('abc');
-      driver.events.add(
-        const TerminalConnectionEvent(
-          kind: TerminalConnectionEventKind.moshInputStateQueued,
-          message: 'state 1',
-          stateNum: 1,
-        ),
-      );
-      controller.poll();
-      controller.sendInput('def');
-      driver.events.add(
-        const TerminalConnectionEvent(
-          kind: TerminalConnectionEventKind.moshInputStateQueued,
-          message: 'state 2',
-          stateNum: 2,
-        ),
-      );
-      controller.poll();
-      driver.events.add(
-        const TerminalConnectionEvent(
-          kind: TerminalConnectionEventKind.moshPredictionConfirmed,
-          message: 'state 1 confirmed',
-          stateNum: 1,
-        ),
-      );
-      controller.poll();
-      driver.changed = true;
-      controller.poll();
+    controller.sendInput('abc');
+    driver.events.add(
+      const TerminalConnectionEvent(
+        kind: TerminalConnectionEventKind.moshInputStateQueued,
+        message: 'state 1',
+        stateNum: 1,
+      ),
+    );
+    controller.poll();
+    controller.sendInput('def');
+    driver.events.add(
+      const TerminalConnectionEvent(
+        kind: TerminalConnectionEventKind.moshInputStateQueued,
+        message: 'state 2',
+        stateNum: 2,
+      ),
+    );
+    controller.poll();
+    driver.events.add(
+      const TerminalConnectionEvent(
+        kind: TerminalConnectionEventKind.moshPredictionConfirmed,
+        message: 'state 1 confirmed',
+        stateNum: 1,
+      ),
+    );
+    controller.poll();
+    driver.changed = true;
+    controller.poll();
 
-      expect(controller.moshPrediction, 'abcdef');
-      final batches = controller.debugMoshPredictionBatches;
-      expect(batches, hasLength(2));
-      expect(batches.first.inputAcked, isTrue);
-      expect(batches.last.inputAcked, isFalse);
-      controller.dispose();
-    },
-  );
+    expect(controller.moshPrediction, 'abcdef');
+    final batches = controller.debugMoshPredictionBatches;
+    expect(batches, hasLength(2));
+    expect(batches.first.inputAcked, isTrue);
+    expect(batches.last.inputAcked, isFalse);
+    controller.dispose();
+  });
 
-  test(
-    'mosh prediction pauses after unsupported control input until screen update',
-    () {
-      final driver = _ExitingTerminalDriver();
-      final controller = TerminalController.mosh(
-        host: 'example.test',
-        port: 22,
-        username: 'user',
-        knownHostsPath: '/tmp/known-hosts',
-        driver: driver,
-      );
-      driver.events.add(
-        const TerminalConnectionEvent(
-          kind: TerminalConnectionEventKind.moshEchoEnabled,
-          message: 'echo enabled',
-        ),
-      );
-      controller.poll();
+  test('mosh prediction pauses after unsupported control input until screen update', () {
+    final driver = _ExitingTerminalDriver();
+    final controller = TerminalController.mosh(
+      host: 'example.test',
+      port: 22,
+      username: 'user',
+      knownHostsPath: '/tmp/known-hosts',
+      driver: driver,
+    );
+    driver.events.add(
+      const TerminalConnectionEvent(
+        kind: TerminalConnectionEventKind.moshEchoEnabled,
+        message: 'echo enabled',
+      ),
+    );
+    controller.poll();
 
-      controller.sendInput('ab');
-      expect(controller.moshPrediction, 'ab');
+    controller.sendInput('ab');
+    expect(controller.moshPrediction, 'ab');
 
-      controller.sendInput('\x03');
-      expect(controller.moshPrediction, isEmpty);
+    controller.sendInput('\x03');
+    expect(controller.moshPrediction, isEmpty);
 
-      controller.sendInput('c');
-      expect(controller.moshPrediction, isEmpty);
+    controller.sendInput('c');
+    expect(controller.moshPrediction, isEmpty);
 
-      driver.changed = true;
-      controller.poll();
+    driver.changed = true;
+    controller.poll();
 
-      controller.sendInput('d');
-      expect(controller.moshPrediction, 'd');
-      controller.dispose();
-    },
-  );
+    controller.sendInput('d');
+    expect(controller.moshPrediction, 'd');
+    controller.dispose();
+  });
 
   test(
     'mosh prediction batches capture cursor origin and strategy metadata',
@@ -653,41 +644,38 @@ void main() {
     },
   );
 
-  test(
-    'Mosh cursor at the next prediction batch origin does not discard that pending batch',
-    () {
-      final driver = _ExitingTerminalDriver();
-      driver.currentSnapshot = _snapshotWithCursor(column: 3, row: 4);
-      final controller = TerminalController.mosh(
-        host: 'example.test',
-        port: 22,
-        username: 'user',
-        knownHostsPath: '/tmp/known-hosts',
-        driver: driver,
-      );
-      driver.events.add(
-        const TerminalConnectionEvent(
-          kind: TerminalConnectionEventKind.moshEchoEnabled,
-          message: 'echo enabled',
-        ),
-      );
-      controller.poll();
+  test('Mosh cursor at the next prediction batch origin does not discard that pending batch', () {
+    final driver = _ExitingTerminalDriver();
+    driver.currentSnapshot = _snapshotWithCursor(column: 3, row: 4);
+    final controller = TerminalController.mosh(
+      host: 'example.test',
+      port: 22,
+      username: 'user',
+      knownHostsPath: '/tmp/known-hosts',
+      driver: driver,
+    );
+    driver.events.add(
+      const TerminalConnectionEvent(
+        kind: TerminalConnectionEventKind.moshEchoEnabled,
+        message: 'echo enabled',
+      ),
+    );
+    controller.poll();
 
-      controller.sendInput('ab');
-      controller.sendInput('cd');
-      expect(controller.moshPrediction, 'abcd');
+    controller.sendInput('ab');
+    controller.sendInput('cd');
+    expect(controller.moshPrediction, 'abcd');
 
-      driver.currentSnapshot = _snapshotWithCursor(column: 5, row: 4);
-      controller.refreshSnapshot();
+    driver.currentSnapshot = _snapshotWithCursor(column: 5, row: 4);
+    controller.refreshSnapshot();
 
-      expect(controller.moshPrediction, 'abcd');
-      final batches = controller.debugMoshPredictionBatches;
-      expect(batches, hasLength(2));
-      expect(batches.first.text, 'ab');
-      expect(batches.last.text, 'cd');
-      controller.dispose();
-    },
-  );
+    expect(controller.moshPrediction, 'abcd');
+    final batches = controller.debugMoshPredictionBatches;
+    expect(batches, hasLength(2));
+    expect(batches.first.text, 'ab');
+    expect(batches.last.text, 'cd');
+    controller.dispose();
+  });
 
   test(
     'screen content mismatch invalidates only affected mosh prediction batches',
@@ -730,44 +718,41 @@ void main() {
     },
   );
 
-  test(
-    'screen content mismatch inside a batch invalidates that batch and later ones',
-    () {
-      final driver = _ExitingTerminalDriver();
-      driver.currentSnapshot = _snapshotWithCursor(column: 3, row: 4);
-      final controller = TerminalController.mosh(
-        host: 'example.test',
-        port: 22,
-        username: 'user',
-        knownHostsPath: '/tmp/known-hosts',
-        driver: driver,
-      );
-      driver.events.add(
-        const TerminalConnectionEvent(
-          kind: TerminalConnectionEventKind.moshEchoEnabled,
-          message: 'echo enabled',
-        ),
-      );
-      controller.poll();
+  test('screen content mismatch inside a batch invalidates that batch and later ones', () {
+    final driver = _ExitingTerminalDriver();
+    driver.currentSnapshot = _snapshotWithCursor(column: 3, row: 4);
+    final controller = TerminalController.mosh(
+      host: 'example.test',
+      port: 22,
+      username: 'user',
+      knownHostsPath: '/tmp/known-hosts',
+      driver: driver,
+    );
+    driver.events.add(
+      const TerminalConnectionEvent(
+        kind: TerminalConnectionEventKind.moshEchoEnabled,
+        message: 'echo enabled',
+      ),
+    );
+    controller.poll();
 
-      controller.sendInput('ab');
-      controller.sendInput('cd');
-      expect(controller.moshPrediction, 'abcd');
+    controller.sendInput('ab');
+    controller.sendInput('cd');
+    expect(controller.moshPrediction, 'abcd');
 
-      driver.currentSnapshot = _snapshotWithCursor(
-        column: 7,
-        row: 4,
-        textCells: const {(4, 5): 'c', (4, 6): 'X'},
-      );
-      controller.refreshSnapshot();
+    driver.currentSnapshot = _snapshotWithCursor(
+      column: 7,
+      row: 4,
+      textCells: const {(4, 5): 'c', (4, 6): 'X'},
+    );
+    controller.refreshSnapshot();
 
-      expect(controller.moshPrediction, 'ab');
-      final batches = controller.debugMoshPredictionBatches;
-      expect(batches, hasLength(1));
-      expect(batches.single.text, 'ab');
-      controller.dispose();
-    },
-  );
+    expect(controller.moshPrediction, 'ab');
+    final batches = controller.debugMoshPredictionBatches;
+    expect(batches, hasLength(1));
+    expect(batches.single.text, 'ab');
+    controller.dispose();
+  });
 
   test('mosh prediction mode never disables local prediction overlay', () {
     final driver = _ExitingTerminalDriver();
@@ -879,125 +864,119 @@ void main() {
     },
   );
 
-  test(
-    'mosh adaptive prediction can continue on a low RTT line after confirmed same-row history',
-    () {
-      final driver = _ExitingTerminalDriver();
-      driver.currentSnapshot = _snapshotWithCursor(column: 0, row: 0);
-      final controller = TerminalController.mosh(
-        host: 'example.test',
-        port: 22,
-        username: 'user',
-        knownHostsPath: '/tmp/known-hosts',
-        driver: driver,
-      );
-      driver.events.add(
-        const TerminalConnectionEvent(
-          kind: TerminalConnectionEventKind.moshEchoEnabled,
-          message: 'echo enabled',
-        ),
-      );
-      driver.events.add(
-        const TerminalConnectionEvent(
-          kind: TerminalConnectionEventKind.moshLatencyUpdated,
-          message: 'latency 90',
-          latencyMs: 90,
-        ),
-      );
-      controller.poll();
+  test('mosh adaptive prediction can continue on a low RTT line after confirmed same-row history', () {
+    final driver = _ExitingTerminalDriver();
+    driver.currentSnapshot = _snapshotWithCursor(column: 0, row: 0);
+    final controller = TerminalController.mosh(
+      host: 'example.test',
+      port: 22,
+      username: 'user',
+      knownHostsPath: '/tmp/known-hosts',
+      driver: driver,
+    );
+    driver.events.add(
+      const TerminalConnectionEvent(
+        kind: TerminalConnectionEventKind.moshEchoEnabled,
+        message: 'echo enabled',
+      ),
+    );
+    driver.events.add(
+      const TerminalConnectionEvent(
+        kind: TerminalConnectionEventKind.moshLatencyUpdated,
+        message: 'latency 90',
+        latencyMs: 90,
+      ),
+    );
+    controller.poll();
 
-      controller.sendInput('a');
-      expect(controller.moshPrediction, 'a');
+    controller.sendInput('a');
+    expect(controller.moshPrediction, 'a');
 
-      driver.events.add(
-        const TerminalConnectionEvent(
-          kind: TerminalConnectionEventKind.moshPredictionConfirmed,
-          message: 'confirmed',
-        ),
-      );
-      driver.currentSnapshot = _snapshotWithCursor(
-        column: 1,
-        row: 0,
-        textCells: {(0, 0): 'a'},
-      );
-      driver.events.add(_moshScreenCommittedEvent(11));
-      driver.changed = true;
-      controller.poll();
-      expect(controller.moshPrediction, isEmpty);
+    driver.events.add(
+      const TerminalConnectionEvent(
+        kind: TerminalConnectionEventKind.moshPredictionConfirmed,
+        message: 'confirmed',
+      ),
+    );
+    driver.currentSnapshot = _snapshotWithCursor(
+      column: 1,
+      row: 0,
+      textCells: {(0, 0): 'a'},
+    );
+    driver.events.add(_moshScreenCommittedEvent(11));
+    driver.changed = true;
+    controller.poll();
+    expect(controller.moshPrediction, isEmpty);
 
-      driver.events.add(
-        const TerminalConnectionEvent(
-          kind: TerminalConnectionEventKind.moshLatencyUpdated,
-          message: 'latency 30',
-          latencyMs: 30,
-        ),
-      );
-      controller.poll();
+    driver.events.add(
+      const TerminalConnectionEvent(
+        kind: TerminalConnectionEventKind.moshLatencyUpdated,
+        message: 'latency 30',
+        latencyMs: 30,
+      ),
+    );
+    controller.poll();
 
-      controller.sendInput('b');
-      expect(controller.moshPrediction, 'b');
-      controller.dispose();
-    },
-  );
+    controller.sendInput('b');
+    expect(controller.moshPrediction, 'b');
+    controller.dispose();
+  });
 
-  test(
-    'mosh adaptive low RTT confidence does not survive leaving the confirmed cursor position',
-    () {
-      final driver = _ExitingTerminalDriver();
-      driver.currentSnapshot = _snapshotWithCursor(column: 0, row: 0);
-      final controller = TerminalController.mosh(
-        host: 'example.test',
-        port: 22,
-        username: 'user',
-        knownHostsPath: '/tmp/known-hosts',
-        driver: driver,
-      );
-      driver.events.add(
-        const TerminalConnectionEvent(
-          kind: TerminalConnectionEventKind.moshEchoEnabled,
-          message: 'echo enabled',
-        ),
-      );
-      driver.events.add(
-        const TerminalConnectionEvent(
-          kind: TerminalConnectionEventKind.moshLatencyUpdated,
-          message: 'latency 90',
-          latencyMs: 90,
-        ),
-      );
-      controller.poll();
+  test('mosh adaptive low RTT confidence does not survive leaving the confirmed cursor position', () {
+    final driver = _ExitingTerminalDriver();
+    driver.currentSnapshot = _snapshotWithCursor(column: 0, row: 0);
+    final controller = TerminalController.mosh(
+      host: 'example.test',
+      port: 22,
+      username: 'user',
+      knownHostsPath: '/tmp/known-hosts',
+      driver: driver,
+    );
+    driver.events.add(
+      const TerminalConnectionEvent(
+        kind: TerminalConnectionEventKind.moshEchoEnabled,
+        message: 'echo enabled',
+      ),
+    );
+    driver.events.add(
+      const TerminalConnectionEvent(
+        kind: TerminalConnectionEventKind.moshLatencyUpdated,
+        message: 'latency 90',
+        latencyMs: 90,
+      ),
+    );
+    controller.poll();
 
-      controller.sendInput('a');
+    controller.sendInput('a');
 
-      driver.events.add(
-        const TerminalConnectionEvent(
-          kind: TerminalConnectionEventKind.moshPredictionConfirmed,
-          message: 'confirmed',
-        ),
-      );
-      driver.currentSnapshot = _snapshotWithCursor(
-        column: 0,
-        row: 1,
-        textCells: {(0, 0): 'a'},
-      );
-      driver.events.add(_moshScreenCommittedEvent(12));
-      driver.changed = true;
-      controller.poll();
+    driver.events.add(
+      const TerminalConnectionEvent(
+        kind: TerminalConnectionEventKind.moshPredictionConfirmed,
+        message: 'confirmed',
+      ),
+    );
+    driver.currentSnapshot = _snapshotWithCursor(
+      column: 0,
+      row: 1,
+      textCells: {(0, 0): 'a'},
+    );
+    driver.events.add(_moshScreenCommittedEvent(12));
+    driver.changed = true;
+    controller.poll();
 
-      driver.events.add(
-        const TerminalConnectionEvent(
-          kind: TerminalConnectionEventKind.moshLatencyUpdated,
-          message: 'latency 30',
-          latencyMs: 30,
-        ),
-      );
-      controller.poll();
+    driver.events.add(
+      const TerminalConnectionEvent(
+        kind: TerminalConnectionEventKind.moshLatencyUpdated,
+        message: 'latency 30',
+        latencyMs: 30,
+      ),
+    );
+    controller.poll();
 
-      controller.sendInput('b');
-      expect(controller.moshPrediction, isEmpty);
-      controller.dispose();
-    },
-  );
+    controller.sendInput('b');
+    expect(controller.moshPrediction, isEmpty);
+    controller.dispose();
+  });
 
   testWidgets('mosh network transitions are shown inside the terminal', (
     tester,

@@ -676,8 +676,7 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
     } on MissingPluginException {
       if (mounted) {
         setState(
-          () => _attachmentError =
-              'Attachment picker is not registered. Fully restart the rebuilt application.',
+          () => _attachmentError = 'Attachment picker is not registered. Fully restart the rebuilt application.',
         );
       }
     } on PlatformException catch (error) {

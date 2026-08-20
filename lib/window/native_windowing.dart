@@ -409,9 +409,8 @@ Future<void> persistMainWindowGeometry() async {
   _windowGeometryPersistTimer?.cancel();
   _windowGeometryPersistTimer = null;
   try {
-    await NautermConfigStore(
-      NautermPaths.resolve(),
-    ).saveRuntimeSettings(currentNautermRuntimeSettings());
+    await NautermConfigStore(NautermPaths.resolve())
+        .saveRuntimeSettings(currentNautermRuntimeSettings());
   } on Object {
     // Geometry persistence must never disrupt window interaction or shutdown.
   }

@@ -52,9 +52,9 @@ List<T> _sortWorkspaceItems<T extends _WorkspaceItemData>(
   final sorted = items.toList();
   final itemName = name ?? (item) => item.name;
   sorted.sort((a, b) {
-    final nameResult = itemName(
-      a,
-    ).toLowerCase().compareTo(itemName(b).toLowerCase());
+    final nameResult = itemName(a)
+        .toLowerCase()
+        .compareTo(itemName(b).toLowerCase());
     final ordinalResult = ordinal(a).compareTo(ordinal(b));
     final createdResult = _compareCreatedAt(a, b) ?? ordinalResult;
     return switch (order) {

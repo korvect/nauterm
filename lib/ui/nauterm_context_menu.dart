@@ -811,8 +811,10 @@ class _NautermDropdownMenuOverlay<T> extends StatelessWidget {
   }
 }
 
-typedef NautermAnchoredDropdownBuilder =
-    Widget Function(BuildContext context, double menuHeight);
+typedef NautermAnchoredDropdownBuilder = Widget Function(
+  BuildContext context,
+  double menuHeight,
+);
 
 /// Shared positioning, dismissal, and entrance animation for anchored dropdowns.
 class NautermAnchoredDropdownOverlay extends StatelessWidget {

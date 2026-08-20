@@ -29,8 +29,10 @@ enum DesktopUpdateInstallDisposition {
   relaunchOnQuit,
 }
 
-typedef DesktopUpdateProcessRunner =
-    Future<ProcessResult> Function(String executable, List<String> arguments);
+typedef DesktopUpdateProcessRunner = Future<ProcessResult> Function(
+  String executable,
+  List<String> arguments,
+);
 
 class DesktopUpdateTarget {
   const DesktopUpdateTarget({
@@ -76,9 +78,9 @@ class DesktopUpdateTarget {
       return DesktopUpdateAssetKind.appImage;
     }
     try {
-      final osRelease = File(
-        '/etc/os-release',
-      ).readAsStringSync().toLowerCase();
+      final osRelease = File('/etc/os-release')
+          .readAsStringSync()
+          .toLowerCase();
       if (osRelease.contains('id=ubuntu') ||
           osRelease.contains('id=debian') ||
           osRelease.contains('id=linuxmint') ||
@@ -620,9 +622,8 @@ selectUpdateAsset(
 Map<String, String> parseSha256Sums(String contents) {
   final result = <String, String>{};
   for (final line in const LineSplitter().convert(contents)) {
-    final match = RegExp(
-      r'^([a-fA-F0-9]{64})\s+\*?(.+)$',
-    ).firstMatch(line.trim());
+    final match = RegExp(r'^([a-fA-F0-9]{64})\s+\*?(.+)$')
+        .firstMatch(line.trim());
     if (match != null) result[match.group(2)!] = match.group(1)!;
   }
   return result;

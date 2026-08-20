@@ -32,9 +32,9 @@ void main() {
       'ghostty',
     );
     expect(
-      NautermConfig.fromJson(const {
-        'schemaVersion': 1,
-      }).terminal.emulationEngine,
+      NautermConfig.fromJson(const {'schemaVersion': 1})
+          .terminal
+          .emulationEngine,
       TerminalEmulatorBackend.ghostty,
     );
     expect(
@@ -65,9 +65,10 @@ void main() {
 
   test('selecting a command block on click defaults to enabled', () {
     expect(
-      NautermConfig.fromJson(const {
-        'schemaVersion': 1,
-      }).terminal.behavior.selectCommandBlockOnClick,
+      NautermConfig.fromJson(const {'schemaVersion': 1})
+          .terminal
+          .behavior
+          .selectCommandBlockOnClick,
       isTrue,
     );
   });
@@ -415,9 +416,9 @@ void main() {
     expect(loaded.window.x, -320);
     expect(loaded.window.y, 48);
 
-    final json =
-        jsonDecode(await paths.configFile.readAsString())
-            as Map<String, dynamic>;
+    final json = jsonDecode(
+      await paths.configFile.readAsString(),
+    ) as Map<String, dynamic>;
     expect(json['schemaVersion'], 1);
     expect(json, isNot(contains('aiAssistant')));
     expect((json['appearance'] as Map)['hostIcon'], 'osIcon');
@@ -516,9 +517,9 @@ void main() {
       customThemeJson: defaultTerminalTheme.toJson(),
     );
 
-    final config =
-        jsonDecode(await paths.configFile.readAsString())
-            as Map<String, dynamic>;
+    final config = jsonDecode(
+      await paths.configFile.readAsString(),
+    ) as Map<String, dynamic>;
     final terminal = config['terminal'] as Map;
     expect((terminal['behavior'] as Map)['copyOnSelect'], isTrue);
     expect((terminal['appearance'] as Map)['theme']['id'], 'one-dark');

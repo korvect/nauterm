@@ -1,7 +1,8 @@
 part of 'nauterm_workspace.dart';
 
-typedef _LoadHostImportSource =
-    Future<HostImportBundle?> Function(HostImportSource source);
+typedef _LoadHostImportSource = Future<HostImportBundle?> Function(
+  HostImportSource source,
+);
 
 class _HostImportSelection {
   const _HostImportSelection({required this.hosts, required this.keys});
@@ -179,8 +180,7 @@ class _HostImportDialogState extends State<_HostImportDialog> {
         Text(
           tr(
             'workspace.import.source.description',
-            fallback:
-                'Choose a source. You can review hosts and keys before anything is saved.',
+            fallback: 'Choose a source. You can review hosts and keys before anything is saved.',
           ),
           style: TextStyle(
             color: _mutedText,

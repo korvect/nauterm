@@ -3,35 +3,41 @@ part of 'nauterm_workspace.dart';
 typedef _SaveGroup = Future<void> Function(HostGroup group);
 typedef _SaveHost = Future<void> Function(HostEntry host);
 typedef _CreateTag = TagEntry? Function(String name);
-typedef _SaveHostEnvironment =
-    void Function(List<HostEnvironmentVariable> variables);
-typedef _EditHostEnvironment =
-    void Function(
-      String hostLabel,
-      List<HostEnvironmentVariable> variables,
-      ValueChanged<List<HostEnvironmentVariable>> onSaved,
-    );
+typedef _SaveHostEnvironment = void Function(
+  List<HostEnvironmentVariable> variables,
+);
+typedef _EditHostEnvironment = void Function(
+  String hostLabel,
+  List<HostEnvironmentVariable> variables,
+  ValueChanged<List<HostEnvironmentVariable>> onSaved,
+);
 typedef _SaveKey = Future<void> Function(KeyEntry key);
 typedef _SaveGeneratedKey = Future<void> Function(KeyEntry key);
 typedef _ExportKey = Future<void> Function(KeyEntry key, _KeyExportDraft draft);
-typedef _ShowWorkspaceNotification =
-    void Function(String message, {_WorkspaceNotificationType type});
+typedef _ShowWorkspaceNotification = void Function(
+  String message, {
+  _WorkspaceNotificationType type,
+});
 typedef _SaveIdentity = Future<void> Function(IdentityEntry identity);
 typedef _SavePortForward = Future<void> Function(PortForwardEntry portForward);
 typedef _SaveProxy = Future<void> Function(ProxyEntry proxy);
-typedef _SaveSnippetPackage =
-    Future<void> Function(SnippetPackageEntry package);
-typedef _SaveSnippet =
-    Future<void> Function(_SnippetItem? initial, _SnippetDraft draft);
-typedef _CreateRelatedEntry =
-    void Function(String initialName, ValueChanged<int> onCreated);
+typedef _SaveSnippetPackage = Future<void> Function(
+  SnippetPackageEntry package,
+);
+typedef _SaveSnippet = Future<void> Function(
+  _SnippetItem? initial,
+  _SnippetDraft draft,
+);
+typedef _CreateRelatedEntry = void Function(
+  String initialName,
+  ValueChanged<int> onCreated,
+);
 typedef _CreateGroupFromProtocol = void Function(HostGroup template);
-typedef _CreateRelatedCredential =
-    void Function(
-      String initialName, {
-      required bool certificate,
-      required ValueChanged<int> onCreated,
-    });
+typedef _CreateRelatedCredential = void Function(
+  String initialName, {
+  required bool certificate,
+  required ValueChanged<int> onCreated,
+});
 
 class _WorkspaceEditorStackEntry {
   const _WorkspaceEditorStackEntry({required this.request, this.onSaved});

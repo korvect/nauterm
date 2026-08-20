@@ -742,8 +742,7 @@ Widget _buildGithubAuthenticationSettings(_SettingsPanelState state) {
       children: [
         _SettingsRow(
           title: 'Access Token',
-          subtitle:
-              'Requires repository Contents: Read and write. Stored in the encrypted local database.',
+          subtitle: 'Requires repository Contents: Read and write. Stored in the encrypted local database.',
           showSubtitle: false,
           trailing: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1696,8 +1695,7 @@ Widget _buildSettingsMasterKeyContent(_SettingsPanelState state) {
         Text(
           tr(
             'settings.sync.masterKey.description',
-            fallback:
-                'Use the same Master Key on every device. Nauterm uses it only to wrap or unwrap the random Sync DEK; it never stores the Master Key.',
+            fallback: 'Use the same Master Key on every device. Nauterm uses it only to wrap or unwrap the random Sync DEK; it never stores the Master Key.',
           ),
           style: TextStyle(
             color: _mutedText,
@@ -1720,8 +1718,7 @@ Widget _buildSettingsMasterKeyContent(_SettingsPanelState state) {
                   title: 'Master Key',
                   subtitle: tr(
                     'settings.sync.masterKey.requirements',
-                    fallback:
-                        'Use at least 12 characters and include at least 3 of the 4 character types below.',
+                    fallback: 'Use at least 12 characters and include at least 3 of the 4 character types below.',
                   ),
                   trailing: _MasterKeyFieldWithStrength(
                     key: const ValueKey('settings-sync-master-key'),
@@ -3153,8 +3150,7 @@ class _GithubDeviceFlowDialogState extends State<_GithubDeviceFlowDialog> {
             child: Text(
               tr(
                 'settings.sync.gist.id.description',
-                fallback:
-                    'Leave empty to create a new private gist on the first sync.',
+                fallback: 'Leave empty to create a new private gist on the first sync.',
               ),
               style: TextStyle(color: _mutedText, fontSize: 11, height: 1.4),
             ),
@@ -3342,16 +3338,14 @@ class _SyncProviderDialog extends StatelessWidget {
               state,
               icon: LucideIcons.triangle,
               title: 'Google Drive',
-              description:
-                  'Nauterm stores nauterm-sync.enc in Google Drive and requests drive.file access, limited to files created or opened by Nauterm.',
+              description: 'Nauterm stores nauterm-sync.enc in Google Drive and requests drive.file access, limited to files created or opened by Nauterm.',
               buttonLabel: 'Connect Google Drive',
             ),
             _SyncProvider.oneDrive => _buildOAuthSyncProviderSettings(
               state,
               icon: LucideIcons.cloud,
               title: 'OneDrive',
-              description:
-                  'Nauterm stores nauterm-sync.enc in its OneDrive application folder.',
+              description: 'Nauterm stores nauterm-sync.enc in its OneDrive application folder.',
               buttonLabel: 'Connect OneDrive',
             ),
             _SyncProvider.webdav => _buildWebdavSettings(state),
@@ -4025,8 +4019,7 @@ String? _masterKeyValidationError(
       _masterKeyMinimumCharacterClasses) {
     return tr(
       'settings.sync.masterKey.error.characterClasses',
-      fallback:
-          '{subject} must include at least 3 of these character types: uppercase letters, lowercase letters, numbers, and symbols.',
+      fallback: '{subject} must include at least 3 of these character types: uppercase letters, lowercase letters, numbers, and symbols.',
       args: {'subject': subject},
     );
   }

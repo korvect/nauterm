@@ -44,12 +44,11 @@ class TerminalConnectionIdentityOption {
   }
 }
 
-typedef TerminalConnectionAuthSaver =
-    Future<void> Function(
-      SshConnectionProfile profile, {
-      String? password,
-      TerminalConnectionKeyOption? key,
-    });
+typedef TerminalConnectionAuthSaver = Future<void> Function(
+  SshConnectionProfile profile, {
+  String? password,
+  TerminalConnectionKeyOption? key,
+});
 
 class _ReloadedTerminalConnection {
   const _ReloadedTerminalConnection({

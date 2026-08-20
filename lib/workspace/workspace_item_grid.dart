@@ -1,10 +1,14 @@
 part of 'nauterm_workspace.dart';
 
-typedef _WorkspaceContextAction<T extends _WorkspaceItemData> =
-    void Function(T item, _ContextMenuActionId action);
+typedef _WorkspaceContextAction<T extends _WorkspaceItemData> = void Function(
+  T item,
+  _ContextMenuActionId action,
+);
 
-typedef _WorkspaceContextActions<T extends _WorkspaceItemData> =
-    void Function(List<T> items, _ContextMenuActionId action);
+typedef _WorkspaceContextActions<T extends _WorkspaceItemData> = void Function(
+  List<T> items,
+  _ContextMenuActionId action,
+);
 
 @visibleForTesting
 ValueChanged<A> workspaceContextActionSnapshot<T, A>({
@@ -1263,9 +1267,8 @@ class _WorkspaceItemCardState<T extends _WorkspaceItemData>
           child: Material(
             color: _hovered ? _cardHover : _card,
             elevation: _hovered ? 5 : 2,
-            shadowColor: const Color(
-              0xff6d858c,
-            ).withValues(alpha: _hovered ? 0.22 : 0.14),
+            shadowColor: const Color(0xff6d858c)
+                .withValues(alpha: _hovered ? 0.22 : 0.14),
             surfaceTintColor: Colors.transparent,
             animationDuration: const Duration(milliseconds: 120),
             shape: RoundedRectangleBorder(
@@ -1521,9 +1524,8 @@ class _WorkspaceItemListRowState<T extends _WorkspaceItemData>
         child: Material(
           color: _hovered ? _cardHover : _card,
           elevation: _hovered ? 3 : 1,
-          shadowColor: const Color(
-            0xff6d858c,
-          ).withValues(alpha: _hovered ? 0.18 : 0.1),
+          shadowColor: const Color(0xff6d858c)
+              .withValues(alpha: _hovered ? 0.18 : 0.1),
           surfaceTintColor: Colors.transparent,
           animationDuration: const Duration(milliseconds: 120),
           shape: RoundedRectangleBorder(

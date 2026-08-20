@@ -321,9 +321,8 @@ bool _structuredPromptPrefix(String prefix) {
   if (prefix.startsWith('[') && prefix.endsWith(']')) {
     return true;
   }
-  if (RegExp(
-    r'^[^\s@]+@[^\s:]+(?:(?::|\s+)(?:~|/|[A-Za-z]:[\\/]).*)?$',
-  ).hasMatch(prefix)) {
+  if (RegExp(r'^[^\s@]+@[^\s:]+(?:(?::|\s+)(?:~|/|[A-Za-z]:[\\/]).*)?$')
+      .hasMatch(prefix)) {
     return true;
   }
   final windowsPath = RegExp(r'^[A-Za-z]:[\\/]').hasMatch(prefix);

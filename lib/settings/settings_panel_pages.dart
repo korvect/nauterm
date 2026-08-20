@@ -74,9 +74,9 @@ Widget _buildSettingsGeneralContent(_SettingsPanelState state) {
                     values: AppLanguage.values
                         .map((language) => language.configValue)
                         .toList(growable: false),
-                    format: (value) => AppLanguage.fromString(
-                      value,
-                    ).displayName(state.context.l10n),
+                    format: (value) =>
+                        AppLanguage.fromString(value)
+                            .displayName(state.context.l10n),
                     onChanged: (value) {
                       final language = AppLanguage.fromString(value);
                       state._mutate(
@@ -417,8 +417,7 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
                 _SettingsRow(
                   localizationKey: 'settings.terminal.cjkFont',
                   title: 'CJK Font',
-                  subtitle:
-                      'Leave blank to follow the application language, then the system fallback.',
+                  subtitle: 'Leave blank to follow the application language, then the system fallback.',
                   trailing: _SettingsSelect(
                     key: const ValueKey('settings-terminal-cjk-font-select'),
                     label: 'CJK Font',
@@ -568,8 +567,7 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
                 _SettingsRow(
                   localizationKey: 'settings.terminal.emulator',
                   title: 'Emulation Engine',
-                  subtitle:
-                      'Selects the emulation engine used by new terminal sessions.',
+                  subtitle: 'Selects the emulation engine used by new terminal sessions.',
                   trailing: _SettingsSelect(
                     key: const ValueKey('settings-terminal-emulator-select'),
                     label: 'Emulation Engine',
@@ -636,8 +634,7 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
                 _SettingsRow(
                   localizationKey: 'settings.terminal.sshPrediction',
                   title: 'SSH Local Predictive Echo',
-                  subtitle:
-                      'Shows safe local input predictions on high-latency SSH connections.',
+                  subtitle: 'Shows safe local input predictions on high-latency SSH connections.',
                   trailing: _SettingsSelect(
                     key: const ValueKey(
                       'settings-terminal-ssh-prediction-select',
@@ -674,8 +671,7 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
                 _SettingsRow(
                   localizationKey: 'settings.terminal.sshKeepalive',
                   title: 'SSH Keepalive Interval',
-                  subtitle:
-                      'Seconds between SSH protocol keepalive packets. Set to 0 to disable.',
+                  subtitle: 'Seconds between SSH protocol keepalive packets. Set to 0 to disable.',
                   trailing: _SettingsTextField(
                     controller: state._sshKeepaliveIntervalSecondsController,
                     keyboardType: TextInputType.number,
@@ -710,8 +706,7 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
                 _SettingsRow(
                   localizationKey: 'settings.terminal.padding',
                   title: 'Padding',
-                  subtitle:
-                      'Inner spacing around terminal content. Supports 1 to 4 values.',
+                  subtitle: 'Inner spacing around terminal content. Supports 1 to 4 values.',
                   trailing: _TerminalPaddingControl(
                     padding: state._terminalPadding,
                     onChanged: (value) {
@@ -875,8 +870,7 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
                 _SettingsRow(
                   localizationKey: 'settings.terminal.input.reportMouseEvents',
                   title: 'Report Mouse Events',
-                  subtitle:
-                      'Send mouse input to terminal applications that request it.',
+                  subtitle: 'Send mouse input to terminal applications that request it.',
                   trailing: _SettingsSwitch(
                     value: state._reportMouseEvents,
                     onChanged: (value) {
@@ -925,8 +919,7 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
                   localizationKey:
                       'settings.terminal.pointer.commandClickOpensTarget',
                   title: 'Cmd-Click Opens Filename/URL',
-                  subtitle:
-                      'Open a recognized filename or URL with the default application.',
+                  subtitle: 'Open a recognized filename or URL with the default application.',
                   trailing: _SettingsSwitch(
                     value: terminalPointerConfig.commandClickOpensFilenameOrUrl,
                     onChanged: (value) {
@@ -1105,8 +1098,7 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
                 _SettingsRow(
                   localizationKey: 'settings.terminal.recording.sessionLimit',
                   title: 'Per-session Limit',
-                  subtitle:
-                      'Keep the latest output when a session exceeds this size.',
+                  subtitle: 'Keep the latest output when a session exceeds this size.',
                   trailing: _SettingsSelect(
                     key: const ValueKey(
                       'settings-terminal-session-limit-select',
@@ -1132,8 +1124,7 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
                 _SettingsRow(
                   localizationKey: 'settings.terminal.recording.storageLimit',
                   title: 'Total Storage Limit',
-                  subtitle:
-                      'Delete the oldest completed sessions when storage is full.',
+                  subtitle: 'Delete the oldest completed sessions when storage is full.',
                   trailing: _SettingsSelect(
                     key: const ValueKey('settings-terminal-total-limit-select'),
                     label: 'Total Storage Limit',
@@ -1398,8 +1389,7 @@ Widget _buildSettingsSftpContent(_SettingsPanelState state) {
                 _SettingsRow(
                   localizationKey: 'settings.sftp.transferConcurrency',
                   title: 'Transfer Concurrency',
-                  subtitle:
-                      'Maximum parallel SFTP requests or files within each transfer task.',
+                  subtitle: 'Maximum parallel SFTP requests or files within each transfer task.',
                   trailing: _SettingsSelect(
                     label: 'Transfer Concurrency',
                     showLabel: false,
@@ -1493,8 +1483,7 @@ Widget _buildSettingsShortcutsContent(_SettingsPanelState state) {
         Text(
           tr(
             'settings.pages.shortcuts.description',
-            fallback:
-                'Configure terminal keyboard behavior and review active bindings.',
+            fallback: 'Configure terminal keyboard behavior and review active bindings.',
           ),
           style: TextStyle(
             color: _mutedText,

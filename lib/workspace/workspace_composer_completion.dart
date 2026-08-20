@@ -457,9 +457,8 @@ class WorkspaceComposerCompletion {
     if (equalsIndex <= 0) {
       return false;
     }
-    return RegExp(
-      r'^[A-Za-z_][A-Za-z0-9_]*$',
-    ).hasMatch(word.substring(0, equalsIndex));
+    return RegExp(r'^[A-Za-z_][A-Za-z0-9_]*$')
+        .hasMatch(word.substring(0, equalsIndex));
   }
 
   static bool _sudoOptionTakesValue(String option) {

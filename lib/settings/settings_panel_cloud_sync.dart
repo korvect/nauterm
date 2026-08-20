@@ -1521,14 +1521,10 @@ class _CloudProviderHistoryDialogState
                   SizedBox(height: 4),
                   Text(
                     switch (widget.provider?.scheme) {
-                      'gdrive' =>
-                        'Google Drive revisions appear after the sync file has been updated.',
-                      'onedrive' =>
-                        'OneDrive versions appear after the sync file has been updated.',
-                      'dropbox' =>
-                        'Dropbox revisions appear after the sync file has been updated.',
-                      _ =>
-                        'Enable Bucket Versioning in the storage provider to retain history.',
+                      'gdrive' => 'Google Drive revisions appear after the sync file has been updated.',
+                      'onedrive' => 'OneDrive versions appear after the sync file has been updated.',
+                      'dropbox' => 'Dropbox revisions appear after the sync file has been updated.',
+                      _ => 'Enable Bucket Versioning in the storage provider to retain history.',
                     },
                     textAlign: TextAlign.center,
                     style: TextStyle(color: _faintText, fontSize: 10),

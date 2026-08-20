@@ -69,15 +69,13 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
       final proxies = dataStore.listProxies();
       final snippetPackages = dataStore.listSnippetPackages();
       final snippets = dataStore.listSnippets();
-      final knownHostsText = await KnownHostsStore(
-        paths.knownHostsFile,
-      ).readText();
+      final knownHostsText = await KnownHostsStore(paths.knownHostsFile)
+          .readText();
       final terminalLogs = dataStore.listTerminalLogs(
         limit: _terminalLogPageSize,
       );
-      final shellHistory = await ShellHistoryFileStore(
-        paths.shellHistoryFile,
-      ).read();
+      final shellHistory = await ShellHistoryFileStore(paths.shellHistoryFile)
+          .read();
       final terminalCaptureDiskUsage = await captureStore.diskUsage();
 
       if (!mounted) {

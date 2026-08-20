@@ -55,9 +55,8 @@ class TerminalThemeCatalog {
     }
 
     for (final directory in _directories.toList().reversed) {
-      final userTheme = await TerminalThemeStore(
-        directory,
-      ).loadTheme(normalizedId);
+      final userTheme = await TerminalThemeStore(directory)
+          .loadTheme(normalizedId);
       if (userTheme != null) {
         return userTheme;
       }
@@ -193,9 +192,8 @@ TerminalTheme? _builtInTerminalTheme(String id) {
 }
 
 int _compareTerminalThemeIds(String left, String right) {
-  final priorityComparison = _terminalThemePriority(
-    left,
-  ).compareTo(_terminalThemePriority(right));
+  final priorityComparison = _terminalThemePriority(left)
+      .compareTo(_terminalThemePriority(right));
   return priorityComparison != 0 ? priorityComparison : left.compareTo(right);
 }
 

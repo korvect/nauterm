@@ -40,76 +40,80 @@ void main() {
     await requestHandled;
   });
 
-  test('OpenAI protocol sends chat completions request and parses SSE', () async {
-    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    addTearDown(() => server.close(force: true));
-    final requestHandled = server.first.then((request) async {
-      expect(request.method, 'POST');
-      expect(request.uri.path, '/v1/chat/completions');
-      expect(
-        request.headers.value(HttpHeaders.authorizationHeader),
-        'Bearer key',
-      );
-      final body = jsonDecode(await utf8.decoder.bind(request).join()) as Map;
-      expect(body['model'], 'openai-model');
-      expect(body['stream'], isTrue);
-      expect(body.containsKey('max_tokens'), isFalse);
-      expect((body['messages'] as List).last, {
-        'role': 'user',
-        'content': 'hello\n\n<terminal_context>safe output</terminal_context>',
+  test(
+    'OpenAI protocol sends chat completions request and parses SSE',
+    () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      final requestHandled = server.first.then((request) async {
+        expect(request.method, 'POST');
+        expect(request.uri.path, '/v1/chat/completions');
+        expect(
+          request.headers.value(HttpHeaders.authorizationHeader),
+          'Bearer key',
+        );
+        final body = jsonDecode(await utf8.decoder.bind(request).join()) as Map;
+        expect(body['model'], 'openai-model');
+        expect(body['stream'], isTrue);
+        expect(body.containsKey('max_tokens'), isFalse);
+        expect((body['messages'] as List).last, {
+          'role': 'user',
+          'content':
+              'hello\n\n<terminal_context>safe output</terminal_context>',
+        });
+        final terminalTool =
+            ((body['tools'] as List).single as Map)['function'] as Map;
+        expect(terminalTool['name'], 'run_terminal_command');
+        expect(terminalTool['parameters']['required'], [
+          'command',
+          'explanation',
+        ]);
+        request.response.headers.contentType = ContentType(
+          'text',
+          'event-stream',
+        );
+        request.response.write(
+          'data: {"choices":[{"delta":{"content":"hel"}}]}\n\n',
+        );
+        request.response.write(
+          'data: {"choices":[{"delta":{"content":"lo"}}]}\n\n',
+        );
+        request.response.write(
+          'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call-1","function":{"name":"run_terminal_command","arguments":"{\\"command\\":\\"pw"}}]}}]}\n\n',
+        );
+        request.response.write(
+          'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"d\\"}"}}]}}]}\n\n',
+        );
+        request.response.write('data: [DONE]\n\n');
+        await request.response.close();
       });
-      final terminalTool =
-          ((body['tools'] as List).single as Map)['function'] as Map;
-      expect(terminalTool['name'], 'run_terminal_command');
-      expect(terminalTool['parameters']['required'], [
-        'command',
-        'explanation',
-      ]);
-      request.response.headers.contentType = ContentType(
-        'text',
-        'event-stream',
-      );
-      request.response.write(
-        'data: {"choices":[{"delta":{"content":"hel"}}]}\n\n',
-      );
-      request.response.write(
-        'data: {"choices":[{"delta":{"content":"lo"}}]}\n\n',
-      );
-      request.response.write(
-        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call-1","function":{"name":"run_terminal_command","arguments":"{\\"command\\":\\"pw"}}]}}]}\n\n',
-      );
-      request.response.write(
-        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"d\\"}"}}]}}]}\n\n',
-      );
-      request.response.write('data: [DONE]\n\n');
-      await request.response.close();
-    });
 
-    final chunks = await AiProtocolClient()
-        .streamCompletion(
-          config: AiAssistantConfig(
-            baseUrl: 'http://${server.address.host}:${server.port}/v1/',
-            model: 'openai-model',
-            apiKey: 'key',
-          ),
-          messages: const [
-            AiChatMessage(
-              role: AiChatRole.user,
-              content: 'hello',
-              context: '<terminal_context>safe output</terminal_context>',
+      final chunks = await AiProtocolClient()
+          .streamCompletion(
+            config: AiAssistantConfig(
+              baseUrl: 'http://${server.address.host}:${server.port}/v1/',
+              model: 'openai-model',
+              apiKey: 'key',
             ),
-          ],
-          enableTerminalTool: true,
-        )
-        .toList();
+            messages: const [
+              AiChatMessage(
+                role: AiChatRole.user,
+                content: 'hello',
+                context: '<terminal_context>safe output</terminal_context>',
+              ),
+            ],
+            enableTerminalTool: true,
+          )
+          .toList();
 
-    await requestHandled;
-    expect(
-      chunks.whereType<AiTextDelta>().map((event) => event.text).join(),
-      'hello',
-    );
-    expect(chunks.whereType<AiToolCall>().single.terminalCommand, 'pwd');
-  });
+      await requestHandled;
+      expect(
+        chunks.whereType<AiTextDelta>().map((event) => event.text).join(),
+        'hello',
+      );
+      expect(chunks.whereType<AiToolCall>().single.terminalCommand, 'pwd');
+    },
+  );
 
   test('Anthropic protocol sends Messages request and parses SSE', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);

@@ -1457,12 +1457,12 @@ class AiConversationEntry {
       hostUuid: _stringOrNull(map['host_uuid']),
       providerUuid: _stringOrNull(map['provider_uuid']),
       model: _string(map['model'] ?? ''),
-      messages: _jsonList(
-        map['messages'],
-      ).map(AiMessageEntry.fromJson).toList(growable: false),
-      commandBlocks: _jsonList(
-        map['command_blocks'],
-      ).map(AiCommandBlockEntry.fromJson).toList(growable: false),
+      messages: _jsonList(map['messages'])
+          .map(AiMessageEntry.fromJson)
+          .toList(growable: false),
+      commandBlocks: _jsonList(map['command_blocks'])
+          .map(AiCommandBlockEntry.fromJson)
+          .toList(growable: false),
       createdAt: _dateTimeOrNull(map['created_at']),
       updatedAt: _dateTimeOrNull(map['updated_at']),
       version: _intOrNull(map['version']),
@@ -1525,15 +1525,15 @@ class AiMessageEntry {
       content: _string(map['content']),
       context: _stringOrNull(map['context']) ?? '',
       sequence: _int(map['sequence']),
-      toolCalls: _jsonList(
-        map['tool_calls'],
-      ).map(_jsonMap).toList(growable: false),
+      toolCalls: _jsonList(map['tool_calls'])
+          .map(_jsonMap)
+          .toList(growable: false),
       toolResult: map['tool_result'] == null
           ? null
           : _jsonMap(map['tool_result']),
-      attachments: _jsonList(
-        map['attachments'],
-      ).map(_jsonMap).toList(growable: false),
+      attachments: _jsonList(map['attachments'])
+          .map(_jsonMap)
+          .toList(growable: false),
       createdAt: _dateTimeOrNull(map['created_at']),
       updatedAt: _dateTimeOrNull(map['updated_at']),
       version: _intOrNull(map['version']),
@@ -1840,9 +1840,9 @@ class NautermDataStore {
 
   /// Returns true if the given Master Key unlocks the vault.
   bool verifyMasterKey(String masterKey) {
-    final data =
-        _call('verify_master_key', {'master_key': masterKey})
-            as Map<String, dynamic>;
+    final data = _call('verify_master_key', {
+      'master_key': masterKey,
+    }) as Map<String, dynamic>;
     return data['ok'] as bool? ?? false;
   }
 
@@ -1903,11 +1903,10 @@ class NautermDataStore {
   }) {
     return Map<String, dynamic>.from(
       _call('github_gist_sync', {
-            'master_key': masterKey,
-            'strategy': strategy,
-            'backup_count': backupCount,
-          })
-          as Map,
+        'master_key': masterKey,
+        'strategy': strategy,
+        'backup_count': backupCount,
+      }) as Map,
     );
   }
 
@@ -1917,10 +1916,9 @@ class NautermDataStore {
   }) {
     return Map<String, dynamic>.from(
       _call('github_gist_change_master_key', {
-            'current_master_key': currentMasterKey,
-            'new_master_key': newMasterKey,
-          })
-          as Map,
+        'current_master_key': currentMasterKey,
+        'new_master_key': newMasterKey,
+      }) as Map,
     );
   }
 
@@ -1936,10 +1934,9 @@ class NautermDataStore {
   }) {
     return Map<String, dynamic>.from(
       _call('github_gist_restore_version', {
-            'version': version,
-            'backup_count': backupCount,
-          })
-          as Map,
+        'version': version,
+        'backup_count': backupCount,
+      }) as Map,
     );
   }
 
@@ -1985,11 +1982,10 @@ class NautermDataStore {
   }) {
     return Map<String, dynamic>.from(
       _call('github_sync', {
-            'master_key': masterKey,
-            'strategy': strategy,
-            'backup_count': backupCount,
-          })
-          as Map,
+        'master_key': masterKey,
+        'strategy': strategy,
+        'backup_count': backupCount,
+      }) as Map,
     );
   }
 
@@ -1999,10 +1995,9 @@ class NautermDataStore {
   }) {
     return Map<String, dynamic>.from(
       _call('github_change_master_key', {
-            'current_master_key': currentMasterKey,
-            'new_master_key': newMasterKey,
-          })
-          as Map,
+        'current_master_key': currentMasterKey,
+        'new_master_key': newMasterKey,
+      }) as Map,
     );
   }
 
@@ -2018,10 +2013,9 @@ class NautermDataStore {
   }) {
     return Map<String, dynamic>.from(
       _call('github_restore_revision', {
-            'commit_sha': commitSha,
-            'backup_count': backupCount,
-          })
-          as Map,
+        'commit_sha': commitSha,
+        'backup_count': backupCount,
+      }) as Map,
     );
   }
 
@@ -2085,11 +2079,10 @@ class NautermDataStore {
   }) {
     return Map<String, dynamic>.from(
       _call('s3_sync', {
-            'master_key': masterKey,
-            'strategy': strategy,
-            'backup_count': backupCount,
-          })
-          as Map,
+        'master_key': masterKey,
+        'strategy': strategy,
+        'backup_count': backupCount,
+      }) as Map,
     );
   }
 
@@ -2105,10 +2098,9 @@ class NautermDataStore {
   }) {
     return Map<String, dynamic>.from(
       _call('s3_restore_version', {
-            'version_id': versionId,
-            'backup_count': backupCount,
-          })
-          as Map,
+        'version_id': versionId,
+        'backup_count': backupCount,
+      }) as Map,
     );
   }
 
@@ -2118,10 +2110,9 @@ class NautermDataStore {
   }) {
     return Map<String, dynamic>.from(
       _call('s3_change_master_key', {
-            'current_master_key': currentMasterKey,
-            'new_master_key': newMasterKey,
-          })
-          as Map,
+        'current_master_key': currentMasterKey,
+        'new_master_key': newMasterKey,
+      }) as Map,
     );
   }
 
@@ -2155,9 +2146,8 @@ class NautermDataStore {
   }) {
     return Map<String, dynamic>.from(
       _call('save_sync_preferences', {
-            'preferences': {'active_provider_id': activeProviderId},
-          })
-          as Map,
+        'preferences': {'active_provider_id': activeProviderId},
+      }) as Map,
     );
   }
 
@@ -2167,12 +2157,11 @@ class NautermDataStore {
   }) {
     return Map<String, dynamic>.from(
       _call('cloud_save_provider', {
-            'provider': provider,
-            'credentials': credentials == null
-                ? null
-                : <String, dynamic>{'values': credentials},
-          })
-          as Map,
+        'provider': provider,
+        'credentials': credentials == null
+            ? null
+            : <String, dynamic>{'values': credentials},
+      }) as Map,
     );
   }
 
@@ -2189,12 +2178,11 @@ class NautermDataStore {
   }) {
     return Map<String, dynamic>.from(
       _call('cloud_sync', {
-            'provider_id': providerId,
-            'master_key': masterKey,
-            'strategy': strategy,
-            'backup_count': backupCount,
-          })
-          as Map,
+        'provider_id': providerId,
+        'master_key': masterKey,
+        'strategy': strategy,
+        'backup_count': backupCount,
+      }) as Map,
     );
   }
 
@@ -2203,10 +2191,9 @@ class NautermDataStore {
     int limit = 20,
   }) {
     return (_call('cloud_list_history', {
-              'provider_id': providerId,
-              'limit': limit,
-            })
-            as List)
+          'provider_id': providerId,
+          'limit': limit,
+        }) as List)
         .map((item) => Map<String, dynamic>.from(item as Map))
         .toList(growable: false);
   }
@@ -2218,11 +2205,10 @@ class NautermDataStore {
   }) {
     return Map<String, dynamic>.from(
       _call('cloud_restore_version', {
-            'provider_id': providerId,
-            'version_id': versionId,
-            'backup_count': backupCount,
-          })
-          as Map,
+        'provider_id': providerId,
+        'version_id': versionId,
+        'backup_count': backupCount,
+      }) as Map,
     );
   }
 
@@ -2238,10 +2224,9 @@ class NautermDataStore {
   }) {
     return Map<String, dynamic>.from(
       _call('local_sync_backup_restore', {
-            'backup_id': backupId,
-            'backup_count': backupCount,
-          })
-          as Map,
+        'backup_id': backupId,
+        'backup_count': backupCount,
+      }) as Map,
     );
   }
 
@@ -2252,11 +2237,10 @@ class NautermDataStore {
   }) {
     return Map<String, dynamic>.from(
       _call('cloud_change_master_key', {
-            'provider_id': providerId,
-            'current_master_key': currentMasterKey,
-            'new_master_key': newMasterKey,
-          })
-          as Map,
+        'provider_id': providerId,
+        'current_master_key': currentMasterKey,
+        'new_master_key': newMasterKey,
+      }) as Map,
     );
   }
 
@@ -2405,9 +2389,9 @@ class NautermDataStore {
   }
 
   List<AiProviderEntry> listAiProviders() {
-    return _callList(
-      'list_ai_providers',
-    ).map(AiProviderEntry.fromJson).toList(growable: false);
+    return _callList('list_ai_providers')
+        .map(AiProviderEntry.fromJson)
+        .toList(growable: false);
   }
 
   int deleteAiProvider(int id) {
@@ -2445,9 +2429,9 @@ class NautermDataStore {
   }
 
   List<SnippetPackageEntry> listSnippetPackages() {
-    return _callList(
-      'list_snippet_packages',
-    ).map(SnippetPackageEntry.fromJson).toList();
+    return _callList('list_snippet_packages')
+        .map(SnippetPackageEntry.fromJson)
+        .toList();
   }
 
   int deleteSnippetPackage(int id) {
@@ -2534,9 +2518,9 @@ class NautermDataStore {
   }
 
   List<TerminalLogEntry> listIncompleteTerminalCaptures() {
-    return _callList(
-      'list_incomplete_terminal_captures',
-    ).map(TerminalLogEntry.fromJson).toList();
+    return _callList('list_incomplete_terminal_captures')
+        .map(TerminalLogEntry.fromJson)
+        .toList();
   }
 
   void clearMissingTerminalCapture(String logId) {
@@ -2589,10 +2573,8 @@ class NautermDataStore {
       throw const NautermDataException('Database is closed.');
     }
 
-    final requestPointer = jsonEncode({
-      'op': operation,
-      ...payload,
-    }).toNativeUtf8();
+    final requestPointer = jsonEncode({'op': operation, ...payload})
+        .toNativeUtf8();
     Pointer<Utf8> responsePointer = nullptr;
 
     try {
@@ -2654,10 +2636,14 @@ typedef _OpenPathDart = Pointer<Void> Function(Pointer<Utf8> path);
 typedef _DestroyNative = Void Function(Pointer<Void> handle);
 typedef _DestroyDart = void Function(Pointer<Void> handle);
 
-typedef _CallNative =
-    Pointer<Utf8> Function(Pointer<Void> handle, Pointer<Utf8> request);
-typedef _CallDart =
-    Pointer<Utf8> Function(Pointer<Void> handle, Pointer<Utf8> request);
+typedef _CallNative = Pointer<Utf8> Function(
+  Pointer<Void> handle,
+  Pointer<Utf8> request,
+);
+typedef _CallDart = Pointer<Utf8> Function(
+  Pointer<Void> handle,
+  Pointer<Utf8> request,
+);
 
 typedef _DefaultPathNative = Pointer<Utf8> Function();
 typedef _DefaultPathDart = Pointer<Utf8> Function();

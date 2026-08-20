@@ -48,9 +48,8 @@ void main() {
     );
     addTearDown(() => directory.deleteSync(recursive: true));
 
-    File(
-      '${directory.path}${Platform.pathSeparator}one-light.toml',
-    ).writeAsStringSync('''
+    File('${directory.path}${Platform.pathSeparator}one-light.toml')
+        .writeAsStringSync('''
 [colors.primary]
 background = "#fafafa"
 foreground = "#383a42"
@@ -98,9 +97,8 @@ white = "#ffffff"
     );
     addTearDown(() => directory.deleteSync(recursive: true));
 
-    File(
-      '${directory.path}${Platform.pathSeparator}atom-one-light.toml',
-    ).writeAsStringSync('''
+    File('${directory.path}${Platform.pathSeparator}atom-one-light.toml')
+        .writeAsStringSync('''
 name = "Atom One Light"
 type = "light"
 
@@ -133,12 +131,10 @@ foreground = "#383a42"
       final additional = Directory(
         '${root.path}${Platform.pathSeparator}additional',
       )..createSync();
-      File(
-        '${primary.path}${Platform.pathSeparator}custom.toml',
-      ).writeAsStringSync('name = "Primary"');
-      File(
-        '${additional.path}${Platform.pathSeparator}custom.toml',
-      ).writeAsStringSync('name = "Additional"');
+      File('${primary.path}${Platform.pathSeparator}custom.toml')
+          .writeAsStringSync('name = "Primary"');
+      File('${additional.path}${Platform.pathSeparator}custom.toml')
+          .writeAsStringSync('name = "Additional"');
 
       final catalog = TerminalThemeCatalog(
         primary,

@@ -46,9 +46,9 @@ void main() {
       '${directory.path}${Platform.pathSeparator}nauterm.log',
     ).readAsLines();
     expect(lines, hasLength(2));
-    final completedFields =
-        jsonDecode(lines.last.substring(lines.last.indexOf('{')))
-            as Map<String, dynamic>;
+    final completedFields = jsonDecode(
+      lines.last.substring(lines.last.indexOf('{')),
+    ) as Map<String, dynamic>;
     expect(completedFields['operation_id'], startsWith('op-'));
     expect(completedFields['duration_ms'], isA<int>());
     expect(completedFields['schema_version'], 1);
