@@ -168,11 +168,9 @@ void main() {
     );
     await tester.pump();
 
-    final menu =
-        tester.widget(
-              find.byWidgetPredicate((widget) => widget is NautermContextMenu),
-            )
-            as NautermContextMenu;
+    final menu = tester.widget(
+      find.byWidgetPredicate((widget) => widget is NautermContextMenu),
+    ) as NautermContextMenu;
     final actions = menu.entries
         .whereType<NautermContextMenuAction<dynamic>>()
         .toList(growable: false);
@@ -319,62 +317,73 @@ void main() {
 
     await _pumpTerminal(tester, controller, theme: theme);
 
-    final scrollbar = find.byKey(const ValueKey('terminal-scrollbar-thumb'));
+    final scrollbar = find.byKey(const ValueKey('terminal-scrollbar'));
     expect(scrollbar, findsOneWidget);
-    expect(
-      tester
-          .widget<MouseRegion>(
-            find.byKey(const ValueKey('terminal-scrollbar-hit-region')),
-          )
-          .cursor,
-      SystemMouseCursors.basic,
-    );
-    final thumb = tester.widget<AnimatedContainer>(scrollbar);
-    final decoration = thumb.decoration! as BoxDecoration;
-    expect(decoration.color, theme.primary.foreground.withValues(alpha: 0));
+    final scrollbarWidget = tester.widget<Scrollbar>(scrollbar);
+    expect(scrollbarWidget.controller, isNotNull);
+    expect(scrollbarWidget.interactive, isTrue);
+    expect(scrollbarWidget.scrollbarOrientation, ScrollbarOrientation.right);
 
-    final thumbRect = tester.getRect(scrollbar);
-    final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
-    addTearDown(gesture.removePointer);
-    await gesture.addPointer(location: Offset.zero);
-    await gesture.moveTo(
-      tester.getCenter(
-        find.byKey(const ValueKey('terminal-scrollbar-hit-region')),
-      ),
+    final scrollbarTheme = tester.widget<ScrollbarTheme>(
+      find.ancestor(of: scrollbar, matching: find.byType(ScrollbarTheme)).first,
     );
-    await tester.pump(const Duration(milliseconds: 120));
-    final hoveredThumb = tester.widget<AnimatedContainer>(scrollbar);
+    expect(scrollbarTheme.data.thickness!.resolve({}), 6);
+    expect(scrollbarTheme.data.radius, const Radius.circular(999));
+    expect(scrollbarTheme.data.minThumbLength, 28);
     expect(
-      (hoveredThumb.decoration! as BoxDecoration).color,
+      scrollbarTheme.data.thumbColor!.resolve({}),
       theme.primary.foreground.withValues(alpha: 0.62),
     );
 
-    await tester.dragFrom(thumbRect.center, const Offset(0, -80));
+    final scrollController = scrollbarWidget.controller!;
+    scrollController.jumpTo(scrollController.position.maxScrollExtent - 80);
     await tester.pump();
     expect(driver.scrolledLines, greaterThan(0));
-
-    await gesture.moveTo(const Offset(20, 20));
-    await tester.pump(_terminalScrollbarScrollVisibilityDurationForTest);
-    await tester.pump(const Duration(milliseconds: 120));
-    final hiddenAfterScroll = tester.widget<AnimatedContainer>(scrollbar);
-    expect(
-      (hiddenAfterScroll.decoration! as BoxDecoration).color,
-      theme.primary.foreground.withValues(alpha: 0),
-    );
-
-    controller.scrollLines(1);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 120));
-    final scrollingThumb = tester.widget<AnimatedContainer>(scrollbar);
-    expect(
-      (scrollingThumb.decoration! as BoxDecoration).color,
-      theme.primary.foreground.withValues(alpha: 0.62),
-    );
 
     terminalScrollbarEnabled = false;
     terminalConfigNotifier.value++;
     await tester.pump();
     expect(scrollbar, findsNothing);
+  });
+
+  testWidgets('scrollbar preserves the full history while output grows', (
+    tester,
+  ) async {
+    final driver = _SnapshotDriver(
+      TerminalSnapshot.blank(
+        columns: 80,
+        rows: 8,
+        historyLines: 10,
+        displayOffset: 0,
+      ),
+    );
+    final controller = TerminalController(driver: driver);
+    addTearDown(controller.dispose);
+    await _pumpTerminal(tester, controller);
+
+    driver._snapshot = TerminalSnapshot.blank(
+      columns: 80,
+      rows: driver.snapshot.rows,
+      historyLines: 10000,
+      displayOffset: 0,
+    );
+    controller.refreshSnapshot();
+    await tester.pump();
+
+    final scrollbar = tester.widget<Scrollbar>(
+      find.byKey(const ValueKey('terminal-scrollbar')),
+    );
+    final scrollController = scrollbar.controller!;
+    final cellHeight = TerminalMetrics.measure(
+      defaultTerminalConfig.font.textStyle(),
+    ).cellSize.height;
+    expect(scrollController.position.maxScrollExtent, 10000 * cellHeight);
+    expect(scrollController.position.pixels, 10000 * cellHeight);
+    expect(driver.snapshot.displayOffset, 0);
+
+    scrollController.jumpTo(0);
+    await tester.pump();
+    expect(driver.snapshot.displayOffset, 10000);
   });
 
   testWidgets('terminal wheel wins over an ancestor scroll view', (
@@ -486,6 +495,138 @@ void main() {
 
     expect(driver.scrolledLines, lessThan(0));
     expect(outerController.offset, 0);
+  });
+
+  testWidgets('terminal trackpad discards sub-row movement between gestures', (
+    tester,
+  ) async {
+    final driver = _SnapshotDriver(
+      TerminalSnapshot.blank(
+        columns: 80,
+        rows: 8,
+        historyLines: 92,
+        displayOffset: 40,
+      ),
+    );
+    final controller = TerminalController(driver: driver);
+    addTearDown(controller.dispose);
+    await _pumpTerminal(tester, controller);
+
+    final position = tester.getCenter(
+      find.byKey(const ValueKey('terminal-renderer-region')),
+    );
+    for (var index = 0; index < 2; index++) {
+      final gesture = await tester.startGesture(
+        position,
+        kind: PointerDeviceKind.trackpad,
+      );
+      await gesture.moveBy(const Offset(0, -4));
+      await gesture.up();
+      await tester.pump();
+    }
+
+    expect(driver.scrolledLines, 0);
+  });
+
+  testWidgets('terminal trackpad speed does not depend on viewport height', (
+    tester,
+  ) async {
+    Future<int> scrollAtHeight(double height) async {
+      final driver = _SnapshotDriver(
+        TerminalSnapshot.blank(
+          columns: 80,
+          rows: 8,
+          historyLines: 400,
+          displayOffset: 200,
+        ),
+      );
+      final controller = TerminalController(driver: driver);
+      addTearDown(controller.dispose);
+      await _pumpTerminal(tester, controller, height: height);
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(
+          find.byKey(const ValueKey('terminal-renderer-region')),
+        ),
+        kind: PointerDeviceKind.trackpad,
+      );
+      await gesture.moveBy(const Offset(0, -60));
+      await tester.pump();
+      final result = driver.scrolledLines;
+      await gesture.up();
+      await tester.pumpAndSettle();
+      return result;
+    }
+
+    final shortViewportLines = await scrollAtHeight(160);
+    final tallViewportLines = await scrollAtHeight(420);
+
+    expect(shortViewportLines, lessThan(0));
+    expect(tallViewportLines, shortViewportLines);
+  });
+
+  testWidgets('terminal trackpad uses Scrollable momentum after release', (
+    tester,
+  ) async {
+    final driver = _SnapshotDriver(
+      TerminalSnapshot.blank(
+        columns: 80,
+        rows: 8,
+        historyLines: 400,
+        displayOffset: 200,
+      ),
+    );
+    final controller = TerminalController(driver: driver);
+    addTearDown(controller.dispose);
+    await _pumpTerminal(tester, controller);
+
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byKey(const ValueKey('terminal-renderer-region'))),
+      kind: PointerDeviceKind.trackpad,
+    );
+    await gesture.moveBy(
+      const Offset(0, -12),
+      timeStamp: const Duration(milliseconds: 16),
+    );
+    await gesture.moveBy(
+      const Offset(0, -48),
+      timeStamp: const Duration(milliseconds: 32),
+    );
+    await gesture.up(timeStamp: const Duration(milliseconds: 48));
+    await tester.pump();
+
+    final linesAtRelease = driver.scrolledLines;
+    await tester.pump(const Duration(milliseconds: 120));
+
+    expect(linesAtRelease, lessThan(0));
+    expect(driver.scrolledLines, lessThan(linesAtRelease));
+  });
+
+  testWidgets('terminal trackpad does not rebound at scroll boundaries', (
+    tester,
+  ) async {
+    final driver = _SnapshotDriver(
+      TerminalSnapshot.blank(
+        columns: 80,
+        rows: 8,
+        historyLines: 100,
+        displayOffset: 0,
+      ),
+    );
+    final controller = TerminalController(driver: driver);
+    addTearDown(controller.dispose);
+    await _pumpTerminal(tester, controller);
+
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byKey(const ValueKey('terminal-renderer-region'))),
+      kind: PointerDeviceKind.trackpad,
+    );
+    await gesture.moveBy(const Offset(0, -60));
+    await gesture.up();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(driver.scrolledLines, 0);
+    expect(driver.snapshot.displayOffset, 0);
   });
 
   testWidgets('terminal wheel reports the natural scroll direction to apps', (
@@ -1280,18 +1421,9 @@ void main() {
       await selectionGesture.down(_cellCenter(metrics, column: 1, row: 2));
       await selectionGesture.moveTo(_cellCenter(metrics, column: 8, row: 3));
 
-      final scrollbar = find.byKey(
-        const ValueKey('terminal-scrollbar-hit-region'),
-      );
-      final scrollbarRect = tester.getRect(scrollbar);
-      final scrollbarGesture = await tester.createGesture(
-        kind: PointerDeviceKind.touch,
-      );
-      addTearDown(scrollbarGesture.removePointer);
-      await scrollbarGesture.down(
-        Offset(scrollbarRect.center.dx, scrollbarRect.top + 1),
-      );
-      await scrollbarGesture.up();
+      final scrollbar = find.byKey(const ValueKey('terminal-scrollbar'));
+      final scrollbarWidget = tester.widget<Scrollbar>(scrollbar);
+      scrollbarWidget.controller!.jumpTo(0);
       await tester.pump();
 
       expect(driver.snapshot.displayOffset, driver.snapshot.historyLines);
@@ -2596,13 +2728,10 @@ class _SnapshotDriver implements TerminalDriver {
   void dispose() {}
 }
 
-const _terminalScrollbarScrollVisibilityDurationForTest = Duration(
-  milliseconds: 700,
-);
-
 Future<void> _pumpTerminal(
   WidgetTester tester,
   TerminalController controller, {
+  double height = 240,
   List<String> composerHistory = const [],
   List<String> composerSuggestions = const [],
   TerminalComposerSuggestionResolver? composerSuggestionResolver,
@@ -2617,7 +2746,7 @@ Future<void> _pumpTerminal(
     MaterialApp(
       home: SizedBox(
         width: 800,
-        height: 240,
+        height: height,
         child: TerminalView(
           controller: controller,
           config: defaultTerminalConfig.copyWith(

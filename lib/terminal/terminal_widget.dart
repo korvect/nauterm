@@ -6,6 +6,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
 import '../app/nauterm_localizations.dart';
@@ -29,7 +30,6 @@ import '../ui/nauterm_overlay.dart';
 part 'terminal_view_toolbar.dart';
 part 'terminal_context_menu.dart';
 part 'terminal_painter.dart';
-part 'terminal_scrollbar.dart';
 
 enum TerminalSplitDirection { right, down }
 
@@ -112,7 +112,9 @@ class _TerminalPointerRegion extends StatelessWidget {
     this.onPointerUp,
     this.onPointerCancel,
     this.onPointerSignal,
+    this.onPointerPanZoomStart,
     this.onPointerPanZoomUpdate,
+    this.onPointerPanZoomEnd,
   });
 
   final Widget child;
@@ -122,27 +124,155 @@ class _TerminalPointerRegion extends StatelessWidget {
   final ValueChanged<PointerUpEvent>? onPointerUp;
   final ValueChanged<PointerCancelEvent>? onPointerCancel;
   final ValueChanged<PointerSignalEvent>? onPointerSignal;
+  final ValueChanged<PointerPanZoomStartEvent>? onPointerPanZoomStart;
   final ValueChanged<PointerPanZoomUpdateEvent>? onPointerPanZoomUpdate;
+  final ValueChanged<PointerPanZoomEndEvent>? onPointerPanZoomEnd;
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return Listener(
       behavior: HitTestBehavior.opaque,
-      supportedDevices: const {PointerDeviceKind.trackpad},
-      // Claim trackpad scrolling before an ancestor scroll view.
-      onVerticalDragStart: (_) {},
-      child: Listener(
-        behavior: HitTestBehavior.opaque,
-        onPointerDown: onPointerDown,
-        onPointerMove: onPointerMove,
-        onPointerHover: onPointerHover,
-        onPointerUp: onPointerUp,
-        onPointerCancel: onPointerCancel,
-        onPointerSignal: onPointerSignal,
-        onPointerPanZoomUpdate: onPointerPanZoomUpdate,
-        child: child,
-      ),
+      onPointerDown: onPointerDown,
+      onPointerMove: onPointerMove,
+      onPointerHover: onPointerHover,
+      onPointerUp: onPointerUp,
+      onPointerCancel: onPointerCancel,
+      onPointerSignal: onPointerSignal,
+      onPointerPanZoomStart: onPointerPanZoomStart,
+      onPointerPanZoomUpdate: onPointerPanZoomUpdate,
+      onPointerPanZoomEnd: onPointerPanZoomEnd,
+      child: child,
     );
+  }
+}
+
+class _TerminalScrollViewport extends SingleChildRenderObjectWidget {
+  const _TerminalScrollViewport({
+    required this.position,
+    required this.maxScrollExtent,
+    required this.targetScrollOffset,
+    required this.synchronizeScrollOffset,
+    required this.onScrollOffsetCorrected,
+    required super.child,
+  });
+
+  final ViewportOffset position;
+  final double maxScrollExtent;
+  final double targetScrollOffset;
+  final bool synchronizeScrollOffset;
+  final ValueChanged<double> onScrollOffsetCorrected;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) {
+    return _RenderTerminalScrollViewport(
+      position,
+      maxScrollExtent,
+      targetScrollOffset,
+      synchronizeScrollOffset,
+      onScrollOffsetCorrected,
+    );
+  }
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _RenderTerminalScrollViewport renderObject,
+  ) {
+    renderObject
+      ..position = position
+      ..maxScrollExtent = maxScrollExtent
+      ..targetScrollOffset = targetScrollOffset
+      ..synchronizeScrollOffset = synchronizeScrollOffset
+      ..onScrollOffsetCorrected = onScrollOffsetCorrected;
+  }
+}
+
+class _RenderTerminalScrollViewport extends RenderProxyBox {
+  _RenderTerminalScrollViewport(
+    this._position,
+    this._maxScrollExtent,
+    this._targetScrollOffset,
+    this._synchronizeScrollOffset,
+    this._onScrollOffsetCorrected,
+  );
+
+  ViewportOffset _position;
+  double _maxScrollExtent;
+  double _targetScrollOffset;
+  bool _synchronizeScrollOffset;
+  ValueChanged<double> _onScrollOffsetCorrected;
+
+  set position(ViewportOffset value) {
+    if (_position == value) return;
+    _position = value;
+    markNeedsLayout();
+  }
+
+  set maxScrollExtent(double value) {
+    if (_maxScrollExtent == value) return;
+    _maxScrollExtent = value;
+    markNeedsLayout();
+  }
+
+  set targetScrollOffset(double value) {
+    if (_targetScrollOffset == value) return;
+    _targetScrollOffset = value;
+    markNeedsLayout();
+  }
+
+  set synchronizeScrollOffset(bool value) {
+    if (_synchronizeScrollOffset == value) return;
+    _synchronizeScrollOffset = value;
+    markNeedsLayout();
+  }
+
+  set onScrollOffsetCorrected(ValueChanged<double> value) {
+    _onScrollOffsetCorrected = value;
+  }
+
+  @override
+  void performLayout() {
+    super.performLayout();
+    _position.applyViewportDimension(size.height);
+    if (_synchronizeScrollOffset && _position.hasPixels) {
+      final target = _targetScrollOffset.clamp(0, _maxScrollExtent).toDouble();
+      final correction = target - _position.pixels;
+      if (correction != 0) {
+        _position.correctBy(correction);
+        _onScrollOffsetCorrected(target);
+      }
+    }
+    _position.applyContentDimensions(0, _maxScrollExtent);
+  }
+}
+
+class _TerminalScrollPhysics extends ScrollPhysics {
+  const _TerminalScrollPhysics({super.parent});
+
+  @override
+  _TerminalScrollPhysics applyTo(ScrollPhysics? ancestor) {
+    return _TerminalScrollPhysics(parent: buildParent(ancestor));
+  }
+
+  @override
+  double applyBoundaryConditions(ScrollMetrics position, double value) {
+    if (value < position.pixels &&
+        position.pixels <= position.minScrollExtent) {
+      return value - position.pixels;
+    }
+    if (position.maxScrollExtent <= position.pixels &&
+        position.pixels < value) {
+      return value - position.pixels;
+    }
+    if (value < position.minScrollExtent &&
+        position.minScrollExtent < position.pixels) {
+      return value - position.minScrollExtent;
+    }
+    if (position.pixels < position.maxScrollExtent &&
+        position.maxScrollExtent < value) {
+      return value - position.maxScrollExtent;
+    }
+    return 0;
   }
 }
 
@@ -1058,8 +1188,18 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
   final FocusNode _searchFocusNode = FocusNode(debugLabel: 'terminal search');
   final GlobalKey _editableRegionKey = GlobalKey();
   final GlobalKey _searchOverlayKey = GlobalKey();
-  final GlobalKey _scrollbarKey = GlobalKey();
   final TerminalTextCache _textCache = TerminalTextCache();
+  late final ScrollController _terminalScrollController;
+  ScrollPosition? _terminalScrollPosition;
+  double _terminalScrollLastPixels = 0;
+  double _terminalScrollLineRemainder = 0;
+  double _terminalScrollCellHeight = 1;
+  bool _terminalScrollActive = false;
+  bool _terminalScrollSyncScheduled = false;
+  bool _terminalScrollSynchronizing = false;
+  bool _trackpadScrollIgnored = false;
+  Offset? _trackpadScrollLocalPosition;
+  TerminalMetrics? _trackpadScrollMetrics;
   double _lastLayoutWidth = 0;
   double _lastLayoutHeight = 0;
   int _lastCellWidth = 0;
@@ -1118,6 +1258,12 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
   @override
   void initState() {
     super.initState();
+    _terminalScrollController = ScrollController(
+      keepScrollOffset: false,
+      debugLabel: 'terminal scroll input',
+      onAttach: _attachTerminalScrollPosition,
+      onDetach: _detachTerminalScrollPosition,
+    );
     widget.actionController?._attach(this);
     _focusNode.addListener(_handleFocusChanged);
     _searchController.addListener(_handleSearchQueryChanged);
@@ -1159,6 +1305,7 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
     _searchFocusNode.dispose();
     _cursorBlinkTimer?.cancel();
     _selectionAutoScrollTimer?.cancel();
+    _terminalScrollController.dispose();
     _textCache.dispose();
     for (final image in _graphicImageCache.values) {
       image.dispose();
@@ -1195,162 +1342,210 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
     TerminalMetrics metrics,
     EdgeInsets padding,
   ) {
-    return MouseRegion(
-      key: const ValueKey('terminal-text-region'),
-      cursor: _hoveredOpenTarget == null
-          ? SystemMouseCursors.text
-          : SystemMouseCursors.click,
-      onExit: (_) => _clearOpenTargetHover(),
-      child: Focus(
-        focusNode: _focusNode,
-        autofocus: true,
-        onKeyEvent: _handleKeyEvent,
-        child: _TerminalPointerRegion(
-          onPointerDown: (event) => _handlePointerDown(event, metrics),
-          onPointerMove: (event) => _handlePointerMove(event, metrics),
-          onPointerHover: (event) => _handlePointerHover(event, metrics),
-          onPointerUp: (event) => _handlePointerUp(event, metrics),
-          onPointerCancel: _handlePointerCancel,
-          onPointerSignal: (event) => _handlePointerSignal(event, metrics),
-          onPointerPanZoomUpdate: (event) =>
-              _handleTrackpadPanZoomUpdate(event, metrics),
-          child: Stack(
-            key: _editableRegionKey,
-            children: [
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final drawableWidth = math.max(
-                    0.0,
-                    constraints.maxWidth - padding.horizontal,
-                  );
-                  final drawableHeight = math.max(
-                    0.0,
-                    constraints.maxHeight - padding.vertical,
-                  );
-                  final columns = math.max(
-                    2,
-                    drawableWidth ~/ metrics.cellSize.width,
-                  );
-                  final rows = math.max(
-                    1,
-                    drawableHeight ~/ metrics.cellSize.height,
-                  );
-                  _scheduleResize(
-                    columns,
-                    rows,
-                    drawableWidth,
-                    drawableHeight,
-                    metrics,
-                  );
+    _terminalScrollCellHeight = metrics.cellSize.height;
+    final scrollBehavior = ScrollConfiguration.of(context);
+    final terminalScrollView = ScrollConfiguration(
+      behavior: scrollBehavior.copyWith(scrollbars: false, overscroll: false),
+      child: Scrollable(
+        controller: _terminalScrollController,
+        axisDirection: AxisDirection.down,
+        physics: const _TerminalScrollPhysics(),
+        viewportBuilder: (context, position) => AnimatedBuilder(
+          animation: widget.controller,
+          builder: (context, child) {
+            final snapshot = widget.controller.snapshot;
+            return _TerminalScrollViewport(
+              position: position,
+              maxScrollExtent: snapshot.historyLines * metrics.cellSize.height,
+              targetScrollOffset:
+                  (snapshot.historyLines - snapshot.displayOffset) *
+                  metrics.cellSize.height,
+              synchronizeScrollOffset: !_terminalScrollActive,
+              onScrollOffsetCorrected: (pixels) {
+                _terminalScrollLastPixels = pixels;
+              },
+              child: child,
+            );
+          },
+          child: MouseRegion(
+            key: const ValueKey('terminal-text-region'),
+            cursor: _hoveredOpenTarget == null
+                ? SystemMouseCursors.text
+                : SystemMouseCursors.click,
+            onExit: (_) => _clearOpenTargetHover(),
+            child: Focus(
+              focusNode: _focusNode,
+              autofocus: true,
+              onKeyEvent: _handleKeyEvent,
+              child: _TerminalPointerRegion(
+                onPointerDown: (event) => _handlePointerDown(event, metrics),
+                onPointerMove: (event) => _handlePointerMove(event, metrics),
+                onPointerHover: (event) => _handlePointerHover(event, metrics),
+                onPointerUp: (event) => _handlePointerUp(event, metrics),
+                onPointerCancel: _handlePointerCancel,
+                onPointerSignal: (event) =>
+                    _handlePointerSignal(event, metrics),
+                onPointerPanZoomStart: _handleTrackpadPanZoomStart,
+                onPointerPanZoomUpdate: (event) =>
+                    _handleTrackpadPanZoomUpdate(event, metrics),
+                onPointerPanZoomEnd: _handleTrackpadPanZoomEnd,
+                child: Stack(
+                  key: _editableRegionKey,
+                  children: [
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final drawableWidth = math.max(
+                          0.0,
+                          constraints.maxWidth - padding.horizontal,
+                        );
+                        final drawableHeight = math.max(
+                          0.0,
+                          constraints.maxHeight - padding.vertical,
+                        );
+                        final columns = math.max(
+                          2,
+                          drawableWidth ~/ metrics.cellSize.width,
+                        );
+                        final rows = math.max(
+                          1,
+                          drawableHeight ~/ metrics.cellSize.height,
+                        );
+                        _scheduleResize(
+                          columns,
+                          rows,
+                          drawableWidth,
+                          drawableHeight,
+                          metrics,
+                        );
 
-                  return Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      Padding(
-                        padding: padding,
-                        child: AnimatedBuilder(
-                          animation: widget.controller,
-                          builder: (context, _) {
-                            final snapshot = widget.controller.snapshot;
-                            _synchronizeGraphicImages(snapshot);
-                            final cursor = snapshot.cursor;
-                            _scheduleTextInputGeometryUpdate(metrics, padding);
-                            if (cursor.column != _lastCursorColumn ||
-                                cursor.row != _lastCursorRow) {
-                              _lastCursorColumn = cursor.column;
-                              _lastCursorRow = cursor.row;
-                              _cursorBlinkOn = true;
-                              _configureCursorBlink();
-                            }
-                            return CustomPaint(
-                              painter: TerminalPainter(
-                                snapshot: snapshot,
-                                metrics: metrics,
-                                textStyle: textStyle,
-                                showCursor:
-                                    widget.controller.localPrediction.isEmpty &&
-                                    _showCursor(snapshot),
-                                composingText: snapshot.displayOffset == 0
-                                    ? _imeComposingText
-                                    : null,
-                                predictedText:
-                                    widget.controller.localPrediction,
-                                selection: _selection,
-                                commandBlockSelection: _commandBlockSelection,
-                                paintCommandBlockVerticalBorders: false,
-                                openTargetSelection:
-                                    _hoveredOpenTarget?.selection,
-                                focused: _focusNode.hasFocus,
-                                theme: widget.theme,
-                                weight: _config.font.weight,
-                                boldWeight: _config.font.boldWeight,
-                                graphicImages: Map.unmodifiable(
-                                  _graphicImageCache,
-                                ),
-                                textCache: _textCache,
-                              ),
-                              size: Size.infinite,
-                            );
-                          },
-                        ),
-                      ),
-                      if (_commandBlockSelection != null)
-                        Positioned.fill(
-                          child: IgnorePointer(
-                            child: AnimatedBuilder(
-                              animation: widget.controller,
-                              builder: (context, _) => CustomPaint(
-                                painter: TerminalCommandBlockFocusPainter(
-                                  snapshot: widget.controller.snapshot,
-                                  metrics: metrics,
-                                  selection: _commandBlockSelection!,
-                                  theme: widget.theme,
-                                  contentPadding: padding,
-                                ),
+                        return Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            Padding(
+                              padding: padding,
+                              child: AnimatedBuilder(
+                                animation: widget.controller,
+                                builder: (context, _) {
+                                  final snapshot = widget.controller.snapshot;
+                                  _synchronizeGraphicImages(snapshot);
+                                  final cursor = snapshot.cursor;
+                                  _scheduleTextInputGeometryUpdate(
+                                    metrics,
+                                    padding,
+                                  );
+                                  if (cursor.column != _lastCursorColumn ||
+                                      cursor.row != _lastCursorRow) {
+                                    _lastCursorColumn = cursor.column;
+                                    _lastCursorRow = cursor.row;
+                                    _cursorBlinkOn = true;
+                                    _configureCursorBlink();
+                                  }
+                                  return CustomPaint(
+                                    painter: TerminalPainter(
+                                      snapshot: snapshot,
+                                      metrics: metrics,
+                                      textStyle: textStyle,
+                                      showCursor:
+                                          widget
+                                              .controller
+                                              .localPrediction
+                                              .isEmpty &&
+                                          _showCursor(snapshot),
+                                      composingText: snapshot.displayOffset == 0
+                                          ? _imeComposingText
+                                          : null,
+                                      predictedText:
+                                          widget.controller.localPrediction,
+                                      selection: _selection,
+                                      commandBlockSelection:
+                                          _commandBlockSelection,
+                                      paintCommandBlockVerticalBorders: false,
+                                      openTargetSelection:
+                                          _hoveredOpenTarget?.selection,
+                                      focused: _focusNode.hasFocus,
+                                      theme: widget.theme,
+                                      weight: _config.font.weight,
+                                      boldWeight: _config.font.boldWeight,
+                                      graphicImages: Map.unmodifiable(
+                                        _graphicImageCache,
+                                      ),
+                                      textCache: _textCache,
+                                    ),
+                                    size: Size.infinite,
+                                  );
+                                },
                               ),
                             ),
-                          ),
-                        ),
-                    ],
-                  );
-                },
-              ),
-              Positioned(
-                top: 3,
-                right: 0,
-                bottom: 3,
-                width: 12,
-                child: AnimatedBuilder(
-                  animation: widget.controller,
-                  builder: (context, _) {
-                    final snapshot = widget.controller.snapshot;
-                    if (!terminalScrollbarEnabled ||
-                        snapshot.historyLines <= 0) {
-                      return const SizedBox.shrink();
-                    }
-                    return _TerminalScrollbar(
-                      key: _scrollbarKey,
-                      rows: snapshot.rows,
-                      historyLines: snapshot.historyLines,
-                      displayOffset: snapshot.displayOffset,
-                      theme: widget.theme,
-                      onScrollToOffset: _scrollToDisplayOffset,
-                    );
-                  },
+                            if (_commandBlockSelection != null)
+                              Positioned.fill(
+                                child: IgnorePointer(
+                                  child: AnimatedBuilder(
+                                    animation: widget.controller,
+                                    builder: (context, _) => CustomPaint(
+                                      painter: TerminalCommandBlockFocusPainter(
+                                        snapshot: widget.controller.snapshot,
+                                        metrics: metrics,
+                                        selection: _commandBlockSelection!,
+                                        theme: widget.theme,
+                                        contentPadding: padding,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        );
+                      },
+                    ),
+                    Positioned(
+                      top: 10,
+                      right: 18,
+                      child: AnimatedBuilder(
+                        animation: widget.controller,
+                        builder: (context, _) => _buildMoshNetworkStatus(),
+                      ),
+                    ),
+                    if (_searchVisible) _buildSearchOverlay(),
+                  ],
                 ),
               ),
-              Positioned(
-                top: 10,
-                right: 18,
-                child: AnimatedBuilder(
-                  animation: widget.controller,
-                  builder: (context, _) => _buildMoshNetworkStatus(),
-                ),
-              ),
-              if (_searchVisible) _buildSearchOverlay(),
-            ],
+            ),
           ),
         ),
+      ),
+    );
+    if (!terminalScrollbarEnabled) {
+      return terminalScrollView;
+    }
+    final foreground = widget.theme.primary.foreground;
+    final thumbAlpha = widget.theme.type == TerminalThemeType.dark
+        ? 0.62
+        : 0.52;
+    return ScrollbarTheme(
+      data: ScrollbarThemeData(
+        thickness: const WidgetStatePropertyAll(6),
+        radius: const Radius.circular(999),
+        thumbColor: WidgetStatePropertyAll(
+          foreground.withValues(alpha: thumbAlpha),
+        ),
+        trackVisibility: WidgetStateProperty.resolveWith(
+          (states) =>
+              states.contains(WidgetState.hovered) ||
+              states.contains(WidgetState.dragged),
+        ),
+        trackColor: WidgetStatePropertyAll(foreground.withValues(alpha: 0.08)),
+        trackBorderColor: const WidgetStatePropertyAll(Colors.transparent),
+        crossAxisMargin: 2,
+        mainAxisMargin: 3,
+        minThumbLength: 28,
+        interactive: true,
+      ),
+      child: Scrollbar(
+        key: const ValueKey('terminal-scrollbar'),
+        controller: _terminalScrollController,
+        interactive: true,
+        scrollbarOrientation: ScrollbarOrientation.right,
+        child: terminalScrollView,
       ),
     );
   }
@@ -2376,10 +2571,6 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
     if (_isPointerInsideSearchOverlay(event.position)) {
       return;
     }
-    if (_isPointerInsideScrollbar(event.position)) {
-      return;
-    }
-
     final terminalHadFocus = _focusNode.hasFocus;
     _focusNode.requestFocus();
     final position = _cellPositionForOffset(event.localPosition, metrics);
@@ -2832,20 +3023,135 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
     );
   }
 
+  void _attachTerminalScrollPosition(ScrollPosition position) {
+    _terminalScrollPosition = position;
+    _terminalScrollLastPixels = position.pixels;
+    position.addListener(_handleTerminalScrollPositionChanged);
+    position.isScrollingNotifier.addListener(
+      _handleTerminalScrollActivityChanged,
+    );
+    _scheduleTerminalScrollSync();
+  }
+
+  void _detachTerminalScrollPosition(ScrollPosition position) {
+    position.removeListener(_handleTerminalScrollPositionChanged);
+    position.isScrollingNotifier.removeListener(
+      _handleTerminalScrollActivityChanged,
+    );
+    if (identical(_terminalScrollPosition, position)) {
+      _terminalScrollPosition = null;
+    }
+  }
+
+  void _handleTerminalScrollActivityChanged() {
+    final position = _terminalScrollPosition;
+    if (position == null) return;
+    _terminalScrollActive = position.isScrollingNotifier.value;
+    if (_terminalScrollActive) {
+      _terminalScrollLineRemainder = 0;
+      _terminalScrollLastPixels = position.pixels;
+      return;
+    }
+    _terminalScrollLineRemainder = 0;
+    _trackpadScrollIgnored = false;
+    _scheduleTerminalScrollSync();
+  }
+
+  void _handleTerminalScrollPositionChanged() {
+    final position = _terminalScrollPosition;
+    if (position == null) return;
+    final pixels = position.pixels;
+    final delta = pixels - _terminalScrollLastPixels;
+    _terminalScrollLastPixels = pixels;
+    if (_terminalScrollSynchronizing ||
+        _trackpadScrollIgnored ||
+        _terminalReportsMouseEvents ||
+        delta == 0) {
+      return;
+    }
+
+    _terminalScrollLineRemainder += -delta / _terminalScrollCellHeight;
+    final wholeLines = _terminalScrollLineRemainder.truncate();
+    if (wholeLines == 0) return;
+    _terminalScrollLineRemainder -= wholeLines;
+    _scrollTerminalLines(
+      wholeLines,
+      _dragLocalPosition ?? _trackpadScrollLocalPosition ?? Offset.zero,
+      _dragMetrics ??
+          _trackpadScrollMetrics ??
+          TerminalMetrics.measure(_config.font.textStyle()),
+    );
+  }
+
+  bool get _terminalReportsMouseEvents {
+    return !widget.readOnly &&
+        _config.keyboard.reportMouseEvents &&
+        widget.controller.snapshot.keyboardMode.mouseReporting;
+  }
+
+  void _scheduleTerminalScrollSync() {
+    if (_terminalScrollActive || _terminalScrollSyncScheduled) return;
+    _terminalScrollSyncScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _terminalScrollSyncScheduled = false;
+      _syncTerminalScrollPosition();
+    });
+  }
+
+  void _syncTerminalScrollPosition() {
+    final position = _terminalScrollPosition;
+    if (!mounted ||
+        _terminalScrollActive ||
+        position == null ||
+        !position.hasContentDimensions) {
+      return;
+    }
+    final snapshot = widget.controller.snapshot;
+    final target =
+        (snapshot.historyLines - snapshot.displayOffset) *
+        _terminalScrollCellHeight;
+    final clampedTarget = target
+        .clamp(position.minScrollExtent, position.maxScrollExtent)
+        .toDouble();
+    if (position.pixels == clampedTarget) return;
+    _terminalScrollSynchronizing = true;
+    position.jumpTo(clampedTarget);
+    _terminalScrollLastPixels = clampedTarget;
+    _terminalScrollSynchronizing = false;
+  }
+
+  void _handleTrackpadPanZoomStart(PointerPanZoomStartEvent event) {
+    _trackpadScrollIgnored = _isPointerInsideSearchOverlay(event.position);
+    _trackpadScrollLocalPosition = event.localPosition;
+    _terminalScrollLineRemainder = 0;
+    final position = _terminalScrollPosition;
+    if (position != null) {
+      _terminalScrollLastPixels = position.pixels;
+    }
+  }
+
   void _handleTrackpadPanZoomUpdate(
     PointerPanZoomUpdateEvent event,
     TerminalMetrics metrics,
   ) {
-    if (_isPointerInsideSearchOverlay(event.position) ||
-        event.localPanDelta.dy == 0) {
+    final scrollDeltaY = -event.localPanDelta.dy;
+    _trackpadScrollLocalPosition = event.localPosition;
+    _trackpadScrollMetrics = metrics;
+    if (_trackpadScrollIgnored || scrollDeltaY == 0) {
       return;
     }
-    _handleTerminalScroll(
-      localPosition: event.localPosition,
-      // macOS pan deltas have the opposite sign from PointerScrollEvent.
-      scrollDeltaY: -event.localPanDelta.dy,
-      metrics: metrics,
-    );
+    final position = _cellPositionForOffset(event.localPosition, metrics);
+    final scrollButton = scrollDeltaY < 0 ? 64 : 65;
+    if (_sendMouseReport(position: position, button: scrollButton)) {
+      return;
+    }
+  }
+
+  void _handleTrackpadPanZoomEnd(PointerPanZoomEndEvent _) {
+    if (_terminalScrollPosition?.isScrollingNotifier.value ?? false) return;
+    _terminalScrollLineRemainder = 0;
+    _trackpadScrollIgnored = false;
+    _scheduleTerminalScrollSync();
   }
 
   void _handleTerminalScroll({
@@ -2866,8 +3172,16 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
     }
 
     _scrollLineRemainder -= wholeLines;
+    _scrollTerminalLines(wholeLines, localPosition, metrics);
+  }
+
+  void _scrollTerminalLines(
+    int lines,
+    Offset localPosition,
+    TerminalMetrics metrics,
+  ) {
     final beforeOffset = widget.controller.snapshot.displayOffset;
-    widget.controller.scrollLines(wholeLines);
+    widget.controller.scrollLines(lines);
     final snapshot = widget.controller.snapshot;
     final scrolledLines = snapshot.displayOffset - beforeOffset;
     final anchor = _dragAnchorOffset;
@@ -2916,50 +3230,6 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
 
     final localPosition = renderObject.globalToLocal(globalPosition);
     return (Offset.zero & renderObject.size).contains(localPosition);
-  }
-
-  bool _isPointerInsideScrollbar(Offset globalPosition) {
-    if (!terminalScrollbarEnabled ||
-        widget.controller.snapshot.historyLines <= 0) {
-      return false;
-    }
-
-    final renderObject = _scrollbarKey.currentContext?.findRenderObject();
-    if (renderObject is! RenderBox || !renderObject.hasSize) {
-      return false;
-    }
-
-    final localPosition = renderObject.globalToLocal(globalPosition);
-    return (Offset.zero & renderObject.size).contains(localPosition);
-  }
-
-  void _scrollToDisplayOffset(int displayOffset) {
-    final snapshot = widget.controller.snapshot;
-    final target = displayOffset.clamp(0, snapshot.historyLines);
-    final lines = target - snapshot.displayOffset;
-    if (lines == 0) {
-      return;
-    }
-    widget.controller.scrollLines(lines);
-    _updateDragSelectionForSnapshot(widget.controller.snapshot);
-  }
-
-  void _updateDragSelectionForSnapshot(TerminalSnapshot snapshot) {
-    final anchor = _dragAnchorOffset;
-    final localPosition = _dragLocalPosition;
-    final metrics = _dragMetrics;
-    if (anchor == null || localPosition == null || metrics == null) {
-      return;
-    }
-    _setSelection(
-      TerminalSelection.fromOffsets(
-        anchor: anchor,
-        extent: terminalCellOffset(
-          snapshot,
-          _cellPositionForOffset(localPosition, metrics),
-        ),
-      ),
-    );
   }
 
   bool _sendMouseMotionReport(
