@@ -42,7 +42,7 @@ void main() {
           : 'NAUTERM_DRAFT_EXECUTED=1';
       controller.sendInput(draft);
       if (tracksResult) {
-        await _waitForPtyEcho(output, draft);
+        await _waitForDraftVisible(controller, output, draft);
       } else {
         await Future<void>.delayed(const Duration(milliseconds: 80));
       }
@@ -144,27 +144,22 @@ Future<void> _waitForInitialPrompt(TerminalController controller) async {
   throw StateError('The test shell did not produce its first prompt.');
 }
 
-Future<void> _waitForPtyEcho(List<int> output, String value) async {
-  final expected = utf8.encode(value);
+Future<void> _waitForDraftVisible(
+  TerminalController controller,
+  List<int> output,
+  String draft,
+) async {
+  final expected = draft.replaceAll(RegExp(r'\s+'), '');
   final deadline = DateTime.now().add(const Duration(seconds: 3));
   while (DateTime.now().isBefore(deadline)) {
-    if (_containsBytes(output, expected)) return;
+    final visibleText = controller.snapshot.cells
+        .map((cell) => cell.text)
+        .join();
+    final observedText = AiContextSanitizer.plainTerminalText(
+      '${utf8.decode(output, allowMalformed: true)}\n$visibleText',
+    ).replaceAll(RegExp(r'\s+'), '');
+    if (observedText.contains(expected)) return;
     await Future<void>.delayed(const Duration(milliseconds: 10));
   }
-  throw StateError('The test shell did not echo the draft input.');
-}
-
-bool _containsBytes(List<int> bytes, List<int> pattern) {
-  if (pattern.isEmpty) return true;
-  for (var start = 0; start + pattern.length <= bytes.length; start++) {
-    var matches = true;
-    for (var offset = 0; offset < pattern.length; offset++) {
-      if (bytes[start + offset] != pattern[offset]) {
-        matches = false;
-        break;
-      }
-    }
-    if (matches) return true;
-  }
-  return false;
+  throw StateError('The test shell did not render the draft input.');
 }
