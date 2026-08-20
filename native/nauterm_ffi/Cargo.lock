@@ -1996,7 +1996,7 @@ dependencies = [
 
 [[package]]
 name = "nauterm_ffi"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "aes-gcm 0.10.3",
  "alacritty_terminal",
