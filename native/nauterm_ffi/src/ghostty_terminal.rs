@@ -33,6 +33,7 @@ const TERMINAL_OPT_KITTY_IMAGE_STORAGE_LIMIT: c_int = 15;
 const TERMINAL_OPT_DEFAULT_CURSOR_STYLE: c_int = 22;
 const TERMINAL_OPT_DEFAULT_CURSOR_BLINK: c_int = 23;
 const TERMINAL_OPT_CLIPBOARD_WRITE: c_int = 26;
+const TERMINAL_OPT_SCROLLBACK_MAX_BYTES: c_int = 27;
 const TERMINAL_OPT_SCROLLBACK_MAX_LINES: c_int = 28;
 
 const TERMINAL_DATA_ACTIVE_SCREEN: c_int = 6;
@@ -679,6 +680,10 @@ impl GhosttyTerminalEngine {
                 TERMINAL_OPT_COLOR_PALETTE,
                 palette.as_ptr() as *const c_void,
             ),
+            // Nauterm exposes scrollback as a line limit. Disable Ghostty's
+            // independent byte limit so wide terminals do not retain fewer
+            // rows than the configured value.
+            (TERMINAL_OPT_SCROLLBACK_MAX_BYTES, ptr::null()),
             (
                 TERMINAL_OPT_SCROLLBACK_MAX_LINES,
                 &scrollback as *const _ as *const c_void,
@@ -3063,6 +3068,30 @@ mod tests {
         terminal.resize(12, 4, 9, 18);
         let resized = terminal.snapshot();
         assert_eq!((resized.columns, resized.rows), (12, 4));
+    }
+
+    #[test]
+    fn configured_scrollback_retains_the_full_line_limit() {
+        let options = TerminalOptions {
+            scrollback_lines: 10_000,
+            ..TerminalOptions::default()
+        };
+        let mut terminal = GhosttyTerminalEngine::new(160, 20, options).unwrap();
+        let output = (0..10_500)
+            .map(|line| format!("history-{line:05}\r\n"))
+            .collect::<String>();
+
+        terminal.write_bytes(output.as_bytes());
+
+        let snapshot = terminal.snapshot();
+        // Ghostty evicts storage in pages, so the retained count can sit
+        // slightly below the configured ceiling after crossing it.
+        assert!((9_000..=10_000).contains(&snapshot.history_lines));
+        assert_eq!(snapshot.display_offset, 0);
+        let text = terminal.plain_text();
+        assert!(text.contains("history-02000"));
+        assert!(text.contains("history-10499"));
+        assert!(!text.contains("history-00000"));
     }
 
     #[test]
