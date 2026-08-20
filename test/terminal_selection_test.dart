@@ -335,6 +335,146 @@ void main() {
       nysaDarkTerminalTheme.bright.white,
     );
   });
+
+  test('terminal text cache reuses only unchanged rows', () {
+    final cache = TerminalTextCache()
+      ..prepare(rowCount: 1, configuration: const (revision: 1));
+    addTearDown(cache.dispose);
+    final cells = _snapshotFromLines(['cache']).cells;
+    final recorder = PictureRecorder();
+    Canvas(recorder);
+    final picture = recorder.endRecording();
+
+    cache.store(
+      row: 0,
+      cells: cells,
+      cellOffset: 0,
+      cellCount: cells.length,
+      cursorTextColumn: -1,
+      picture: picture,
+    );
+
+    final equivalentCells = [
+      for (final cell in cells)
+        TerminalCell(
+          text: cell.text,
+          foreground: cell.foreground,
+          background: cell.background,
+          flags: cell.flags,
+        ),
+    ];
+    expect(
+      cache.lookup(
+        row: 0,
+        cells: equivalentCells,
+        cellOffset: 0,
+        cellCount: equivalentCells.length,
+        cursorTextColumn: -1,
+      ),
+      same(picture),
+    );
+
+    final changedCells = List<TerminalCell>.of(equivalentCells);
+    changedCells[0] = const TerminalCell(
+      text: 'C',
+      foreground: terminalDefaultForeground,
+      background: terminalDefaultBackground,
+      flags: 0,
+    );
+    expect(
+      cache.lookup(
+        row: 0,
+        cells: changedCells,
+        cellOffset: 0,
+        cellCount: changedCells.length,
+        cursorTextColumn: -1,
+      ),
+      isNull,
+    );
+    expect(
+      cache.lookup(
+        row: 0,
+        cells: equivalentCells,
+        cellOffset: 0,
+        cellCount: equivalentCells.length,
+        cursorTextColumn: 0,
+      ),
+      isNull,
+    );
+  });
+
+  test('cached terminal text renders identically to uncached text', () async {
+    final snapshot = _snapshotFromCells([
+      const TerminalCell(
+        text: 'a',
+        foreground: terminalDefaultForeground,
+        background: terminalDefaultBackground,
+        flags: 0,
+      ),
+      const TerminalCell(
+        text: 'B',
+        foreground: terminalDefaultForeground,
+        background: terminalDefaultBackground,
+        flags: terminalFlagBold,
+      ),
+      const TerminalCell(
+        text: '表',
+        foreground: terminalDefaultForeground,
+        background: terminalDefaultBackground,
+        flags: terminalFlagWideChar,
+      ),
+      const TerminalCell(
+        text: ' ',
+        foreground: terminalDefaultForeground,
+        background: terminalDefaultBackground,
+        flags: terminalFlagWideCharSpacer,
+      ),
+      const TerminalCell(
+        text: 'e\u0301',
+        foreground: terminalDefaultForeground,
+        background: terminalDefaultBackground,
+        flags: 0,
+      ),
+    ]);
+    final textStyle = defaultTerminalConfig.font.textStyle();
+    final metrics = TerminalMetrics.measure(textStyle);
+    final cache = TerminalTextCache();
+    addTearDown(cache.dispose);
+
+    TerminalPainter painter(TerminalTextCache? textCache) => TerminalPainter(
+      snapshot: snapshot,
+      metrics: metrics,
+      textStyle: textStyle,
+      showCursor: false,
+      composingText: null,
+      selection: null,
+      focused: false,
+      theme: defaultTerminalTheme,
+      textCache: textCache,
+    );
+
+    Future<List<int>> render(TerminalPainter terminalPainter) async {
+      final width = (snapshot.columns * metrics.cellSize.width).ceil();
+      final height = metrics.cellSize.height.ceil();
+      final recorder = PictureRecorder();
+      terminalPainter.paint(
+        Canvas(recorder),
+        Size(width.toDouble(), height.toDouble()),
+      );
+      final picture = recorder.endRecording();
+      final image = await picture.toImage(width, height);
+      final bytes = await image.toByteData(format: ImageByteFormat.rawRgba);
+      picture.dispose();
+      image.dispose();
+      return bytes!.buffer.asUint8List();
+    }
+
+    final uncached = await render(painter(null));
+    await render(painter(cache));
+    final cached = await render(painter(cache));
+
+    expect(cached, orderedEquals(uncached));
+  });
 }
 
 TerminalSnapshot _snapshotFromLines(

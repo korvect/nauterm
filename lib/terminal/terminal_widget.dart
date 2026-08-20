@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 
 import '../app/nauterm_localizations.dart';
 import '../app/nauterm_log.dart';
+
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'terminal_controller.dart';
@@ -32,10 +33,13 @@ part 'terminal_scrollbar.dart';
 
 enum TerminalSplitDirection { right, down }
 
-typedef TerminalComposerSuggestionResolver =
-    List<String> Function(String input, int limit);
-typedef TerminalOpenTargetCallback =
-    FutureOr<void> Function(TerminalOpenTarget target);
+typedef TerminalComposerSuggestionResolver = List<String> Function(
+  String input,
+  int limit,
+);
+typedef TerminalOpenTargetCallback = FutureOr<void> Function(
+  TerminalOpenTarget target,
+);
 
 @visibleForTesting
 String terminalCursorMoveSequence({
@@ -1055,6 +1059,7 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
   final GlobalKey _editableRegionKey = GlobalKey();
   final GlobalKey _searchOverlayKey = GlobalKey();
   final GlobalKey _scrollbarKey = GlobalKey();
+  final TerminalTextCache _textCache = TerminalTextCache();
   double _lastLayoutWidth = 0;
   double _lastLayoutHeight = 0;
   int _lastCellWidth = 0;
@@ -1154,6 +1159,7 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
     _searchFocusNode.dispose();
     _cursorBlinkTimer?.cancel();
     _selectionAutoScrollTimer?.cancel();
+    _textCache.dispose();
     for (final image in _graphicImageCache.values) {
       image.dispose();
     }
@@ -1281,6 +1287,7 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
                                 graphicImages: Map.unmodifiable(
                                   _graphicImageCache,
                                 ),
+                                textCache: _textCache,
                               ),
                               size: Size.infinite,
                             );

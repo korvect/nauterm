@@ -64,6 +64,7 @@ class TerminalPainter extends CustomPainter {
     this.weight = 400,
     this.boldWeight = 700,
     this.graphicImages = const {},
+    this.textCache,
   });
 
   final TerminalSnapshot snapshot;
@@ -82,6 +83,7 @@ class TerminalPainter extends CustomPainter {
   final int weight;
   final int boldWeight;
   final Map<int, ui.Image> graphicImages;
+  final TerminalTextCache? textCache;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -475,6 +477,7 @@ class TerminalPainter extends CustomPainter {
 
   void _paintText(Canvas canvas, double cellWidth, double cellHeight) {
     final styleCache = <_CellStyleKey, TextStyle>{};
+    final runStyleCache = <_CellStyleKey, TextStyle>{};
     final columns = snapshot.columns;
     final cells = snapshot.cells;
     final cursor = snapshot.cursor;
@@ -489,17 +492,119 @@ class TerminalPainter extends CustomPainter {
         cursor.row < snapshot.rows &&
         cursorTextColumn != null;
     final painter = TextPainter(textDirection: TextDirection.ltr, maxLines: 1);
+    textCache?.prepare(
+      rowCount: snapshot.rows,
+      configuration: (
+        columns: snapshot.columns,
+        displayOffset: snapshot.displayOffset,
+        textStyle: textStyle,
+        theme: theme,
+        cellSize: metrics.cellSize,
+        textOffset: metrics.textOffset,
+        selection: selection,
+        weight: weight,
+        boldWeight: boldWeight,
+      ),
+    );
+
+    TextStyle resolvedStyle(_CellStyleKey style) {
+      return styleCache.putIfAbsent(
+        style,
+        () => style.resolve(textStyle, weight: weight, boldWeight: boldWeight),
+      );
+    }
+
+    TextStyle resolvedRunStyle(_CellStyleKey style) {
+      return runStyleCache.putIfAbsent(style, () {
+        final resolved = resolvedStyle(style);
+        final probe = TextPainter(
+          text: TextSpan(text: 'W', style: resolved),
+          textDirection: TextDirection.ltr,
+          maxLines: 1,
+        )..layout();
+        final spacingCorrection = cellWidth - probe.width;
+        if (spacingCorrection.abs() < 0.001) {
+          return resolved;
+        }
+        return resolved.copyWith(
+          letterSpacing: (resolved.letterSpacing ?? 0) + spacingCorrection,
+        );
+      });
+    }
+
+    void paintText(
+      Canvas targetCanvas,
+      String text,
+      _CellStyleKey style,
+      int column,
+      double top, {
+      required bool isRun,
+    }) {
+      painter
+        ..text = TextSpan(
+          text: text,
+          style: isRun ? resolvedRunStyle(style) : resolvedStyle(style),
+        )
+        ..layout();
+      painter.paint(
+        targetCanvas,
+        Offset(column * cellWidth, top + metrics.textOffset.dy),
+      );
+    }
 
     for (var row = 0; row < snapshot.rows; row++) {
       final rowOffset = row * columns;
+      final rowCursorTextColumn = overrideCursorCell && row == cursor.row
+          ? cursorTextColumn
+          : -1;
+      final cachedPicture = textCache?.lookup(
+        row: row,
+        cells: cells,
+        cellOffset: rowOffset,
+        cellCount: columns,
+        cursorTextColumn: rowCursorTextColumn,
+      );
+      if (cachedPicture != null) {
+        canvas
+          ..save()
+          ..translate(0, row * cellHeight)
+          ..drawPicture(cachedPicture)
+          ..restore();
+        continue;
+      }
 
-      canvas.save();
-      canvas.clipRect(
-        Rect.fromLTWH(0, row * cellHeight, columns * cellWidth, cellHeight),
+      final recorder = textCache == null ? null : ui.PictureRecorder();
+      final rowCanvas = recorder == null ? canvas : Canvas(recorder);
+      final rowTop = recorder == null ? row * cellHeight : 0.0;
+      var runStart = -1;
+      _CellStyleKey? runStyle;
+      final runText = StringBuffer();
+
+      void flushRun() {
+        if (runStart < 0 || runStyle == null || runText.isEmpty) {
+          return;
+        }
+        paintText(
+          rowCanvas,
+          runText.toString(),
+          runStyle!,
+          runStart,
+          rowTop,
+          isRun: true,
+        );
+        runStart = -1;
+        runStyle = null;
+        runText.clear();
+      }
+
+      rowCanvas.save();
+      rowCanvas.clipRect(
+        Rect.fromLTWH(0, rowTop, columns * cellWidth, cellHeight),
       );
       for (var column = 0; column < columns; column++) {
         final cell = cells[rowOffset + column];
         if (cell.wideCharSpacer || cell.leadingWideCharSpacer) {
+          flushRun();
           continue;
         }
 
@@ -510,6 +615,9 @@ class TerminalPainter extends CustomPainter {
             column == cursorTextColumn;
         final isSelected = _isSelectedCell(row, column);
         if (!isCursorCell && _isBlankText(text)) {
+          if (runStart >= 0) {
+            runText.write(' ');
+          }
           continue;
         }
 
@@ -518,21 +626,42 @@ class TerminalPainter extends CustomPainter {
           isCursorCell: isCursorCell,
           isSelected: isSelected,
         );
-        final resolvedStyle = styleCache.putIfAbsent(
-          style,
-          () =>
-              style.resolve(textStyle, weight: weight, boldWeight: boldWeight),
-        );
-        painter
-          ..text = TextSpan(text: text, style: resolvedStyle)
-          ..layout();
-        painter.paint(
-          canvas,
-          Offset(column * cellWidth, row * cellHeight + metrics.textOffset.dy),
-        );
+        final canJoinRun = !cell.wideChar && _isSingleWidthAscii(text);
+        if (!canJoinRun) {
+          flushRun();
+          paintText(rowCanvas, text, style, column, rowTop, isRun: false);
+          continue;
+        }
+
+        if (runStart >= 0 && runStyle != style) {
+          flushRun();
+        }
+        if (runStart < 0) {
+          runStart = column;
+          runStyle = style;
+        }
+        runText.write(text);
       }
 
-      canvas.restore();
+      flushRun();
+      rowCanvas.restore();
+
+      if (recorder != null) {
+        final picture = recorder.endRecording();
+        textCache!.store(
+          row: row,
+          cells: cells,
+          cellOffset: rowOffset,
+          cellCount: columns,
+          cursorTextColumn: rowCursorTextColumn,
+          picture: picture,
+        );
+        canvas
+          ..save()
+          ..translate(0, row * cellHeight)
+          ..drawPicture(picture)
+          ..restore();
+      }
     }
   }
 
@@ -984,7 +1113,8 @@ class TerminalPainter extends CustomPainter {
         oldDelegate.metrics.strikeoutY != metrics.strikeoutY ||
         oldDelegate.weight != weight ||
         oldDelegate.boldWeight != boldWeight ||
-        oldDelegate.graphicImages != graphicImages;
+        oldDelegate.graphicImages != graphicImages ||
+        oldDelegate.textCache != textCache;
   }
 }
 
@@ -1298,5 +1428,114 @@ bool _isBlankText(String text) {
     }
   }
 
+  return true;
+}
+
+bool _isSingleWidthAscii(String text) {
+  return text.length == 1 &&
+      text.codeUnitAt(0) >= 0x20 &&
+      text.codeUnitAt(0) < 0x7f;
+}
+
+class TerminalTextCache {
+  Object? _configuration;
+  List<_TerminalTextRowCacheEntry?> _rows = const [];
+
+  void prepare({required int rowCount, required Object configuration}) {
+    if (_configuration == configuration && _rows.length == rowCount) {
+      return;
+    }
+    clear();
+    _configuration = configuration;
+    _rows = List<_TerminalTextRowCacheEntry?>.filled(rowCount, null);
+  }
+
+  ui.Picture? lookup({
+    required int row,
+    required List<TerminalCell> cells,
+    required int cellOffset,
+    required int cellCount,
+    required int cursorTextColumn,
+  }) {
+    if (row < 0 || row >= _rows.length) {
+      return null;
+    }
+    final entry = _rows[row];
+    if (entry == null ||
+        entry.cursorTextColumn != cursorTextColumn ||
+        !_sameTerminalCells(entry.cells, cells, cellOffset, cellCount)) {
+      return null;
+    }
+    return entry.picture;
+  }
+
+  void store({
+    required int row,
+    required List<TerminalCell> cells,
+    required int cellOffset,
+    required int cellCount,
+    required int cursorTextColumn,
+    required ui.Picture picture,
+  }) {
+    if (row < 0 || row >= _rows.length) {
+      picture.dispose();
+      return;
+    }
+    _rows[row]?.picture.dispose();
+    _rows[row] = _TerminalTextRowCacheEntry(
+      cells: List<TerminalCell>.of(
+        cells.getRange(cellOffset, cellOffset + cellCount),
+        growable: false,
+      ),
+      cursorTextColumn: cursorTextColumn,
+      picture: picture,
+    );
+  }
+
+  void clear() {
+    for (final row in _rows) {
+      row?.picture.dispose();
+    }
+    _rows = const [];
+    _configuration = null;
+  }
+
+  void dispose() => clear();
+}
+
+class _TerminalTextRowCacheEntry {
+  const _TerminalTextRowCacheEntry({
+    required this.cells,
+    required this.cursorTextColumn,
+    required this.picture,
+  });
+
+  final List<TerminalCell> cells;
+  final int cursorTextColumn;
+  final ui.Picture picture;
+}
+
+bool _sameTerminalCells(
+  List<TerminalCell> previous,
+  List<TerminalCell> current,
+  int currentOffset,
+  int count,
+) {
+  if (previous.length != count || currentOffset < 0 || count < 0) {
+    return false;
+  }
+  if (currentOffset + count > current.length) {
+    return false;
+  }
+  for (var index = 0; index < count; index++) {
+    final left = previous[index];
+    final right = current[currentOffset + index];
+    if (left.text != right.text ||
+        left.foreground != right.foreground ||
+        left.background != right.background ||
+        left.flags != right.flags) {
+      return false;
+    }
+  }
   return true;
 }
