@@ -318,9 +318,9 @@ class TerminalCaptureWriter implements TerminalCaptureWriteHandle {
   TerminalCaptureWriter._({
     required this.logId,
     required this.fileName,
-    required FfiTerminalCaptureWriter writer,
+    required FfiTerminalCaptureWriter this._writer,
     required this.onFinalized,
-  }) : _writer = writer;
+  });
 
   final String logId;
   final String fileName;

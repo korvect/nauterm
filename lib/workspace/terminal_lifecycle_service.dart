@@ -3,8 +3,9 @@ import 'dart:collection';
 import '../ai/ai_conversation.dart';
 import '../terminal/terminal_controller.dart';
 
-typedef AiConversationRelease =
-    void Function(AiConversationController conversation);
+typedef AiConversationRelease = void Function(
+  AiConversationController conversation,
+);
 
 /// Owns idempotent disposal of terminal and AI session resources.
 ///
@@ -12,8 +13,7 @@ typedef AiConversationRelease =
 /// watcher, and shutdown traversal. Keeping the identity sets here prevents
 /// those paths from releasing persistence or native resources more than once.
 class TerminalLifecycleService {
-  TerminalLifecycleService({required AiConversationRelease releaseConversation})
-    : _releaseConversation = releaseConversation;
+  TerminalLifecycleService({required this._releaseConversation});
 
   final AiConversationRelease _releaseConversation;
   final Set<TerminalController> _disposedTerminals = HashSet.identity();

@@ -20,8 +20,7 @@ class AiConversationPersistenceTarget {
 /// for destructive-action confirmation. This repository owns listeners,
 /// debounce timers, save ordering, and history reads/writes.
 class AiConversationRepository {
-  AiConversationRepository({required NautermDataStore? Function() dataStore})
-    : _dataStore = dataStore;
+  AiConversationRepository({required this._dataStore});
 
   static const Duration _saveDebounce = Duration(milliseconds: 400);
 

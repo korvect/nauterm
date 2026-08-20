@@ -9,12 +9,7 @@ import 'nauterm_data_store.dart';
 import 'nauterm_paths.dart';
 
 class SyncService {
-  SyncService(
-    this.paths, {
-    Future<void> Function(String strategy)? syncNow,
-    VoidCallback? onSyncCompleted,
-  }) : _syncNow = syncNow,
-       _onSyncCompleted = onSyncCompleted;
+  SyncService(this.paths, {this._syncNow, this._onSyncCompleted});
 
   final NautermPaths paths;
   final Future<void> Function(String strategy)? _syncNow;

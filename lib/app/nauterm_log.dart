@@ -192,9 +192,8 @@ class NautermLogOperation {
     required this.id,
     required this.area,
     required this.action,
-    required Map<String, Object?> fields,
-  }) : _fields = fields,
-       _stopwatch = Stopwatch()..start();
+    required this._fields,
+  }) : _stopwatch = Stopwatch()..start();
 
   final String id;
   final String area;

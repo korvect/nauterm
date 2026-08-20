@@ -112,10 +112,9 @@ class AiConversationController extends ChangeNotifier {
     AiProtocolClient? client,
     AiTerminalCommandRunner? terminalRunner,
     AiConversationEntry? initialConversation,
-    AiAssistantConfig? config,
+    this._config,
   }) : _client = client ?? AiProtocolClient(),
-       _terminalRunner = terminalRunner ?? AiTerminalCommandRunner(),
-       _config = config {
+       _terminalRunner = terminalRunner ?? AiTerminalCommandRunner() {
     if (initialConversation != null) {
       _restore(initialConversation);
     }

@@ -41,25 +41,20 @@ class StartupUpdateNotice {
 typedef StartupUpdateNoticeSink = void Function(StartupUpdateNotice? notice);
 typedef SkippedUpdateVersionLoader = Future<String?> Function();
 typedef SkippedUpdateVersionSaver = Future<void> Function(String version);
-typedef NautermUpdateRestarter =
-    Future<void> Function(DesktopUpdateInstallDisposition disposition);
+typedef NautermUpdateRestarter = Future<void> Function(
+  DesktopUpdateInstallDisposition disposition,
+);
 
 class StartupUpdateCoordinator {
   StartupUpdateCoordinator({
-    required StartupUpdateNoticeSink showNotice,
-    required SkippedUpdateVersionLoader loadSkippedVersion,
-    required SkippedUpdateVersionSaver saveSkippedVersion,
-    required NautermUpdateRestarter restart,
-    DesktopUpdateService? service,
-    MacosSparkleUpdater sparkle = const MacosSparkleUpdater(),
+    required this._showNotice,
+    required this._loadSkippedVersion,
+    required this._saveSkippedVersion,
+    required this._restart,
+    this._service,
+    this._sparkle = const MacosSparkleUpdater(),
     Future<PackageInfo> Function()? loadPackageInfo,
-  }) : _showNotice = showNotice,
-       _loadSkippedVersion = loadSkippedVersion,
-       _saveSkippedVersion = saveSkippedVersion,
-       _restart = restart,
-       _service = service,
-       _sparkle = sparkle,
-       _loadPackageInfo = loadPackageInfo ?? PackageInfo.fromPlatform;
+  }) : _loadPackageInfo = loadPackageInfo ?? PackageInfo.fromPlatform;
 
   final StartupUpdateNoticeSink _showNotice;
   final SkippedUpdateVersionLoader _loadSkippedVersion;

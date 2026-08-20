@@ -48,9 +48,8 @@ class AiTerminalCommandCancelled implements Exception {
 class AiTerminalCommandRunner {
   AiTerminalCommandRunner({
     Random? random,
-    Duration cancellationGracePeriod = const Duration(milliseconds: 1500),
-  }) : _random = random ?? Random.secure(),
-       _cancellationGracePeriod = cancellationGracePeriod;
+    this._cancellationGracePeriod = const Duration(milliseconds: 1500),
+  }) : _random = random ?? Random.secure();
 
   static const int _maximumCapturedBytes = 1024 * 1024;
   static const Duration _integrationTimeout = Duration(seconds: 4);
