@@ -1247,7 +1247,6 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
   TerminalCellPosition? _lastTapPosition;
   DateTime? _lastTapTime;
   int _tapCount = 0;
-  double _scrollLineRemainder = 0;
   final Map<int, ui.Image> _graphicImageCache = {};
   final Set<int> _graphicImageDecodes = {};
   Set<int> _visibleGraphicGenerations = const {};
@@ -3016,7 +3015,7 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
     PointerScrollEvent event,
     TerminalMetrics metrics,
   ) {
-    _handleTerminalScroll(
+    _handleTerminalWheelScroll(
       localPosition: event.localPosition,
       scrollDeltaY: event.scrollDelta.dy,
       metrics: metrics,
@@ -3154,7 +3153,7 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
     _scheduleTerminalScrollSync();
   }
 
-  void _handleTerminalScroll({
+  void _handleTerminalWheelScroll({
     required Offset localPosition,
     required double scrollDeltaY,
     required TerminalMetrics metrics,
@@ -3165,13 +3164,11 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
       return;
     }
 
-    _scrollLineRemainder += -scrollDeltaY / metrics.cellSize.height;
-    final wholeLines = _scrollLineRemainder.truncate();
-    if (wholeLines == 0) {
-      return;
-    }
-
-    _scrollLineRemainder -= wholeLines;
+    final lineDelta = -scrollDeltaY / metrics.cellSize.height;
+    final wholeLines = lineDelta.abs() < 1
+        ? lineDelta.sign.toInt()
+        : lineDelta.truncate();
+    if (wholeLines == 0) return;
     _scrollTerminalLines(wholeLines, localPosition, metrics);
   }
 

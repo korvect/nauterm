@@ -442,6 +442,34 @@ void main() {
     expect(outerController.offset, 0);
   });
 
+  testWidgets('terminal wheel keeps scrolling for sub-row deltas', (
+    tester,
+  ) async {
+    final driver = _SnapshotDriver(
+      TerminalSnapshot.blank(
+        columns: 80,
+        rows: 8,
+        historyLines: 92,
+        displayOffset: 40,
+      ),
+    );
+    final controller = TerminalController(driver: driver);
+    addTearDown(controller.dispose);
+    await _pumpTerminal(tester, controller);
+
+    final position = tester.getCenter(
+      find.byKey(const ValueKey('terminal-renderer-region')),
+    );
+    for (var index = 0; index < 3; index++) {
+      await tester.sendEventToBinding(
+        PointerScrollEvent(position: position, scrollDelta: const Offset(0, 1)),
+      );
+      await tester.pump();
+    }
+
+    expect(driver.scrolledLines, -3);
+  });
+
   testWidgets('terminal trackpad scroll wins over an ancestor scroll view', (
     tester,
   ) async {
