@@ -11,6 +11,20 @@ bool terminalShellSupportsStructuredIntegration(TerminalShellKind kind) {
   };
 }
 
+bool terminalShellPathSupportsStructuredIntegration(
+  String? path, {
+  bool isMacOS = false,
+}) {
+  final kind = terminalShellKindFromPath(path);
+  if (kind == null || !terminalShellSupportsStructuredIntegration(kind)) {
+    return false;
+  }
+  final normalized = (path ?? '').trim().toLowerCase().replaceAll('\\', '/');
+  return !(isMacOS &&
+      kind == TerminalShellKind.bash &&
+      normalized == '/bin/bash');
+}
+
 @immutable
 class TerminalShellIntegration {
   const TerminalShellIntegration(this.kind, this.token);

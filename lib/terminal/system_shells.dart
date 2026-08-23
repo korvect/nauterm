@@ -46,6 +46,7 @@ String shellDisplayName(String path) {
     'pwsh' || 'pwsh.exe' => 'PowerShell 7',
     'powershell' || 'powershell.exe' => 'Windows PowerShell',
     'cmd' || 'cmd.exe' => 'Command Prompt',
+    'bash.exe' when _looksLikeGitBashPath(path) => 'Git Bash',
     _ => name,
   };
 }
@@ -55,6 +56,8 @@ List<String> _windowsShells() {
   final environment = Platform.environment;
   final systemRoot = _nonEmpty(environment['SystemRoot']);
   final programFiles = _nonEmpty(environment['ProgramFiles']);
+  final programFilesX86 = _nonEmpty(environment['ProgramFiles(x86)']);
+  final localAppData = _nonEmpty(environment['LOCALAPPDATA']);
   final candidates = <String>[
     if (programFiles != null) '$programFiles\\PowerShell\\7\\pwsh.exe',
     ..._executablesFromPath('pwsh.exe'),
@@ -64,11 +67,29 @@ List<String> _windowsShells() {
     ?_nonEmpty(environment['COMSPEC']),
     if (systemRoot != null) '$systemRoot\\System32\\cmd.exe',
     ..._executablesFromPath('cmd.exe'),
+    if (programFiles != null) '$programFiles\\Git\\bin\\bash.exe',
+    if (programFilesX86 != null) '$programFilesX86\\Git\\bin\\bash.exe',
+    if (localAppData != null) '$localAppData\\Programs\\Git\\bin\\bash.exe',
+    ..._executablesFromPath('bash.exe').where(_looksLikeGitBashPath),
   ];
   for (final candidate in candidates) {
     if (File(candidate).existsSync()) shells.add(candidate);
   }
   return shells.toList(growable: false);
+}
+
+bool _looksLikeGitBashPath(String path) {
+  final normalized = path.trim().toLowerCase().replaceAll('\\', '/');
+  final segments = normalized.split('/');
+  if (segments.length < 3 || segments.last != 'bash.exe') return false;
+  final binIndex = segments.length - 2;
+  if (segments[binIndex] != 'bin') return false;
+  final rootIndex = segments[binIndex - 1] == 'usr'
+      ? binIndex - 2
+      : binIndex - 1;
+  if (rootIndex < 0) return false;
+  final root = segments[rootIndex];
+  return root == 'git' || root.startsWith('portablegit');
 }
 
 List<String> _executablesFromPath(String executable) {

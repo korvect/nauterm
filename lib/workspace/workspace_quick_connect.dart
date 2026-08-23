@@ -54,6 +54,7 @@ String _quickConnectShellLabel(String path) {
     return switch (executableName.toLowerCase()) {
       'pwsh.exe' || 'powershell.exe' => 'PowerShell',
       'cmd.exe' => 'CMD',
+      'bash.exe' => 'Git Bash',
       _ => executableName,
     };
   }
@@ -77,6 +78,7 @@ int _quickConnectShellPriority(String path) {
     'pwsh.exe' => 0,
     'powershell.exe' => 1,
     'cmd.exe' => 2,
+    'bash.exe' => 3,
     _ => 100,
   };
 }

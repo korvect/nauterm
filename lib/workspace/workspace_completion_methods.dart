@@ -152,11 +152,11 @@ extension _NautermWorkspaceCompletionMethods on _NautermWorkspaceState {
   }
 
   String? _shellCompletionKind(String shellPath) {
-    final name = _pathBaseName(shellPath);
+    final name = _pathBaseName(shellPath).toLowerCase();
     if (name == 'zsh') {
       return 'zsh';
     }
-    if (name == 'bash') {
+    if (name == 'bash' || name == 'bash.exe') {
       return 'bash';
     }
     return null;

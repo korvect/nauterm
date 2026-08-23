@@ -72,6 +72,13 @@ void main() {
     );
   });
 
+  test('recognizes Git Bash history from a Windows executable path', () {
+    expect(
+      ShellHistoryReader.formatForShell(r'C:\Program Files\Git\bin\bash.exe'),
+      ShellHistoryFormat.bash,
+    );
+  });
+
   test("reads local history containing malformed UTF-8 bytes", () async {
     final directory = await Directory.systemTemp.createTemp(
       "nauterm-history-encoding-",

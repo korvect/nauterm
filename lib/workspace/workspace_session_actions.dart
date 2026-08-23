@@ -1460,7 +1460,7 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
   String? _resolvedLocalShellPath(String? shellPath) {
     return _emptyToNull(shellPath) ??
         _emptyToNull(terminalShellPath) ??
-        _emptyToNull(io.Platform.environment['SHELL']);
+        (io.Platform.isWindows ? null : systemDefaultShellPath());
   }
 
   String? _localShellUsername() {

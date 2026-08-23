@@ -200,7 +200,7 @@ fn shell_for_local_session(shell_path: &str) -> Option<Shell> {
 
 #[cfg(target_os = "macos")]
 fn macos_login_shell_args(shell_program: &str) -> Vec<String> {
-    match shell_name(shell_program) {
+    match shell_name(shell_program).as_deref() {
         Some("zsh") => vec!["-l".to_owned()],
         Some("fish") => vec!["--login".to_owned()],
         Some("bash" | "dash" | "sh" | "ksh" | "ksh93" | "mksh" | "csh" | "tcsh" | "ash") => {
@@ -220,7 +220,7 @@ fn configure_history_filtering(options: &mut Options, shell_path: Option<&str>) 
     let Some(shell_path) = shell_path else {
         return;
     };
-    if let Some("bash") = shell_name(shell_path) {
+    if let Some("bash") = shell_name(shell_path).as_deref() {
         let history_control = options
             .env
             .get("HISTCONTROL")
@@ -257,7 +257,7 @@ fn configure_shell_integration(
     let Some(shell_path) = shell_path else {
         return Ok(None);
     };
-    match shell_name(shell_path) {
+    match shell_name(shell_path).as_deref() {
         Some("zsh") => configure_zsh_integration(options).map(Some),
         Some("bash") => configure_bash_integration(options, shell_path),
         Some("fish") => configure_fish_integration(options).map(Some),
@@ -652,8 +652,12 @@ function __nauterm_setup --on-event fish_prompt
 end
 "#;
 
-fn shell_name(shell_path: &str) -> Option<&str> {
-    Path::new(shell_path).file_name()?.to_str()
+fn shell_name(shell_path: &str) -> Option<String> {
+    let name = Path::new(shell_path)
+        .file_name()?
+        .to_str()?
+        .to_ascii_lowercase();
+    Some(name.strip_suffix(".exe").unwrap_or(&name).to_owned())
 }
 
 #[cfg(windows)]
@@ -1145,6 +1149,25 @@ mod shutdown_tests {
     use std::thread;
     #[cfg(target_os = "macos")]
     use std::time::{Duration, Instant};
+
+    #[test]
+    fn windows_bash_executable_name_enables_bash_integration() {
+        assert_eq!(super::shell_name("BASH.EXE").as_deref(), Some("bash"));
+
+        let executable_root =
+            super::create_shell_integration_root().expect("create fake Git Bash root");
+        let executable = executable_root.join("bash.exe");
+        std::fs::write(&executable, []).expect("create fake Git Bash executable");
+        let mut options = Options::default();
+
+        let files = configure_shell_integration(&mut options, executable.to_str())
+            .expect("configure Git Bash integration")
+            .expect("Git Bash integration files");
+
+        assert!(options.env.contains_key("ENV"));
+        assert!(files.root.join("nauterm.bash").is_file());
+        let _ = std::fs::remove_dir_all(executable_root);
+    }
 
     #[test]
     fn join_worker_waits_for_completion_and_consumes_handle() {

@@ -168,13 +168,10 @@ class NativeTerminalDriver implements TerminalDriver {
   }
 
   static bool _supportsStartupShellIntegration(String? shellPath) {
-    final normalized = (shellPath ?? '').trim().replaceAll('\\', '/');
-    final name = normalized.split('/').last.toLowerCase();
-    return switch (name) {
-      'zsh' || 'fish' => true,
-      'bash' => !(Platform.isMacOS && normalized == '/bin/bash'),
-      _ => false,
-    };
+    return terminalShellPathSupportsStructuredIntegration(
+      shellPath,
+      isMacOS: Platform.isMacOS,
+    );
   }
 
   factory NativeTerminalDriver.createCommand({

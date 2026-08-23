@@ -15,6 +15,7 @@ import 'terminal_driver.dart';
 import 'terminal_config.dart';
 import 'terminal_models.dart';
 import 'terminal_selection.dart';
+import 'terminal_shell_integration.dart';
 import 'terminal_theme.dart';
 
 part 'terminal_ffi_native_types.dart';

@@ -14,7 +14,27 @@ void main() {
         terminalShellKindFromPath(r'C:\Program Files\PowerShell\7\pwsh.exe'),
         TerminalShellKind.powerShell,
       );
+      expect(
+        terminalShellKindFromPath(r'C:\Program Files\Git\bin\bash.exe'),
+        TerminalShellKind.bash,
+      );
       expect(terminalShellKindFromPath('/bin/unknown-shell'), isNull);
+    });
+
+    test('Git Bash enables startup shell integration', () {
+      expect(
+        terminalShellPathSupportsStructuredIntegration(
+          r'C:\Program Files\Git\bin\bash.exe',
+        ),
+        isTrue,
+      );
+      expect(
+        terminalShellPathSupportsStructuredIntegration(
+          '/bin/bash',
+          isMacOS: true,
+        ),
+        isFalse,
+      );
     });
 
     test('Unix setup commands are hidden from compatible shell history', () {

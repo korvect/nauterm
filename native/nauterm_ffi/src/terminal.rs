@@ -587,7 +587,10 @@ fn shell_supports_prompt_click_fallback(shell_path: Option<&str>) -> bool {
         .and_then(|name| name.to_str())
         .unwrap_or_default()
         .to_ascii_lowercase();
-    if matches!(name.as_str(), "zsh" | "rzsh" | "bash" | "rbash" | "fish") {
+    if matches!(
+        name.as_str(),
+        "zsh" | "rzsh" | "bash" | "bash.exe" | "rbash" | "fish"
+    ) {
         return true;
     }
     #[cfg(target_os = "macos")]

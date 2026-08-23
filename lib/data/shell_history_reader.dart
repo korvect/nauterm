@@ -13,7 +13,10 @@ class ShellHistoryReader {
     String? homeDirectory,
     int limit = 2000,
   }) async {
-    final home = homeDirectory ?? Platform.environment['HOME'];
+    final home =
+        homeDirectory ??
+        Platform.environment['HOME'] ??
+        (Platform.isWindows ? Platform.environment['USERPROFILE'] : null);
     if (home == null || home.isEmpty) return const [];
     final format = formatForShell(shellPath);
     if (format == null) return const [];
@@ -122,9 +125,15 @@ class ShellHistoryReader {
   }
 
   static ShellHistoryFormat? formatForShell(String? shellPath) {
-    return switch (shellPath?.trim().split('/').last.toLowerCase()) {
+    final name = shellPath
+        ?.trim()
+        .replaceAll('\\', '/')
+        .split('/')
+        .last
+        .toLowerCase();
+    return switch (name) {
       'zsh' => ShellHistoryFormat.zsh,
-      'bash' => ShellHistoryFormat.bash,
+      'bash' || 'bash.exe' => ShellHistoryFormat.bash,
       'fish' => ShellHistoryFormat.fish,
       'pwsh' ||
       'powershell' ||
