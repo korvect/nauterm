@@ -500,7 +500,7 @@ pub(super) async fn download_sftp_path(
         }
         progress.set_total(total, remote_path);
         tree_entries.sort_unstable();
-        let tree_fingerprint = format!("{:x}", Sha256::digest(tree_entries.join("\n").as_bytes()));
+        let tree_fingerprint = sha256_hex(tree_entries.join("\n").as_bytes());
         let staging_path = local_download_staging_path(local_path);
         let metadata_path = local_part_metadata_path(&staging_path);
         let expected_metadata = transfer_part_metadata(
@@ -577,6 +577,16 @@ pub(super) async fn download_sftp_path(
             download_sftp_file(sftp, remote_path, local_path, transfer_threads, progress).await?;
         Ok((bytes, "file".to_owned()))
     }
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    let digest = Sha256::digest(bytes);
+    let mut value = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        use std::fmt::Write as _;
+        let _ = write!(value, "{byte:02x}");
+    }
+    value
 }
 
 async fn download_sftp_file(
