@@ -8,7 +8,6 @@ use std::path::{Path, PathBuf};
 use aes_gcm::aead::{Aead, KeyInit, Payload};
 use aes_gcm::{Aes256Gcm, Nonce};
 use hkdf::Hkdf;
-use rand_core::{OsRng, RngCore};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
@@ -33,6 +32,10 @@ const STATE_HEADER_LENGTH: usize = 7 + 1 + 12;
 
 fn aes_nonce(bytes: &[u8]) -> Nonce<aes_gcm::aead::consts::U12> {
     Nonce::try_from(bytes).expect("AES-GCM nonce must be 12 bytes")
+}
+
+fn fill_random(bytes: &mut [u8]) {
+    getrandom::fill(bytes).expect("operating system random source is unavailable");
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -91,8 +94,8 @@ impl CaptureWriter {
 
         let mut salt = [0u8; 16];
         let mut nonce_prefix = [0u8; 4];
-        OsRng.fill_bytes(&mut salt);
-        OsRng.fill_bytes(&mut nonce_prefix);
+        fill_random(&mut salt);
+        fill_random(&mut nonce_prefix);
         let key = derive_file_key(&salt)?;
         let state_key = derive_state_key(key.as_slice())?;
         let mut header = Vec::with_capacity(HEADER_LENGTH);
@@ -689,7 +692,7 @@ fn write_checkpoint_sidecar(
 ) -> io::Result<()> {
     let payload = serde_json::to_vec(checkpoint).map_err(|_| invalid_data("invalid checkpoint"))?;
     let mut nonce_bytes = [0u8; 12];
-    OsRng.fill_bytes(&mut nonce_bytes);
+    fill_random(&mut nonce_bytes);
     let cipher = Aes256Gcm::new_from_slice(state_key)
         .map_err(|_| invalid_data("invalid capture state key"))?;
     let ciphertext = cipher
@@ -771,7 +774,7 @@ fn checkpoint_path(capture_path: &Path) -> PathBuf {
 
 fn checkpoint_temp_path(state_path: &Path) -> PathBuf {
     let mut random = [0u8; 8];
-    OsRng.fill_bytes(&mut random);
+    fill_random(&mut random);
     let mut value: OsString = state_path.as_os_str().to_owned();
     value.push(format!(".{}.tmp", digest_hex(&random)));
     PathBuf::from(value)

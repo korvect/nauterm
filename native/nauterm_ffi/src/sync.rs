@@ -11,7 +11,6 @@ use aes_gcm::{Aes256Gcm, Nonce};
 use argon2::{Algorithm, Argon2, Params, Version};
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use base64::Engine;
-use rand_core::{OsRng, RngCore};
 use rusqlite::types::{Value as SqlValue, ValueRef};
 use rusqlite::{params, params_from_iter, Connection, OptionalExtension, Transaction};
 use serde::{Deserialize, Serialize};
@@ -37,6 +36,10 @@ const META_SYNC_ENVELOPE_HEADER: &str = "sync_envelope_header";
 
 fn aes_nonce(bytes: &[u8]) -> Nonce<aes_gcm::aead::consts::U12> {
     Nonce::try_from(bytes).expect("AES-GCM nonce must be 12 bytes")
+}
+
+fn fill_random(bytes: &mut [u8]) {
+    getrandom::fill(bytes).expect("operating system random source is unavailable");
 }
 
 #[derive(Debug)]
@@ -571,7 +574,7 @@ fn sync_file(
         })?;
         crate::crypto::validate_master_key(master_key)?;
         let mut key = Zeroizing::new([0u8; 32]);
-        OsRng.fill_bytes(key.as_mut_slice());
+        fill_random(key.as_mut_slice());
         (None, key)
     };
 
@@ -644,7 +647,7 @@ fn rewrap_envelope_header(
     sync_dek: &[u8; 32],
 ) -> Result<SyncEnvelopeHeader, SyncError> {
     let mut salt = [0u8; ARGON2_SALT_LENGTH];
-    OsRng.fill_bytes(&mut salt);
+    fill_random(&mut salt);
     header.kdf = SyncKdfHeader {
         algorithm: "argon2id".to_string(),
         salt: STANDARD.encode(salt),
@@ -731,8 +734,8 @@ fn rebuild_envelope_header(
         .ok_or_else(|| SyncError::new("The saved sync vault identity is missing."))?;
     let mut salt = [0u8; ARGON2_SALT_LENGTH];
     let mut nonce = [0u8; AES_NONCE_LENGTH];
-    OsRng.fill_bytes(&mut salt);
-    OsRng.fill_bytes(&mut nonce);
+    fill_random(&mut salt);
+    fill_random(&mut nonce);
     let kdf = SyncKdfHeader {
         algorithm: "argon2id".to_string(),
         salt: STANDARD.encode(salt),
@@ -1329,8 +1332,8 @@ fn encrypt_payload(
             crate::crypto::validate_master_key(master_key)?;
             let mut vault_id = [0u8; VAULT_ID_LENGTH];
             let mut salt = [0u8; ARGON2_SALT_LENGTH];
-            OsRng.fill_bytes(&mut vault_id);
-            OsRng.fill_bytes(&mut salt);
+            fill_random(&mut vault_id);
+            fill_random(&mut salt);
             let vault_id = URL_SAFE_NO_PAD.encode(vault_id);
             let kdf = SyncKdfHeader {
                 algorithm: "argon2id".to_string(),
@@ -1347,8 +1350,8 @@ fn encrypt_payload(
     validate_kdf_header(&kdf)?;
     let mut nonce = [0u8; AES_NONCE_LENGTH];
     let mut snapshot_id = [0u8; SNAPSHOT_ID_LENGTH];
-    OsRng.fill_bytes(&mut nonce);
-    OsRng.fill_bytes(&mut snapshot_id);
+    fill_random(&mut nonce);
+    fill_random(&mut snapshot_id);
     let header = SyncEnvelopeHeader {
         format_version: ENVELOPE_FORMAT_VERSION,
         schema_version,
@@ -1542,7 +1545,7 @@ fn wrap_sync_dek(
     let cipher = Aes256Gcm::new_from_slice(wrapping_key.as_slice())
         .map_err(|_| SyncError::new("Unable to initialize Sync DEK wrapping."))?;
     let mut nonce = [0u8; AES_NONCE_LENGTH];
-    OsRng.fill_bytes(&mut nonce);
+    fill_random(&mut nonce);
     let aad = key_wrap_aad(vault_id, key_version);
     let wrapped = cipher
         .encrypt(
@@ -1610,7 +1613,7 @@ fn write_atomically(path: &Path, bytes: &[u8]) -> Result<(), SyncError> {
         .and_then(|name| name.to_str())
         .unwrap_or("nauterm-sync");
     let mut random_suffix = [0u8; 6];
-    OsRng.fill_bytes(&mut random_suffix);
+    fill_random(&mut random_suffix);
     let temporary_path = path.with_file_name(format!(
         ".{file_name}.{}.{}.tmp",
         std::process::id(),

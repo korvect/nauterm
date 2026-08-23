@@ -21,7 +21,6 @@ use aes_gcm::{Aes256Gcm, Nonce};
 use argon2::{Algorithm, Argon2, Params, Version};
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
-use rand_core::{OsRng, RngCore};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use unicode_normalization::UnicodeNormalization;
@@ -54,6 +53,10 @@ pub const MASTER_KEY_MIN_CHARACTER_CLASSES: usize = 3;
 
 fn aes_nonce(bytes: &[u8]) -> Nonce<aes_gcm::aead::consts::U12> {
     Nonce::try_from(bytes).expect("AES-GCM nonce must be 12 bytes")
+}
+
+fn fill_random(bytes: &mut [u8]) {
+    getrandom::fill(bytes).expect("operating system random source is unavailable");
 }
 
 static DATABASE_KEY_CACHE: OnceLock<Mutex<Option<Zeroizing<[u8; AES_KEY_LENGTH]>>>> =
@@ -135,7 +138,7 @@ pub struct EncryptionConfig {
 impl EncryptionConfig {
     pub fn new_default() -> Self {
         let mut salt = [0u8; ARGON2_SALT_LENGTH];
-        OsRng.fill_bytes(&mut salt);
+        fill_random(&mut salt);
         Self {
             version: 1,
             has_master_key: false,
@@ -233,7 +236,7 @@ pub fn aes_seal(key: &[u8; AES_KEY_LENGTH], plaintext: &[u8]) -> Result<Vec<u8>,
     let cipher = Aes256Gcm::new_from_slice(key)
         .map_err(|_| CryptoError::new("Unable to initialize AES-256-GCM."))?;
     let mut nonce = [0u8; AES_NONCE_LENGTH];
-    OsRng.fill_bytes(&mut nonce);
+    fill_random(&mut nonce);
     let ct = cipher
         .encrypt(&aes_nonce(&nonce), plaintext)
         .map_err(|_| CryptoError::new("AES-GCM encryption failed."))?;
@@ -288,7 +291,7 @@ fn load_or_create_keyring_key(
         }
         Err(keyring::Error::NoEntry) => {
             let mut key = Zeroizing::new([0u8; AES_KEY_LENGTH]);
-            OsRng.fill_bytes(key.as_mut_slice());
+            fill_random(key.as_mut_slice());
             let encoded = Zeroizing::new(STANDARD.encode(key.as_slice()));
             entry
                 .set_password(encoded.as_str())
@@ -404,7 +407,7 @@ pub type Dek = Zeroizing<[u8; AES_KEY_LENGTH]>;
 
 fn new_dek() -> Dek {
     let mut dek = Zeroizing::new([0u8; AES_KEY_LENGTH]);
-    OsRng.fill_bytes(dek.as_mut_slice());
+    fill_random(dek.as_mut_slice());
     dek
 }
 
@@ -548,7 +551,7 @@ pub fn set_master_key(connection: &Connection, master_key: &str) -> Result<(), C
     let dek = unlock_with_device_key(connection)?;
     // Rotate salt to make sure it is fresh.
     let mut salt = [0u8; ARGON2_SALT_LENGTH];
-    OsRng.fill_bytes(&mut salt);
+    fill_random(&mut salt);
     cfg.kdf.salt = STANDARD.encode(salt);
     let wrapping = derive_wrapping_key(master_key, &salt, &cfg.kdf)?;
     let sealed = seal_dek_with_key(&dek, &wrapping)?;
@@ -573,7 +576,7 @@ pub fn change_master_key(
     let mut cfg = load_encryption_config(connection)?
         .ok_or_else(|| CryptoError::new("Encryption has not been initialised yet."))?;
     let mut salt = [0u8; ARGON2_SALT_LENGTH];
-    OsRng.fill_bytes(&mut salt);
+    fill_random(&mut salt);
     cfg.kdf.salt = STANDARD.encode(salt);
     let wrapping = derive_wrapping_key(new_master_key, &salt, &cfg.kdf)?;
     let sealed = seal_dek_with_key(&dek, &wrapping)?;
