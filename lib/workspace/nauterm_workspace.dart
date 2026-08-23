@@ -165,7 +165,7 @@ class NautermWorkspaceController extends ChangeNotifier {
 
   void _attach(_NautermWorkspaceState state) {
     _state = state;
-    state._showUpdateNotice(_updateNotice);
+    state._updateNotice = _updateNotice;
     notifyListeners();
   }
 
