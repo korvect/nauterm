@@ -4,6 +4,19 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nauterm/terminal/system_shells.dart';
 
 void main() {
+  test('distinguishes PowerShell from Windows PowerShell', () {
+    expect(
+      shellDisplayName(r'C:\Program Files\PowerShell\7\pwsh.exe'),
+      'PowerShell',
+    );
+    expect(
+      shellDisplayName(
+        r'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe',
+      ),
+      'Windows PowerShell',
+    );
+  });
+
   test('uses a friendly display name for Git Bash', () {
     expect(shellDisplayName(r'C:\Program Files\Git\bin\bash.exe'), 'Git Bash');
     expect(

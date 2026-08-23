@@ -1,5 +1,7 @@
 part of 'nauterm_workspace.dart';
 
+const double _quickConnectShellButtonHeight = 36;
+
 const _quickConnectShellPreviewCount = 8;
 
 List<_QuickConnectShell> _quickConnectShells() {
@@ -49,16 +51,7 @@ bool _isExecutableShell(String path) {
 }
 
 String _quickConnectShellLabel(String path) {
-  final executableName = _quickConnectShellExecutableName(path);
-  if (io.Platform.isWindows) {
-    return switch (executableName.toLowerCase()) {
-      'pwsh.exe' || 'powershell.exe' => 'PowerShell',
-      'cmd.exe' => 'CMD',
-      'bash.exe' => 'Git Bash',
-      _ => executableName,
-    };
-  }
-  return executableName;
+  return shellDisplayName(path);
 }
 
 String _quickConnectShellExecutableName(String path) {
@@ -520,7 +513,7 @@ class _QuickConnectShellGrid extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final columnCount = constraints.maxWidth < 360 ? 2 : 4;
+        final columnCount = constraints.maxWidth < 360 ? 2 : 3;
         return GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
@@ -529,7 +522,7 @@ class _QuickConnectShellGrid extends StatelessWidget {
             crossAxisCount: columnCount,
             mainAxisSpacing: 6,
             crossAxisSpacing: 6,
-            childAspectRatio: 3.2,
+            mainAxisExtent: _quickConnectShellButtonHeight,
           ),
           itemBuilder: (context, index) {
             final shell = shells[index];

@@ -43,7 +43,7 @@ String shellDisplayName(String path) {
   final normalized = path.replaceAll('\\', '/');
   final name = normalized.split('/').last;
   return switch (name.toLowerCase()) {
-    'pwsh' || 'pwsh.exe' => 'PowerShell 7',
+    'pwsh' || 'pwsh.exe' => 'PowerShell',
     'powershell' || 'powershell.exe' => 'Windows PowerShell',
     'cmd' || 'cmd.exe' => 'Command Prompt',
     'bash.exe' when _looksLikeGitBashPath(path) => 'Git Bash',
