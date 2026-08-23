@@ -19,7 +19,7 @@ alacritty_terminal = { version = "0.26.0", default-features = false }
 argon2 = "0.5"
 base64 = "0.23"
 hkdf = "0.13"
-keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
+keyring = "4"
 libc = "0.2"
 libloading = "0.9"
 polling = "3"
