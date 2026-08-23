@@ -52,6 +52,10 @@ pub const ARGON2_PARALLELISM: u32 = 1;
 pub const MASTER_KEY_MIN_LENGTH: usize = 12;
 pub const MASTER_KEY_MIN_CHARACTER_CLASSES: usize = 3;
 
+fn aes_nonce(bytes: &[u8]) -> Nonce<aes_gcm::aead::consts::U12> {
+    Nonce::try_from(bytes).expect("AES-GCM nonce must be 12 bytes")
+}
+
 static DATABASE_KEY_CACHE: OnceLock<Mutex<Option<Zeroizing<[u8; AES_KEY_LENGTH]>>>> =
     OnceLock::new();
 static DEVICE_KEY_CACHE: OnceLock<Mutex<Option<Zeroizing<[u8; AES_KEY_LENGTH]>>>> = OnceLock::new();
@@ -231,7 +235,7 @@ pub fn aes_seal(key: &[u8; AES_KEY_LENGTH], plaintext: &[u8]) -> Result<Vec<u8>,
     let mut nonce = [0u8; AES_NONCE_LENGTH];
     OsRng.fill_bytes(&mut nonce);
     let ct = cipher
-        .encrypt(Nonce::from_slice(&nonce), plaintext)
+        .encrypt(&aes_nonce(&nonce), plaintext)
         .map_err(|_| CryptoError::new("AES-GCM encryption failed."))?;
     let mut out = Vec::with_capacity(AES_NONCE_LENGTH + ct.len());
     out.extend_from_slice(&nonce);
@@ -247,7 +251,7 @@ pub fn aes_open(key: &[u8; AES_KEY_LENGTH], sealed: &[u8]) -> Result<Vec<u8>, Cr
     let cipher = Aes256Gcm::new_from_slice(key)
         .map_err(|_| CryptoError::new("Unable to initialize AES-256-GCM."))?;
     cipher
-        .decrypt(Nonce::from_slice(nonce), ct)
+        .decrypt(&aes_nonce(nonce), ct)
         .map_err(|_| CryptoError::new("AES-GCM decryption failed."))
 }
 

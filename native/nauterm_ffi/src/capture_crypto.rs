@@ -31,6 +31,10 @@ const STATE_MAGIC: &[u8; 7] = b"NTRSTA1";
 const STATE_VERSION: u8 = 1;
 const STATE_HEADER_LENGTH: usize = 7 + 1 + 12;
 
+fn aes_nonce(bytes: &[u8]) -> Nonce<aes_gcm::aead::consts::U12> {
+    Nonce::try_from(bytes).expect("AES-GCM nonce must be 12 bytes")
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct CaptureCheckpoint {
     pub committed_chunk_count: u64,
@@ -131,7 +135,7 @@ impl CaptureWriter {
             .map_err(|_| invalid_data("invalid capture key"))?;
         let ciphertext = cipher
             .encrypt(
-                Nonce::from_slice(&nonce),
+                &aes_nonce(&nonce),
                 Payload {
                     msg: plaintext,
                     aad: &aad,
@@ -213,7 +217,7 @@ impl CaptureWriter {
             .map_err(|_| invalid_data("invalid capture key"))?;
         let ciphertext = cipher
             .encrypt(
-                Nonce::from_slice(&nonce),
+                &aes_nonce(&nonce),
                 Payload {
                     msg: payload.as_slice(),
                     aad: &aad,
@@ -294,7 +298,7 @@ impl CaptureReader {
             .map_err(|_| invalid_data("invalid capture key"))?;
         let plaintext = cipher
             .decrypt(
-                Nonce::from_slice(&nonce),
+                &aes_nonce(&nonce),
                 Payload {
                     msg: &ciphertext,
                     aad: &aad,
@@ -468,7 +472,7 @@ pub fn recover_capture(path: &Path, recording_id: &str) -> io::Result<CaptureFin
             .map_err(|_| invalid_data("invalid capture key"))?;
         let plaintext = cipher
             .decrypt(
-                Nonce::from_slice(&nonce(nonce_prefix, index)),
+                &aes_nonce(&nonce(nonce_prefix, index)),
                 Payload {
                     msg: &ciphertext,
                     aad: &aad(recording_id, index, length, record_type),
@@ -574,7 +578,7 @@ fn finalize_recovered_capture(
     let cipher = Aes256Gcm::new_from_slice(key).map_err(|_| invalid_data("invalid capture key"))?;
     let encrypted = cipher
         .encrypt(
-            Nonce::from_slice(&nonce(nonce_prefix, chunk_count)),
+            &aes_nonce(&nonce(nonce_prefix, chunk_count)),
             Payload {
                 msg: &payload,
                 aad: &aad(recording_id, chunk_count, length, RECORD_FOOTER),
@@ -690,7 +694,7 @@ fn write_checkpoint_sidecar(
         .map_err(|_| invalid_data("invalid capture state key"))?;
     let ciphertext = cipher
         .encrypt(
-            Nonce::from_slice(&nonce_bytes),
+            &aes_nonce(&nonce_bytes),
             Payload {
                 msg: &payload,
                 aad: &state_aad(recording_id),
@@ -738,7 +742,7 @@ fn read_checkpoint_sidecar(
         .map_err(|_| invalid_data("invalid capture state key"))?;
     let plaintext = cipher
         .decrypt(
-            Nonce::from_slice(&header[8..20]),
+            &aes_nonce(&header[8..20]),
             Payload {
                 msg: &ciphertext,
                 aad: &state_aad(recording_id),

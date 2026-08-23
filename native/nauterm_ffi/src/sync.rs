@@ -35,6 +35,10 @@ const META_SYNC_DEK: &str = "sync_dek";
 const META_SYNC_VAULT_ID: &str = "sync_vault_id";
 const META_SYNC_ENVELOPE_HEADER: &str = "sync_envelope_header";
 
+fn aes_nonce(bytes: &[u8]) -> Nonce<aes_gcm::aead::consts::U12> {
+    Nonce::try_from(bytes).expect("AES-GCM nonce must be 12 bytes")
+}
+
 #[derive(Debug)]
 pub(crate) struct SyncError {
     message: String,
@@ -1366,7 +1370,7 @@ fn encrypt_payload(
         .map_err(|_| SyncError::new("Unable to initialize sync encryption."))?;
     let ciphertext = cipher
         .encrypt(
-            Nonce::from_slice(&nonce),
+            &aes_nonce(&nonce),
             Payload {
                 msg: plaintext.as_slice(),
                 aad: &aad,
@@ -1413,7 +1417,7 @@ fn decrypt_envelope(
     let plaintext = Zeroizing::new(
         cipher
             .decrypt(
-                Nonce::from_slice(&nonce),
+                &aes_nonce(&nonce),
                 Payload {
                     msg: &ciphertext,
                     aad: &aad,
@@ -1542,7 +1546,7 @@ fn wrap_sync_dek(
     let aad = key_wrap_aad(vault_id, key_version);
     let wrapped = cipher
         .encrypt(
-            Nonce::from_slice(&nonce),
+            &aes_nonce(&nonce),
             Payload {
                 msg: sync_dek,
                 aad: &aad,
@@ -1578,7 +1582,7 @@ fn unwrap_sync_dek(
     let plaintext = Zeroizing::new(
         cipher
             .decrypt(
-                Nonce::from_slice(&nonce),
+                &aes_nonce(&nonce),
                 Payload {
                     msg: &wrapped,
                     aad: &aad,
