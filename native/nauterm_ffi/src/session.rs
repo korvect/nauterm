@@ -224,9 +224,21 @@ impl MoshAlternateScreenTracker {
         // mosh-server consumes application smcup/rmcup sequences. Recreate the
         // local screen boundary only for modes interactive full-screen apps use.
         let normalized;
+        let mut detected_primary_row_offset = None;
+        let mut clear_primary_scrollback = false;
         let output = if self.suppress_leading_breaks && !self.active {
-            self.suppress_leading_breaks = false;
             normalized = remove_mosh_leading_line_breaks(output);
+            if !normalized.is_empty() {
+                self.suppress_leading_breaks = false;
+                clear_primary_scrollback = true;
+            }
+            // An ordinary initial shell frame can reserve row 1 as a
+            // synthetic screen origin and paint the prompt at row 2. Keep the
+            // correction for later framebuffer diffs instead of applying it
+            // to this batch only.
+            if is_mosh_initial_shell_frame(output) || is_mosh_initial_shell_frame(&normalized) {
+                detected_primary_row_offset = Some(1);
+            }
             normalized.as_slice()
         } else {
             output
@@ -260,14 +272,25 @@ impl MoshAlternateScreenTracker {
         }
 
         if !output.is_empty() {
-            if !self.active && self.primary_row_offset > 0 {
-                engine.write_bytes(&translate_absolute_cursor_rows(
-                    output,
-                    self.primary_row_offset,
-                ));
+            let row_offset = detected_primary_row_offset.unwrap_or(self.primary_row_offset);
+            if !self.active && row_offset > 0 {
+                engine.write_bytes(&translate_absolute_cursor_rows(output, row_offset));
             } else {
                 engine.write_bytes(output);
             }
+        }
+        if let Some(row_offset) = detected_primary_row_offset {
+            if !self.active {
+                self.primary_row_offset = row_offset;
+            }
+        }
+        if clear_primary_scrollback && !self.active {
+            // A Mosh screen update is a framebuffer repaint, not output that
+            // should extend the local terminal's history. Alacritty can retain
+            // the pre-repaint prompt when the first frame is followed by the
+            // initial geometry resize. ED 3 clears only that stale scrollback
+            // while preserving the corrected visible screen.
+            engine.write_bytes_without_capture(b"\x1b[3J");
         }
     }
 
@@ -394,12 +417,7 @@ fn mosh_output_leaves_full_screen(output: &[u8]) -> bool {
 }
 
 fn remove_mosh_leading_line_breaks(output: &[u8]) -> Vec<u8> {
-    let mut prefix_end = 0;
-    for prefix in [b"\x1b[?25l".as_slice(), b"\x1b[0m".as_slice()] {
-        if output[prefix_end..].starts_with(prefix) {
-            prefix_end += prefix.len();
-        }
-    }
+    let prefix_end = mosh_control_prefix_end(output);
     let mut content_start = prefix_end;
     loop {
         if output[content_start..].starts_with(b"\r\n") {
@@ -412,25 +430,75 @@ fn remove_mosh_leading_line_breaks(output: &[u8]) -> Vec<u8> {
             break;
         }
     }
-    let normalized = if content_start == prefix_end {
+    if content_start == prefix_end {
         output.to_vec()
     } else {
         let mut normalized = Vec::with_capacity(output.len() - (content_start - prefix_end));
         normalized.extend_from_slice(&output[..prefix_end]);
         normalized.extend_from_slice(&output[content_start..]);
         normalized
-    };
-
-    // The first Mosh framebuffer for an ordinary shell is sometimes painted
-    // as a cleared screen followed by one erased row and an absolute cursor at
-    // row 2. That row is Mosh's synthetic screen origin, not shell output.
-    // Restrict the correction to this initial clear-and-erase shape so a real
-    // full-screen application keeps its coordinates unchanged.
-    if is_mosh_initial_shell_frame(&normalized) {
-        translate_absolute_cursor_rows(&normalized, 1)
-    } else {
-        normalized
     }
+}
+
+fn mosh_control_prefix_end(output: &[u8]) -> usize {
+    let mut index = 0;
+    while index < output.len() {
+        match output[index] {
+            0x1b => {
+                let Some(end) = ansi_escape_sequence_end(output, index) else {
+                    break;
+                };
+                index = end;
+            }
+            byte if byte < 0x20 && !matches!(byte, b'\r' | b'\n') => {
+                index += 1;
+            }
+            0x7f => {
+                index += 1;
+            }
+            _ => break,
+        }
+    }
+    index
+}
+
+fn ansi_escape_sequence_end(output: &[u8], start: usize) -> Option<usize> {
+    let kind = *output.get(start + 1)?;
+    match kind {
+        b'[' => output[start + 2..]
+            .iter()
+            .position(|byte| (0x40..=0x7e).contains(byte))
+            .map(|offset| start + 3 + offset),
+        b']' => ansi_string_end(output, start + 2, true),
+        b'P' | b'X' | b'^' | b'_' => ansi_string_end(output, start + 2, false),
+        _ => {
+            let mut index = start + 1;
+            while output
+                .get(index)
+                .is_some_and(|byte| (0x20..=0x2f).contains(byte))
+            {
+                index += 1;
+            }
+            output
+                .get(index)
+                .filter(|byte| (0x30..=0x7e).contains(*byte))
+                .map(|_| index + 1)
+        }
+    }
+}
+
+fn ansi_string_end(output: &[u8], start: usize, bell_terminated: bool) -> Option<usize> {
+    let mut index = start;
+    while index < output.len() {
+        if bell_terminated && output[index] == 0x07 {
+            return Some(index + 1);
+        }
+        if output[index..].starts_with(b"\x1b\\") {
+            return Some(index + 2);
+        }
+        index += 1;
+    }
+    None
 }
 
 fn is_mosh_initial_shell_frame(output: &[u8]) -> bool {
@@ -1738,19 +1806,165 @@ mod tests {
         assert_eq!(engine.snapshot().cursor_row, 0);
     }
 
-    #[test]
-    fn mosh_initial_shell_frame_drops_the_synthetic_top_row() {
-        let mut engine = TerminalEngine::new(40, 6);
+    fn assert_empty_mosh_batch_keeps_initial_prompt_compact(engine: &mut dyn TerminalEmulator) {
         let mut tracker = MoshAlternateScreenTracker::default();
 
+        tracker.write_update(engine, b"\r\n");
+        assert!(tracker.suppress_leading_breaks);
+
         tracker.write_update(
-            &mut engine,
-            b"\x1b[r\x1b[0m\x1b[H\x1b[2J\x1b[?25l\x1b[K\n\x1b[K\n\x1b[K\x1b[2;1HFIRST_PROMPT",
+            engine,
+            b"\x1b[r\x1b[0m\x1b[?25l\x1b]0;admin@localhost:~\x07\x1b[32m\nsh-3.2$ \x1b[?25h",
         );
 
         let snapshot = engine.snapshot();
+        assert_eq!(snapshot.history_lines, 0);
         assert_eq!(snapshot.cursor_row, 0);
-        assert!(terminal_snapshot_text(&snapshot).contains("FIRST_PROMPT"));
+        assert_eq!(snapshot.cursor_column, 8);
+        assert_eq!(
+            terminal_snapshot_text(&snapshot)
+                .matches("sh-3.2$ ")
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn alacritty_mosh_empty_initial_batch_does_not_shift_the_prompt() {
+        let mut engine = TerminalEngine::new_with_options(
+            40,
+            6,
+            TerminalOptions {
+                scrollback_lines: 0,
+                ..TerminalOptions::default()
+            },
+        );
+        assert_empty_mosh_batch_keeps_initial_prompt_compact(&mut engine);
+    }
+
+    #[test]
+    fn alacritty_mosh_resize_redraw_does_not_retain_the_previous_prompt() {
+        let mut engine = TerminalEngine::new_with_options(
+            80,
+            24,
+            TerminalOptions {
+                scrollback_lines: 0,
+                ..TerminalOptions::default()
+            },
+        );
+        let mut tracker = MoshAlternateScreenTracker::default();
+
+        tracker.write_update(&mut engine, b"");
+        tracker.write_update(&mut engine, b"\x1b[?25l\nsh-3.2$ \x1b[?25h");
+        engine.resize(100, 30);
+        tracker.note_resize();
+        tracker.write_update(
+            &mut engine,
+            b"\x1b[r\x1b[0m\x1b[H\x1b[2J\x1b[?25l\x1b[K\nsh-3.2$ \x1b[K\r\n\x1b[K\n\x1b[K\n\x1b[K\x1b[2;9H\x1b[?25h",
+        );
+
+        let snapshot = engine.snapshot();
+        assert_eq!(snapshot.history_lines, 0);
+        assert_eq!(snapshot.cursor_row, 0);
+        assert_eq!(snapshot.cursor_column, 8);
+        assert_eq!(
+            terminal_snapshot_text(&snapshot)
+                .matches("sh-3.2$ ")
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn alacritty_mosh_primary_repaint_discards_stale_prompt_scrollback() {
+        let mut engine = TerminalEngine::new_with_options(
+            12,
+            2,
+            TerminalOptions {
+                scrollback_lines: 100,
+                ..TerminalOptions::default()
+            },
+        );
+        engine.write_bytes(b"OLD_PROMPT\r\nfiller\r\n");
+        assert!(engine.snapshot().history_lines > 0);
+
+        let mut tracker = MoshAlternateScreenTracker::default();
+        tracker.write_update(
+            &mut engine,
+            b"\x1b[r\x1b[0m\x1b[H\x1b[2J\x1b[?25l\x1b[K\nNEW_PROMPT\x1b[K\x1b[2;11H\x1b[?25h",
+        );
+
+        let snapshot = engine.snapshot();
+        assert_eq!(snapshot.history_lines, 0);
+        assert!(!terminal_snapshot_text(&snapshot).contains("OLD_PROMPT"));
+        assert_eq!(
+            terminal_snapshot_text(&snapshot)
+                .matches("NEW_PROMPT")
+                .count(),
+            1
+        );
+    }
+
+    #[cfg(feature = "terminal-ghostty")]
+    #[test]
+    fn ghostty_mosh_empty_initial_batch_does_not_shift_the_prompt() {
+        let mut engine = crate::ghostty_terminal::GhosttyTerminalEngine::new(
+            40,
+            6,
+            TerminalOptions {
+                emulator_backend: TerminalEmulatorBackend::Ghostty,
+                scrollback_lines: 0,
+                ..TerminalOptions::default()
+            },
+        )
+        .unwrap();
+        assert_empty_mosh_batch_keeps_initial_prompt_compact(&mut engine);
+    }
+
+    fn assert_mosh_initial_row_offset_persists(engine: &mut dyn TerminalEmulator) {
+        let mut tracker = MoshAlternateScreenTracker::default();
+
+        tracker.write_update(
+            engine,
+            b"\x1b[r\x1b[0m\x1b[H\x1b[2J\x1b[?25l\x1b[K\n\x1b[K\n\x1b[K\x1b[2;1HFIRST_PROMPT",
+        );
+        tracker.write_update(engine, b"\x1b[2;1HSECOND_PROMPT");
+
+        let snapshot = engine.snapshot();
+        let text = terminal_snapshot_text(&snapshot);
+        assert_eq!(snapshot.history_lines, 0);
+        assert_eq!(snapshot.cursor_row, 0);
+        assert!(!text.contains("FIRST_PROMPT"));
+        assert_eq!(text.matches("SECOND_PROMPT").count(), 1);
+    }
+
+    #[test]
+    fn alacritty_mosh_initial_shell_frame_offset_persists() {
+        let mut engine = TerminalEngine::new_with_options(
+            40,
+            6,
+            TerminalOptions {
+                scrollback_lines: 0,
+                ..TerminalOptions::default()
+            },
+        );
+        assert_mosh_initial_row_offset_persists(&mut engine);
+    }
+
+    #[cfg(feature = "terminal-ghostty")]
+    #[test]
+    fn ghostty_mosh_initial_shell_frame_offset_persists() {
+        let mut engine = crate::ghostty_terminal::GhosttyTerminalEngine::new(
+            40,
+            6,
+            TerminalOptions {
+                emulator_backend: TerminalEmulatorBackend::Ghostty,
+                scrollback_lines: 0,
+                ..TerminalOptions::default()
+            },
+        )
+        .unwrap();
+        assert_mosh_initial_row_offset_persists(&mut engine);
     }
 
     #[test]
