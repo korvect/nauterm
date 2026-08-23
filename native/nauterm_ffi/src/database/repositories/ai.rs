@@ -126,6 +126,7 @@ impl NautermDatabase {
         &mut self,
         conversation: &AiConversationEntry,
     ) -> rusqlite::Result<AiConversationEntry> {
+        let scope = normalize_ai_conversation_scope(&conversation.scope)?;
         let transaction = self.connection.transaction()?;
         let conversation_uuid = uuid_or_new(&transaction, conversation.uuid.as_deref())?;
         transaction.execute(
@@ -144,7 +145,7 @@ impl NautermDatabase {
             params![
                 conversation_uuid,
                 conversation.title,
-                conversation.scope,
+                scope,
                 conversation.host_uuid,
                 conversation.provider_uuid,
                 conversation.model,
@@ -153,6 +154,7 @@ impl NautermDatabase {
 
         let mut message_uuids = BTreeSet::new();
         for message in &conversation.messages {
+            let role = normalize_ai_message_role(&message.role)?;
             let message_uuid = uuid_or_new(&transaction, message.uuid.as_deref())?;
             let tool_calls = serde_json::to_string(&message.tool_calls)
                 .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
@@ -184,7 +186,7 @@ impl NautermDatabase {
                 params![
                     message_uuid,
                     conversation_uuid,
-                    message.role,
+                    role,
                     message.content,
                     message.context,
                     message.sequence,
@@ -204,6 +206,7 @@ impl NautermDatabase {
 
         let mut command_uuids = BTreeSet::new();
         for block in &conversation.command_blocks {
+            let status = normalize_ai_command_status(&block.status)?;
             let block_uuid = uuid_or_new(&transaction, block.uuid.as_deref())?;
             transaction.execute(
                 r#"
@@ -231,7 +234,7 @@ impl NautermDatabase {
                     block.tool_call_id,
                     block.command,
                     block.explanation,
-                    block.status,
+                    status,
                     block.sequence,
                     block.output,
                     block.exit_code,

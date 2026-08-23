@@ -21,7 +21,7 @@ mod schema;
 
 use schema::create_schema;
 
-const SCHEMA_VERSION: i32 = 2;
+const SCHEMA_VERSION: i32 = 3;
 #[cfg(test)]
 const DEFAULT_MOSH_SERVER_COMMAND: &str = "mosh-server new -s -l LANG=en_US.UTF-8";
 const DEVICE_ID_METADATA_KEY: &str = "device_id";
@@ -421,6 +421,63 @@ fn normalize_ai_provider_protocol(value: &str) -> rusqlite::Result<&'static str>
         "ollama" => Ok("ollama"),
         value => Err(rusqlite::Error::InvalidParameterName(format!(
             "unsupported AI provider protocol: {value}"
+        ))),
+    }
+}
+
+fn normalize_port_forward_type(value: &str) -> rusqlite::Result<&'static str> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "local" => Ok("local"),
+        "remote" => Ok("remote"),
+        "dynamic" => Ok("dynamic"),
+        value => Err(rusqlite::Error::InvalidParameterName(format!(
+            "unsupported port forward type: {value}"
+        ))),
+    }
+}
+
+fn normalize_proxy_type(value: &str) -> rusqlite::Result<&'static str> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "http" => Ok("http"),
+        "socks5" => Ok("socks5"),
+        value => Err(rusqlite::Error::InvalidParameterName(format!(
+            "unsupported proxy type: {value}"
+        ))),
+    }
+}
+
+fn normalize_ai_conversation_scope(value: &str) -> rusqlite::Result<&'static str> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "terminal" => Ok("terminal"),
+        "workspace" => Ok("workspace"),
+        value => Err(rusqlite::Error::InvalidParameterName(format!(
+            "unsupported AI conversation scope: {value}"
+        ))),
+    }
+}
+
+fn normalize_ai_message_role(value: &str) -> rusqlite::Result<&'static str> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "system" => Ok("system"),
+        "user" => Ok("user"),
+        "assistant" => Ok("assistant"),
+        "tool" => Ok("tool"),
+        value => Err(rusqlite::Error::InvalidParameterName(format!(
+            "unsupported AI message role: {value}"
+        ))),
+    }
+}
+
+fn normalize_ai_command_status(value: &str) -> rusqlite::Result<&'static str> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "pending" => Ok("pending"),
+        "running" => Ok("running"),
+        "succeeded" => Ok("succeeded"),
+        "failed" => Ok("failed"),
+        "cancelled" => Ok("cancelled"),
+        "skipped" => Ok("skipped"),
+        value => Err(rusqlite::Error::InvalidParameterName(format!(
+            "unsupported AI command status: {value}"
         ))),
     }
 }
@@ -3104,6 +3161,14 @@ mod tests {
         Ok(table_column_type(connection, table, column)?.is_some())
     }
 
+    fn table_sql(connection: &Connection, table: &str) -> rusqlite::Result<String> {
+        connection.query_row(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?",
+            params![table],
+            |row| row.get(0),
+        )
+    }
+
     #[test]
     fn opens_encrypted_file_database() {
         let path = std::env::temp_dir().join(format!(
@@ -3175,6 +3240,122 @@ mod tests {
         assert!(
             !table_column_exists(&database.connection, "ai_conversations", "session_id").unwrap()
         );
+    }
+
+    #[test]
+    fn enum_values_are_enforced_in_code_instead_of_sqlite() {
+        let database = NautermDatabase::open_in_memory().unwrap();
+        for (table, column) in [
+            ("hosts", "type IN"),
+            ("port_forwards", "type IN"),
+            ("proxies", "type IN"),
+            ("sftp_favorites", "scope ="),
+            ("snippets", "scope IN"),
+            ("sftp_tasks", "transfer_type IN"),
+            ("sftp_tasks", "item_kind IN"),
+            ("sftp_tasks", "status IN"),
+            ("ai_conversations", "scope IN"),
+            ("ai_messages", "role IN"),
+            ("ai_command_blocks", "status IN"),
+        ] {
+            assert!(
+                !table_sql(&database.connection, table)
+                    .unwrap()
+                    .contains(column),
+                "{table}.{column} should not be constrained by SQLite"
+            );
+        }
+
+        database
+            .connection
+            .execute(
+                "INSERT INTO hosts (uuid, name, type) VALUES (?, ?, ?)",
+                params![
+                    "01979f62-8548-7000-8000-000000000201",
+                    "Future host",
+                    "future"
+                ],
+            )
+            .unwrap();
+        assert_eq!(
+            database
+                .connection
+                .query_row("SELECT type FROM hosts", [], |row| row.get::<_, String>(0))
+                .unwrap(),
+            "future"
+        );
+
+        assert!(normalize_port_forward_type("future").is_err());
+        assert!(normalize_proxy_type("future").is_err());
+        assert!(normalize_ai_conversation_scope("future").is_err());
+        assert!(normalize_ai_message_role("future").is_err());
+        assert!(normalize_ai_command_status("future").is_err());
+    }
+
+    #[test]
+    fn migrates_v2_enum_constraints_without_losing_data_or_triggers() {
+        let mut database = NautermDatabase::open_in_memory().unwrap();
+        database
+            .connection
+            .execute(
+                "INSERT INTO hosts (uuid, name, type) VALUES (?, ?, ?)",
+                params![
+                    "01979f62-8548-7000-8000-000000000202",
+                    "Existing host",
+                    "remote"
+                ],
+            )
+            .unwrap();
+        database
+            .connection
+            .execute_batch("PRAGMA foreign_keys = OFF; PRAGMA user_version = 2;")
+            .unwrap();
+
+        migrations::migrate_schema(&mut database.connection, 2).unwrap();
+
+        assert_eq!(database.schema_version().unwrap(), 3);
+        assert_eq!(
+            database
+                .connection
+                .query_row("PRAGMA legacy_alter_table", [], |row| row.get::<_, i64>(0))
+                .unwrap(),
+            0
+        );
+        let stale_schema_references = database
+            .connection
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE sql LIKE '%_v2%'",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap();
+        assert_eq!(stale_schema_references, 0);
+        assert_eq!(
+            database
+                .connection
+                .query_row("SELECT name FROM hosts", [], |row| row.get::<_, String>(0))
+                .unwrap(),
+            "Existing host"
+        );
+        database
+            .connection
+            .execute(
+                "INSERT INTO hosts (uuid, name, type) VALUES (?, ?, ?)",
+                params!["01979f62-8548-7000-8000-000000000203", "New host", "future"],
+            )
+            .unwrap();
+        assert!(database
+            .connection
+            .query_row(
+                "SELECT created_device_id FROM hosts WHERE name = 'New host'",
+                [],
+                |row| row.get::<_, Option<String>>(0),
+            )
+            .unwrap()
+            .is_some());
+        assert!(!table_sql(&database.connection, "hosts")
+            .unwrap()
+            .contains("type IN"));
     }
 
     #[test]
@@ -3480,7 +3661,7 @@ mod tests {
                 "INSERT INTO proxies (uuid, name, type, host, port) VALUES ('proxy-1', 'Invalid', 'ftp', 'localhost', 21)",
                 [],
             )
-            .is_err());
+            .is_ok());
     }
 
     #[test]
@@ -4124,7 +4305,7 @@ mod tests {
             )
             .unwrap();
 
-        NautermDatabase::ensure_schema(&mut connection).unwrap();
+        migrations::migrate_v1_to_v2(&mut connection).unwrap();
         connection
             .execute(
                 "INSERT INTO ai_providers (uuid, name, protocol, base_url) VALUES (?, ?, ?, ?)",

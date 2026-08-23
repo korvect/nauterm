@@ -120,8 +120,7 @@ pub(super) fn create_schema(connection: &Connection) -> rusqlite::Result<()> {
             ),
           encoding TEXT,
           telnet_encoding TEXT,
-          type TEXT NOT NULL DEFAULT 'remote'
-            CHECK (type IN ('local', 'remote')),
+          type TEXT NOT NULL DEFAULT 'remote',
           key_uuid TEXT,
           shell_path TEXT,
           work_dir TEXT,
@@ -151,7 +150,7 @@ pub(super) fn create_schema(connection: &Connection) -> rusqlite::Result<()> {
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           uuid TEXT NOT NULL UNIQUE,
           name TEXT NOT NULL,
-          type TEXT NOT NULL CHECK (type IN ('local', 'remote', 'dynamic')),
+          type TEXT NOT NULL,
           bind_address TEXT NOT NULL,
           bind_port INTEGER NOT NULL CHECK (bind_port BETWEEN 1 AND 65535),
           destination_host TEXT NOT NULL,
@@ -207,7 +206,14 @@ fn create_device_tracking_schema(connection: &Connection) -> rusqlite::Result<()
         params![DEVICE_ID_METADATA_KEY, device_id],
     )?;
 
-    for table in DEVICE_TRACKED_TABLES {
+    create_device_tracking_triggers(connection, DEVICE_TRACKED_TABLES)
+}
+
+pub(super) fn create_device_tracking_triggers(
+    connection: &Connection,
+    tables: &[&str],
+) -> rusqlite::Result<()> {
+    for table in tables {
         connection.execute_batch(&format!(
             r#"
             CREATE TRIGGER {table}_device_id_after_insert
@@ -254,7 +260,7 @@ fn create_proxy_schema(connection: &Connection) -> rusqlite::Result<()> {
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           uuid TEXT NOT NULL UNIQUE,
           name TEXT NOT NULL,
-          type TEXT NOT NULL CHECK (type IN ('http', 'socks5')),
+          type TEXT NOT NULL,
           host TEXT NOT NULL,
           port INTEGER NOT NULL CHECK (port BETWEEN 1 AND 65535),
           identity_uuid TEXT,
@@ -284,7 +290,7 @@ fn create_sftp_favorites_schema(connection: &Connection) -> rusqlite::Result<()>
         CREATE TABLE sftp_favorites (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           uuid TEXT NOT NULL UNIQUE,
-          scope TEXT NOT NULL DEFAULT 'remote' CHECK (scope = 'remote'),
+          scope TEXT NOT NULL DEFAULT 'remote',
           host_uuid TEXT NOT NULL,
           path TEXT NOT NULL,
           created_at INTEGER NOT NULL DEFAULT (CAST(unixepoch('subsec') * 1000 AS INTEGER)),
@@ -376,8 +382,7 @@ fn create_snippet_schema(connection: &Connection) -> rusqlite::Result<()> {
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           uuid TEXT NOT NULL UNIQUE,
           package_uuid TEXT,
-          scope TEXT NOT NULL DEFAULT 'global'
-            CHECK (scope IN ('global', 'targeted')),
+          scope TEXT NOT NULL DEFAULT 'global',
           description TEXT NOT NULL,
           script TEXT NOT NULL,
           created_at INTEGER NOT NULL DEFAULT (CAST(unixepoch('subsec') * 1000 AS INTEGER)),
@@ -477,18 +482,15 @@ pub(super) fn create_sftp_task_schema(connection: &Connection) -> rusqlite::Resu
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           uuid TEXT NOT NULL UNIQUE,
           host_uuid TEXT,
-          transfer_type TEXT NOT NULL
-            CHECK (transfer_type IN ('download', 'upload', 'edit', 'move', 'copy', 'delete')),
+          transfer_type TEXT NOT NULL,
           host TEXT NOT NULL DEFAULT '',
           username TEXT NOT NULL DEFAULT '',
           port INTEGER NOT NULL DEFAULT 22 CHECK (port BETWEEN 1 AND 65535),
           display_name TEXT NOT NULL DEFAULT '',
           source_path TEXT NOT NULL DEFAULT '',
           target_path TEXT NOT NULL DEFAULT '',
-          item_kind TEXT NOT NULL DEFAULT 'unknown'
-            CHECK (item_kind IN ('file', 'folder', 'unknown')),
-          status TEXT NOT NULL
-            CHECK (status IN ('completed', 'failed', 'cancelled')),
+          item_kind TEXT NOT NULL DEFAULT 'unknown',
+          status TEXT NOT NULL,
           bytes INTEGER NOT NULL DEFAULT 0 CHECK (bytes >= 0),
           total_bytes INTEGER NOT NULL DEFAULT 0 CHECK (total_bytes >= 0),
           error_text TEXT,
@@ -558,7 +560,7 @@ pub(super) fn create_ai_conversation_schema(connection: &Connection) -> rusqlite
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           uuid TEXT NOT NULL UNIQUE,
           title TEXT NOT NULL,
-          scope TEXT NOT NULL CHECK (scope IN ('terminal', 'workspace')),
+          scope TEXT NOT NULL,
           host_uuid TEXT,
           provider_uuid TEXT,
           model TEXT NOT NULL DEFAULT '',
@@ -570,7 +572,7 @@ pub(super) fn create_ai_conversation_schema(connection: &Connection) -> rusqlite
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           uuid TEXT NOT NULL UNIQUE,
           conversation_uuid TEXT NOT NULL,
-          role TEXT NOT NULL CHECK (role IN ('system', 'user', 'assistant', 'tool')),
+          role TEXT NOT NULL,
           content TEXT NOT NULL,
           context TEXT NOT NULL DEFAULT '',
           sequence INTEGER NOT NULL,
@@ -592,7 +594,7 @@ pub(super) fn create_ai_conversation_schema(connection: &Connection) -> rusqlite
           tool_call_id TEXT NOT NULL,
           command TEXT NOT NULL,
           explanation TEXT NOT NULL,
-          status TEXT NOT NULL CHECK (status IN ('pending', 'running', 'succeeded', 'failed', 'cancelled', 'skipped')),
+          status TEXT NOT NULL,
           sequence INTEGER NOT NULL,
           output TEXT,
           exit_code INTEGER,

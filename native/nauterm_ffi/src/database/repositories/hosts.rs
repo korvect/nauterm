@@ -705,6 +705,7 @@ impl NautermDatabase {
     }
 
     pub fn save_port_forward(&mut self, port_forward: &PortForwardEntry) -> rusqlite::Result<i64> {
+        let forward_type = normalize_port_forward_type(&port_forward.r#type)?;
         let host_uuid = relation_uuid(
             &self.connection,
             "hosts",
@@ -727,7 +728,7 @@ impl NautermDatabase {
                 "#,
                 params![
                     port_forward.name,
-                    port_forward.r#type,
+                    forward_type,
                     port_forward.bind_address,
                     port_forward.bind_port,
                     port_forward.destination_host,
@@ -754,7 +755,7 @@ impl NautermDatabase {
             "#,
             params![
                 port_forward.name,
-                port_forward.r#type,
+                forward_type,
                 port_forward.bind_address,
                 port_forward.bind_port,
                 port_forward.destination_host,
@@ -826,6 +827,7 @@ impl NautermDatabase {
     }
 
     pub fn save_proxy(&mut self, proxy: &ProxyEntry) -> rusqlite::Result<i64> {
+        let proxy_type = normalize_proxy_type(&proxy.r#type)?;
         let dek = configured_dek(&self.connection)?;
         let password = encrypt_optional_field(dek.as_ref(), proxy.password.as_deref())?;
         let identity_uuid = relation_uuid(
@@ -847,7 +849,7 @@ impl NautermDatabase {
                 "#,
                 params![
                     proxy.name,
-                    proxy.r#type,
+                    proxy_type,
                     proxy.host,
                     proxy.port,
                     identity_uuid,
@@ -874,7 +876,7 @@ impl NautermDatabase {
             "#,
             params![
                 proxy.name,
-                proxy.r#type,
+                proxy_type,
                 proxy.host,
                 proxy.port,
                 identity_uuid,
