@@ -21,7 +21,7 @@ base64 = "0.22"
 hkdf = "0.12"
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
 libc = "0.2"
-libloading = "0.8"
+libloading = "0.9"
 polling = "3"
 png = "0.18"
 opendal = { version = "0.57", default-features = false, features = [
