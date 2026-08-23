@@ -11,6 +11,7 @@ use hkdf::Hkdf;
 use rand_core::{OsRng, RngCore};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use sha2_modern::Sha256 as HkdfSha256;
 use zeroize::Zeroizing;
 
 #[cfg(not(test))]
@@ -657,12 +658,12 @@ fn derive_file_key(salt: &[u8; 16]) -> io::Result<Zeroizing<[u8; AES_KEY_LENGTH]
         .map_err(|error| io::Error::new(ErrorKind::PermissionDenied, error.to_string()))?;
     #[cfg(test)]
     let database_key = Zeroizing::new([0x5au8; AES_KEY_LENGTH]);
-    let root_hkdf = Hkdf::<Sha256>::new(None, database_key.as_slice());
+    let root_hkdf = Hkdf::<HkdfSha256>::new(None, database_key.as_slice());
     let mut root = Zeroizing::new([0u8; AES_KEY_LENGTH]);
     root_hkdf
         .expand(b"nauterm/terminal-capture/v1", root.as_mut_slice())
         .map_err(|_| invalid_data("capture root key derivation failed"))?;
-    let file_hkdf = Hkdf::<Sha256>::new(Some(salt), root.as_slice());
+    let file_hkdf = Hkdf::<HkdfSha256>::new(Some(salt), root.as_slice());
     let mut file_key = Zeroizing::new([0u8; AES_KEY_LENGTH]);
     file_hkdf
         .expand(b"nauterm/terminal-capture/file/v1", file_key.as_mut_slice())
@@ -671,7 +672,7 @@ fn derive_file_key(salt: &[u8; 16]) -> io::Result<Zeroizing<[u8; AES_KEY_LENGTH]
 }
 
 fn derive_state_key(file_key: &[u8]) -> io::Result<Zeroizing<[u8; AES_KEY_LENGTH]>> {
-    let hkdf = Hkdf::<Sha256>::new(None, file_key);
+    let hkdf = Hkdf::<HkdfSha256>::new(None, file_key);
     let mut state_key = Zeroizing::new([0u8; AES_KEY_LENGTH]);
     hkdf.expand(
         b"nauterm/terminal-capture/state/v1",
