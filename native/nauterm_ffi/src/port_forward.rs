@@ -555,12 +555,12 @@ impl client::Handler for ForwardClientHandler {
 
     fn check_server_key(
         &mut self,
-        server_public_key: &russh::keys::ssh_key::PublicKey,
+        server_public_key: &russh::keys::PublicKeyOrCertificate,
     ) -> impl std::future::Future<Output = Result<bool, Self::Error>> + Send {
         let host = self.host.clone();
         let port = self.port;
         let known_hosts_path = self.known_hosts_path.clone();
-        let server_public_key = server_public_key.clone();
+        let server_public_key = server_public_key.public_key();
         async move {
             let Some(known_hosts_path) = known_hosts_path else {
                 return Ok(false);
@@ -587,12 +587,14 @@ impl client::Handler for ForwardClientHandler {
         _connected_port: u32,
         _originator_address: &str,
         _originator_port: u32,
+        reply: client::ChannelOpenHandle,
         _session: &mut client::Session,
     ) -> impl std::future::Future<Output = Result<(), Self::Error>> + Send {
         let target = self.remote_target.clone();
         let status = self.status.clone();
         async move {
             if let Some(target) = target {
+                reply.accept().await;
                 adjust_active_connections(&status, 1);
                 tokio::spawn(async move {
                     match TcpStream::connect((

@@ -1550,7 +1550,7 @@ impl client::Handler for SshClientHandler {
 
     fn check_server_key(
         &mut self,
-        server_public_key: &russh::keys::ssh_key::PublicKey,
+        server_public_key: &russh::keys::PublicKeyOrCertificate,
     ) -> impl std::future::Future<Output = Result<bool, Self::Error>> + Send {
         let host = self.host.clone();
         let port = self.port;
@@ -1558,7 +1558,7 @@ impl client::Handler for SshClientHandler {
         let host_key_trust_mode = self.host_key_trust_mode;
         let events = self.events.clone();
         let wakeup = self.wakeup.clone();
-        let server_public_key = server_public_key.clone();
+        let server_public_key = server_public_key.public_key();
 
         async move {
             let fingerprint = server_public_key.fingerprint(HashAlg::Sha256).to_string();
