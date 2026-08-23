@@ -38,7 +38,13 @@ opendal = { version = "0.57", default-features = false, features = [
     "services-dropbox",
 ] }
 rand_core = { version = "0.6", features = ["getrandom"] }
-reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+reqwest = { version = "0.13", default-features = false, features = [
+    "blocking",
+    "form",
+    "json",
+    "query",
+    "rustls",
+] }
 socket2 = "0.6.3"
 encoding_rs = "0.8.35"
 futures-util = "0.3"
