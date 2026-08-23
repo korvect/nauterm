@@ -121,7 +121,6 @@ impl CloudTransportStrategy for OpenDalServiceStrategy {
                             .with_io_timeout(Duration::from_secs(30)),
                     )
                     .layer(RetryLayer::new().with_max_times(3).with_jitter())
-                    .finish()
             }};
         }
         let operator = match provider.scheme.as_str() {

@@ -82,8 +82,7 @@ pub fn build_transport(
                 .with_timeout(Duration::from_secs(30))
                 .with_io_timeout(Duration::from_secs(30)),
         )
-        .layer(RetryLayer::new().with_max_times(3).with_jitter())
-        .finish();
+        .layer(RetryLayer::new().with_max_times(3).with_jitter());
     credentials.access_key_id.zeroize();
     credentials.secret_access_key.zeroize();
     OpenDalSyncTransport::new(

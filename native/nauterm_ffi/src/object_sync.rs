@@ -112,7 +112,7 @@ pub struct OpenDalSyncTransport {
 
 impl OpenDalSyncTransport {
     pub fn new(operator: Operator, object_path: String) -> Result<Self, ObjectSyncError> {
-        let capability = operator.info().full_capability();
+        let capability = operator.info().capability();
         if !capability.read || !capability.stat || !capability.write {
             return Err(ObjectSyncError::new(
                 "This storage backend does not support the object operations required for sync.",
@@ -147,7 +147,7 @@ impl OpenDalSyncTransport {
             let version_id = metadata.version().map(str::to_string);
             let request = self.operator.read_with(&self.object_path);
             let bytes = match provider_etag {
-                Some(etag) if self.operator.info().full_capability().read_with_if_match => {
+                Some(etag) if self.operator.info().capability().read_with_if_match => {
                     request.if_match(etag).await
                 }
                 _ => request.await,
@@ -177,7 +177,7 @@ impl OpenDalSyncTransport {
             return Err(object_too_large());
         }
         self.runtime.block_on(async {
-            let capability = self.operator.info().full_capability();
+            let capability = self.operator.info().capability();
             let request = self.operator.write_with(&self.object_path, bytes.to_vec());
             let metadata = match (
                 expected_etag,
@@ -234,7 +234,7 @@ impl OpenDalSyncTransport {
         if version_id.trim().is_empty() {
             return Err(ObjectSyncError::new("Choose a storage version to restore."));
         }
-        let capability = self.operator.info().full_capability();
+        let capability = self.operator.info().capability();
         if !capability.read_with_version {
             return Err(ObjectSyncError::new(
                 "This storage backend does not support restoring object versions.",
@@ -259,7 +259,7 @@ impl OpenDalSyncTransport {
         &self,
         limit: usize,
     ) -> Result<Vec<ObjectVersionSummary>, ObjectSyncError> {
-        let capability = self.operator.info().full_capability();
+        let capability = self.operator.info().capability();
         if !capability.list || !capability.list_with_versions {
             return Err(ObjectSyncError::new(
                 "This storage backend does not support object version history.",
@@ -380,9 +380,7 @@ mod path_tests {
 
     #[test]
     fn transport_falls_back_to_content_tokens_without_etags() {
-        let operator = Operator::new(opendal::services::Memory::default())
-            .unwrap()
-            .finish();
+        let operator = Operator::new(opendal::services::Memory::default()).unwrap();
         let transport = OpenDalSyncTransport::new(operator, "vault.enc".to_string()).unwrap();
 
         let first = transport.write(b"first encrypted payload", None).unwrap();

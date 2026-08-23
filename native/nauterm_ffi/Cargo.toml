@@ -24,7 +24,7 @@ libc = "0.2"
 libloading = "0.9"
 polling = "3"
 png = "0.18"
-opendal = { version = "0.57", default-features = false, features = [
+opendal = { version = "0.58", default-features = false, features = [
     "executors-tokio",
     "layers-retry",
     "layers-timeout",
@@ -64,7 +64,7 @@ zeroize = "1"
 windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"] }
 
 [dev-dependencies]
-opendal = { version = "0.57", default-features = false, features = [
+opendal = { version = "0.58", default-features = false, features = [
     "executors-tokio",
     "services-memory",
 ] }
