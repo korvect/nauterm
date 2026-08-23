@@ -36,6 +36,7 @@ const COMMAND_BLOCK_MARKER_SAME_LINE: char = '\u{f0010}';
 const COMMAND_BLOCK_MARKER_NEXT_LINE: char = '\u{f0011}';
 const COMMAND_BLOCK_MARKER_DIGIT_BASE: u32 = 0xf0100;
 const COMMAND_BLOCK_MARKER_DIGITS: usize = 4;
+const CLEAR_VIEWPORT_SEQUENCE: &[u8] = b"\x1b[2J";
 
 #[derive(Clone, Copy, Debug)]
 pub struct TerminalGeometry {
@@ -388,6 +389,7 @@ pub struct TerminalEngine {
     input_echo_override: Option<bool>,
     exited: bool,
     wakeup_callback: Option<WakeupCallback>,
+    startup_clear_match: Option<usize>,
 }
 
 struct OutputSuppression {
@@ -728,6 +730,7 @@ impl TerminalEngine {
             input_echo_override: None,
             exited: false,
             wakeup_callback: None,
+            startup_clear_match: Some(0),
         }
     }
 
@@ -1075,9 +1078,52 @@ impl TerminalEngine {
         let was_alt_screen = self.term.mode().contains(TermMode::ALT_SCREEN);
         let cursor_style_before = self.term.cursor_style();
 
-        self.processor.advance(&mut self.term, bytes);
+        let mut consumed = 0;
+        while consumed < bytes.len() && self.startup_clear_match.is_some() {
+            let byte = bytes[consumed];
+            self.processor
+                .advance(&mut self.term, std::slice::from_ref(&byte));
+            consumed += 1;
+
+            let matched = self.startup_clear_match.unwrap_or_default();
+            let next_match = if byte == CLEAR_VIEWPORT_SEQUENCE[matched] {
+                matched + 1
+            } else if byte == CLEAR_VIEWPORT_SEQUENCE[0] {
+                1
+            } else {
+                0
+            };
+
+            if next_match == CLEAR_VIEWPORT_SEQUENCE.len() {
+                // Alacritty's primary-screen ED2 implementation can move a pristine row into
+                // history. ConPTY sends ED2 before the first shell output, so discard only the
+                // history created by that initial clear. All bytes still reach the emulator.
+                if !self.viewport_has_text() {
+                    self.term.grid_mut().clear_history();
+                }
+                self.startup_clear_match = None;
+            } else if self.viewport_has_text() {
+                self.startup_clear_match = None;
+            } else {
+                self.startup_clear_match = Some(next_match);
+            }
+        }
+
+        if consumed < bytes.len() {
+            self.processor.advance(&mut self.term, &bytes[consumed..]);
+        }
         self.restore_cursor_style_after_alt_screen(was_alt_screen, cursor_style_before);
         self.forward_terminal_pty_writes();
+    }
+
+    fn viewport_has_text(&self) -> bool {
+        (0..self.size.rows).any(|line| {
+            (&self.term.grid()[Line(line as i32)])
+                .into_iter()
+                .any(|cell| {
+                    cell.c != ' ' || cell.zerowidth().is_some_and(|chars| !chars.is_empty())
+                })
+        })
     }
 
     fn handle_shell_integration_osc(&mut self, payload: &[u8]) {
@@ -2929,6 +2975,41 @@ mod tests {
         let restored_snapshot = terminal.snapshot();
         assert_eq!(snapshot_text(&restored_snapshot), bottom);
         assert_eq!(restored_snapshot.display_offset, 0);
+    }
+
+    #[test]
+    fn initial_clear_does_not_create_blank_scrollback() {
+        let mut terminal = TerminalEngine::new_with_options(
+            50,
+            20,
+            TerminalOptions {
+                scrollback_lines: 100,
+                ..TerminalOptions::default()
+            },
+        );
+        terminal.write_bytes(b"\x1b[?9001h\x1b[?1004h\x1b[?25l\x1b[2J\x1b[m\x1b[H");
+
+        assert_eq!(terminal.snapshot().history_lines, 0);
+    }
+
+    #[test]
+    fn initial_clear_preserves_a_later_real_blank_line() {
+        let mut terminal = TerminalEngine::new_with_options(
+            8,
+            2,
+            TerminalOptions {
+                scrollback_lines: 100,
+                ..TerminalOptions::default()
+            },
+        );
+        terminal.write_bytes(b"\x1b[2J\x1b[H\r\nGit\r\nnext");
+
+        terminal.scroll_lines(10_000);
+        let snapshot = terminal.snapshot();
+
+        assert_eq!(snapshot.display_offset, snapshot.history_lines);
+        assert_eq!(cell_text(&snapshot, 0), " ");
+        assert_eq!(cell_text(&snapshot, 8), "G");
     }
 
     #[test]
