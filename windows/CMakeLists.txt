@@ -124,7 +124,15 @@ install(FILES "${NAUTERM_FFI_DIR}/target/debug/nauterm_ffi.dll"
   DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
   CONFIGURATIONS Debug
   COMPONENT Runtime)
+install(FILES "${NAUTERM_FFI_DIR}/target/debug/ghostty-vt.dll"
+  DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+  CONFIGURATIONS Debug
+  COMPONENT Runtime)
 install(FILES "${NAUTERM_FFI_DIR}/target/release/nauterm_ffi.dll"
+  DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+  CONFIGURATIONS Profile;Release
+  COMPONENT Runtime)
+install(FILES "${NAUTERM_FFI_DIR}/target/release/ghostty-vt.dll"
   DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
   CONFIGURATIONS Profile;Release
   COMPONENT Runtime)
