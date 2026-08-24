@@ -12,3 +12,9 @@ PRODUCT_BUNDLE_IDENTIFIER = com.korvect.nauterm
 
 // The copyright displayed in application information
 PRODUCT_COPYRIGHT = Copyright © 2026 Korvect. All rights reserved.
+
+// Keep Flutter 3.47's default renderer on Apple Silicon, but avoid Impeller's
+// rendering and performance regressions on Intel Macs.
+NAUTERM_ENABLE_IMPELLER_arm64 = YES
+NAUTERM_ENABLE_IMPELLER_x86_64 = NO
+NAUTERM_ENABLE_IMPELLER = $(NAUTERM_ENABLE_IMPELLER_$(NATIVE_ARCH_ACTUAL))

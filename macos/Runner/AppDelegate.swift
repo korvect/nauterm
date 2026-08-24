@@ -7,19 +7,6 @@ import Sparkle
 
 private typealias NautermRuntimePrepareShutdown = @convention(c) () -> Void
 
-private final class NautermFlutterDartProject: FlutterDartProject {
-  // Flutter 3.47 enables Impeller by default on macOS. Its Metal/SDF path is
-  // unreliable and significantly slower on some Intel GPUs, while Apple
-  // Silicon benefits from keeping the new default.
-  @objc var enableImpeller: Bool {
-#if arch(x86_64)
-    return false
-#else
-    return true
-#endif
-  }
-}
-
 #if DEBUG
 private extension FlutterEngine {
   @objc func nautermEngineCallbackOnPreEngineRestart() {
@@ -70,8 +57,7 @@ class AppDelegate: FlutterAppDelegate {
 #if DEBUG
     installFlutterHotRestartWorkaround()
 #endif
-    let project = NautermFlutterDartProject()
-    engine = FlutterEngine(name: "project", project: project)
+    engine = FlutterEngine(name: "project", project: nil)
     engine?.run(withEntrypoint: nil)
     if let engine {
       RegisterGeneratedPlugins(registry: engine)
