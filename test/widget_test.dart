@@ -2290,7 +2290,8 @@ void main() {
         .map((element) => (element.widget as Tooltip).message)
         .whereType<String>()
         .toSet();
-    final hasLongWindowsLabel = shellLabels.contains('Windows PowerShell') ||
+    final hasLongWindowsLabel =
+        shellLabels.contains('Windows PowerShell') ||
         shellLabels.contains('Command Prompt');
     expect(delegate.crossAxisCount, hasLongWindowsLabel ? 3 : 4);
 
