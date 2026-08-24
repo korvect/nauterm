@@ -795,15 +795,22 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
     }
     final selection = _HostProtocolSelection(
       protocol: selectedProtocol,
+      port: selectedProtocol == _HostConnectProtocol.telnet
+          ? host.telnetPort ?? 23
+          : host.port ?? 22,
       moshServerCommand: host.moshServerCommand,
     );
     switch (selection.protocol) {
       case _HostConnectProtocol.ssh:
-        await _connectSshHost(host);
+        await _connectSshHost(host, port: selection.port);
       case _HostConnectProtocol.mosh:
-        await _connectMoshHost(host, command: selection.moshServerCommand);
+        await _connectMoshHost(
+          host,
+          port: selection.port,
+          command: selection.moshServerCommand,
+        );
       case _HostConnectProtocol.telnet:
-        await _connectTelnetHost(host);
+        await _connectTelnetHost(host, port: selection.port);
     }
   }
 
@@ -857,14 +864,15 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
     }
     switch (selection.protocol) {
       case _HostConnectProtocol.ssh:
-        await _connectSshHost(pending.host);
+        await _connectSshHost(pending.host, port: selection.port);
       case _HostConnectProtocol.mosh:
         await _connectMoshHost(
           pending.host,
+          port: selection.port,
           command: selection.moshServerCommand,
         );
       case _HostConnectProtocol.telnet:
-        await _connectTelnetHost(pending.host);
+        await _connectTelnetHost(pending.host, port: selection.port);
     }
     if (mounted) {
       _closeTerminalTab(pendingTabId);
@@ -873,10 +881,15 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
 
   Future<void> _connectSshHost(
     HostEntry host, {
+    int? port,
     bool useMosh = false,
     String? moshServerCommand,
   }) async {
-    final auth = _sshAuthForHost(host, feature: useMosh ? 'Mosh' : 'SSH');
+    final auth = _sshAuthForHost(
+      host,
+      feature: useMosh ? 'Mosh' : 'SSH',
+      portOverride: port,
+    );
     if (auth == null) {
       return;
     }
@@ -978,15 +991,24 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
     widget.controller?._notifyTabsChanged();
   }
 
-  Future<void> _connectMoshHost(HostEntry host, {String? command}) async {
+  Future<void> _connectMoshHost(
+    HostEntry host, {
+    int? port,
+    String? command,
+  }) async {
     if (!host.moshEnabled) {
       _showWorkspaceMessage('Mosh is not enabled for this host.');
       return;
     }
-    await _connectSshHost(host, useMosh: true, moshServerCommand: command);
+    await _connectSshHost(
+      host,
+      port: port,
+      useMosh: true,
+      moshServerCommand: command,
+    );
   }
 
-  Future<void> _connectTelnetHost(HostEntry host) async {
+  Future<void> _connectTelnetHost(HostEntry host, {int? port}) async {
     if (!host.telnetEnabled) {
       _showWorkspaceMessage('Telnet is not enabled for this host.');
       return;
@@ -996,8 +1018,8 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
       _showWorkspaceMessage('Host address is required.');
       return;
     }
-    final port = host.telnetPort ?? 23;
-    if (port < 1 || port > 65535) {
+    final resolvedPort = port ?? host.telnetPort ?? 23;
+    if (resolvedPort < 1 || resolvedPort > 65535) {
       _showWorkspaceMessage('Telnet port must be between 1 and 65535.');
       return;
     }
@@ -1021,7 +1043,7 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
       late final TerminalController controller;
       controller = TerminalController.telnet(
         host: address,
-        port: port,
+        port: resolvedPort,
         hostId: host.id,
         identityId: host.telnetIdentityId,
         label: host.name,
@@ -1032,11 +1054,11 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
         theme: theme,
         recorder: _createTerminalRecorder(
           title: host.name,
-          target: 'telnet $address:$port',
+          target: 'telnet $address:$resolvedPort',
           themeId: host.telnetThemeId,
           hostId: host.id,
           host: address,
-          port: port,
+          port: resolvedPort,
           username: username,
           awaitConnection: true,
         ),
@@ -1736,10 +1758,12 @@ enum _HostConnectProtocol { ssh, mosh, telnet }
 class _HostProtocolSelection {
   const _HostProtocolSelection({
     required this.protocol,
+    required this.port,
     required this.moshServerCommand,
   });
 
   final _HostConnectProtocol protocol;
+  final int port;
   final String moshServerCommand;
 }
 
@@ -1770,23 +1794,42 @@ class _HostProtocolCard extends StatelessWidget {
   const _HostProtocolCard({
     required this.title,
     required this.command,
-    required this.port,
+    required this.portController,
     required this.color,
     required this.selected,
+    required this.enabled,
     required this.onTap,
     this.commandController,
   });
 
   final String title;
   final String command;
-  final int port;
+  final TextEditingController portController;
   final Color color;
   final bool selected;
+  final bool enabled;
   final VoidCallback onTap;
   final TextEditingController? commandController;
 
   @override
   Widget build(BuildContext context) {
+    final portTextStyle = TextStyle(
+      fontSize: NautermFontSizes.labelLarge,
+      fontWeight: NautermFontWeights.regular,
+      letterSpacing: 0,
+    );
+    final commandPreview = Text(
+      command,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        color: _mutedText,
+        fontSize: NautermFontSizes.labelMedium,
+        fontStyle: FontStyle.italic,
+        fontWeight: NautermFontWeights.regular,
+        letterSpacing: 0,
+      ),
+    );
     return Material(
       color: selected
           ? _card
@@ -1797,7 +1840,7 @@ class _HostProtocolCard extends StatelessWidget {
         hoverColor: _workspaceDark ? _sidebarHover : null,
         splashColor: _workspaceDark ? _workspaceMenuPressed : null,
         highlightColor: _workspaceDark ? _workspaceMenuPressed : null,
-        onTap: onTap,
+        onTap: enabled ? onTap : null,
         child: Container(
           constraints: const BoxConstraints(minHeight: 62),
           decoration: BoxDecoration(
@@ -1824,34 +1867,75 @@ class _HostProtocolCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(
-                      title,
-                      style: TextStyle(
-                        color: _text,
-                        fontSize: NautermFontSizes.labelLarge,
-                        fontWeight: NautermFontWeights.semibold,
-                        letterSpacing: 0,
-                      ),
-                    ),
-                    SizedBox(height: 3),
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
                       children: [
-                        Flexible(
+                        Expanded(
                           child: Text(
-                            command,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                            title,
                             style: TextStyle(
-                              color: _mutedText,
-                              fontSize: NautermFontSizes.labelMedium,
-                              fontStyle: FontStyle.italic,
-                              fontWeight: NautermFontWeights.regular,
+                              color: _text,
+                              fontSize: NautermFontSizes.labelLarge,
+                              fontWeight: NautermFontWeights.semibold,
                               letterSpacing: 0,
                             ),
                           ),
                         ),
+                        const SizedBox(width: 12),
+                        Text(
+                          'port:',
+                          style: portTextStyle.copyWith(color: _mutedText),
+                        ),
+                        const SizedBox(width: 5),
+                        SizedBox(
+                          width: 52,
+                          height: 24,
+                          child: TextField(
+                            key: ValueKey('host-protocol-port:$title'),
+                            controller: portController,
+                            enabled: enabled,
+                            onTap: onTap,
+                            onChanged: (_) => onTap(),
+                            maxLines: 1,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                            ],
+                            textAlign: TextAlign.left,
+                            textDirection: TextDirection.ltr,
+                            style: portTextStyle.copyWith(color: _text),
+                            decoration: InputDecoration(
+                              isDense: true,
+                              contentPadding: const EdgeInsets.only(bottom: 4),
+                              border: UnderlineInputBorder(
+                                borderSide: BorderSide(color: _sidebarDivider),
+                              ),
+                              enabledBorder: UnderlineInputBorder(
+                                borderSide: BorderSide(color: _sidebarDivider),
+                              ),
+                              focusedBorder: UnderlineInputBorder(
+                                borderSide: BorderSide(color: color),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        if (commandController == null)
+                          Flexible(child: commandPreview)
+                        else
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 150),
+                            child: commandPreview,
+                          ),
                         if (commandController != null) ...[
-                          SizedBox(width: 10),
+                          const SizedBox(width: 10),
                           Expanded(
                             child: SizedBox(
                               height: 24,
@@ -1860,11 +1944,12 @@ class _HostProtocolCard extends StatelessWidget {
                                   'host-protocol-mosh-command',
                                 ),
                                 controller: commandController,
+                                enabled: enabled,
                                 onTap: onTap,
                                 maxLines: 1,
                                 style: TextStyle(
                                   color: _text,
-                                  fontSize: NautermFontSizes.labelMedium,
+                                  fontSize: NautermFontSizes.labelLarge,
                                   fontWeight: NautermFontWeights.regular,
                                   letterSpacing: 0,
                                 ),
@@ -1873,7 +1958,7 @@ class _HostProtocolCard extends StatelessWidget {
                                   hintText: defaultMoshServerCommand,
                                   hintStyle: TextStyle(
                                     color: _mutedText.withValues(alpha: 0.72),
-                                    fontSize: NautermFontSizes.labelMedium,
+                                    fontSize: NautermFontSizes.labelLarge,
                                   ),
                                   contentPadding: const EdgeInsets.only(
                                     bottom: 4,
@@ -1899,16 +1984,6 @@ class _HostProtocolCard extends StatelessWidget {
                       ],
                     ),
                   ],
-                ),
-              ),
-              SizedBox(width: 12),
-              Text(
-                tr('port: $port'),
-                style: TextStyle(
-                  color: _text,
-                  fontSize: NautermFontSizes.labelMedium,
-                  fontWeight: NautermFontWeights.semibold,
-                  letterSpacing: 0,
                 ),
               ),
             ],

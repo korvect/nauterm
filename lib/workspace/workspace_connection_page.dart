@@ -108,22 +108,83 @@ class _PendingHostConnectionPage extends StatefulWidget {
 
 class _PendingHostConnectionPageState
     extends State<_PendingHostConnectionPage> {
-  _HostConnectProtocol _selected = _HostConnectProtocol.ssh;
+  late _HostConnectProtocol _selected;
   bool _starting = false;
+  bool _invalidPort = false;
+  late final TextEditingController _sshPortController;
+  late final TextEditingController _moshPortController;
+  late final TextEditingController _telnetPortController;
   late final TextEditingController _moshServerCommandController;
 
   @override
   void initState() {
     super.initState();
+    final host = widget.pending.host;
+    _selected = host.sshEnabled
+        ? _HostConnectProtocol.ssh
+        : host.moshEnabled
+        ? _HostConnectProtocol.mosh
+        : _HostConnectProtocol.telnet;
+    _sshPortController = TextEditingController(
+      text: (host.port ?? 22).toString(),
+    );
+    _moshPortController = TextEditingController(
+      text: (host.port ?? 22).toString(),
+    );
+    _telnetPortController = TextEditingController(
+      text: (host.telnetPort ?? 23).toString(),
+    );
     _moshServerCommandController = TextEditingController(
-      text: widget.pending.host.moshServerCommand,
+      text: host.moshServerCommand,
     );
   }
 
   @override
   void dispose() {
+    _sshPortController.dispose();
+    _moshPortController.dispose();
+    _telnetPortController.dispose();
     _moshServerCommandController.dispose();
     super.dispose();
+  }
+
+  TextEditingController _portControllerFor(_HostConnectProtocol protocol) {
+    return switch (protocol) {
+      _HostConnectProtocol.ssh => _sshPortController,
+      _HostConnectProtocol.mosh => _moshPortController,
+      _HostConnectProtocol.telnet => _telnetPortController,
+    };
+  }
+
+  void _selectProtocol(_HostConnectProtocol protocol) {
+    if (_starting) {
+      return;
+    }
+    setState(() {
+      _selected = protocol;
+      _invalidPort = false;
+    });
+  }
+
+  void _connect() {
+    final port = int.tryParse(_portControllerFor(_selected).text.trim());
+    if (port == null || port < 1 || port > 65535) {
+      setState(() => _invalidPort = true);
+      return;
+    }
+    setState(() {
+      _starting = true;
+      _invalidPort = false;
+    });
+    widget.onConnect(
+      _HostProtocolSelection(
+        protocol: _selected,
+        port: port,
+        moshServerCommand:
+            _emptyToNull(_moshServerCommandController.text) ??
+            defaultMoshServerCommand,
+      ),
+    );
   }
 
   @override
@@ -176,33 +237,23 @@ class _PendingHostConnectionPageState
                       _HostProtocolCard(
                         title: 'SSH',
                         command: 'ssh $address',
-                        port: host.port ?? 22,
+                        portController: _sshPortController,
                         color: _green,
                         selected: _selected == _HostConnectProtocol.ssh,
-                        onTap: () {
-                          if (!_starting) {
-                            setState(
-                              () => _selected = _HostConnectProtocol.ssh,
-                            );
-                          }
-                        },
+                        enabled: !_starting,
+                        onTap: () => _selectProtocol(_HostConnectProtocol.ssh),
                       ),
                     if (host.moshEnabled) ...[
                       SizedBox(height: 10),
                       _HostProtocolCard(
                         title: 'Mosh',
                         command: 'mosh $address',
-                        port: host.port ?? 22,
+                        portController: _moshPortController,
                         color: const Color(0xff0ea5a8),
                         selected: _selected == _HostConnectProtocol.mosh,
+                        enabled: !_starting,
                         commandController: _moshServerCommandController,
-                        onTap: () {
-                          if (!_starting) {
-                            setState(
-                              () => _selected = _HostConnectProtocol.mosh,
-                            );
-                          }
-                        },
+                        onTap: () => _selectProtocol(_HostConnectProtocol.mosh),
                       ),
                     ],
                     if (host.telnetEnabled) ...[
@@ -210,16 +261,23 @@ class _PendingHostConnectionPageState
                       _HostProtocolCard(
                         title: 'Telnet',
                         command: 'telnet $address',
-                        port: host.telnetPort ?? 23,
+                        portController: _telnetPortController,
                         color: const Color(0xff7b61ff),
                         selected: _selected == _HostConnectProtocol.telnet,
-                        onTap: () {
-                          if (!_starting) {
-                            setState(
-                              () => _selected = _HostConnectProtocol.telnet,
-                            );
-                          }
-                        },
+                        enabled: !_starting,
+                        onTap: () =>
+                            _selectProtocol(_HostConnectProtocol.telnet),
+                      ),
+                    ],
+                    if (_invalidPort) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'Port must be between 1 and 65535.',
+                        style: TextStyle(
+                          color: const Color(0xffef4444),
+                          fontSize: NautermFontSizes.labelMedium,
+                          fontWeight: NautermFontWeights.regular,
+                        ),
                       ),
                     ],
                     SizedBox(height: 24),
@@ -236,21 +294,7 @@ class _PendingHostConnectionPageState
                             fallback: 'Connect',
                           ),
                           primary: true,
-                          onPressed: _starting
-                              ? null
-                              : () {
-                                  setState(() => _starting = true);
-                                  widget.onConnect(
-                                    _HostProtocolSelection(
-                                      protocol: _selected,
-                                      moshServerCommand:
-                                          _emptyToNull(
-                                            _moshServerCommandController.text,
-                                          ) ??
-                                          defaultMoshServerCommand,
-                                    ),
-                                  );
-                                },
+                          onPressed: _starting ? null : _connect,
                         ),
                       ],
                     ),

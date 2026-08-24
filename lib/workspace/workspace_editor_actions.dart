@@ -1649,6 +1649,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
   _PortForwardSshAuth? _sshAuthForHost(
     HostEntry? host, {
     String feature = 'Port forwarding',
+    int? portOverride,
   }) {
     if (host == null) {
       _showWorkspaceMessage('$feature host is not available.');
@@ -1671,7 +1672,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       _showWorkspaceMessage('$feature host address is required.');
       return null;
     }
-    final port = host.port ?? 22;
+    final port = portOverride ?? host.port ?? 22;
     if (port < 1 || port > 65535) {
       _showWorkspaceMessage('$feature host port must be between 1 and 65535.');
       return null;
