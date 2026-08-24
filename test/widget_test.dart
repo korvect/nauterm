@@ -2269,6 +2269,45 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('quick connect shell grid adapts columns and previews two rows', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(NautermApp(onOpenSettings: () {}));
+
+    await tester.tap(find.byTooltip('Quick Connect'));
+    await tester.pump(const Duration(milliseconds: 200));
+
+    final shellGridFinder = find.byType(GridView);
+    final shellGrid = tester.widget<GridView>(shellGridFinder);
+    final delegate =
+        shellGrid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
+    final shellTooltips = find.descendant(
+      of: shellGridFinder,
+      matching: find.byType(Tooltip),
+    );
+    final shellLabels = shellTooltips
+        .evaluate()
+        .map((element) => (element.widget as Tooltip).message)
+        .whereType<String>()
+        .toSet();
+    final hasLongWindowsLabel = shellLabels.contains('Windows PowerShell') ||
+        shellLabels.contains('Command Prompt');
+    expect(delegate.crossAxisCount, hasLongWindowsLabel ? 3 : 4);
+
+    final previewCount = delegate.crossAxisCount * 2;
+    final showAll = find.text('Show All');
+    if (showAll.evaluate().isNotEmpty) {
+      expect(shellTooltips, findsNWidgets(previewCount));
+      await tester.tap(showAll);
+      await tester.pump();
+      expect(shellTooltips.evaluate().length, greaterThan(previewCount));
+    } else {
+      expect(shellTooltips.evaluate().length, lessThanOrEqualTo(previewCount));
+    }
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('temporary SSH tabs use the host title', (
     WidgetTester tester,
   ) async {

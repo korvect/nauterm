@@ -1,8 +1,8 @@
 part of 'nauterm_workspace.dart';
 
 const double _quickConnectShellButtonHeight = 36;
-
-const _quickConnectShellPreviewCount = 8;
+const double _quickConnectShellGridSpacing = 6;
+const int _quickConnectShellPreviewRows = 2;
 
 List<_QuickConnectShell> _quickConnectShells() {
   final shellsByLabel = <String, _QuickConnectShell>{};
@@ -228,10 +228,6 @@ class _QuickConnectDialogState extends State<_QuickConnectDialog> {
     final hosts = _filteredHosts;
     final directQuery = _directQuery;
     final shells = _quickConnectShells();
-    final hasMoreShells = shells.length > _quickConnectShellPreviewCount;
-    final visibleShells = _showAllShells
-        ? shells
-        : shells.take(_quickConnectShellPreviewCount).toList(growable: false);
     return Focus(
       onKeyEvent: _handleKeyEvent,
       child: Center(
@@ -262,41 +258,69 @@ class _QuickConnectDialogState extends State<_QuickConnectDialog> {
                         child: ListView(
                           padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
                           children: [
-                            _QuickConnectSectionHeader(
-                              label: 'Shells',
-                              trailing: hasMoreShells
-                                  ? _WorkspaceButton(
-                                      label: _showAllShells
-                                          ? tr(
-                                              'common.label.showLess',
-                                              fallback: 'Show Less',
+                            LayoutBuilder(
+                              builder: (context, constraints) {
+                                final columnCount =
+                                    _quickConnectShellColumnCount(
+                                      context,
+                                      shells,
+                                      constraints.maxWidth,
+                                    );
+                                final previewCount =
+                                    columnCount * _quickConnectShellPreviewRows;
+                                final hasMoreShells =
+                                    shells.length > previewCount;
+                                final visibleShells = _showAllShells
+                                    ? shells
+                                    : shells
+                                          .take(previewCount)
+                                          .toList(growable: false);
+                                return Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    _QuickConnectSectionHeader(
+                                      label: 'Shells',
+                                      trailing: hasMoreShells
+                                          ? _WorkspaceButton(
+                                              label: _showAllShells
+                                                  ? tr(
+                                                      'common.label.showLess',
+                                                      fallback: 'Show Less',
+                                                    )
+                                                  : tr(
+                                                      'common.label.showAll',
+                                                      fallback: 'Show All',
+                                                    ),
+                                              icon: _showAllShells
+                                                  ? Icons.expand_less_rounded
+                                                  : Icons.expand_more_rounded,
+                                              variant:
+                                                  _WorkspaceButtonVariant.text,
+                                              size: _WorkspaceControlSize.tiny,
+                                              horizontalPadding: 8,
+                                              onPressed: () {
+                                                setState(() {
+                                                  _showAllShells =
+                                                      !_showAllShells;
+                                                });
+                                              },
                                             )
-                                          : tr(
-                                              'common.label.showAll',
-                                              fallback: 'Show All',
-                                            ),
-                                      icon: _showAllShells
-                                          ? Icons.expand_less_rounded
-                                          : Icons.expand_more_rounded,
-                                      variant: _WorkspaceButtonVariant.text,
-                                      size: _WorkspaceControlSize.tiny,
-                                      horizontalPadding: 8,
-                                      onPressed: () {
-                                        setState(() {
-                                          _showAllShells = !_showAllShells;
-                                        });
+                                          : null,
+                                    ),
+                                    const SizedBox(height: 6),
+                                    _QuickConnectShellGrid(
+                                      shells: visibleShells,
+                                      columnCount: columnCount,
+                                      onSelected: (shell) {
+                                        _close(_QuickConnectLocalShell(shell));
                                       },
-                                    )
-                                  : null,
-                            ),
-                            SizedBox(height: 6),
-                            _QuickConnectShellGrid(
-                              shells: visibleShells,
-                              onSelected: (shell) {
-                                _close(_QuickConnectLocalShell(shell));
+                                    ),
+                                  ],
+                                );
                               },
                             ),
-                            SizedBox(height: 14),
+                            const SizedBox(height: 14),
                             const _QuickConnectSectionLabel('Hosts'),
                             SizedBox(height: 6),
                             if (directQuery != null) ...[
@@ -499,10 +523,12 @@ class _QuickConnectSectionHeader extends StatelessWidget {
 class _QuickConnectShellGrid extends StatelessWidget {
   const _QuickConnectShellGrid({
     required this.shells,
+    required this.columnCount,
     required this.onSelected,
   });
 
   final List<_QuickConnectShell> shells;
+  final int columnCount;
   final ValueChanged<_QuickConnectShell> onSelected;
 
   @override
@@ -511,34 +537,65 @@ class _QuickConnectShellGrid extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final columnCount = constraints.maxWidth < 360 ? 2 : 3;
-        return GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: shells.length,
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: columnCount,
-            mainAxisSpacing: 6,
-            crossAxisSpacing: 6,
-            mainAxisExtent: _quickConnectShellButtonHeight,
-          ),
-          itemBuilder: (context, index) {
-            final shell = shells[index];
-            return _WorkspaceButton(
-              label: shell.label,
-              tooltip: shell.label,
-              variant: _WorkspaceButtonVariant.outlined,
-              size: _WorkspaceControlSize.small,
-              fullWidth: true,
-              onPressed: () => onSelected(shell),
-            );
-          },
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: shells.length,
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: columnCount,
+        mainAxisSpacing: _quickConnectShellGridSpacing,
+        crossAxisSpacing: _quickConnectShellGridSpacing,
+        mainAxisExtent: _quickConnectShellButtonHeight,
+      ),
+      itemBuilder: (context, index) {
+        final shell = shells[index];
+        return _WorkspaceButton(
+          label: shell.label,
+          tooltip: shell.label,
+          variant: _WorkspaceButtonVariant.outlined,
+          size: _WorkspaceControlSize.small,
+          fullWidth: true,
+          onPressed: () => onSelected(shell),
         );
       },
     );
   }
+}
+
+int _quickConnectShellColumnCount(
+  BuildContext context,
+  List<_QuickConnectShell> shells,
+  double maxWidth,
+) {
+  if (maxWidth < 360) {
+    return 2;
+  }
+
+  const candidateColumnCount = 4;
+  final buttonWidth =
+      (maxWidth - _quickConnectShellGridSpacing * (candidateColumnCount - 1)) /
+      candidateColumnCount;
+  final labelWidth =
+      buttonWidth - _WorkspaceControlSize.small.horizontalPadding * 2;
+  final textStyle = TextStyle(
+    fontSize: _WorkspaceControlSize.small.inputFontSize,
+    fontWeight: NautermFontWeights.semibold,
+    letterSpacing: 0,
+  );
+  final textScaler = MediaQuery.textScalerOf(context);
+  final textDirection = Directionality.of(context);
+  for (final shell in shells) {
+    final painter = TextPainter(
+      text: TextSpan(text: tr(shell.label), style: textStyle),
+      maxLines: 1,
+      textDirection: textDirection,
+      textScaler: textScaler,
+    )..layout();
+    if (painter.width > labelWidth) {
+      return 3;
+    }
+  }
+  return candidateColumnCount;
 }
 
 class _QuickConnectHostList extends StatelessWidget {
