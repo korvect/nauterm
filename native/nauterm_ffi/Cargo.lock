@@ -2078,7 +2078,7 @@ dependencies = [
 
 [[package]]
 name = "nauterm_ffi"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "aes-gcm",
  "alacritty_terminal",
