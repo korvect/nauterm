@@ -7,6 +7,10 @@
     {
       "packages": ["libghostty-vt 1.3.2-dev"],
       "license": "assets/licenses/manual/ghostty-LICENSE"
+    },
+    {
+      "packages": ["Nerd Fonts Symbols Only 3.4.0"],
+      "license": "assets/licenses/manual/nerd-fonts-LICENSE"
     }
   ]
 }

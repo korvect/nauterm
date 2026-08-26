@@ -14,6 +14,7 @@ void main() {
     });
 
     expect(packages, contains('Sparkle 2.9.4'));
+    expect(packages, contains('Nerd Fonts Symbols Only 3.4.0'));
     expect(packages.any((package) => package.endsWith('(Rust)')), isTrue);
   });
 

@@ -97,6 +97,11 @@ flutter:
     - assets/licenses/
     - assets/licenses/manual/
 
+  fonts:
+    - family: Nauterm Nerd Font Symbols
+      fonts:
+        - asset: assets/fonts/SymbolsNerdFont-Regular.ttf
+
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
 

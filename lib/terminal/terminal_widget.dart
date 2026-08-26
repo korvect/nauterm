@@ -29,6 +29,7 @@ import '../ui/nauterm_overlay.dart';
 
 part 'terminal_view_toolbar.dart';
 part 'terminal_context_menu.dart';
+part 'terminal_powerline_painter.dart';
 part 'terminal_painter.dart';
 
 enum TerminalSplitDirection { right, down }

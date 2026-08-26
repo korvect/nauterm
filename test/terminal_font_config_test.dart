@@ -10,6 +10,23 @@ void main() {
 
     expect(font.resolvedFallback().first, 'Sarasa Mono SC');
     expect(font.textStyle().fontFamilyFallback?.first, 'Sarasa Mono SC');
+    expect(
+      font.resolvedFallback()[1],
+      TerminalFontConfig.nerdFontSymbolsFamily,
+    );
+  });
+
+  test('bundled Nerd Font symbols precede platform fallback fonts', () {
+    const font = TerminalFontConfig();
+
+    expect(
+      font.resolvedFallback().first,
+      TerminalFontConfig.nerdFontSymbolsFamily,
+    );
+    expect(
+      font.textStyle().fontFamilyFallback?.first,
+      TerminalFontConfig.nerdFontSymbolsFamily,
+    );
   });
 
   test('application language is passed to the renderer as a locale', () {

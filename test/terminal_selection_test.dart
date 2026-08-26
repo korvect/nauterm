@@ -224,6 +224,160 @@ void main() {
     expect(painter.cursorRectForTesting(), isNull);
   });
 
+  test('Powerline triangles fill their cell symmetrically', () async {
+    const capColor = Color(0xff4a72a8);
+    const canvasColor = terminalDefaultBackground;
+    const metrics = TerminalMetrics(
+      cellSize: Size(10, 20),
+      textOffset: Offset.zero,
+      decorationThickness: 1,
+      underlineY: 18,
+      strikeoutY: 10,
+    );
+    final snapshot = _snapshotFromCells(const [
+      TerminalCell(
+        text: '\uE0B2',
+        foreground: capColor,
+        background: terminalDefaultBackground,
+        flags: 0,
+      ),
+      TerminalCell(
+        text: ' ',
+        foreground: terminalDefaultForeground,
+        background: capColor,
+        flags: 0,
+      ),
+      TerminalCell(
+        text: '\uE0B0',
+        foreground: capColor,
+        background: terminalDefaultBackground,
+        flags: 0,
+      ),
+    ]);
+    final painter = TerminalPainter(
+      snapshot: snapshot,
+      metrics: metrics,
+      textStyle: defaultTerminalConfig.font.textStyle(),
+      showCursor: false,
+      composingText: null,
+      selection: null,
+      focused: false,
+      theme: defaultTerminalTheme,
+    );
+    final recorder = PictureRecorder();
+    painter.paint(Canvas(recorder), const Size(30, 20));
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(30, 20);
+    final bytes = await image.toByteData(format: ImageByteFormat.rawRgba);
+    picture.dispose();
+    image.dispose();
+    final pixels = bytes!.buffer.asUint8List();
+
+    Color pixelAt(int x, int y) {
+      final offset = (y * 30 + x) * 4;
+      return Color.fromARGB(
+        pixels[offset + 3],
+        pixels[offset],
+        pixels[offset + 1],
+        pixels[offset + 2],
+      );
+    }
+
+    expect(pixelAt(9, 0), isNot(canvasColor));
+    expect(pixelAt(10, 0), capColor);
+    expect(pixelAt(19, 0), capColor);
+    expect(pixelAt(20, 0), isNot(canvasColor));
+    expect(pixelAt(0, 0), canvasColor);
+    expect(pixelAt(29, 0), canvasColor);
+
+    // Both slopes mirror around the row center.
+    expect(pixelAt(5, 4), pixelAt(5, 15));
+    expect(pixelAt(24, 4), pixelAt(24, 15));
+  });
+
+  test('Ghostty geometric Powerline sprite set paints every glyph', () async {
+    const spriteColor = Color(0xff4a72a8);
+    const canvasColor = terminalDefaultBackground;
+    const glyphs = [
+      '\uE0B0',
+      '\uE0B1',
+      '\uE0B2',
+      '\uE0B3',
+      '\uE0B4',
+      '\uE0B5',
+      '\uE0B6',
+      '\uE0B7',
+      '\uE0B8',
+      '\uE0B9',
+      '\uE0BA',
+      '\uE0BB',
+      '\uE0BC',
+      '\uE0BD',
+      '\uE0BE',
+      '\uE0BF',
+      '\uE0D2',
+      '\uE0D4',
+    ];
+    const metrics = TerminalMetrics(
+      cellSize: Size(10, 20),
+      textOffset: Offset.zero,
+      decorationThickness: 1,
+      underlineY: 18,
+      strikeoutY: 10,
+    );
+    final snapshot = _snapshotFromCells([
+      for (final glyph in glyphs)
+        TerminalCell(
+          text: glyph,
+          foreground: spriteColor,
+          background: canvasColor,
+          flags: 0,
+        ),
+    ]);
+    final painter = TerminalPainter(
+      snapshot: snapshot,
+      metrics: metrics,
+      textStyle: defaultTerminalConfig.font.textStyle(),
+      showCursor: false,
+      composingText: null,
+      selection: null,
+      focused: false,
+      theme: defaultTerminalTheme,
+    );
+    final recorder = PictureRecorder();
+    painter.paint(Canvas(recorder), const Size(180, 20));
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(180, 20);
+    final bytes = await image.toByteData(format: ImageByteFormat.rawRgba);
+    picture.dispose();
+    image.dispose();
+    final pixels = bytes!.buffer.asUint8List();
+
+    Color pixelAt(int x, int y) {
+      final offset = (y * 180 + x) * 4;
+      return Color.fromARGB(
+        pixels[offset + 3],
+        pixels[offset],
+        pixels[offset + 1],
+        pixels[offset + 2],
+      );
+    }
+
+    for (var glyphIndex = 0; glyphIndex < glyphs.length; glyphIndex++) {
+      var paintedPixels = 0;
+      for (var y = 0; y < 20; y++) {
+        for (var x = glyphIndex * 10; x < (glyphIndex + 1) * 10; x++) {
+          if (pixelAt(x, y) != canvasColor) paintedPixels++;
+        }
+      }
+      expect(
+        paintedPixels,
+        greaterThan(2),
+        reason: 'Powerline sprite ${glyphs[glyphIndex]} was not painted',
+      );
+    }
+  });
+
   test('command block focus frame includes horizontal terminal padding', () {
     final snapshot = _snapshotFromLines([
       'first',
@@ -333,6 +487,47 @@ void main() {
     expect(
       painter.resolveColorForTesting(nysaLightTerminalTheme.bright.white),
       nysaDarkTerminalTheme.bright.white,
+    );
+  });
+
+  test('ANSI black prompt backgrounds remain distinct from default text', () {
+    final metrics = TerminalMetrics.measure(
+      defaultTerminalConfig.font.textStyle(),
+    );
+    final painter = TerminalPainter(
+      snapshot: _snapshotFromLines([' ']),
+      metrics: metrics,
+      textStyle: defaultTerminalConfig.font.textStyle(),
+      showCursor: false,
+      composingText: null,
+      selection: null,
+      focused: false,
+      theme: nysaDarkTerminalTheme,
+    );
+    const textCell = TerminalCell(
+      text: 'u',
+      foreground: terminalDefaultForeground,
+      background: terminalDefaultForeground,
+      flags: 0,
+    );
+    const separatorCell = TerminalCell(
+      text: '\uE0B0',
+      foreground: terminalDefaultForeground,
+      background: terminalDefaultBackground,
+      flags: 0,
+    );
+
+    expect(
+      painter.resolveCellForegroundForTesting(textCell),
+      nysaDarkTerminalTheme.primary.foreground,
+    );
+    expect(
+      painter.resolveCellBackgroundForTesting(textCell),
+      nysaDarkTerminalTheme.normal.black,
+    );
+    expect(
+      painter.resolveCellForegroundForTesting(separatorCell),
+      nysaDarkTerminalTheme.normal.black,
     );
   });
 

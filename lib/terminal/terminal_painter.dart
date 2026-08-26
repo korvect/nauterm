@@ -65,7 +65,9 @@ class TerminalPainter extends CustomPainter {
     this.boldWeight = 700,
     this.graphicImages = const {},
     this.textCache,
-  });
+  }) : _powerlinePainter = _PowerlineGlyphPainter(
+         strokeWidth: metrics.decorationThickness,
+       );
 
   final TerminalSnapshot snapshot;
   final TerminalMetrics metrics;
@@ -84,6 +86,7 @@ class TerminalPainter extends CustomPainter {
   final int boldWeight;
   final Map<int, ui.Image> graphicImages;
   final TerminalTextCache? textCache;
+  final _PowerlineGlyphPainter _powerlinePainter;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -540,6 +543,15 @@ class TerminalPainter extends CustomPainter {
       double top, {
       required bool isRun,
     }) {
+      if (!isRun &&
+          _powerlinePainter.paint(
+            targetCanvas,
+            text,
+            style.foreground,
+            Rect.fromLTWH(column * cellWidth, top, cellWidth, cellHeight),
+          )) {
+        return;
+      }
       painter
         ..text = TextSpan(
           text: text,
@@ -675,6 +687,12 @@ class TerminalPainter extends CustomPainter {
     }
     if (isSelected) {
       return _CellStyleKey.selection(theme.selection.text, cell);
+    }
+    if (_powerlinePainter.supports(cell.text)) {
+      return _CellStyleKey.fromCell(
+        cell,
+        _resolveExplicitColor(cell.effectiveForeground),
+      );
     }
 
     return _CellStyleKey.fromCell(cell, _resolveCellForeground(cell));
@@ -1017,7 +1035,19 @@ class TerminalPainter extends CustomPainter {
   }
 
   Color _resolveCellBackground(TerminalCell cell) {
+    // Nysa's transport color for the default foreground intentionally equals
+    // ANSI black. In a background position, a non-inverted cell carrying this
+    // value represents an explicit ANSI black background, not the terminal's
+    // default foreground. Resolving it by role prevents dark prompts from
+    // painting their text and background with the same theme foreground.
+    if (!cell.inverse && cell.background == terminalDefaultForeground) {
+      return theme.normal.black;
+    }
     return _resolveColor(cell.effectiveBackground);
+  }
+
+  Color _resolveExplicitColor(Color color) {
+    return _resolveAnsiColor(color) ?? color;
   }
 
   Color _resolveColor(Color color) {
@@ -1090,6 +1120,17 @@ class TerminalPainter extends CustomPainter {
 
   @visibleForTesting
   Color resolveColorForTesting(Color color) => _resolveColor(color);
+
+  @visibleForTesting
+  Color resolveCellForegroundForTesting(TerminalCell cell) => _textStyleForCell(
+    cell: cell,
+    isCursorCell: false,
+    isSelected: false,
+  ).foreground;
+
+  @visibleForTesting
+  Color resolveCellBackgroundForTesting(TerminalCell cell) =>
+      _resolveCellBackground(cell);
 
   @override
   bool shouldRepaint(covariant TerminalPainter oldDelegate) {

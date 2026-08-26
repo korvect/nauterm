@@ -676,6 +676,8 @@ class TerminalConfig {
 
 @immutable
 class TerminalFontConfig {
+  static const nerdFontSymbolsFamily = 'Nauterm Nerd Font Symbols';
+
   const TerminalFontConfig({
     this.family = 'monospace',
     this.cjkFamily,
@@ -789,6 +791,7 @@ class TerminalFontConfig {
     }
 
     addIfNew(cjkFamily);
+    addIfNew(nerdFontSymbolsFamily);
     for (final candidate in _platformFallbackFamilies) {
       addIfNew(candidate);
     }
