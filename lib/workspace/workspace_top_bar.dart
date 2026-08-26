@@ -704,7 +704,6 @@ class _WorkspaceTabButtonState extends State<_WorkspaceTabButton> {
                       style: TextStyle(
                         color: foreground,
                         fontSize: NautermFontSizes.labelLarge,
-                        height: 1,
                         leadingDistribution: TextLeadingDistribution.even,
                         fontWeight: NautermFontWeights.medium,
                         letterSpacing: 0,
