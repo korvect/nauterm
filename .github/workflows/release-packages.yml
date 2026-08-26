@@ -441,17 +441,23 @@ jobs:
         run: ./scripts/ci/setup_windows_openssl.ps1
 
       # arm64 OpenSSL: the choco `openssl` package is x64-only, so install the
-      # matching-version arm64 prebuilt from slproweb (the same source as the
-      # x86_64 build uses). CMake's find_library searches lib/VC/arm64/MD.
+      # pinned arm64 prebuilt from slproweb and verify its official hash.
+      # CMake's find_library searches lib/VC/arm64/MD.
       - name: Install Windows OpenSSL (arm64)
         if: matrix.arch == 'arm64'
         shell: pwsh
         run: |
-          $version = "4.0.1"
-          $url = "https://slproweb.com/download/Win64ARMOpenSSL-$($version.Replace('.', '_')).exe"
+          $version = "4.0.2"
+          $url = "https://slproweb.com/download/Win64ARMOpenSSL-4_0_2.exe"
+          $expectedSha256 = "5d2653ef3045a4090d448b5b9d4b85ca5277cc2d410aade9523e9bc0275b7e51"
           $installer = "$env:TEMP\Win64ARMOpenSSL.exe"
           Write-Host "Downloading $url"
-          Invoke-WebRequest -Uri $url -OutFile $installer -UseBasicParsing
+          Invoke-WebRequest -Uri $url -OutFile $installer -UseBasicParsing -MaximumRetryCount 3 -RetryIntervalSec 5
+          $actualSha256 = (Get-FileHash -Path $installer -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualSha256 -ne $expectedSha256) {
+            throw "SHA-256 mismatch for arm64 OpenSSL ${version}: expected $expectedSha256, got $actualSha256"
+          }
+
           Write-Host "Installing arm64 OpenSSL $version"
           Start-Process -Wait -FilePath $installer -ArgumentList "/VERYSILENT", "/DIR=C:\OpenSSL-Win-arm64"
           $opensslDir = "C:\OpenSSL-Win-arm64"

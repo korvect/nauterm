@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 
-choco install openssl -y --no-progress
+choco install openssl --version 4.0.1 -y --no-progress
 
 $opensslCandidates = @(
   (Join-Path $env:ProgramFiles "OpenSSL-Win64"),
