@@ -435,45 +435,9 @@ jobs:
             rustup target add aarch64-pc-windows-msvc
           }
 
-      - name: Install and configure Windows OpenSSL (x86_64)
-        if: matrix.arch == 'x86_64'
+      - name: Install and configure Windows OpenSSL
         shell: pwsh
-        run: ./scripts/ci/setup_windows_openssl.ps1
-
-      # arm64 OpenSSL: the choco `openssl` package is x64-only, so install the
-      # pinned arm64 prebuilt from slproweb and verify its official hash.
-      # CMake's find_library searches lib/VC/arm64/MD.
-      - name: Install Windows OpenSSL (arm64)
-        if: matrix.arch == 'arm64'
-        shell: pwsh
-        run: |
-          $version = "4.0.2"
-          $url = "https://slproweb.com/download/Win64ARMOpenSSL-4_0_2.exe"
-          $expectedSha256 = "5d2653ef3045a4090d448b5b9d4b85ca5277cc2d410aade9523e9bc0275b7e51"
-          $installer = "$env:TEMP\Win64ARMOpenSSL.exe"
-          Write-Host "Downloading $url"
-          Invoke-WebRequest -Uri $url -OutFile $installer -UseBasicParsing -MaximumRetryCount 3 -RetryIntervalSec 5
-          $actualSha256 = (Get-FileHash -Path $installer -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($actualSha256 -ne $expectedSha256) {
-            throw "SHA-256 mismatch for arm64 OpenSSL ${version}: expected $expectedSha256, got $actualSha256"
-          }
-
-          Write-Host "Installing arm64 OpenSSL $version"
-          Start-Process -Wait -FilePath $installer -ArgumentList "/VERYSILENT", "/DIR=C:\OpenSSL-Win-arm64"
-          $opensslDir = "C:\OpenSSL-Win-arm64"
-          $opensslLibDir = Join-Path $opensslDir "lib\VC\arm64\MD"
-          if (-not (Test-Path (Join-Path $opensslLibDir "libcrypto.lib"))) {
-            throw "arm64 OpenSSL libcrypto.lib not found at $opensslLibDir"
-          }
-          Add-Content -Path $env:GITHUB_ENV -Value "OPENSSL_DIR=$opensslDir"
-          Add-Content -Path $env:GITHUB_ENV -Value "OPENSSL_INCLUDE_DIR=$(Join-Path $opensslDir 'include')"
-          Add-Content -Path $env:GITHUB_ENV -Value "OPENSSL_LIB_DIR=$opensslLibDir"
-          Add-Content -Path $env:GITHUB_ENV -Value "LIB=$opensslLibDir;$env:LIB"
-          # Runtime DLLs (libcrypto-3-arm64.dll) live in OpenSSL's bin dir;
-          # nauterm_ffi links OpenSSL (via rusqlite's bundled-sqlcipher), so the
-          # test executable needs them on PATH or it fails with
-          # STATUS_DLL_NOT_FOUND (0xc0000135).
-          Add-Content -Path $env:GITHUB_PATH -Value "C:\OpenSSL-Win-arm64\bin"
+        run: ./scripts/ci/setup_windows_openssl.ps1 -Arch "${{ matrix.arch }}"
 
       - name: Resolve Flutter dependencies
         run: flutter pub get
