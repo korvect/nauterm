@@ -1033,6 +1033,7 @@ class _SettingsSelectState extends State<_SettingsSelect> {
         : ((_highlightedIndex - 2) * rowHeight).clamp(0.0, maximumScrollOffset);
     _menuScrollController = ScrollController(
       initialScrollOffset: initialScrollOffset,
+      keepScrollOffset: false,
     );
 
     _overlayEntry = OverlayEntry(
@@ -1055,12 +1056,7 @@ class _SettingsSelectState extends State<_SettingsSelect> {
             offset: Offset(0, openAbove ? -4 : 4),
             child: SizedBox(
               width: fieldBox.size.width,
-              height: widget.searchable
-                  ? math.min(
-                      _visibleValues.length * rowHeight,
-                      math.max(rowHeight, availableSpace - 8),
-                    )
-                  : menuHeight,
+              height: math.min(_visibleValues.length * rowHeight, menuHeight),
               child: Focus(
                 focusNode: _menuFocusNode,
                 onKeyEvent: _handleMenuKeyEvent,
@@ -1402,77 +1398,90 @@ class _SettingsSelectMenu extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(7),
-        child: ListView.builder(
-          controller: scrollController,
-          padding: EdgeInsets.zero,
-          itemExtent: _settingsSelectHeight,
-          itemCount: values.length,
-          itemBuilder: (context, index) {
-            final value = values[index];
-            final selected = value == selectedValue;
-            final highlighted = index == highlightedIndex;
-            return ColoredBox(
-              color: selected
-                  ? (_settingsDark
-                        ? _primary.withValues(alpha: 0.18)
-                        : const Color(0xffeaf3ff))
-                  : highlighted
-                  ? _settingsFieldHover
-                  : Colors.transparent,
-              child: Material(
-                type: MaterialType.transparency,
-                child: InkWell(
-                  hoverColor: _settingsDark
-                      ? _settingsFieldHover
-                      : selected
-                      ? const Color(0xffe3efff)
-                      : const Color(0xfff3f6fa),
-                  splashColor: _settingsDark
-                      ? _primary.withValues(alpha: 0.14)
-                      : const Color(0xffdceaff),
-                  highlightColor: _settingsDark
-                      ? _primary.withValues(alpha: 0.08)
-                      : const Color(0xffdceaff),
-                  onTap: () => onSelected(value),
-                  child: Padding(
-                    padding: _settingsSelectPadding.copyWith(right: 10),
-                    child: Row(
-                      children: [
-                        if (leadingBuilder?.call(value)
-                            case final leading?) ...[
-                          leading,
-                          SizedBox(width: 7),
-                        ],
-                        Expanded(
-                          child: Text(
-                            _formatOption(value),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: selected ? _primary : _text,
-                              fontSize: _settingsFieldFontSize,
-                              height: 1.2,
-                              fontWeight: selected
-                                  ? NautermFontWeights.semibold
-                                  : NautermFontWeights.regular,
-                              letterSpacing: 0,
-                            ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final scrollable =
+                values.length * _settingsSelectHeight >
+                constraints.maxHeight + precisionErrorTolerance;
+            return Scrollbar(
+              key: const ValueKey('settings-select-scrollbar'),
+              controller: scrollController,
+              thumbVisibility: scrollable,
+              interactive: true,
+              child: ListView.builder(
+                controller: scrollController,
+                padding: EdgeInsets.zero,
+                itemExtent: _settingsSelectHeight,
+                itemCount: values.length,
+                itemBuilder: (context, index) {
+                  final value = values[index];
+                  final selected = value == selectedValue;
+                  final highlighted = index == highlightedIndex;
+                  return ColoredBox(
+                    color: selected
+                        ? (_settingsDark
+                              ? _primary.withValues(alpha: 0.18)
+                              : const Color(0xffeaf3ff))
+                        : highlighted
+                        ? _settingsFieldHover
+                        : Colors.transparent,
+                    child: Material(
+                      type: MaterialType.transparency,
+                      child: InkWell(
+                        hoverColor: _settingsDark
+                            ? _settingsFieldHover
+                            : selected
+                            ? const Color(0xffe3efff)
+                            : const Color(0xfff3f6fa),
+                        splashColor: _settingsDark
+                            ? _primary.withValues(alpha: 0.14)
+                            : const Color(0xffdceaff),
+                        highlightColor: _settingsDark
+                            ? _primary.withValues(alpha: 0.08)
+                            : const Color(0xffdceaff),
+                        onTap: () => onSelected(value),
+                        child: Padding(
+                          padding: _settingsSelectPadding.copyWith(right: 10),
+                          child: Row(
+                            children: [
+                              if (leadingBuilder?.call(value)
+                                  case final leading?) ...[
+                                leading,
+                                SizedBox(width: 7),
+                              ],
+                              Expanded(
+                                child: Text(
+                                  _formatOption(value),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: selected ? _primary : _text,
+                                    fontSize: _settingsFieldFontSize,
+                                    height: 1.2,
+                                    fontWeight: selected
+                                        ? NautermFontWeights.semibold
+                                        : NautermFontWeights.regular,
+                                    letterSpacing: 0,
+                                  ),
+                                ),
+                              ),
+                              SizedBox(
+                                width: 20,
+                                child: selected
+                                    ? Icon(
+                                        Icons.check_rounded,
+                                        size: 16,
+                                        color: _primary,
+                                      )
+                                    : null,
+                              ),
+                            ],
                           ),
                         ),
-                        SizedBox(
-                          width: 20,
-                          child: selected
-                              ? Icon(
-                                  Icons.check_rounded,
-                                  size: 16,
-                                  color: _primary,
-                                )
-                              : null,
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
-                ),
+                  );
+                },
               ),
             );
           },

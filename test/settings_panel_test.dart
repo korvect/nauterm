@@ -560,6 +560,16 @@ void main() {
     );
     await tester.pump();
 
+    final fontMenu = find.byKey(const ValueKey('settings-select-menu'));
+    expect(tester.getSize(fontMenu).height, lessThanOrEqualTo(34 * 6));
+    final fontMenuScrollbar = find.descendant(
+      of: fontMenu,
+      matching: find.byKey(const ValueKey('settings-select-scrollbar')),
+    );
+    expect(fontMenuScrollbar, findsOneWidget);
+    expect(tester.widget<Scrollbar>(fontMenuScrollbar).thumbVisibility, isTrue);
+    expect(tester.widget<Scrollbar>(fontMenuScrollbar).interactive, isTrue);
+
     expect(find.text('01'), findsNothing);
     expect(find.byIcon(Icons.check_rounded), findsOneWidget);
     expect(find.text(terminalFontConfig.resolvedFamily()), findsWidgets);
@@ -588,6 +598,14 @@ void main() {
     expect(
       tester.getSize(find.byKey(const ValueKey('settings-select-menu'))).height,
       34,
+    );
+    expect(
+      tester
+          .widget<Scrollbar>(
+            find.byKey(const ValueKey('settings-select-scrollbar')),
+          )
+          .thumbVisibility,
+      isFalse,
     );
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pump();
