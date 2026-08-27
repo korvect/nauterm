@@ -776,11 +776,11 @@ void main() {
     final defaultPath = systemDefaultShellPath();
     final defaultLabel = defaultPath == null
         ? 'System Default'
-        : 'System Default — ${shellDisplayName(defaultPath)} ($defaultPath)';
+        : 'System Default — ${shellDisplayNameWithVersion(defaultPath)} ($defaultPath)';
     expect(find.text(defaultLabel), findsWidgets);
     if (defaultPath != null) {
       expect(
-        find.text('${shellDisplayName(defaultPath)} — $defaultPath'),
+        find.text('${shellDisplayNameWithVersion(defaultPath)} — $defaultPath'),
         findsNothing,
       );
     }

@@ -19,7 +19,15 @@ List<String> discoverSystemShells({String? current}) {
   final configured = _nonEmpty(current);
   if (configured != null) shells.add(configured);
 
-  final values = shells.toList(growable: false)
+  Iterable<String> uniqueShells = shells;
+  if (Platform.isWindows) {
+    final shellsByPath = <String, String>{};
+    for (final shell in shells) {
+      shellsByPath.putIfAbsent(_normalizedWindowsPath(shell), () => shell);
+    }
+    uniqueShells = shellsByPath.values;
+  }
+  final values = uniqueShells.toList(growable: false)
     ..sort((a, b) {
       final defaultPath = systemDefaultShellPath();
       final aDefault = a == defaultPath;
@@ -32,16 +40,20 @@ List<String> discoverSystemShells({String? current}) {
 }
 
 String? systemDefaultShellPath() {
-  return _nonEmpty(
-    Platform.isWindows
-        ? Platform.environment['COMSPEC']
-        : Platform.environment['SHELL'],
-  );
+  if (Platform.isWindows) {
+    final shells = _windowsShells();
+    for (final executable in ['pwsh.exe', 'powershell.exe', 'cmd.exe']) {
+      for (final shell in shells) {
+        if (_executableName(shell).toLowerCase() == executable) return shell;
+      }
+    }
+    return _nonEmpty(Platform.environment['COMSPEC']);
+  }
+  return _nonEmpty(Platform.environment['SHELL']);
 }
 
 String shellDisplayName(String path) {
-  final normalized = path.replaceAll('\\', '/');
-  final name = normalized.split('/').last;
+  final name = _executableName(path);
   return switch (name.toLowerCase()) {
     'pwsh' || 'pwsh.exe' => 'PowerShell',
     'powershell' || 'powershell.exe' => 'Windows PowerShell',
@@ -49,6 +61,29 @@ String shellDisplayName(String path) {
     'bash.exe' when _looksLikeGitBashPath(path) => 'Git Bash',
     _ => name,
   };
+}
+
+String shellDisplayNameWithVersion(String path) {
+  final executableName = _executableName(path).toLowerCase();
+  return switch (executableName) {
+    'pwsh' || 'pwsh.exe' => 'PowerShell 7',
+    _ => shellDisplayName(path),
+  };
+}
+
+String _executableName(String path) {
+  final normalized = path.replaceAll('\\', '/');
+  return normalized.split('/').last;
+}
+
+String _normalizedWindowsPath(String path) {
+  final normalized = path.trim().replaceAll('/', '\\');
+  final unc = normalized.startsWith('\\\\');
+  final start = unc ? 2 : 0;
+  final collapsed = normalized
+      .substring(start)
+      .replaceAll(RegExp(r'\\+'), '\\');
+  return '${unc ? '\\\\' : ''}$collapsed'.toLowerCase();
 }
 
 String? shellDisplayNameFromExecutableTitle(String title, {bool? isWindows}) {

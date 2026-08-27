@@ -15,6 +15,16 @@ void main() {
       ),
       'Windows PowerShell',
     );
+    expect(
+      shellDisplayNameWithVersion(r'C:\Program Files\PowerShell\7\pwsh.exe'),
+      'PowerShell 7',
+    );
+    expect(
+      shellDisplayNameWithVersion(
+        r'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe',
+      ),
+      'Windows PowerShell',
+    );
   });
 
   test('uses a friendly display name for Git Bash', () {
@@ -88,4 +98,44 @@ void main() {
     expect(isSystemShellAvailable(alias), isTrue);
     expect(discoverSystemShells(), contains(alias));
   });
+
+  test(
+    'Windows shell discovery matches the native default and deduplicates paths',
+    () {
+      if (!Platform.isWindows) return;
+
+      final discovered = discoverSystemShells();
+      final defaultPath = systemDefaultShellPath();
+      expect(defaultPath, isNotNull);
+      expect(discovered, contains(defaultPath));
+
+      final defaultName = defaultPath!.replaceAll('\\', '/').split('/').last;
+      final expectedDefault = discovered.firstWhere(
+        (path) =>
+            path.replaceAll('\\', '/').split('/').last.toLowerCase() ==
+            defaultName.toLowerCase(),
+      );
+      expect(defaultPath, expectedDefault);
+
+      final withCaseVariant = discoverSystemShells(
+        current: defaultPath.toUpperCase(),
+      );
+      final normalizedDefault = defaultPath.replaceAll('/', '\\').toLowerCase();
+      expect(
+        withCaseVariant
+            .where(
+              (path) =>
+                  path.replaceAll('/', '\\').toLowerCase() == normalizedDefault,
+            )
+            .length,
+        1,
+      );
+
+      final separatorVariant = defaultPath.replaceAll('\\', '\\\\');
+      expect(
+        discoverSystemShells(current: separatorVariant),
+        isNot(contains(separatorVariant)),
+      );
+    },
+  );
 }

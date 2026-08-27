@@ -1693,9 +1693,9 @@ String _shellPathLabel(String value) {
   if (value.isEmpty) {
     final path = systemDefaultShellPath();
     if (path == null) return 'System Default';
-    return 'System Default — ${shellDisplayName(path)} ($path)';
+    return 'System Default — ${shellDisplayNameWithVersion(path)} ($path)';
   }
-  return '${shellDisplayName(value)} — $value';
+  return '${shellDisplayNameWithVersion(value)} — $value';
 }
 
 String _normalizedSettingsShellPath(String? value) {
