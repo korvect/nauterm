@@ -26,6 +26,38 @@ void main() {
     expect(shellDisplayName(r'C:\cygwin64\bin\bash.exe'), 'bash.exe');
   });
 
+  test('normalizes Windows shell executable titles', () {
+    expect(
+      shellDisplayNameFromExecutableTitle(
+        r'C:\Program Files\WindowsApps\Microsoft.PowerShell_7.6.5.0_x64__8wekyb3d8bbwe\pwsh.exe',
+        isWindows: true,
+      ),
+      'PowerShell',
+    );
+    expect(
+      shellDisplayNameFromExecutableTitle(
+        r'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe',
+        isWindows: true,
+      ),
+      'Windows PowerShell',
+    );
+    expect(
+      shellDisplayNameFromExecutableTitle(
+        r'C:\Windows\System32\cmd.exe',
+        isWindows: true,
+      ),
+      'Command Prompt',
+    );
+    expect(
+      shellDisplayNameFromExecutableTitle(r'C:\Users\valurno', isWindows: true),
+      isNull,
+    );
+    expect(
+      shellDisplayNameFromExecutableTitle('/usr/bin/pwsh', isWindows: false),
+      isNull,
+    );
+  });
+
   test('discovers a standard Git Bash installation when present', () {
     if (!Platform.isWindows) return;
     final environment = Platform.environment;

@@ -51,6 +51,23 @@ String shellDisplayName(String path) {
   };
 }
 
+String? shellDisplayNameFromExecutableTitle(String title, {bool? isWindows}) {
+  if (!(isWindows ?? Platform.isWindows)) return null;
+
+  final trimmed = title.trim();
+  if (!trimmed.contains('/') && !trimmed.contains('\\')) return null;
+
+  final normalized = trimmed.replaceAll('\\', '/');
+  final executableName = normalized.split('/').last.toLowerCase();
+  return switch (executableName) {
+    'pwsh' || 'pwsh.exe' => 'PowerShell',
+    'powershell' || 'powershell.exe' => 'Windows PowerShell',
+    'cmd' || 'cmd.exe' => 'Command Prompt',
+    'bash.exe' when _looksLikeGitBashPath(trimmed) => 'Git Bash',
+    _ => null,
+  };
+}
+
 bool isSystemShellAvailable(String path) {
   final type = FileSystemEntity.typeSync(
     path,

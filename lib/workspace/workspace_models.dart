@@ -214,7 +214,8 @@ String _terminalViewTabDisplayTitle(_TerminalViewTabEntry tab) {
 
 String _terminalViewSessionTitle(_TerminalViewTabEntry tab) {
   final shellTitle = tab.controller.snapshot.title.trim();
-  return shellTitle.isEmpty ? _terminalViewTabDisplayTitle(tab) : shellTitle;
+  if (shellTitle.isEmpty) return _terminalViewTabDisplayTitle(tab);
+  return shellDisplayNameFromExecutableTitle(shellTitle) ?? shellTitle;
 }
 
 String _terminalControllerDisplayTitle(
@@ -238,7 +239,8 @@ String _terminalControllerDisplayTitle(
     );
   }
   final title = controller.snapshot.title.trim();
-  return title.isEmpty ? fallback : title;
+  if (title.isEmpty) return fallback;
+  return shellDisplayNameFromExecutableTitle(title) ?? title;
 }
 
 String _remoteConnectionDisplayTitle({
