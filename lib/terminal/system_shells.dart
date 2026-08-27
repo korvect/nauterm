@@ -51,6 +51,14 @@ String shellDisplayName(String path) {
   };
 }
 
+bool isSystemShellAvailable(String path) {
+  final type = FileSystemEntity.typeSync(
+    path,
+    followLinks: !Platform.isWindows,
+  );
+  return type == FileSystemEntityType.file || type == FileSystemEntityType.link;
+}
+
 List<String> _windowsShells() {
   final shells = <String>{};
   final environment = Platform.environment;
@@ -73,7 +81,7 @@ List<String> _windowsShells() {
     ..._executablesFromPath('bash.exe').where(_looksLikeGitBashPath),
   ];
   for (final candidate in candidates) {
-    if (File(candidate).existsSync()) shells.add(candidate);
+    if (isSystemShellAvailable(candidate)) shells.add(candidate);
   }
   return shells.toList(growable: false);
 }

@@ -45,9 +45,7 @@ List<_QuickConnectShell> _quickConnectShells() {
 }
 
 bool _isExecutableShell(String path) {
-  final type = io.FileSystemEntity.typeSync(path, followLinks: true);
-  return type == io.FileSystemEntityType.file ||
-      type == io.FileSystemEntityType.link;
+  return isSystemShellAvailable(path);
 }
 
 String _quickConnectShellLabel(String path) {

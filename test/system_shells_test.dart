@@ -43,4 +43,17 @@ void main() {
       expect(discovered, contains(candidate));
     }
   });
+
+  test('discovers a Windows PowerShell app execution alias', () {
+    if (!Platform.isWindows) return;
+    final localAppData = Platform.environment['LOCALAPPDATA'];
+    if (localAppData == null) return;
+
+    final alias = '$localAppData\\Microsoft\\WindowsApps\\pwsh.exe';
+    final type = FileSystemEntity.typeSync(alias, followLinks: false);
+    if (type != FileSystemEntityType.link) return;
+
+    expect(isSystemShellAvailable(alias), isTrue);
+    expect(discoverSystemShells(), contains(alias));
+  });
 }
