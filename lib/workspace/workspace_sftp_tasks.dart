@@ -204,6 +204,7 @@ FfiSftpTaskResult _runSftpTask(
     operation: (arguments['operation'] as Map).cast<String, Object?>(),
     password: arguments['password'] as String?,
     privateKey: arguments['privateKey'] as String?,
+    certificate: arguments['certificate'] as String?,
     passphrase: arguments['passphrase'] as String?,
     proxy: _terminalProxyFromArguments(arguments['proxy']),
     hostKeyTrustMode: SshHostKeyTrustMode.fromWireValue(

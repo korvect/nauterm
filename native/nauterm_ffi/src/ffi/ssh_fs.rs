@@ -19,6 +19,7 @@ pub extern "C" fn nauterm_ssh_list_directories(
     username: *const c_char,
     password: *const c_char,
     private_key: *const c_char,
+    certificate: *const c_char,
     passphrase: *const c_char,
     known_hosts_path: *const c_char,
     directory: *const c_char,
@@ -28,6 +29,7 @@ pub extern "C" fn nauterm_ssh_list_directories(
         let username = string_from_ptr(username).unwrap_or_default();
         let password = optional_string_from_ptr(password);
         let private_key = optional_string_from_ptr(private_key);
+        let certificate = optional_string_from_ptr(certificate);
         let passphrase = optional_string_from_ptr(passphrase);
         let known_hosts_path = optional_string_from_ptr(known_hosts_path);
         let directory = string_from_ptr(directory).unwrap_or_else(|| "~".to_owned());
@@ -37,6 +39,7 @@ pub extern "C" fn nauterm_ssh_list_directories(
             &username,
             password.as_deref(),
             private_key.as_deref(),
+            certificate.as_deref(),
             passphrase.as_deref(),
             known_hosts_path.as_deref(),
             &directory,
@@ -67,6 +70,7 @@ pub extern "C" fn nauterm_ssh_list_directory_entries(
     username: *const c_char,
     password: *const c_char,
     private_key: *const c_char,
+    certificate: *const c_char,
     passphrase: *const c_char,
     known_hosts_path: *const c_char,
     directory: *const c_char,
@@ -76,6 +80,7 @@ pub extern "C" fn nauterm_ssh_list_directory_entries(
         let username = string_from_ptr(username).unwrap_or_default();
         let password = optional_string_from_ptr(password);
         let private_key = optional_string_from_ptr(private_key);
+        let certificate = optional_string_from_ptr(certificate);
         let passphrase = optional_string_from_ptr(passphrase);
         let known_hosts_path = optional_string_from_ptr(known_hosts_path);
         let directory = string_from_ptr(directory).unwrap_or_else(|| "~".to_owned());
@@ -85,6 +90,7 @@ pub extern "C" fn nauterm_ssh_list_directory_entries(
             &username,
             password.as_deref(),
             private_key.as_deref(),
+            certificate.as_deref(),
             passphrase.as_deref(),
             known_hosts_path.as_deref(),
             &directory,
@@ -110,6 +116,7 @@ pub extern "C" fn nauterm_ssh_detect_host_os(
     username: *const c_char,
     password: *const c_char,
     private_key: *const c_char,
+    certificate: *const c_char,
     passphrase: *const c_char,
     known_hosts_path: *const c_char,
     host_key_trust_mode: u32,
@@ -120,6 +127,7 @@ pub extern "C" fn nauterm_ssh_detect_host_os(
         let username = string_from_ptr(username).unwrap_or_default();
         let password = optional_string_from_ptr(password);
         let private_key = optional_string_from_ptr(private_key);
+        let certificate = optional_string_from_ptr(certificate);
         let passphrase = optional_string_from_ptr(passphrase);
         let known_hosts_path = optional_string_from_ptr(known_hosts_path);
         let proxy = ssh::proxy_config_from_json_ptr(proxy_json);
@@ -129,6 +137,7 @@ pub extern "C" fn nauterm_ssh_detect_host_os(
             &username,
             password.as_deref(),
             private_key.as_deref(),
+            certificate.as_deref(),
             passphrase.as_deref(),
             known_hosts_path.as_deref(),
             proxy,
@@ -152,6 +161,7 @@ pub extern "C" fn nauterm_ssh_collect_system_info(
     username: *const c_char,
     password: *const c_char,
     private_key: *const c_char,
+    certificate: *const c_char,
     passphrase: *const c_char,
     known_hosts_path: *const c_char,
     host_key_trust_mode: u32,
@@ -162,6 +172,7 @@ pub extern "C" fn nauterm_ssh_collect_system_info(
         let username = string_from_ptr(username).unwrap_or_default();
         let password = optional_string_from_ptr(password);
         let private_key = optional_string_from_ptr(private_key);
+        let certificate = optional_string_from_ptr(certificate);
         let passphrase = optional_string_from_ptr(passphrase);
         let known_hosts_path = optional_string_from_ptr(known_hosts_path);
         let proxy = ssh::proxy_config_from_json_ptr(proxy_json);
@@ -171,6 +182,7 @@ pub extern "C" fn nauterm_ssh_collect_system_info(
             &username,
             password.as_deref(),
             private_key.as_deref(),
+            certificate.as_deref(),
             passphrase.as_deref(),
             known_hosts_path.as_deref(),
             proxy,
@@ -192,6 +204,7 @@ pub extern "C" fn nauterm_ssh_export_public_key(
     username: *const c_char,
     password: *const c_char,
     private_key: *const c_char,
+    certificate: *const c_char,
     passphrase: *const c_char,
     known_hosts_path: *const c_char,
     host_key_trust_mode: u32,
@@ -206,6 +219,7 @@ pub extern "C" fn nauterm_ssh_export_public_key(
         let username = string_from_ptr(username).unwrap_or_default();
         let password = optional_string_from_ptr(password);
         let private_key = optional_string_from_ptr(private_key);
+        let certificate = optional_string_from_ptr(certificate);
         let passphrase = optional_string_from_ptr(passphrase);
         let known_hosts_path = optional_string_from_ptr(known_hosts_path);
         let proxy = ssh::proxy_config_from_json_ptr(proxy_json);
@@ -219,6 +233,7 @@ pub extern "C" fn nauterm_ssh_export_public_key(
             &username,
             password.as_deref(),
             private_key.as_deref(),
+            certificate.as_deref(),
             passphrase.as_deref(),
             known_hosts_path.as_deref(),
             proxy,

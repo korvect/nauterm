@@ -87,6 +87,7 @@ class _SftpRemoteAuth {
     required this.knownHostsPath,
     this.password,
     this.privateKey,
+    this.certificate,
     this.passphrase,
     this.proxy,
     this.hostKeyTrustMode = SshHostKeyTrustMode.strict,
@@ -98,6 +99,7 @@ class _SftpRemoteAuth {
   final String knownHostsPath;
   final String? password;
   final String? privateKey;
+  final String? certificate;
   final String? passphrase;
   final TerminalProxyConfig? proxy;
   final SshHostKeyTrustMode hostKeyTrustMode;
@@ -110,6 +112,7 @@ class _SftpRemoteAuth {
       knownHostsPath: knownHostsPath,
       password: password,
       privateKey: privateKey,
+      certificate: certificate,
       passphrase: passphrase,
       proxy: proxy,
       hostKeyTrustMode: hostKeyTrustMode ?? this.hostKeyTrustMode,
@@ -125,6 +128,7 @@ class _SftpRemoteAuth {
       'directory': directory,
       'password': password,
       'privateKey': privateKey,
+      'certificate': certificate,
       'passphrase': passphrase,
       'proxy': proxy?.toJson(),
       'hostKeyTrustMode': hostKeyTrustMode.wireValue,

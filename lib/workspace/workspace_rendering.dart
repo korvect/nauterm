@@ -1625,6 +1625,7 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
       'knownHostsPath': profile.knownHostsPath,
       'password': profile.password,
       'privateKey': profile.privateKey,
+      'certificate': profile.certificate,
       'passphrase': profile.passphrase,
       'proxy': profile.proxy?.toJson(),
       'hostKeyTrustMode': SshHostKeyTrustMode.strict.wireValue,

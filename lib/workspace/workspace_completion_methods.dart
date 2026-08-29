@@ -600,6 +600,7 @@ extension _NautermWorkspaceCompletionMethods on _NautermWorkspaceState {
       'directory': directory,
       'password': profile.password,
       'privateKey': profile.privateKey,
+      'certificate': profile.certificate,
       'passphrase': profile.passphrase,
     };
     final request = _spawnSshDirectoryListing(arguments)
@@ -699,6 +700,7 @@ extension _NautermWorkspaceCompletionMethods on _NautermWorkspaceState {
       'directory': directory,
       'password': profile.password,
       'privateKey': profile.privateKey,
+      'certificate': profile.certificate,
       'passphrase': profile.passphrase,
     };
     final request = _spawnSshDirectoryEntryListing(arguments)

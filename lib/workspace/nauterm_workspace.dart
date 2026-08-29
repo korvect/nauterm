@@ -649,9 +649,15 @@ class _NautermWorkspaceState extends ConsumerState<NautermWorkspace> {
           TerminalConnectionKeyOption(
             id: key.id!,
             name: key.name,
-            subtitle: _emptyToNull(key.publicKey) == null
-                ? 'Key'
-                : 'Public key stored',
+            // Key summaries intentionally contain only a non-null marker for
+            // encrypted certificate material. The full value is loaded when
+            // the user selects the credential.
+            certificate: key.certificate,
+            subtitle: _keyTypeLabel(
+              publicKey: key.publicKey,
+              privateKey: key.privateKey,
+              certificate: key.certificate,
+            ),
           ),
     ];
   }

@@ -155,6 +155,40 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );
+
+  testWidgets('certificate form recognizes OpenSSH certificate algorithms', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(NautermApp(onOpenSettings: () {}));
+    await tester.tap(find.text('Keychain'));
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.tap(find.text('Certificate'));
+    await tester.pump(const Duration(milliseconds: 250));
+
+    for (final (wireType, expectedLabel) in [
+      ('ssh-ed25519-cert-v01@openssh.com', 'ED25519 SSH Certificate'),
+      ('ecdsa-sha2-nistp384-cert-v01@openssh.com', 'ECDSA 384 SSH Certificate'),
+      ('ssh-rsa-cert-v01@openssh.com', 'RSA SSH Certificate'),
+      ('sk-ssh-ed25519-cert-v01@openssh.com', 'FIDO2 ED25519 SSH Certificate'),
+    ]) {
+      await tester.enterText(
+        _keyField('Certificate'),
+        '$wireType AAAAC3NzaC1lZDI1NTE5',
+      );
+      await tester.pump();
+      expect(
+        tester.widget<TextField>(_keyField('Name')).controller?.text,
+        expectedLabel,
+      );
+    }
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 }
 
 Finder _keyFieldDecorator(String label) {

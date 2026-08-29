@@ -276,13 +276,22 @@ impl NautermDatabase {
     }
 
     pub fn list_keys(&self) -> rusqlite::Result<Vec<KeyEntry>> {
+        let dek = configured_dek(&self.connection)?;
         let mut statement = self
             .connection
             .prepare(
-                "SELECT id, uuid, name, NULL AS private_key, public_key, CASE WHEN certificate IS NULL THEN NULL ELSE '' END AS certificate, created_at, updated_at, deleted_at, version, created_device_id, updated_device_id FROM keys WHERE deleted_at IS NULL ORDER BY name COLLATE NOCASE",
+                "SELECT id, uuid, name, NULL AS private_key, public_key, certificate, created_at, updated_at, deleted_at, version, created_device_id, updated_device_id FROM keys WHERE deleted_at IS NULL ORDER BY name COLLATE NOCASE",
             )?;
-        let values = statement.query_map([], key_from_row)?.collect();
-        values
+        let mut values = statement
+            .query_map([], key_from_row)?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        for key in &mut values {
+            let certificate = decrypt_optional_field(dek.as_ref(), key.certificate.take())?;
+            key.certificate = certificate.map(|certificate| {
+                crate::ssh::openssh_certificate_type(&certificate).unwrap_or_default()
+            });
+        }
+        Ok(values)
     }
 
     pub fn delete_key(&mut self, id: i64) -> rusqlite::Result<usize> {

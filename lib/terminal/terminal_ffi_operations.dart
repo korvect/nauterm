@@ -320,6 +320,7 @@ class FfiPortForwarding {
     required int bindPort,
     String? password,
     String? privateKey,
+    String? certificate,
     String? passphrase,
     TerminalProxyConfig? proxy,
     String? destinationHost,
@@ -335,6 +336,9 @@ class FfiPortForwarding {
     final nativePrivateKey = privateKey == null
         ? nullptr
         : privateKey.toNativeUtf8();
+    final nativeCertificate = certificate == null
+        ? nullptr
+        : certificate.toNativeUtf8();
     final nativePassphrase = passphrase == null
         ? nullptr
         : passphrase.toNativeUtf8();
@@ -352,6 +356,7 @@ class FfiPortForwarding {
         nativeUsername,
         nativePassword,
         nativePrivateKey,
+        nativeCertificate,
         nativePassphrase,
         nativeKnownHostsPath,
         nativeBindAddress,
@@ -372,6 +377,9 @@ class FfiPortForwarding {
       }
       if (nativePrivateKey != nullptr) {
         malloc.free(nativePrivateKey);
+      }
+      if (nativeCertificate != nullptr) {
+        malloc.free(nativeCertificate);
       }
       if (nativePassphrase != nullptr) {
         malloc.free(nativePassphrase);
@@ -468,6 +476,7 @@ class FfiSshDirectoryListing {
     required String directory,
     String? password,
     String? privateKey,
+    String? certificate,
     String? passphrase,
   }) {
     final bindings = _TerminalBindings.open();
@@ -479,6 +488,9 @@ class FfiSshDirectoryListing {
     final nativePrivateKey = privateKey == null
         ? nullptr
         : privateKey.toNativeUtf8();
+    final nativeCertificate = certificate == null
+        ? nullptr
+        : certificate.toNativeUtf8();
     final nativePassphrase = passphrase == null
         ? nullptr
         : passphrase.toNativeUtf8();
@@ -490,6 +502,7 @@ class FfiSshDirectoryListing {
         nativeUsername,
         nativePassword,
         nativePrivateKey,
+        nativeCertificate,
         nativePassphrase,
         nativeKnownHostsPath,
         nativeDirectory,
@@ -540,6 +553,9 @@ class FfiSshDirectoryListing {
       }
       if (nativePrivateKey != nullptr) {
         malloc.free(nativePrivateKey);
+      }
+      if (nativeCertificate != nullptr) {
+        malloc.free(nativeCertificate);
       }
       if (nativePassphrase != nullptr) {
         malloc.free(nativePassphrase);
@@ -609,6 +625,7 @@ class FfiSshDirectoryEntryListing {
     required String directory,
     String? password,
     String? privateKey,
+    String? certificate,
     String? passphrase,
   }) {
     final bindings = _TerminalBindings.open();
@@ -620,6 +637,9 @@ class FfiSshDirectoryEntryListing {
     final nativePrivateKey = privateKey == null
         ? nullptr
         : privateKey.toNativeUtf8();
+    final nativeCertificate = certificate == null
+        ? nullptr
+        : certificate.toNativeUtf8();
     final nativePassphrase = passphrase == null
         ? nullptr
         : passphrase.toNativeUtf8();
@@ -631,6 +651,7 @@ class FfiSshDirectoryEntryListing {
         nativeUsername,
         nativePassword,
         nativePrivateKey,
+        nativeCertificate,
         nativePassphrase,
         nativeKnownHostsPath,
         nativeDirectory,
@@ -688,6 +709,9 @@ class FfiSshDirectoryEntryListing {
       }
       if (nativePrivateKey != nullptr) {
         malloc.free(nativePrivateKey);
+      }
+      if (nativeCertificate != nullptr) {
+        malloc.free(nativeCertificate);
       }
       if (nativePassphrase != nullptr) {
         malloc.free(nativePassphrase);
@@ -755,6 +779,7 @@ class FfiHostOsDetector {
     required String knownHostsPath,
     String? password,
     String? privateKey,
+    String? certificate,
     String? passphrase,
     TerminalProxyConfig? proxy,
     SshHostKeyTrustMode hostKeyTrustMode = SshHostKeyTrustMode.strict,
@@ -778,6 +803,9 @@ class FfiHostOsDetector {
     final nativePrivateKey = privateKey == null
         ? nullptr
         : privateKey.toNativeUtf8();
+    final nativeCertificate = certificate == null
+        ? nullptr
+        : certificate.toNativeUtf8();
     final nativePassphrase = passphrase == null
         ? nullptr
         : passphrase.toNativeUtf8();
@@ -790,6 +818,7 @@ class FfiHostOsDetector {
         nativeUsername,
         nativePassword,
         nativePrivateKey,
+        nativeCertificate,
         nativePassphrase,
         nativeKnownHostsPath,
         hostKeyTrustMode.wireValue,
@@ -820,6 +849,9 @@ class FfiHostOsDetector {
       }
       if (nativePrivateKey != nullptr) {
         malloc.free(nativePrivateKey);
+      }
+      if (nativeCertificate != nullptr) {
+        malloc.free(nativeCertificate);
       }
       if (nativePassphrase != nullptr) {
         malloc.free(nativePassphrase);
@@ -876,6 +908,7 @@ class FfiSshPublicKeyExporter {
     required String script,
     String? password,
     String? privateKey,
+    String? certificate,
     String? passphrase,
     TerminalProxyConfig? proxy,
     SshHostKeyTrustMode hostKeyTrustMode = SshHostKeyTrustMode.strict,
@@ -905,6 +938,9 @@ class FfiSshPublicKeyExporter {
     final nativePrivateKey = privateKey == null
         ? nullptr
         : privateKey.toNativeUtf8();
+    final nativeCertificate = certificate == null
+        ? nullptr
+        : certificate.toNativeUtf8();
     final nativePassphrase = passphrase == null
         ? nullptr
         : passphrase.toNativeUtf8();
@@ -917,6 +953,7 @@ class FfiSshPublicKeyExporter {
         nativeUsername,
         nativePassword,
         nativePrivateKey,
+        nativeCertificate,
         nativePassphrase,
         nativeKnownHostsPath,
         hostKeyTrustMode.wireValue,
@@ -960,6 +997,9 @@ class FfiSshPublicKeyExporter {
       }
       if (nativePrivateKey != nullptr) {
         malloc.free(nativePrivateKey);
+      }
+      if (nativeCertificate != nullptr) {
+        malloc.free(nativeCertificate);
       }
       if (nativePassphrase != nullptr) {
         malloc.free(nativePassphrase);
@@ -1232,6 +1272,7 @@ class FfiHostSystemInfoCollector {
     required String knownHostsPath,
     String? password,
     String? privateKey,
+    String? certificate,
     String? passphrase,
     TerminalProxyConfig? proxy,
     SshHostKeyTrustMode hostKeyTrustMode = SshHostKeyTrustMode.strict,
@@ -1256,6 +1297,9 @@ class FfiHostSystemInfoCollector {
     final nativePrivateKey = privateKey == null
         ? nullptr
         : privateKey.toNativeUtf8();
+    final nativeCertificate = certificate == null
+        ? nullptr
+        : certificate.toNativeUtf8();
     final nativePassphrase = passphrase == null
         ? nullptr
         : passphrase.toNativeUtf8();
@@ -1268,6 +1312,7 @@ class FfiHostSystemInfoCollector {
         nativeUsername,
         nativePassword,
         nativePrivateKey,
+        nativeCertificate,
         nativePassphrase,
         nativeKnownHostsPath,
         hostKeyTrustMode.wireValue,
@@ -1298,6 +1343,9 @@ class FfiHostSystemInfoCollector {
       }
       if (nativePrivateKey != nullptr) {
         malloc.free(nativePrivateKey);
+      }
+      if (nativeCertificate != nullptr) {
+        malloc.free(nativeCertificate);
       }
       if (nativePassphrase != nullptr) {
         malloc.free(nativePassphrase);
@@ -1409,6 +1457,7 @@ class FfiSftpDirectoryEntryListing {
     required String directory,
     String? password,
     String? privateKey,
+    String? certificate,
     String? passphrase,
     TerminalProxyConfig? proxy,
     SshHostKeyTrustMode hostKeyTrustMode = SshHostKeyTrustMode.strict,
@@ -1422,6 +1471,9 @@ class FfiSftpDirectoryEntryListing {
     final nativePrivateKey = privateKey == null
         ? nullptr
         : privateKey.toNativeUtf8();
+    final nativeCertificate = certificate == null
+        ? nullptr
+        : certificate.toNativeUtf8();
     final nativePassphrase = passphrase == null
         ? nullptr
         : passphrase.toNativeUtf8();
@@ -1435,6 +1487,7 @@ class FfiSftpDirectoryEntryListing {
         nativeUsername,
         nativePassword,
         nativePrivateKey,
+        nativeCertificate,
         nativePassphrase,
         nativeKnownHostsPath,
         nativeDirectory,
@@ -1463,6 +1516,9 @@ class FfiSftpDirectoryEntryListing {
       }
       if (nativePrivateKey != nullptr) {
         malloc.free(nativePrivateKey);
+      }
+      if (nativeCertificate != nullptr) {
+        malloc.free(nativeCertificate);
       }
       if (nativePassphrase != nullptr) {
         malloc.free(nativePassphrase);
@@ -1527,6 +1583,7 @@ class FfiSftpTaskExecutor {
     required Map<String, Object?> operation,
     String? password,
     String? privateKey,
+    String? certificate,
     String? passphrase,
     TerminalProxyConfig? proxy,
     SshHostKeyTrustMode hostKeyTrustMode = SshHostKeyTrustMode.strict,
@@ -1541,6 +1598,9 @@ class FfiSftpTaskExecutor {
     final nativePrivateKey = privateKey == null
         ? nullptr
         : privateKey.toNativeUtf8();
+    final nativeCertificate = certificate == null
+        ? nullptr
+        : certificate.toNativeUtf8();
     final nativePassphrase = passphrase == null
         ? nullptr
         : passphrase.toNativeUtf8();
@@ -1574,6 +1634,7 @@ class FfiSftpTaskExecutor {
         nativeUsername,
         nativePassword,
         nativePrivateKey,
+        nativeCertificate,
         nativePassphrase,
         nativeKnownHostsPath,
         nativeOperation,
@@ -1617,6 +1678,9 @@ class FfiSftpTaskExecutor {
       }
       if (nativePrivateKey != nullptr) {
         malloc.free(nativePrivateKey);
+      }
+      if (nativeCertificate != nullptr) {
+        malloc.free(nativeCertificate);
       }
       if (nativePassphrase != nullptr) {
         malloc.free(nativePassphrase);

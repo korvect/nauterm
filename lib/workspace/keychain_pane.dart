@@ -42,7 +42,11 @@ class _KeychainPaneState extends State<_KeychainPane> {
       _filterWorkspaceItems(
         widget.keys,
         _searchQuery,
-        extraText: (key) => [key.privateKey ?? '', key.publicKey ?? ''],
+        extraText: (key) => [
+          key.privateKey ?? '',
+          key.publicKey ?? '',
+          key.certificate ?? '',
+        ],
       ),
       _sortOrder,
       ordinal: (key) => key.id,

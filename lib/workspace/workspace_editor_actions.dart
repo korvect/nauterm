@@ -855,6 +855,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
           uuid: saved.uuid,
           name: saved.name,
           publicKey: saved.publicKey,
+          certificate: _sshCertificateSummaryMarker(saved.certificate),
           createdAt: saved.createdAt,
           updatedAt: saved.updatedAt,
           version: saved.version,
@@ -1039,6 +1040,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       'knownHostsPath': NautermPaths.resolve().knownHostsFile.path,
       'password': auth.password,
       'privateKey': auth.privateKey,
+      'certificate': auth.certificate,
       'passphrase': null,
       'proxy': auth.proxy?.toJson(),
       'hostKeyTrustMode': SshHostKeyTrustMode.strict.wireValue,
@@ -1073,7 +1075,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
         uuid: saved.uuid,
         name: saved.name,
         publicKey: saved.publicKey,
-        certificate: saved.certificate == null ? null : '',
+        certificate: _sshCertificateSummaryMarker(saved.certificate),
         createdAt: saved.createdAt,
         updatedAt: saved.updatedAt,
         version: saved.version,
@@ -1627,6 +1629,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       username: auth.username,
       password: auth.password,
       privateKey: auth.privateKey,
+      certificate: auth.certificate,
       proxy: auth.proxy,
       knownHostsPath: NautermPaths.resolve().knownHostsFile.path,
       bindAddress: entry.bindAddress,
@@ -1686,6 +1689,9 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
     final privateKey = keyId == null
         ? null
         : _emptyToNull(_dataStore?.getKey(keyId)?.privateKey);
+    final certificate = keyId == null
+        ? null
+        : _emptyToNull(_dataStore?.getKey(keyId)?.certificate);
     final password = privateKey == null
         ? (identity == null
               ? _emptyToNull(host.password)
@@ -1701,6 +1707,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       username: username,
       password: password,
       privateKey: privateKey,
+      certificate: certificate,
       proxy: proxy,
     );
   }
@@ -3352,6 +3359,7 @@ if (\$dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
                   uuid: saved.uuid,
                   name: saved.name,
                   publicKey: saved.publicKey,
+                  certificate: _sshCertificateSummaryMarker(saved.certificate),
                   createdAt: saved.createdAt,
                   updatedAt: saved.updatedAt,
                   version: saved.version,

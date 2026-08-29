@@ -244,6 +244,7 @@ class NativeTerminalDriver implements TerminalDriver {
     required String knownHostsPath,
     String? password,
     String? privateKey,
+    String? certificate,
     String? passphrase,
     TerminalProxyConfig? proxy,
     SshHostKeyTrustMode hostKeyTrustMode = SshHostKeyTrustMode.strict,
@@ -260,6 +261,9 @@ class NativeTerminalDriver implements TerminalDriver {
     final nativePrivateKey = privateKey == null
         ? nullptr
         : privateKey.toNativeUtf8();
+    final nativeCertificate = certificate == null
+        ? nullptr
+        : certificate.toNativeUtf8();
     final nativePassphrase = passphrase == null
         ? nullptr
         : passphrase.toNativeUtf8();
@@ -287,6 +291,7 @@ class NativeTerminalDriver implements TerminalDriver {
         nativeUsername,
         nativePassword,
         nativePrivateKey,
+        nativeCertificate,
         nativePassphrase,
         nativeKnownHostsPath,
         hostKeyTrustMode.wireValue,
@@ -304,6 +309,9 @@ class NativeTerminalDriver implements TerminalDriver {
       }
       if (nativePrivateKey != nullptr) {
         malloc.free(nativePrivateKey);
+      }
+      if (nativeCertificate != nullptr) {
+        malloc.free(nativeCertificate);
       }
       if (nativePassphrase != nullptr) {
         malloc.free(nativePassphrase);
@@ -336,6 +344,7 @@ class NativeTerminalDriver implements TerminalDriver {
     required String knownHostsPath,
     String? password,
     String? privateKey,
+    String? certificate,
     String? passphrase,
     TerminalProxyConfig? proxy,
     SshHostKeyTrustMode hostKeyTrustMode = SshHostKeyTrustMode.strict,
@@ -352,6 +361,9 @@ class NativeTerminalDriver implements TerminalDriver {
     final nativePrivateKey = privateKey == null
         ? nullptr
         : privateKey.toNativeUtf8();
+    final nativeCertificate = certificate == null
+        ? nullptr
+        : certificate.toNativeUtf8();
     final nativePassphrase = passphrase == null
         ? nullptr
         : passphrase.toNativeUtf8();
@@ -381,6 +393,7 @@ class NativeTerminalDriver implements TerminalDriver {
         nativeUsername,
         nativePassword,
         nativePrivateKey,
+        nativeCertificate,
         nativePassphrase,
         nativeKnownHostsPath,
         hostKeyTrustMode.wireValue,
@@ -399,6 +412,9 @@ class NativeTerminalDriver implements TerminalDriver {
       }
       if (nativePrivateKey != nullptr) {
         malloc.free(nativePrivateKey);
+      }
+      if (nativeCertificate != nullptr) {
+        malloc.free(nativeCertificate);
       }
       if (nativePassphrase != nullptr) {
         malloc.free(nativePassphrase);
@@ -428,6 +444,7 @@ class NativeTerminalDriver implements TerminalDriver {
     required int keepaliveIntervalSeconds,
     String? password,
     String? privateKey,
+    String? certificate,
     String? passphrase,
     TerminalProxyConfig? proxy,
     SshHostKeyTrustMode hostKeyTrustMode = SshHostKeyTrustMode.strict,
@@ -443,6 +460,9 @@ class NativeTerminalDriver implements TerminalDriver {
     final nativePrivateKey = privateKey == null
         ? nullptr
         : privateKey.toNativeUtf8();
+    final nativeCertificate = certificate == null
+        ? nullptr
+        : certificate.toNativeUtf8();
     final nativePassphrase = passphrase == null
         ? nullptr
         : passphrase.toNativeUtf8();
@@ -456,6 +476,7 @@ class NativeTerminalDriver implements TerminalDriver {
         nativeUsername,
         nativePassword,
         nativePrivateKey,
+        nativeCertificate,
         nativePassphrase,
         nativeKnownHostsPath,
         hostKeyTrustMode.wireValue,
@@ -469,6 +490,7 @@ class NativeTerminalDriver implements TerminalDriver {
       malloc.free(nativeKnownHostsPath);
       if (nativePassword != nullptr) malloc.free(nativePassword);
       if (nativePrivateKey != nullptr) malloc.free(nativePrivateKey);
+      if (nativeCertificate != nullptr) malloc.free(nativeCertificate);
       if (nativePassphrase != nullptr) malloc.free(nativePassphrase);
       if (nativeProxy != nullptr) malloc.free(nativeProxy);
       malloc.free(nativeEncoding);
@@ -483,6 +505,7 @@ class NativeTerminalDriver implements TerminalDriver {
     required String serverCommand,
     String? password,
     String? privateKey,
+    String? certificate,
     String? passphrase,
     TerminalProxyConfig? proxy,
     SshHostKeyTrustMode hostKeyTrustMode = SshHostKeyTrustMode.strict,
@@ -497,6 +520,9 @@ class NativeTerminalDriver implements TerminalDriver {
     final nativePrivateKey = privateKey == null
         ? nullptr
         : privateKey.toNativeUtf8();
+    final nativeCertificate = certificate == null
+        ? nullptr
+        : certificate.toNativeUtf8();
     final nativePassphrase = passphrase == null
         ? nullptr
         : passphrase.toNativeUtf8();
@@ -510,6 +536,7 @@ class NativeTerminalDriver implements TerminalDriver {
         nativeUsername,
         nativePassword,
         nativePrivateKey,
+        nativeCertificate,
         nativePassphrase,
         nativeKnownHostsPath,
         hostKeyTrustMode.wireValue,
@@ -523,6 +550,7 @@ class NativeTerminalDriver implements TerminalDriver {
       malloc.free(nativeServerCommand);
       if (nativePassword != nullptr) malloc.free(nativePassword);
       if (nativePrivateKey != nullptr) malloc.free(nativePrivateKey);
+      if (nativeCertificate != nullptr) malloc.free(nativeCertificate);
       if (nativePassphrase != nullptr) malloc.free(nativePassphrase);
       if (nativeProxy != nullptr) malloc.free(nativeProxy);
     }

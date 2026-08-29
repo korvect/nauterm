@@ -96,6 +96,7 @@ _KeyItem _mapKey(KeyEntry key) {
     subtitle: _keyTypeLabel(
       publicKey: key.publicKey,
       privateKey: key.privateKey,
+      certificate: key.certificate,
     ),
     icon: Icons.key_rounded,
     color: const Color(0xff075e92),
@@ -107,8 +108,25 @@ _KeyItem _mapKey(KeyEntry key) {
   );
 }
 
-String _keyTypeLabel({String? publicKey, String? privateKey}) {
+String _keyTypeLabel({
+  String? publicKey,
+  String? privateKey,
+  String? certificate,
+}) {
+  final certificateType = _sshCertificateBaseWireType(certificate);
+  if (certificateType != null) {
+    return '${_keyTypeLabelFromWireName(certificateType)} SSH Certificate';
+  }
+
   final text = _emptyToNull(publicKey);
+  if (certificate != null) {
+    if (text == null) {
+      return 'SSH Certificate';
+    }
+    final type = text.split(RegExp(r'\s+')).first.trim();
+    return '${_keyTypeLabelFromWireName(type)} SSH Certificate';
+  }
+
   if (text != null) {
     final type = text.split(RegExp(r'\s+')).first.trim();
     return _keyTypeLabelFromWireName(type);
@@ -138,6 +156,34 @@ String _keyTypeLabel({String? publicKey, String? privateKey}) {
   return 'Unknown key type';
 }
 
+String? _sshCertificateBaseWireType(String? value) {
+  const suffix = '-cert-v01@openssh.com';
+  final text = _emptyToNull(value);
+  if (text == null) {
+    return null;
+  }
+  for (final line in text.split(RegExp(r'\r?\n'))) {
+    final trimmed = line.trim();
+    if (trimmed.isEmpty) {
+      continue;
+    }
+    final type = trimmed.split(RegExp(r'\s+')).first;
+    if (type.endsWith(suffix) && type.length > suffix.length) {
+      return type.substring(0, type.length - suffix.length);
+    }
+  }
+  return null;
+}
+
+String? _sshCertificateSummaryMarker(String? value) {
+  if (value == null) {
+    return null;
+  }
+  const suffix = '-cert-v01@openssh.com';
+  final baseType = _sshCertificateBaseWireType(value);
+  return baseType == null ? '' : '$baseType$suffix';
+}
+
 String _keyTypeLabelFromWireName(String type) {
   return switch (type) {
     'ssh-ed25519' => 'ED25519',
@@ -145,7 +191,8 @@ String _keyTypeLabelFromWireName(String type) {
     'ecdsa-sha2-nistp256' => 'ECDSA 256',
     'ecdsa-sha2-nistp384' => 'ECDSA 384',
     'ecdsa-sha2-nistp521' => 'ECDSA 521',
-    'sk-ssh-ed25519@openssh.com' => 'FIDO2 ED25519',
+    'sk-ssh-ed25519' || 'sk-ssh-ed25519@openssh.com' => 'FIDO2 ED25519',
+    'sk-ecdsa-sha2-nistp256' ||
     'sk-ecdsa-sha2-nistp256@openssh.com' => 'FIDO2 ECDSA 256',
     'ssh-dss' => 'DSA',
     _ when type.contains('mldsa44') || type.contains('ml-dsa44') => 'ML-DSA 44',
@@ -268,6 +315,7 @@ class _PortForwardSshAuth {
     required this.username,
     this.password,
     this.privateKey,
+    this.certificate,
     this.proxy,
   });
 
@@ -276,6 +324,7 @@ class _PortForwardSshAuth {
   final String username;
   final String? password;
   final String? privateKey;
+  final String? certificate;
   final TerminalProxyConfig? proxy;
 }
 

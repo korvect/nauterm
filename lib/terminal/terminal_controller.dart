@@ -149,6 +149,7 @@ class SshConnectionProfile {
     this.label,
     this.password,
     this.privateKey,
+    this.certificate,
     this.passphrase,
     this.proxy,
     this.shellPath,
@@ -165,6 +166,7 @@ class SshConnectionProfile {
   final String? label;
   final String? password;
   final String? privateKey;
+  final String? certificate;
   final String? passphrase;
   final TerminalProxyConfig? proxy;
   final String? shellPath;
@@ -181,6 +183,7 @@ class SshConnectionProfile {
     Object? label = _preserveSshProfileValue,
     Object? password = _preserveSshProfileValue,
     Object? privateKey = _preserveSshProfileValue,
+    Object? certificate = _preserveSshProfileValue,
     Object? passphrase = _preserveSshProfileValue,
     Object? proxy = _preserveSshProfileValue,
     Object? shellPath = _preserveSshProfileValue,
@@ -203,6 +206,9 @@ class SshConnectionProfile {
       privateKey: identical(privateKey, _preserveSshProfileValue)
           ? this.privateKey
           : privateKey as String?,
+      certificate: identical(certificate, _preserveSshProfileValue)
+          ? this.certificate
+          : certificate as String?,
       passphrase: identical(passphrase, _preserveSshProfileValue)
           ? this.passphrase
           : passphrase as String?,
@@ -320,6 +326,7 @@ class TerminalController extends ChangeNotifier {
     String? label,
     String? password,
     String? privateKey,
+    String? certificate,
     String? passphrase,
     TerminalProxyConfig? proxy,
     String? shellPath,
@@ -350,6 +357,7 @@ class TerminalController extends ChangeNotifier {
          label: label,
          password: password,
          privateKey: privateKey,
+         certificate: certificate,
          passphrase: passphrase,
          proxy: proxy,
          shellPath: shellPath,
@@ -373,6 +381,7 @@ class TerminalController extends ChangeNotifier {
           knownHostsPath: knownHostsPath,
           password: password,
           privateKey: privateKey,
+          certificate: certificate,
           passphrase: passphrase,
           proxy: proxy,
           environment: environment,
@@ -395,6 +404,7 @@ class TerminalController extends ChangeNotifier {
     String? label,
     String? password,
     String? privateKey,
+    String? certificate,
     String? passphrase,
     TerminalProxyConfig? proxy,
     String? shellPath,
@@ -425,6 +435,7 @@ class TerminalController extends ChangeNotifier {
          label: label,
          password: password,
          privateKey: privateKey,
+         certificate: certificate,
          passphrase: passphrase,
          proxy: proxy,
          shellPath: shellPath,
@@ -447,6 +458,7 @@ class TerminalController extends ChangeNotifier {
           knownHostsPath: knownHostsPath,
           password: password,
           privateKey: privateKey,
+          certificate: certificate,
           passphrase: passphrase,
           proxy: proxy,
           environment: environment,
@@ -910,6 +922,7 @@ class TerminalController extends ChangeNotifier {
     int? identityId,
     Object? password = _preserveSshProfileValue,
     Object? privateKey = _preserveSshProfileValue,
+    Object? certificate = _preserveSshProfileValue,
     Object? passphrase = _preserveSshProfileValue,
     String? moshServerCommand,
     SshHostKeyTrustMode hostKeyTrustMode = SshHostKeyTrustMode.strict,
@@ -938,6 +951,7 @@ class TerminalController extends ChangeNotifier {
       identityId: identityId,
       password: password,
       privateKey: privateKey,
+      certificate: certificate,
       passphrase: passphrase,
     );
     if (moshServerCommand != null) {
@@ -987,6 +1001,7 @@ class TerminalController extends ChangeNotifier {
                   knownHostsPath: nextProfile.knownHostsPath,
                   password: nextProfile.password,
                   privateKey: nextProfile.privateKey,
+                  certificate: nextProfile.certificate,
                   passphrase: nextProfile.passphrase,
                   proxy: nextProfile.proxy,
                   hostKeyTrustMode: hostKeyTrustMode,
@@ -999,6 +1014,7 @@ class TerminalController extends ChangeNotifier {
                   knownHostsPath: nextProfile.knownHostsPath,
                   password: nextProfile.password,
                   privateKey: nextProfile.privateKey,
+                  certificate: nextProfile.certificate,
                   passphrase: nextProfile.passphrase,
                   proxy: nextProfile.proxy,
                   hostKeyTrustMode: hostKeyTrustMode,
@@ -1024,6 +1040,7 @@ class TerminalController extends ChangeNotifier {
         knownHostsPath: nextProfile.knownHostsPath,
         password: nextProfile.password,
         privateKey: nextProfile.privateKey,
+        certificate: nextProfile.certificate,
         passphrase: nextProfile.passphrase,
         proxy: nextProfile.proxy,
         hostKeyTrustMode: hostKeyTrustMode,
@@ -1043,6 +1060,7 @@ class TerminalController extends ChangeNotifier {
         knownHostsPath: nextProfile.knownHostsPath,
         password: nextProfile.password,
         privateKey: nextProfile.privateKey,
+        certificate: nextProfile.certificate,
         passphrase: nextProfile.passphrase,
         proxy: nextProfile.proxy,
         hostKeyTrustMode: hostKeyTrustMode,
@@ -2492,6 +2510,7 @@ TerminalDriver _createSshDriver({
   required String knownHostsPath,
   String? password,
   String? privateKey,
+  String? certificate,
   String? passphrase,
   TerminalProxyConfig? proxy,
   SshHostKeyTrustMode hostKeyTrustMode = SshHostKeyTrustMode.strict,
@@ -2511,6 +2530,7 @@ TerminalDriver _createSshDriver({
       knownHostsPath: knownHostsPath,
       password: password,
       privateKey: privateKey,
+      certificate: certificate,
       passphrase: passphrase,
       proxy: proxy,
       hostKeyTrustMode: hostKeyTrustMode,
@@ -2540,6 +2560,7 @@ TerminalDriver _createMoshDriver({
   required String knownHostsPath,
   String? password,
   String? privateKey,
+  String? certificate,
   String? passphrase,
   TerminalProxyConfig? proxy,
   SshHostKeyTrustMode hostKeyTrustMode = SshHostKeyTrustMode.strict,
@@ -2563,6 +2584,7 @@ TerminalDriver _createMoshDriver({
       knownHostsPath: knownHostsPath,
       password: password,
       privateKey: privateKey,
+      certificate: certificate,
       passphrase: passphrase,
       proxy: proxy,
       hostKeyTrustMode: hostKeyTrustMode,

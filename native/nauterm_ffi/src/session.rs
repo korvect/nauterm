@@ -569,6 +569,7 @@ impl SessionManager {
         username: &str,
         password: Option<&str>,
         private_key: Option<&str>,
+        certificate: Option<&str>,
         passphrase: Option<&str>,
         known_hosts_path: Option<&str>,
         host_key_trust_mode: HostKeyTrustMode,
@@ -585,6 +586,7 @@ impl SessionManager {
             username,
             password,
             private_key,
+            certificate,
             passphrase,
             known_hosts_path,
             host_key_trust_mode,
@@ -629,6 +631,7 @@ impl SessionManager {
         username: &str,
         password: Option<&str>,
         private_key: Option<&str>,
+        certificate: Option<&str>,
         passphrase: Option<&str>,
         known_hosts_path: Option<&str>,
         host_key_trust_mode: HostKeyTrustMode,
@@ -644,6 +647,7 @@ impl SessionManager {
             username,
             password,
             private_key,
+            certificate,
             passphrase,
             known_hosts_path,
             host_key_trust_mode,
@@ -803,6 +807,7 @@ impl SessionManager {
         username: &str,
         password: Option<&str>,
         private_key: Option<&str>,
+        certificate: Option<&str>,
         passphrase: Option<&str>,
         known_hosts_path: Option<&str>,
         host_key_trust_mode: HostKeyTrustMode,
@@ -817,6 +822,7 @@ impl SessionManager {
         let username = username.to_owned();
         let password = password.map(str::to_owned);
         let private_key = private_key.map(str::to_owned);
+        let certificate = certificate.map(str::to_owned);
         let passphrase = passphrase.map(str::to_owned);
         let known_hosts_path = known_hosts_path.map(str::to_owned);
         let encoding = encoding.to_owned();
@@ -834,6 +840,7 @@ impl SessionManager {
                     &username,
                     password.as_deref(),
                     private_key.as_deref(),
+                    certificate.as_deref(),
                     passphrase.as_deref(),
                     known_hosts_path.as_deref(),
                     host_key_trust_mode,
@@ -873,6 +880,7 @@ impl SessionManager {
         username: &str,
         password: Option<&str>,
         private_key: Option<&str>,
+        certificate: Option<&str>,
         passphrase: Option<&str>,
         known_hosts_path: Option<&str>,
         host_key_trust_mode: HostKeyTrustMode,
@@ -886,6 +894,7 @@ impl SessionManager {
         let username = username.to_owned();
         let password = password.map(str::to_owned);
         let private_key = private_key.map(str::to_owned);
+        let certificate = certificate.map(str::to_owned);
         let passphrase = passphrase.map(str::to_owned);
         let known_hosts_path = known_hosts_path.map(str::to_owned);
         actor
@@ -902,6 +911,7 @@ impl SessionManager {
                     &username,
                     password.as_deref(),
                     private_key.as_deref(),
+                    certificate.as_deref(),
                     passphrase.as_deref(),
                     known_hosts_path.as_deref(),
                     host_key_trust_mode,
@@ -1615,6 +1625,7 @@ mod tests {
             None,
             None,
             None,
+            None,
             HostKeyTrustMode::Strict,
             None,
             20,
@@ -1669,6 +1680,7 @@ mod tests {
             "127.0.0.1",
             9,
             "test",
+            None,
             None,
             None,
             None,

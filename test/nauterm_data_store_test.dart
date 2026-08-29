@@ -217,7 +217,7 @@ void main() {
     );
     expect(
       keySummaries.firstWhere((entry) => entry.id == certificateId).certificate,
-      '',
+      'ssh-ed25519-cert-v01@openssh.com',
     );
     expect(
       store.getKey(certificateId)?.certificate,

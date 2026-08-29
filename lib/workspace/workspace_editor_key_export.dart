@@ -181,6 +181,7 @@ class _KeyExportEditorContentState extends State<_KeyExportEditorContent> {
               type: _keyTypeLabel(
                 publicKey: key.publicKey,
                 privateKey: key.privateKey,
+                certificate: key.certificate,
               ),
             ),
           ],

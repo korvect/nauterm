@@ -1,7 +1,7 @@
 part of 'terminal_ffi.dart';
 
 class _TerminalBindings {
-  static const _expectedAbiVersion = 3;
+  static const _expectedAbiVersion = 4;
 
   _TerminalBindings(this.library)
     : createLocalSessionConfigured = library

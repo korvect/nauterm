@@ -4386,7 +4386,9 @@ mod tests {
                 name: "main key".to_string(),
                 private_key: Some("private".to_string()),
                 public_key: Some("public".to_string()),
-                certificate: None,
+                certificate: Some(
+                    "ecdsa-sha2-nistp384-cert-v01@openssh.com certificate-body".to_string(),
+                ),
                 created_at: None,
                 updated_at: None,
                 deleted_at: None,
@@ -4486,7 +4488,21 @@ mod tests {
             .unwrap();
 
         assert_eq!(database.list_groups().unwrap().len(), 1);
-        assert_eq!(database.list_keys().unwrap().len(), 1);
+        let key_summary = database.list_keys().unwrap().remove(0);
+        assert_eq!(
+            key_summary.certificate.as_deref(),
+            Some("ecdsa-sha2-nistp384-cert-v01@openssh.com")
+        );
+        assert_eq!(key_summary.private_key, None);
+        assert_eq!(
+            database
+                .get_key(key_id)
+                .unwrap()
+                .unwrap()
+                .certificate
+                .as_deref(),
+            Some("ecdsa-sha2-nistp384-cert-v01@openssh.com certificate-body")
+        );
         let identities = database.list_identities().unwrap();
         assert_eq!(identities.len(), 1);
         assert_eq!(identities[0].password, None);

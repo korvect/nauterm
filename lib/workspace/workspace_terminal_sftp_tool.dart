@@ -94,6 +94,7 @@ class _TerminalSftpPanelState extends ConsumerState<_TerminalSftpPanel> {
         username: profile.username,
         password: profile.password,
         privateKey: profile.privateKey,
+        certificate: profile.certificate,
         passphrase: profile.passphrase,
         proxy: profile.proxy,
         knownHostsPath: profile.knownHostsPath,

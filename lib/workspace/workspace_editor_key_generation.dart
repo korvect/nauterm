@@ -679,6 +679,7 @@ class _KeyEditorContentState extends State<_KeyEditorContent> {
       setState(() {
         _privateController.text = imported.privateKey;
         _publicController.text = imported.publicKey ?? '';
+        _certificateController.text = imported.certificate ?? '';
         _importing = false;
       });
     } on Object catch (error) {
@@ -1190,27 +1191,66 @@ class _KeyFileImportPanel extends StatelessWidget {
 }
 
 class _ImportedSshKeyFile {
-  const _ImportedSshKeyFile({required this.privateKey, this.publicKey});
+  const _ImportedSshKeyFile({
+    required this.privateKey,
+    this.publicKey,
+    this.certificate,
+  });
 
   final String privateKey;
   final String? publicKey;
+  final String? certificate;
 }
 
 Future<_ImportedSshKeyFile> _readSshKeyFile(io.File file) async {
   const maximumKeyFileBytes = 4 * 1024 * 1024;
-  final size = await file.length();
-  if (size <= 0) {
-    throw const FormatException('The selected file is empty.');
-  }
-  if (size > maximumKeyFileBytes) {
-    throw const FormatException('The selected file is too large.');
+  final selectedText = await _readSshCredentialFile(
+    file,
+    maximumBytes: maximumKeyFileBytes,
+  );
+  final selectedValue = selectedText.trim();
+  final selectedCertificate =
+      _sshCertificateBaseWireType(selectedValue) != null;
+  final io.File privateFile;
+  final String? certificate;
+  if (selectedCertificate) {
+    if (!file.path.endsWith('-cert.pub')) {
+      throw const FormatException(
+        'The certificate filename must end with -cert.pub so its private key can be found.',
+      );
+    }
+    privateFile = io.File(
+      file.path.substring(0, file.path.length - '-cert.pub'.length),
+    );
+    if (!await privateFile.exists()) {
+      throw const FormatException(
+        'The matching private key was not found next to the certificate.',
+      );
+    }
+    certificate = selectedValue;
+  } else {
+    privateFile = file;
+    final certificateFile = io.File('${file.path}-cert.pub');
+    if (await certificateFile.exists()) {
+      final candidate = (await _readSshCredentialFile(
+        certificateFile,
+        maximumBytes: maximumKeyFileBytes,
+      )).trim();
+      certificate = _sshCertificateBaseWireType(candidate) == null
+          ? null
+          : candidate;
+    } else {
+      certificate = null;
+    }
   }
 
-  final privateKey = await file.readAsString();
+  final privateKey = selectedCertificate
+      ? await _readSshCredentialFile(
+          privateFile,
+          maximumBytes: maximumKeyFileBytes,
+        )
+      : selectedText;
   final normalized = privateKey.trim();
-  if (normalized.isEmpty) {
-    throw const FormatException('The selected file is empty.');
-  }
   if (_looksLikeSshPublicKey(normalized)) {
     throw const FormatException('Select a private key file, not a public key.');
   }
@@ -1219,15 +1259,41 @@ Future<_ImportedSshKeyFile> _readSshKeyFile(io.File file) async {
   }
 
   String? publicKey;
-  final publicFile = io.File('${file.path}.pub');
+  final publicFile = io.File('${privateFile.path}.pub');
   if (await publicFile.exists()) {
-    final candidate = (await publicFile.readAsString()).trim();
-    if (candidate.isNotEmpty) {
+    final candidate = (await _readSshCredentialFile(
+      publicFile,
+      maximumBytes: maximumKeyFileBytes,
+    )).trim();
+    if (candidate.isNotEmpty &&
+        _sshCertificateBaseWireType(candidate) == null) {
       publicKey = candidate;
     }
   }
 
-  return _ImportedSshKeyFile(privateKey: privateKey, publicKey: publicKey);
+  return _ImportedSshKeyFile(
+    privateKey: privateKey,
+    publicKey: publicKey,
+    certificate: certificate,
+  );
+}
+
+Future<String> _readSshCredentialFile(
+  io.File file, {
+  required int maximumBytes,
+}) async {
+  final size = await file.length();
+  if (size <= 0) {
+    throw const FormatException('The selected file is empty.');
+  }
+  if (size > maximumBytes) {
+    throw const FormatException('The selected file is too large.');
+  }
+  final value = await file.readAsString();
+  if (value.trim().isEmpty) {
+    throw const FormatException('The selected file is empty.');
+  }
+  return value;
 }
 
 bool _looksLikeSshPublicKey(String value) {
@@ -1260,6 +1326,10 @@ String _sshCredentialDisplayType({
   required String certificate,
 }) {
   final material = '$certificate\n$publicKey\n$privateKey'.toLowerCase();
+  final certificateType = _sshCertificateBaseWireType(certificate);
+  if (certificateType != null) {
+    return '${_keyTypeLabelFromWireName(certificateType)} SSH Certificate';
+  }
   final type = switch (true) {
     _ when material.contains('sk-ssh-ed25519') => 'FIDO2 ED25519',
     _ when material.contains('sk-ecdsa') => 'FIDO2 ECDSA',

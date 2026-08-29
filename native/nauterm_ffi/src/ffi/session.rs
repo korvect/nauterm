@@ -146,6 +146,7 @@ pub extern "C" fn nauterm_session_create_ssh_configured(
     username: *const c_char,
     password: *const c_char,
     private_key: *const c_char,
+    certificate: *const c_char,
     passphrase: *const c_char,
     known_hosts_path: *const c_char,
     host_key_trust_mode: u32,
@@ -174,6 +175,8 @@ pub extern "C" fn nauterm_session_create_ssh_configured(
         let password = string_from_ptr(password).filter(|password| !password.is_empty());
         let private_key =
             string_from_ptr(private_key).filter(|private_key| !private_key.is_empty());
+        let certificate =
+            string_from_ptr(certificate).filter(|certificate| !certificate.is_empty());
         let passphrase = string_from_ptr(passphrase).filter(|passphrase| !passphrase.is_empty());
         let known_hosts_path = string_from_ptr(known_hosts_path)
             .filter(|known_hosts_path| !known_hosts_path.is_empty());
@@ -189,6 +192,7 @@ pub extern "C" fn nauterm_session_create_ssh_configured(
                 &username,
                 password.as_deref(),
                 private_key.as_deref(),
+                certificate.as_deref(),
                 passphrase.as_deref(),
                 known_hosts_path.as_deref(),
                 HostKeyTrustMode::from_u32(host_key_trust_mode),
@@ -219,6 +223,7 @@ pub extern "C" fn nauterm_session_create_mosh_configured(
     username: *const c_char,
     password: *const c_char,
     private_key: *const c_char,
+    certificate: *const c_char,
     passphrase: *const c_char,
     known_hosts_path: *const c_char,
     host_key_trust_mode: u32,
@@ -246,6 +251,7 @@ pub extern "C" fn nauterm_session_create_mosh_configured(
         let username = string_from_ptr(username).unwrap_or_else(|| "user".to_owned());
         let password = string_from_ptr(password).filter(|value| !value.is_empty());
         let private_key = string_from_ptr(private_key).filter(|value| !value.is_empty());
+        let certificate = string_from_ptr(certificate).filter(|value| !value.is_empty());
         let passphrase = string_from_ptr(passphrase).filter(|value| !value.is_empty());
         let known_hosts_path = string_from_ptr(known_hosts_path).filter(|value| !value.is_empty());
         let proxy = ssh::proxy_config_from_json_ptr(proxy_json);
@@ -264,6 +270,7 @@ pub extern "C" fn nauterm_session_create_mosh_configured(
                 &username,
                 password.as_deref(),
                 private_key.as_deref(),
+                certificate.as_deref(),
                 passphrase.as_deref(),
                 known_hosts_path.as_deref(),
                 HostKeyTrustMode::from_u32(host_key_trust_mode),
@@ -282,6 +289,7 @@ pub extern "C" fn nauterm_session_reconnect_ssh(
     username: *const c_char,
     password: *const c_char,
     private_key: *const c_char,
+    certificate: *const c_char,
     passphrase: *const c_char,
     known_hosts_path: *const c_char,
     host_key_trust_mode: u32,
@@ -294,6 +302,7 @@ pub extern "C" fn nauterm_session_reconnect_ssh(
         let username = string_from_ptr(username).unwrap_or_else(|| "user".to_owned());
         let password = string_from_ptr(password).filter(|value| !value.is_empty());
         let private_key = string_from_ptr(private_key).filter(|value| !value.is_empty());
+        let certificate = string_from_ptr(certificate).filter(|value| !value.is_empty());
         let passphrase = string_from_ptr(passphrase).filter(|value| !value.is_empty());
         let known_hosts_path = string_from_ptr(known_hosts_path).filter(|value| !value.is_empty());
         let proxy = ssh::proxy_config_from_json_ptr(proxy_json);
@@ -306,6 +315,7 @@ pub extern "C" fn nauterm_session_reconnect_ssh(
                 &username,
                 password.as_deref(),
                 private_key.as_deref(),
+                certificate.as_deref(),
                 passphrase.as_deref(),
                 known_hosts_path.as_deref(),
                 HostKeyTrustMode::from_u32(host_key_trust_mode),
@@ -325,6 +335,7 @@ pub extern "C" fn nauterm_session_reconnect_mosh(
     username: *const c_char,
     password: *const c_char,
     private_key: *const c_char,
+    certificate: *const c_char,
     passphrase: *const c_char,
     known_hosts_path: *const c_char,
     host_key_trust_mode: u32,
@@ -336,6 +347,7 @@ pub extern "C" fn nauterm_session_reconnect_mosh(
         let username = string_from_ptr(username).unwrap_or_else(|| "user".to_owned());
         let password = string_from_ptr(password).filter(|value| !value.is_empty());
         let private_key = string_from_ptr(private_key).filter(|value| !value.is_empty());
+        let certificate = string_from_ptr(certificate).filter(|value| !value.is_empty());
         let passphrase = string_from_ptr(passphrase).filter(|value| !value.is_empty());
         let known_hosts_path = string_from_ptr(known_hosts_path).filter(|value| !value.is_empty());
         let proxy = ssh::proxy_config_from_json_ptr(proxy_json);
@@ -352,6 +364,7 @@ pub extern "C" fn nauterm_session_reconnect_mosh(
                 &username,
                 password.as_deref(),
                 private_key.as_deref(),
+                certificate.as_deref(),
                 passphrase.as_deref(),
                 known_hosts_path.as_deref(),
                 HostKeyTrustMode::from_u32(host_key_trust_mode),

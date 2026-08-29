@@ -22,6 +22,7 @@ pub extern "C" fn nauterm_sftp_list_directory_entries(
     username: *const c_char,
     password: *const c_char,
     private_key: *const c_char,
+    certificate: *const c_char,
     passphrase: *const c_char,
     known_hosts_path: *const c_char,
     directory: *const c_char,
@@ -33,6 +34,7 @@ pub extern "C" fn nauterm_sftp_list_directory_entries(
         let username = string_from_ptr(username).unwrap_or_default();
         let password = optional_string_from_ptr(password);
         let private_key = optional_string_from_ptr(private_key);
+        let certificate = optional_string_from_ptr(certificate);
         let passphrase = optional_string_from_ptr(passphrase);
         let known_hosts_path = optional_string_from_ptr(known_hosts_path);
         let directory = string_from_ptr(directory).unwrap_or_else(|| "~".to_owned());
@@ -44,6 +46,7 @@ pub extern "C" fn nauterm_sftp_list_directory_entries(
             &username,
             password.as_deref(),
             private_key.as_deref(),
+            certificate.as_deref(),
             passphrase.as_deref(),
             known_hosts_path.as_deref(),
             proxy,
@@ -67,6 +70,7 @@ pub extern "C" fn nauterm_sftp_execute_task(
     username: *const c_char,
     password: *const c_char,
     private_key: *const c_char,
+    certificate: *const c_char,
     passphrase: *const c_char,
     known_hosts_path: *const c_char,
     operation_json: *const c_char,
@@ -80,6 +84,7 @@ pub extern "C" fn nauterm_sftp_execute_task(
         let username = string_from_ptr(username).unwrap_or_default();
         let password = optional_string_from_ptr(password);
         let private_key = optional_string_from_ptr(private_key);
+        let certificate = optional_string_from_ptr(certificate);
         let passphrase = optional_string_from_ptr(passphrase);
         let known_hosts_path = optional_string_from_ptr(known_hosts_path);
         let operation_json = string_from_ptr(operation_json).unwrap_or_else(|| "{}".to_owned());
@@ -91,6 +96,7 @@ pub extern "C" fn nauterm_sftp_execute_task(
             &username,
             password.as_deref(),
             private_key.as_deref(),
+            certificate.as_deref(),
             passphrase.as_deref(),
             known_hosts_path.as_deref(),
             proxy,

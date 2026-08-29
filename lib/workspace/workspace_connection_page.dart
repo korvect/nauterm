@@ -6,12 +6,14 @@ class TerminalConnectionKeyOption {
     required this.id,
     required this.name,
     this.privateKey,
+    this.certificate,
     this.subtitle,
   });
 
   final int id;
   final String name;
   final String? privateKey;
+  final String? certificate;
   final String? subtitle;
 }
 
@@ -70,6 +72,7 @@ SshConnectionProfile refreshSavedHostSshProfile({
   required Map<String, String> environment,
   String? password,
   String? privateKey,
+  String? certificate,
   TerminalProxyConfig? proxy,
 }) {
   return SshConnectionProfile(
@@ -82,6 +85,7 @@ SshConnectionProfile refreshSavedHostSshProfile({
     label: host.name,
     password: password,
     privateKey: privateKey,
+    certificate: certificate,
     proxy: proxy,
     shellPath: _emptyToNull(host.shellPath),
     environment: environment,
@@ -859,23 +863,28 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
         return;
       }
       final selectedKey = availableKeys[selectedKeyIndex];
-      final privateKey = widget.dataStore
-          ?.getKey(selectedKey.id)
-          ?.privateKey
-          ?.trim();
+      final keyDetail = widget.dataStore?.getKey(selectedKey.id);
+      final privateKey = keyDetail?.privateKey?.trim();
       if (privateKey == null || privateKey.isEmpty) {
         return;
       }
+      final certificate = _emptyToNull(keyDetail?.certificate);
       final resolvedKey = TerminalConnectionKeyOption(
         id: selectedKey.id,
         name: selectedKey.name,
         subtitle: selectedKey.subtitle,
         privateKey: privateKey,
+        certificate: certificate,
       );
       if (save) {
         await widget.onSaveAuth?.call(profile, key: resolvedKey);
       }
-      _reconnect(privateKey: privateKey, passphrase: null, password: null);
+      _reconnect(
+        privateKey: privateKey,
+        certificate: certificate,
+        passphrase: null,
+        password: null,
+      );
       return;
     }
 
@@ -888,12 +897,17 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
         password: _passwordController.text,
       );
     }
-    _reconnect(password: _passwordController.text, privateKey: null);
+    _reconnect(
+      password: _passwordController.text,
+      privateKey: null,
+      certificate: null,
+    );
   }
 
   void _reconnect({
     Object? password = _preserveReconnectValue,
     Object? privateKey = _preserveReconnectValue,
+    Object? certificate = _preserveReconnectValue,
     Object? passphrase = _preserveReconnectValue,
     SshHostKeyTrustMode? hostKeyTrustMode,
   }) {
@@ -919,6 +933,7 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
     final identity = _selectedIdentity;
     var nextPassword = password;
     var nextPrivateKey = privateKey;
+    var nextCertificate = certificate;
     var nextPassphrase = passphrase;
     if (identity != null &&
         identical(password, _preserveReconnectValue) &&
@@ -928,13 +943,20 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
       final identityKey = detail?.keyId == null
           ? null
           : widget.dataStore?.getKey(detail!.keyId!)?.privateKey?.trim();
+      final identityCertificate = detail?.keyId == null
+          ? null
+          : widget.dataStore?.getKey(detail!.keyId!)?.certificate?.trim();
       if (identityKey != null && identityKey.isNotEmpty) {
         nextPrivateKey = identityKey;
+        nextCertificate = identityCertificate?.isEmpty == true
+            ? null
+            : identityCertificate;
         nextPassword = null;
         nextPassphrase = null;
       } else if (identityPassword != null && identityPassword.isNotEmpty) {
         nextPassword = identityPassword;
         nextPrivateKey = null;
+        nextCertificate = null;
         nextPassphrase = null;
       }
     }
@@ -947,6 +969,7 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
       identityId: _selectedIdentityId,
       password: nextPassword,
       privateKey: nextPrivateKey,
+      certificate: nextCertificate,
       passphrase: nextPassphrase,
       moshServerCommand: reloaded?.moshServerCommand,
       hostKeyTrustMode: hostKeyTrustMode ?? _sessionHostKeyTrustMode,

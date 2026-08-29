@@ -8,6 +8,7 @@ FfiHostOsDetectionResult _runHostOsDetection(Map<String, Object?> arguments) {
     knownHostsPath: arguments['knownHostsPath'] as String,
     password: arguments['password'] as String?,
     privateKey: arguments['privateKey'] as String?,
+    certificate: arguments['certificate'] as String?,
     passphrase: arguments['passphrase'] as String?,
     proxy: _terminalProxyFromArguments(arguments['proxy']),
     hostKeyTrustMode: SshHostKeyTrustMode.fromWireValue(
@@ -24,6 +25,7 @@ FfiHostSystemInfoResult _runHostSystemInfo(Map<String, Object?> arguments) {
     knownHostsPath: arguments['knownHostsPath'] as String,
     password: arguments['password'] as String?,
     privateKey: arguments['privateKey'] as String?,
+    certificate: arguments['certificate'] as String?,
     passphrase: arguments['passphrase'] as String?,
     proxy: _terminalProxyFromArguments(arguments['proxy']),
     hostKeyTrustMode: SshHostKeyTrustMode.fromWireValue(
@@ -46,6 +48,7 @@ FfiSshPublicKeyExportResult _runSshPublicKeyExport(
     script: arguments['script'] as String,
     password: arguments['password'] as String?,
     privateKey: arguments['privateKey'] as String?,
+    certificate: arguments['certificate'] as String?,
     passphrase: arguments['passphrase'] as String?,
     proxy: _terminalProxyFromArguments(arguments['proxy']),
     hostKeyTrustMode: SshHostKeyTrustMode.fromWireValue(
@@ -65,6 +68,7 @@ FfiSshDirectoryListingResult _runSshDirectoryListing(
     directory: arguments['directory'] as String,
     password: arguments['password'] as String?,
     privateKey: arguments['privateKey'] as String?,
+    certificate: arguments['certificate'] as String?,
     passphrase: arguments['passphrase'] as String?,
   );
 }
@@ -80,6 +84,7 @@ FfiSshDirectoryEntryListingResult _runSshDirectoryEntryListing(
     directory: arguments['directory'] as String,
     password: arguments['password'] as String?,
     privateKey: arguments['privateKey'] as String?,
+    certificate: arguments['certificate'] as String?,
     passphrase: arguments['passphrase'] as String?,
   );
 }
@@ -103,6 +108,7 @@ FfiSshDirectoryEntryListingResult _runSftpDirectoryEntryListing(
     directory: arguments['directory'] as String,
     password: arguments['password'] as String?,
     privateKey: arguments['privateKey'] as String?,
+    certificate: arguments['certificate'] as String?,
     passphrase: arguments['passphrase'] as String?,
     proxy: _terminalProxyFromArguments(arguments['proxy']),
     hostKeyTrustMode: SshHostKeyTrustMode.fromWireValue(
