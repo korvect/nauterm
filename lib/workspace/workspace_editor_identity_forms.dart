@@ -132,7 +132,7 @@ class _IdentityEditorContentState extends State<_IdentityEditorContent> {
         if (mounted) {
           setState(() {
             _keyId = id;
-            _credentialKind = _SshCredentialKind.key;
+            _credentialKind = kind;
           });
           _refreshAutomaticName();
         }

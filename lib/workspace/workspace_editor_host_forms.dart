@@ -433,7 +433,7 @@ class _GroupEditorContentState extends State<_GroupEditorContent> {
         if (mounted) {
           setState(() {
             _keyId = id;
-            _sshCredentialKind = _SshCredentialKind.key;
+            _sshCredentialKind = kind;
           });
         }
       },
@@ -1599,7 +1599,7 @@ class _HostEditorContentState extends State<_HostEditorContent> {
         if (mounted) {
           setState(() {
             _keyId = id;
-            _sshCredentialKind = _SshCredentialKind.key;
+            _sshCredentialKind = kind;
           });
         }
       },
@@ -2361,15 +2361,12 @@ class _SshCredentialControlState extends State<_SshCredentialControl> {
       return kindPicker;
     }
 
-    // Certificate is a creation-only path. Saved credentials are always Keys,
-    // so they remain searchable only from the Key selector.
-    final matchingKeys = selectedKind == _SshCredentialKind.key
-        ? [
-            for (final key in widget.keys)
-              if (_keyMatchesCredentialKind(widget.keys, key.id, selectedKind))
-                key,
-          ]
-        : const <KeyEntry>[];
+    // Key is the complete credential catalog; Certificate is a filtered view
+    // for credentials that carry OpenSSH certificate material.
+    final matchingKeys = filterSshCredentialKeysForTesting(
+      widget.keys,
+      certificatesOnly: selectedKind == _SshCredentialKind.certificate,
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -2389,11 +2386,6 @@ class _SshCredentialControlState extends State<_SshCredentialControl> {
               DropdownMenuItem<int?>(value: key.id, child: Text(key.name)),
           ],
           onChanged: (value) {
-            // Certificate only selects the creation form. Every saved entry is
-            // a Key, including one that carries optional certificate text.
-            if (value != null && selectedKind != _SshCredentialKind.key) {
-              _handleKindSelected(_SshCredentialKind.key);
-            }
             widget.onChanged(value);
           },
         ),
@@ -2448,15 +2440,27 @@ _SshCredentialKind? _credentialKindForKeyId(
   int? keyId,
 ) {
   if (keyId == null) return null;
-  return keys.any((entry) => entry.id == keyId) ? _SshCredentialKind.key : null;
+  final key = keys.where((entry) => entry.id == keyId).firstOrNull;
+  if (key == null) return null;
+  return sshCredentialUsesCertificateForTesting(key)
+      ? _SshCredentialKind.certificate
+      : _SshCredentialKind.key;
 }
 
-bool _keyMatchesCredentialKind(
-  Iterable<KeyEntry> keys,
-  int? keyId,
-  _SshCredentialKind kind,
-) {
-  return keys.any((entry) => entry.id == keyId);
+@visibleForTesting
+List<KeyEntry> filterSshCredentialKeysForTesting(
+  Iterable<KeyEntry> keys, {
+  required bool certificatesOnly,
+}) {
+  return [
+    for (final key in keys)
+      if (!certificatesOnly || sshCredentialUsesCertificateForTesting(key)) key,
+  ];
+}
+
+@visibleForTesting
+bool sshCredentialUsesCertificateForTesting(KeyEntry key) {
+  return key.certificate != null;
 }
 
 enum _HostThemeTarget { ssh, telnet }
