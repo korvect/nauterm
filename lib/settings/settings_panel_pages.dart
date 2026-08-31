@@ -378,6 +378,8 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
                       searchable: true,
                       allowCustomValue: true,
                       localizeOptions: false,
+                      optionPreviewBuilder: (value) =>
+                          _fontOptionPreview(value),
                       onChanged: (value) =>
                           state._updateTerminalFont(family: value),
                     );
@@ -428,6 +430,8 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
                         ? tr('settings.terminal.cjkFont.auto', fallback: 'Auto')
                         : value,
                     localizeOptions: false,
+                    optionPreviewBuilder: (value) =>
+                        _fontOptionPreview(value, cjk: true),
                     onChanged: state._updateTerminalCjkFont,
                   ),
                 ),
@@ -1242,6 +1246,29 @@ class _TerminalRecordingLocation extends StatelessWidget {
       ],
     );
   }
+}
+
+Widget? _fontOptionPreview(String family, {bool cjk = false}) {
+  if (family.isEmpty) return null;
+  return SizedBox(
+    width: 64,
+    child: ClipRect(
+      child: Text(
+        cjk ? '汉字 Aa' : 'Aa 0123',
+        key: ValueKey('settings-font-option-preview:$family'),
+        maxLines: 1,
+        overflow: TextOverflow.clip,
+        textAlign: TextAlign.right,
+        style: TextStyle(
+          color: _mutedText,
+          fontSize: 13,
+          height: 1,
+          fontFamily: family,
+          fontWeight: FontWeight.w400,
+        ),
+      ),
+    ),
+  );
 }
 
 Widget _buildSettingsSftpContent(_SettingsPanelState state) {

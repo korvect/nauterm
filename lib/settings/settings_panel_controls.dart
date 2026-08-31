@@ -840,6 +840,7 @@ class _SettingsSelect extends StatefulWidget {
     required this.onChanged,
     this.format,
     this.leadingBuilder,
+    this.optionPreviewBuilder,
     this.semanticsLabel,
     this.showLabel = true,
     this.localizeOptions = true,
@@ -853,6 +854,7 @@ class _SettingsSelect extends StatefulWidget {
   final ValueChanged<String> onChanged;
   final String Function(String value)? format;
   final Widget? Function(String value)? leadingBuilder;
+  final Widget? Function(String value)? optionPreviewBuilder;
   final String? semanticsLabel;
   final bool showLabel;
   final bool localizeOptions;
@@ -1068,6 +1070,7 @@ class _SettingsSelectState extends State<_SettingsSelect> {
                   format: widget.format,
                   localizeOptions: widget.localizeOptions,
                   leadingBuilder: widget.leadingBuilder,
+                  optionPreviewBuilder: widget.optionPreviewBuilder,
                   scrollController: _menuScrollController!,
                   onSelected: _selectValue,
                 ),
@@ -1363,6 +1366,7 @@ class _SettingsSelectMenu extends StatelessWidget {
     required this.format,
     this.localizeOptions = true,
     required this.leadingBuilder,
+    this.optionPreviewBuilder,
     required this.scrollController,
     required this.onSelected,
   });
@@ -1373,6 +1377,7 @@ class _SettingsSelectMenu extends StatelessWidget {
   final String Function(String value)? format;
   final bool localizeOptions;
   final Widget? Function(String value)? leadingBuilder;
+  final Widget? Function(String value)? optionPreviewBuilder;
   final ScrollController scrollController;
   final ValueChanged<String> onSelected;
 
@@ -1469,6 +1474,11 @@ class _SettingsSelectMenu extends StatelessWidget {
                                     ),
                                   ),
                                 ),
+                                if (optionPreviewBuilder?.call(value)
+                                    case final preview?) ...[
+                                  SizedBox(width: 8),
+                                  preview,
+                                ],
                                 SizedBox(
                                   width: 20,
                                   child: selected

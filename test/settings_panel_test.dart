@@ -581,6 +581,27 @@ void main() {
     expect(find.text('01'), findsNothing);
     expect(find.byIcon(Icons.check_rounded), findsOneWidget);
     expect(find.text(terminalFontConfig.resolvedFamily()), findsWidgets);
+    final selectedFontOption = tester.widget<Text>(
+      find.descendant(
+        of: fontMenu,
+        matching: find.text(terminalFontConfig.resolvedFamily()),
+      ),
+    );
+    expect(selectedFontOption.style?.fontFamily, isNull);
+    final selectedFontPreview = tester.widget<Text>(
+      find.descendant(
+        of: fontMenu,
+        matching: find.byKey(
+          ValueKey(
+            'settings-font-option-preview:${terminalFontConfig.resolvedFamily()}',
+          ),
+        ),
+      ),
+    );
+    expect(
+      selectedFontPreview.style?.fontFamily,
+      terminalFontConfig.resolvedFamily(),
+    );
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pump();
