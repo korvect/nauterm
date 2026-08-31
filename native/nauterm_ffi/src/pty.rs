@@ -520,7 +520,7 @@ else
 fi
 unset NAUTERM_BASH_ENV NAUTERM_BASH_ENV_SET
 set +o posix
-shopt -u inherit_errexit 2>/dev/null
+shopt -u inherit_errexit 2>&-
 if [[ -n ${NAUTERM_BASH_UNEXPORT_HISTFILE+x} ]]; then
   export -n HISTFILE
   unset NAUTERM_BASH_UNEXPORT_HISTFILE
@@ -556,9 +556,9 @@ if [[ -z ${__nauterm_shell_integration+x} ]]; then
   __nauterm_ai_precmd() {
     local __nauterm_status=$? __nauterm_command __nauterm_encoded
     if [[ ${HISTCMD:-0} -gt ${__nauterm_last_histcmd:-0} ]]; then
-      __nauterm_command=$(builtin fc -ln -1 2>/dev/null)
+      __nauterm_command=$(builtin fc -ln -1 2>&-)
       if [[ -n "$__nauterm_command" ]]; then
-        __nauterm_encoded=$(printf '%s' "$__nauterm_command" | command base64 2>/dev/null | command tr -d '\r\n')
+        __nauterm_encoded=$(printf '%s' "$__nauterm_command" | command base64 2>&- | command tr -d '\r\n')
         printf '\033]4545;CommandStarted;%s;%s\007\033]133;C;aid=%s\007' "$BASHPID" "$__nauterm_encoded" "$BASHPID"
         printf '\033]4545;CommandExited;%s;%s\007\033]133;D;%s;aid=%s\007' "$BASHPID" "$__nauterm_status" "$__nauterm_status" "$BASHPID"
       fi
@@ -570,7 +570,7 @@ if [[ -z ${__nauterm_shell_integration+x} ]]; then
   }
   bind '"\C-x\C-]":"\C-a\C-k"'
 
-  if [[ $(declare -p PROMPT_COMMAND 2>/dev/null) == "declare -a"* ]]; then
+  if [[ $(declare -p PROMPT_COMMAND 2>&-) == "declare -a"* ]]; then
     __nauterm_prompt_commands=("${PROMPT_COMMAND[@]}")
     PROMPT_COMMAND=(__nauterm_ai_precmd "${__nauterm_prompt_commands[@]}")
     unset __nauterm_prompt_commands
@@ -1351,6 +1351,7 @@ mod shutdown_tests {
         assert!(!super::BASH_INTEGRATION.contains(r#"\C-u"#));
         assert!(!super::BASH_INTEGRATION.contains("bind -x"));
         assert!(!super::BASH_INTEGRATION.contains("READLINE_LINE"));
+        assert!(!super::BASH_INTEGRATION.contains("/dev/null"));
 
         let bash_name = if cfg!(windows) { "bash.exe" } else { "bash" };
         let Some(bash_program) = super::resolve_shell_program(bash_name) else {

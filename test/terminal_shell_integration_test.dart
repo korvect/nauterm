@@ -77,6 +77,15 @@ void main() {
       expect(command, isNot(contains(r"nauterm-command-end=%s;%s\007")));
     });
 
+    test('bash setup avoids path redirects rejected by rbash', () {
+      final command = terminalShellSetupCommand(
+        TerminalShellKind.bash,
+        'token',
+      );
+      expect(command, isNot(contains('/dev/null')));
+      expect(command, contains(r'2>&-'));
+    });
+
     test(
       'only history-safe bootstrap shells enable structured integration',
       () {
