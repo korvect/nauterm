@@ -1382,7 +1382,6 @@ class _SettingsSelectMenu extends StatelessWidget {
       decoration: BoxDecoration(
         color: _surface,
         borderRadius: BorderRadius.circular(7),
-        border: Border.all(color: _softOutline),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: _settingsDark ? 0.30 : 0.12),
@@ -1396,93 +1395,101 @@ class _SettingsSelectMenu extends StatelessWidget {
           ),
         ],
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(7),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final scrollable =
-                values.length * _settingsSelectHeight >
-                constraints.maxHeight + precisionErrorTolerance;
-            return Scrollbar(
-              key: const ValueKey('settings-select-scrollbar'),
-              controller: scrollController,
-              thumbVisibility: scrollable,
-              interactive: true,
-              child: ListView.builder(
+      child: DecoratedBox(
+        key: const ValueKey('settings-select-border'),
+        position: DecorationPosition.foreground,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(7),
+          border: Border.all(color: _softOutline),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(7),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final scrollable =
+                  values.length * _settingsSelectHeight >
+                  constraints.maxHeight + precisionErrorTolerance;
+              return Scrollbar(
+                key: const ValueKey('settings-select-scrollbar'),
                 controller: scrollController,
-                padding: EdgeInsets.zero,
-                itemExtent: _settingsSelectHeight,
-                itemCount: values.length,
-                itemBuilder: (context, index) {
-                  final value = values[index];
-                  final selected = value == selectedValue;
-                  final highlighted = index == highlightedIndex;
-                  return ColoredBox(
-                    color: selected
-                        ? (_settingsDark
-                              ? _primary.withValues(alpha: 0.18)
-                              : const Color(0xffeaf3ff))
-                        : highlighted
-                        ? _settingsFieldHover
-                        : Colors.transparent,
-                    child: Material(
-                      type: MaterialType.transparency,
-                      child: InkWell(
-                        hoverColor: _settingsDark
-                            ? _settingsFieldHover
-                            : selected
-                            ? const Color(0xffe3efff)
-                            : const Color(0xfff3f6fa),
-                        splashColor: _settingsDark
-                            ? _primary.withValues(alpha: 0.14)
-                            : const Color(0xffdceaff),
-                        highlightColor: _settingsDark
-                            ? _primary.withValues(alpha: 0.08)
-                            : const Color(0xffdceaff),
-                        onTap: () => onSelected(value),
-                        child: Padding(
-                          padding: _settingsSelectPadding.copyWith(right: 10),
-                          child: Row(
-                            children: [
-                              if (leadingBuilder?.call(value)
-                                  case final leading?) ...[
-                                leading,
-                                SizedBox(width: 7),
-                              ],
-                              Expanded(
-                                child: _SettingsOverflowTooltipText(
-                                  text: _formatOption(value),
-                                  style: TextStyle(
-                                    color: selected ? _primary : _text,
-                                    fontSize: _settingsFieldFontSize,
-                                    height: 1.2,
-                                    fontWeight: selected
-                                        ? NautermFontWeights.semibold
-                                        : NautermFontWeights.regular,
-                                    letterSpacing: 0,
+                thumbVisibility: scrollable,
+                interactive: true,
+                child: ListView.builder(
+                  controller: scrollController,
+                  padding: EdgeInsets.zero,
+                  itemExtent: _settingsSelectHeight,
+                  itemCount: values.length,
+                  itemBuilder: (context, index) {
+                    final value = values[index];
+                    final selected = value == selectedValue;
+                    final highlighted = index == highlightedIndex;
+                    return ColoredBox(
+                      color: selected
+                          ? (_settingsDark
+                                ? _primary.withValues(alpha: 0.18)
+                                : const Color(0xffeaf3ff))
+                          : highlighted
+                          ? _settingsFieldHover
+                          : Colors.transparent,
+                      child: Material(
+                        type: MaterialType.transparency,
+                        child: InkWell(
+                          hoverColor: _settingsDark
+                              ? _settingsFieldHover
+                              : selected
+                              ? const Color(0xffe3efff)
+                              : const Color(0xfff3f6fa),
+                          splashColor: _settingsDark
+                              ? _primary.withValues(alpha: 0.14)
+                              : const Color(0xffdceaff),
+                          highlightColor: _settingsDark
+                              ? _primary.withValues(alpha: 0.08)
+                              : const Color(0xffdceaff),
+                          onTap: () => onSelected(value),
+                          child: Padding(
+                            padding: _settingsSelectPadding.copyWith(right: 10),
+                            child: Row(
+                              children: [
+                                if (leadingBuilder?.call(value)
+                                    case final leading?) ...[
+                                  leading,
+                                  SizedBox(width: 7),
+                                ],
+                                Expanded(
+                                  child: _SettingsOverflowTooltipText(
+                                    text: _formatOption(value),
+                                    style: TextStyle(
+                                      color: selected ? _primary : _text,
+                                      fontSize: _settingsFieldFontSize,
+                                      height: 1.2,
+                                      fontWeight: selected
+                                          ? NautermFontWeights.semibold
+                                          : NautermFontWeights.regular,
+                                      letterSpacing: 0,
+                                    ),
                                   ),
                                 ),
-                              ),
-                              SizedBox(
-                                width: 20,
-                                child: selected
-                                    ? Icon(
-                                        Icons.check_rounded,
-                                        size: 16,
-                                        color: _primary,
-                                      )
-                                    : null,
-                              ),
-                            ],
+                                SizedBox(
+                                  width: 20,
+                                  child: selected
+                                      ? Icon(
+                                          Icons.check_rounded,
+                                          size: 16,
+                                          color: _primary,
+                                        )
+                                      : null,
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  );
-                },
-              ),
-            );
-          },
+                    );
+                  },
+                ),
+              );
+            },
+          ),
         ),
       ),
     );

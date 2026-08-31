@@ -562,6 +562,14 @@ void main() {
 
     final fontMenu = find.byKey(const ValueKey('settings-select-menu'));
     expect(tester.getSize(fontMenu).height, lessThanOrEqualTo(34 * 6));
+    final menuBorder = tester.widget<DecoratedBox>(
+      find.descendant(
+        of: fontMenu,
+        matching: find.byKey(const ValueKey('settings-select-border')),
+      ),
+    );
+    expect(menuBorder.position, DecorationPosition.foreground);
+    expect((menuBorder.decoration as BoxDecoration).border, isNotNull);
     final fontMenuScrollbar = find.descendant(
       of: fontMenu,
       matching: find.byKey(const ValueKey('settings-select-scrollbar')),
