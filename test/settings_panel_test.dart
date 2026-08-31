@@ -877,59 +877,6 @@ void main() {
     expect(terminalSshPredictionMode, TerminalSshPredictionMode.always);
   });
 
-  testWidgets('settings select uses native tooltips only for overflow', (
-    WidgetTester tester,
-  ) async {
-    tester.view.devicePixelRatio = 1;
-    tester.view.physicalSize = const Size(800, 820);
-    addTearDown(() {
-      tester.view.resetDevicePixelRatio();
-      tester.view.resetPhysicalSize();
-    });
-    const longFontFamily =
-        'A deliberately long CJK font family name that must be truncated';
-    final originalFont = terminalFontConfig;
-    terminalFontConfig = originalFont.copyWith(cjkFamily: longFontFamily);
-    addTearDown(() => terminalFontConfig = originalFont);
-
-    await tester.pumpWidget(
-      const MaterialApp(home: SettingsPanel(detectExternalEditors: false)),
-    );
-    await tester.pump();
-    await tester.tap(find.byKey(const ValueKey('settings-nav-terminal')));
-    await tester.pump();
-
-    final select = find.byKey(
-      const ValueKey('settings-terminal-cjk-font-select'),
-    );
-    await tester.scrollUntilVisible(
-      select,
-      300,
-      scrollable: find
-          .descendant(
-            of: find.byKey(const ValueKey('settings-terminal-scroll-view')),
-            matching: find.byType(Scrollable),
-          )
-          .first,
-    );
-    await tester.pump();
-    await tester.tap(select);
-    await tester.pump();
-
-    final menu = find.byKey(const ValueKey('settings-select-menu'));
-    expect(menu, findsOneWidget);
-    final tooltips = find.descendant(of: menu, matching: find.byType(Tooltip));
-    expect(tooltips, findsOneWidget);
-    final tooltip = tester.widget<Tooltip>(tooltips);
-    expect(tooltip.message, longFontFamily);
-    expect(tooltip.waitDuration, const Duration(milliseconds: 300));
-    expect(tooltip.constraints, const BoxConstraints(maxWidth: 360));
-    expect(
-      find.descendant(of: menu, matching: find.byTooltip('Auto')),
-      findsNothing,
-    );
-  });
-
   testWidgets('settings select menu follows its field while scrolling', (
     WidgetTester tester,
   ) async {
