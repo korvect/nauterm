@@ -687,10 +687,11 @@ mod tests {
 
             let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
             let address = listener.local_addr().unwrap();
-            let mut server_config = russh::server::Config::default();
-            server_config.auth_rejection_time = std::time::Duration::ZERO;
-            server_config.keys.push(private_key(3));
-            let server_config = Arc::new(server_config);
+            let server_config = Arc::new(russh::server::Config {
+                auth_rejection_time: std::time::Duration::ZERO,
+                keys: vec![private_key(3)],
+                ..Default::default()
+            });
             let server_certificate_seen = certificate_seen.clone();
             let server_task = tokio::spawn(async move {
                 let (stream, _) = listener.accept().await.unwrap();
