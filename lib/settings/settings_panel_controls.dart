@@ -1495,108 +1495,26 @@ class _SettingsSelectMenu extends StatelessWidget {
   }
 }
 
-class _SettingsOverflowTooltipText extends StatefulWidget {
+class _SettingsOverflowTooltipText extends StatelessWidget {
   const _SettingsOverflowTooltipText({required this.text, required this.style});
 
   final String text;
   final TextStyle style;
 
   @override
-  State<_SettingsOverflowTooltipText> createState() =>
-      _SettingsOverflowTooltipTextState();
-}
-
-class _SettingsOverflowTooltipTextState
-    extends State<_SettingsOverflowTooltipText> {
-  Timer? _showTimer;
-  OverlayEntry? _tooltipEntry;
-
-  @override
-  void dispose() {
-    _hideTooltip();
-    super.dispose();
-  }
-
-  void _scheduleTooltip() {
-    _showTimer?.cancel();
-    _showTimer = Timer(const Duration(milliseconds: 350), _showTooltip);
-  }
-
-  void _showTooltip() {
-    if (!mounted || _tooltipEntry != null) return;
-    final box = context.findRenderObject();
-    final overlay = Overlay.of(context, rootOverlay: true);
-    final overlayBox = overlay.context.findRenderObject();
-    if (box is! RenderBox || overlayBox is! RenderBox || !box.hasSize) return;
-
-    final origin = box.localToGlobal(Offset.zero, ancestor: overlayBox);
-    final target = origin & box.size;
-    final overlaySize = overlayBox.size;
-    final maximumWidth = math.min(480.0, overlaySize.width - 16);
-    final left = target.left
-        .clamp(8.0, math.max(8.0, overlaySize.width - maximumWidth - 8))
-        .toDouble();
-    final showAbove = target.bottom + 54 > overlaySize.height;
-
-    _tooltipEntry = OverlayEntry(
-      builder: (context) => Positioned(
-        left: left,
-        top: showAbove ? null : target.bottom + 5,
-        bottom: showAbove ? overlaySize.height - target.top + 5 : null,
-        child: IgnorePointer(
-          child: Material(
-            color: Colors.transparent,
-            child: Container(
-              constraints: BoxConstraints(maxWidth: maximumWidth),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: const Color(0xff20242b),
-                borderRadius: BorderRadius.circular(5),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x38000000),
-                    blurRadius: 8,
-                    offset: Offset(0, 3),
-                  ),
-                ],
-              ),
-              child: Text(
-                widget.text,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  height: 1.25,
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-    overlay.insert(_tooltipEntry!);
-  }
-
-  void _hideTooltip() {
-    _showTimer?.cancel();
-    _showTimer = null;
-    _tooltipEntry?.remove();
-    _tooltipEntry = null;
-  }
-
-  @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final textWidget = Text(
-          widget.text,
+          text,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: widget.style,
+          style: style,
         );
         if (!constraints.maxWidth.isFinite) return textWidget;
 
         final painter = TextPainter(
-          text: TextSpan(text: widget.text, style: widget.style),
+          text: TextSpan(text: text, style: style),
           maxLines: 1,
           ellipsis: '\u2026',
           textDirection: Directionality.of(context),
@@ -1606,13 +1524,11 @@ class _SettingsOverflowTooltipTextState
         painter.dispose();
 
         if (!overflowed) return textWidget;
-        return Semantics(
-          tooltip: widget.text,
-          child: MouseRegion(
-            onEnter: (_) => _scheduleTooltip(),
-            onExit: (_) => _hideTooltip(),
-            child: textWidget,
-          ),
+        return Tooltip(
+          message: text,
+          waitDuration: const Duration(milliseconds: 300),
+          constraints: const BoxConstraints(maxWidth: 360),
+          child: textWidget,
         );
       },
     );
