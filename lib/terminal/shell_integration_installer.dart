@@ -128,7 +128,8 @@ class ShellIntegrationInstaller {
 String _sourceBlock(Directory resources, String filename) {
   final path = _shellQuote(_join(resources.path, filename));
   return '$_blockStart\n'
-      'if [ -n "\${NAUTERM_SESSION:-}" ]; then\n'
+      'if [ -n "\${NAUTERM_SESSION:-}" ] && '
+      '[ -z "\${NAUTERM_SHELL_INTEGRATION_INJECT+x}" ]; then\n'
       "  . '$path'\n"
       'fi\n'
       '$_blockEnd';

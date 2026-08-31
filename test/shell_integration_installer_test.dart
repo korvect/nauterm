@@ -14,6 +14,7 @@ void main() {
     final data = Directory('${root.path}/data')..createSync();
     final zshRc = File('${home.path}/.zshrc')
       ..writeAsStringSync('export A=1\n');
+    final bashRc = File('${home.path}/.bashrc');
     final installer = ShellIntegrationInstaller(
       paths: NautermPaths(configDirectory: data, dataDirectory: data),
       homeDirectory: home,
@@ -23,6 +24,10 @@ void main() {
     expect(installed.installed, isTrue);
     expect(await zshRc.readAsString(), contains('export A=1'));
     expect(await zshRc.readAsString(), contains('NAUTERM_SESSION'));
+    expect(
+      await bashRc.readAsString(),
+      contains(r'[ -z "${NAUTERM_SHELL_INTEGRATION_INJECT+x}" ]'),
+    );
     expect(await installer.install(), isA<ShellIntegrationInstallStatus>());
     expect(
       '# >>> Nauterm shell integration >>>'.allMatches(
