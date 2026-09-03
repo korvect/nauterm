@@ -16,6 +16,9 @@ class NautermPaths {
 
   File get configFile => File(_join(configDirectory.path, 'config.json'));
 
+  File get workspaceStateFile =>
+      File(_join(dataDirectory.path, 'workspace-state.json'));
+
   Directory get themesDirectory =>
       Directory(_join(configDirectory.path, 'themes'));
 

@@ -5,6 +5,7 @@ Widget _buildSettingsGeneralContent(_SettingsPanelState state) {
     controller: state._contentScrollController,
     thumbVisibility: true,
     child: ListView(
+      key: const ValueKey('settings-general-scroll-view'),
       scrollCacheExtent: const ScrollCacheExtent.viewport(100),
       controller: state._contentScrollController,
       padding: state._contentPadding,
@@ -200,6 +201,55 @@ Widget _buildSettingsGeneralContent(_SettingsPanelState state) {
                       setWorkspacePageEnabled(value);
                       state._persistRuntimeSettings();
                     },
+                  ),
+                ),
+                SizedBox(height: 18),
+                _SettingsRow(
+                  localizationKey: 'settings.general.workspaceRestore',
+                  title: 'Restore Workspace on Startup',
+                  subtitle: 'Tabs, split panes, connections, and active port forwards.',
+                  trailingBelow: true,
+                  trailing: Align(
+                    alignment: Alignment.centerLeft,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 560),
+                      child: _SettingsRadioGroup<WorkspaceRestoreBehavior>(
+                        key: const ValueKey(
+                          'settings-workspace-restore-behavior',
+                        ),
+                        value: state._workspaceRestoreBehavior,
+                        options: [
+                          _SettingsRadioOption(
+                            value: WorkspaceRestoreBehavior.ask,
+                            label: state.context.tr(
+                              'settings.general.workspaceRestore.ask',
+                              fallback: 'Ask When Quitting',
+                            ),
+                          ),
+                          _SettingsRadioOption(
+                            value: WorkspaceRestoreBehavior.always,
+                            label: state.context.tr(
+                              'settings.general.workspaceRestore.always',
+                              fallback: 'Always',
+                            ),
+                          ),
+                          _SettingsRadioOption(
+                            value: WorkspaceRestoreBehavior.never,
+                            label: state.context.tr(
+                              'settings.general.workspaceRestore.never',
+                              fallback: 'Never',
+                            ),
+                          ),
+                        ],
+                        onChanged: (value) {
+                          state._mutate(() {
+                            state._workspaceRestoreBehavior = value;
+                            workspaceRestoreBehavior = value;
+                          });
+                          state._persistRuntimeSettings();
+                        },
+                      ),
+                    ),
                   ),
                 ),
                 SizedBox(height: 18),

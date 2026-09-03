@@ -637,12 +637,18 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
         :final id,
         :final axis,
         :final children,
+        :final fractions,
         :final theme,
       ) =>
         _TerminalSplitPaneView(
           key: ValueKey('split:${tab.id}:$id'),
           axis: axis,
           theme: theme,
+          initialFractions: fractions,
+          onFractionsChanged: (value) {
+            layout.fractions = value;
+            _scheduleWorkspaceStateSave();
+          },
           children: [
             for (final child in children)
               _buildTerminalViewLayout(

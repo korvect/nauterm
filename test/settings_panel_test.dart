@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -142,6 +143,78 @@ void main() {
     expect(find.text('language.english.autonym'), findsNothing);
     expect(find.text('language.simplifiedChinese.autonym'), findsNothing);
 
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('workspace restore behavior uses the settings radio group', (
+    WidgetTester tester,
+  ) async {
+    final previous = workspaceRestoreBehavior;
+    NautermRuntimeSettings? savedSettings;
+    settingsRuntimeSettingsSaverOverride = (settings) async {
+      savedSettings = settings;
+    };
+    addTearDown(() {
+      workspaceRestoreBehavior = previous;
+      settingsRuntimeSettingsSaverOverride = null;
+    });
+
+    await tester.pumpWidget(
+      const MaterialApp(home: SettingsPanel(detectExternalEditors: false)),
+    );
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+    await tester.pump();
+
+    final group = find.byKey(
+      const ValueKey('settings-workspace-restore-behavior'),
+    );
+    await tester.drag(
+      find.byKey(const ValueKey('settings-general-scroll-view')),
+      const Offset(0, -360),
+    );
+    await tester.pumpAndSettle();
+    expect(group, findsOneWidget);
+    await tester.ensureVisible(group);
+    await tester.pumpAndSettle();
+    expect(find.text('Restore Workspace on Startup'), findsOneWidget);
+    expect(find.text('Ask When Quitting'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: group,
+        matching: find.byWidgetPredicate(
+          (widget) => widget is CupertinoRadio<WorkspaceRestoreBehavior>,
+        ),
+      ),
+      findsNWidgets(3),
+    );
+
+    final choiceWidths = [
+      for (final behavior in WorkspaceRestoreBehavior.values)
+        tester.getSize(find.byKey(ValueKey('settings-radio-$behavior'))).width,
+    ];
+    expect(choiceWidths.toSet().length, 1);
+    final groupLeft = tester.getTopLeft(group).dx;
+    final askLabelLeft = tester
+        .getTopLeft(
+          find.descendant(of: group, matching: find.text('Ask When Quitting')),
+        )
+        .dx;
+    expect(askLabelLeft - groupLeft, lessThan(40));
+
+    await tester.tap(
+      find.byKey(
+        const ValueKey('settings-radio-WorkspaceRestoreBehavior.always'),
+      ),
+    );
+    await tester.pump();
+
+    expect(workspaceRestoreBehavior, WorkspaceRestoreBehavior.always);
+    expect(
+      savedSettings?.workspaceRestoreBehavior,
+      WorkspaceRestoreBehavior.always,
+    );
     await tester.pumpWidget(const SizedBox.shrink());
   });
 

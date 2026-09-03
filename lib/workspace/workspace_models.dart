@@ -27,6 +27,7 @@ class _TerminalTab {
     required TerminalController controller,
     required TerminalTheme theme,
     _PendingHostConnection? pendingConnection,
+    String? sourceHostUuid,
     TerminalFontConfig? font,
     _TerminalViewLayout? rootLayout,
     this.replay = false,
@@ -50,6 +51,7 @@ class _TerminalTab {
                controller: controller,
                theme: theme,
                pendingConnection: pendingConnection,
+               sourceHostUuid: sourceHostUuid,
                composerVisible:
                    !replay && currentTerminalConfig().composer.enabled,
              ),
@@ -152,6 +154,7 @@ class _TerminalViewEntry {
     required TerminalController controller,
     required TerminalTheme theme,
     _PendingHostConnection? pendingConnection,
+    this.sourceHostUuid,
     this.composerVisible = true,
   }) : tabs = [
          _TerminalViewTabEntry(
@@ -160,6 +163,7 @@ class _TerminalViewEntry {
            controller: controller,
            theme: theme,
            pendingConnection: pendingConnection,
+           sourceHostUuid: sourceHostUuid,
          ),
        ],
        selectedTabId = id;
@@ -168,6 +172,7 @@ class _TerminalViewEntry {
   final List<_TerminalViewTabEntry> tabs;
   int? selectedTabId;
   bool composerVisible;
+  final String? sourceHostUuid;
 
   _TerminalViewTabEntry get activeTab {
     return tabs.where((tab) => tab.id == selectedTabId).firstOrNull ??
@@ -194,6 +199,7 @@ class _TerminalViewTabEntry {
     required this.controller,
     required this.theme,
     this.pendingConnection,
+    this.sourceHostUuid,
   }) : connectionPageVisible = false;
 
   final int id;
@@ -201,6 +207,7 @@ class _TerminalViewTabEntry {
   final TerminalController controller;
   TerminalTheme theme;
   final _PendingHostConnection? pendingConnection;
+  final String? sourceHostUuid;
   bool connectionPageVisible;
 }
 
@@ -313,15 +320,17 @@ final class _TerminalViewLeaf extends _TerminalViewLayout {
 }
 
 final class _TerminalSplitLayout extends _TerminalViewLayout {
-  const _TerminalSplitLayout({
+  _TerminalSplitLayout({
     required this.id,
     required this.axis,
     required this.children,
-  });
+    List<double>? fractions,
+  }) : fractions = _validSplitFractions(fractions, children.length);
 
   final int id;
   final Axis axis;
   final List<_TerminalViewLayout> children;
+  List<double> fractions;
 
   @override
   TerminalTheme get theme => children.first.theme;
@@ -377,6 +386,7 @@ final class _TerminalSplitLayout extends _TerminalViewLayout {
       id: id,
       axis: this.axis,
       children: nextChildren,
+      fractions: fractions,
     );
   }
 
@@ -407,8 +417,27 @@ final class _TerminalSplitLayout extends _TerminalViewLayout {
       return nextChildren.single;
     }
 
-    return _TerminalSplitLayout(id: id, axis: axis, children: nextChildren);
+    return _TerminalSplitLayout(
+      id: id,
+      axis: axis,
+      children: nextChildren,
+      fractions: fractions,
+    );
   }
+}
+
+List<double> _validSplitFractions(List<double>? values, int count) {
+  if (count <= 0) return const [];
+  if (values == null ||
+      values.length != count ||
+      values.any((value) => !value.isFinite || value <= 0)) {
+    return List<double>.filled(count, 1 / count);
+  }
+  final total = values.fold<double>(0, (sum, value) => sum + value);
+  if (!total.isFinite || total <= 0) {
+    return List<double>.filled(count, 1 / count);
+  }
+  return [for (final value in values) value / total];
 }
 
 class _CloseTabIntent extends Intent {

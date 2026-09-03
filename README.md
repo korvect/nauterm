@@ -112,7 +112,7 @@ not supported.
 - [x] Ghostty terminal emulation backend (`libghostty-vt`)
 - [x] SFTP multithreaded, chunked transfer with resume
 - [x] Predictive local echo for SSH
-- [ ] Session and window restoration after restart
+- [x] Workspace layout and reconnectable session restoration after restart
 - [ ] Unified Capability Registry exposed via MCP to external agents and the built-in AI assistant
 
 ## Installation

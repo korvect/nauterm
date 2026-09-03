@@ -135,6 +135,9 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
         _loadingData = false;
       });
       pendingDataStore = null;
+      if (!_workspaceStateReady && _workspaceStateStore != null) {
+        await _finishWorkspaceRestoreInitialization();
+      }
     } catch (error, stackTrace) {
       pendingDataStore?.dispose();
       NautermLog.error(
@@ -554,6 +557,7 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
     String? title,
     String? shellPath,
     String? workingDirectory,
+    String? sourceHostUuid,
     String? startupSnippet,
     Map<String, String> environment = const {},
     TerminalTheme? theme,
@@ -598,6 +602,7 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
           title: tabTitle,
           theme: tabTheme,
           controller: controller,
+          sourceHostUuid: sourceHostUuid,
         ),
       );
       _selectedTerminalId = id;
@@ -766,6 +771,7 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
         title: host.name,
         shellPath: _emptyToNull(host.shellPath),
         workingDirectory: _emptyToNull(host.workDir),
+        sourceHostUuid: host.uuid,
         theme: theme,
         themeId: host.themeId,
       );

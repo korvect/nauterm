@@ -139,18 +139,17 @@ class _NautermRootState extends State<NautermRoot>
     }
 
     _isClosingMainWindow = true;
-    var shouldClose = true;
-    if (_workspaceController.hasTerminalTabs) {
-      shouldClose = _shouldHideMainWindowOnClose
-          ? await _workspaceController.confirmCloseWindowIfNeeded()
-          : await _workspaceController.confirmQuitIfNeeded();
-    }
+    final shouldClose = _shouldHideMainWindowOnClose
+        ? !_workspaceController.hasActiveWorkspace ||
+              await _workspaceController.confirmCloseWindowIfNeeded()
+        : await _workspaceController.confirmQuitIfNeeded();
     _isClosingMainWindow = false;
     if (!mounted || !shouldClose) {
       return;
     }
 
     if (_shouldHideMainWindowOnClose) {
+      await _workspaceController.saveRestorationStateForClose();
       final visibilityRevision = ++_mainWindowVisibilityRevision;
       markSettingsWindowRequested(false);
       hideMainWindow();

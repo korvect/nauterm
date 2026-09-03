@@ -703,6 +703,7 @@ class _SettingsRow extends StatelessWidget {
     required this.subtitle,
     required this.trailing,
     this.showSubtitle = true,
+    this.trailingBelow = false,
     this.localizationKey,
   });
 
@@ -710,6 +711,7 @@ class _SettingsRow extends StatelessWidget {
   final String subtitle;
   final Widget trailing;
   final bool showSubtitle;
+  final bool trailingBelow;
   final String? localizationKey;
 
   @override
@@ -748,14 +750,17 @@ class _SettingsRow extends StatelessWidget {
     );
     return LayoutBuilder(
       builder: (context, constraints) {
-        if (constraints.maxWidth < _settingsStackedRowBreakpoint) {
+        if (trailingBelow ||
+            constraints.maxWidth < _settingsStackedRowBreakpoint) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               labels,
               SizedBox(height: 12),
               Align(
-                alignment: Alignment.centerRight,
+                alignment: trailingBelow
+                    ? Alignment.centerLeft
+                    : Alignment.centerRight,
                 child: ConstrainedBox(
                   constraints: BoxConstraints(maxWidth: constraints.maxWidth),
                   child: trailing,
@@ -807,6 +812,110 @@ class _SettingsSwitch extends StatelessWidget {
           inactiveThumbColor: _settingsDark
               ? const Color(0xff9aa8b3)
               : Colors.white,
+        ),
+      ),
+    );
+  }
+}
+
+class _SettingsRadioOption<T> {
+  const _SettingsRadioOption({required this.value, required this.label});
+
+  final T value;
+  final String label;
+}
+
+class _SettingsRadioGroup<T> extends StatelessWidget {
+  const _SettingsRadioGroup({
+    super.key,
+    required this.value,
+    required this.options,
+    required this.onChanged,
+  });
+
+  final T value;
+  final List<_SettingsRadioOption<T>> options;
+  final ValueChanged<T> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return RadioGroup<T>(
+      groupValue: value,
+      onChanged: (next) {
+        if (next != null && next != value) {
+          onChanged(next);
+        }
+      },
+      child: Row(
+        children: [
+          for (final option in options)
+            Expanded(
+              child: _SettingsRadioChoice<T>(
+                key: ValueKey('settings-radio-${option.value}'),
+                option: option,
+                onSelected: () => onChanged(option.value),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SettingsRadioChoice<T> extends StatelessWidget {
+  const _SettingsRadioChoice({
+    super.key,
+    required this.option,
+    required this.onSelected,
+  });
+
+  final _SettingsRadioOption<T> option;
+  final VoidCallback onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(7),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(7),
+        onTap: onSelected,
+        hoverColor: _settingsFieldHover,
+        child: SizedBox(
+          height: _settingsSelectHeight,
+          child: Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 20,
+                  height: 18,
+                  child: OverflowBox(
+                    maxWidth: 48,
+                    maxHeight: 48,
+                    child: CupertinoRadio<T>(value: option.value),
+                  ),
+                ),
+                SizedBox(width: 5),
+                Flexible(
+                  child: Text(
+                    option.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.fade,
+                    softWrap: false,
+                    style: TextStyle(
+                      color: _text,
+                      fontSize: _settingsFieldFontSize,
+                      fontWeight: NautermFontWeights.regular,
+                      height: 1.2,
+                      letterSpacing: 0,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

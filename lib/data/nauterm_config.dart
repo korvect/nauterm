@@ -446,16 +446,28 @@ class NautermSshConfig {
 
 @immutable
 class NautermWorkspaceConfig {
-  const NautermWorkspaceConfig({this.enabled = true});
+  const NautermWorkspaceConfig({
+    this.enabled = true,
+    this.restoreBehavior = WorkspaceRestoreBehavior.ask,
+  });
 
   final bool enabled;
+  final WorkspaceRestoreBehavior restoreBehavior;
 
   factory NautermWorkspaceConfig.fromJson(Object? value) {
     final json = _map(value);
-    return NautermWorkspaceConfig(enabled: json['enabled'] as bool? ?? true);
+    return NautermWorkspaceConfig(
+      enabled: json['enabled'] as bool? ?? true,
+      restoreBehavior: WorkspaceRestoreBehavior.fromString(
+        json['restoreBehavior'] as String?,
+      ),
+    );
   }
 
-  Map<String, Object?> toJson() => <String, Object?>{'enabled': enabled};
+  Map<String, Object?> toJson() => <String, Object?>{
+    'enabled': enabled,
+    'restoreBehavior': restoreBehavior.name,
+  };
 }
 
 @immutable

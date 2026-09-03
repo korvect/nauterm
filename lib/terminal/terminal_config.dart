@@ -216,6 +216,21 @@ int sftpConcurrentTasks = sftpDefaultConcurrentTasks;
 int sftpTransferThreads = sftpDefaultTransferThreads;
 bool workspacePageEnabled = true;
 
+enum WorkspaceRestoreBehavior {
+  ask,
+  always,
+  never;
+
+  static WorkspaceRestoreBehavior fromString(String? value) => switch (value) {
+    'always' => WorkspaceRestoreBehavior.always,
+    'never' => WorkspaceRestoreBehavior.never,
+    _ => WorkspaceRestoreBehavior.ask,
+  };
+}
+
+WorkspaceRestoreBehavior workspaceRestoreBehavior =
+    WorkspaceRestoreBehavior.ask;
+
 String sftpEffectiveLocalDirectory() {
   final configured = sftpDefaultDownloadDir;
   if (configured != null && configured.isNotEmpty) {
@@ -451,6 +466,7 @@ class NautermRuntimeSettings {
     this.shellPath,
     this.window = const WindowConfig(),
     this.workspacePageEnabled = true,
+    this.workspaceRestoreBehavior = WorkspaceRestoreBehavior.ask,
     this.recording = const NautermRecordingConfig(),
   });
 
@@ -483,6 +499,7 @@ class NautermRuntimeSettings {
   final String? shellPath;
   final WindowConfig window;
   final bool workspacePageEnabled;
+  final WorkspaceRestoreBehavior workspaceRestoreBehavior;
   final NautermRecordingConfig recording;
 }
 
@@ -526,6 +543,7 @@ void applyNautermRuntimeSettings(NautermRuntimeSettings settings) {
   sftpTransferThreads = settings.sftp.transferThreads;
   setSftpTabEnabled(settings.sftp.showTab);
   setWorkspacePageEnabled(settings.workspacePageEnabled);
+  workspaceRestoreBehavior = settings.workspaceRestoreBehavior;
   terminalRecordingConfig = settings.recording;
   setAiAssistantConfig(settings.aiAssistant);
   setAppThemeMode(settings.appThemeMode);
@@ -580,6 +598,7 @@ NautermRuntimeSettings currentNautermRuntimeSettings() {
       y: terminalWindowY,
     ),
     workspacePageEnabled: workspacePageEnabled,
+    workspaceRestoreBehavior: workspaceRestoreBehavior,
     recording: terminalRecordingConfig,
   );
 }

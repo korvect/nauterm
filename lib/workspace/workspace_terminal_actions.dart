@@ -220,6 +220,9 @@ extension _NautermWorkspaceTerminalActions on _NautermWorkspaceState {
           title: title,
           controller: controller,
           theme: view.theme,
+          sourceHostUuid: sshProfile == null
+              ? view.activeTab.sourceHostUuid
+              : null,
         ),
       );
       view.selectedTabId = id;
@@ -441,6 +444,9 @@ extension _NautermWorkspaceTerminalActions on _NautermWorkspaceState {
       title: title,
       controller: controller,
       theme: targetView.theme,
+      sourceHostUuid: sshProfile == null
+          ? targetView.activeTab.sourceHostUuid
+          : null,
       composerVisible: targetView.composerVisible,
     );
     final nextLayout = currentLayout.splitView(
@@ -637,48 +643,72 @@ extension _NautermWorkspaceTerminalActions on _NautermWorkspaceState {
   }
 
   Future<bool> _confirmQuitIfNeeded() async {
-    return _confirmOpenTerminalTabsAction(
-      title: 'Quit Nauterm?',
-      singularMessage: 'There is still 1 terminal tab open. Quit anyway?',
-      pluralMessage: (count) =>
-          'There are still $count terminal tabs open. Quit anyway?',
-      confirmLabel: 'Quit',
-    );
+    return _confirmApplicationExit(closeWindow: false);
   }
 
   Future<bool> _confirmCloseWindowIfNeeded() async {
-    return _confirmOpenTerminalTabsAction(
-      title: 'Close window?',
-      singularMessage:
-          'There is still 1 terminal tab open. Close this window anyway?',
-      pluralMessage: (count) =>
-          'There are still $count terminal tabs open. Close this window anyway?',
-      confirmLabel: 'Close',
-    );
+    return _confirmApplicationExit(closeWindow: true);
   }
 
-  Future<bool> _confirmOpenTerminalTabsAction({
-    required String title,
-    required String singularMessage,
-    required String Function(int count) pluralMessage,
-    required String confirmLabel,
-  }) async {
+  Future<bool> _confirmApplicationExit({required bool closeWindow}) async {
     final tabCount = _allTerminalTabs.length;
-    if (tabCount == 0) {
+    final forwardCount = _runningPortForwardIds.length;
+    if (tabCount == 0 && forwardCount == 0) {
+      _restoreOnShutdown = false;
       return true;
     }
 
-    final result = await _showWorkspaceDialog<bool>(
-      builder: (context) {
-        return _WorkspaceConfirmDialog(
-          title: Text(tr(title)),
-          message: tabCount == 1 ? singularMessage : pluralMessage(tabCount),
-          confirmLabel: confirmLabel,
-        );
-      },
+    final message = switch ((tabCount, forwardCount)) {
+      (0, final forwards) => context.tr(
+        closeWindow
+            ? 'workspace.closeWindow.activeForwards'
+            : 'workspace.quit.activeForwards',
+        fallback: closeWindow
+            ? 'There are still {count} active port forwards. Close this window anyway?'
+            : 'There are still {count} active port forwards. Quit anyway?',
+        args: {'count': forwards},
+      ),
+      (final tabs, 0) => context.tr(
+        closeWindow
+            ? 'workspace.closeWindow.openTabs'
+            : 'workspace.quit.openTabs',
+        fallback: closeWindow
+            ? tabs == 1
+                  ? 'There is still 1 terminal tab open. Close this window anyway?'
+                  : 'There are still {count} terminal tabs open. Close this window anyway?'
+            : tabs == 1
+            ? 'There is still 1 terminal tab open. Quit anyway?'
+            : 'There are still {count} terminal tabs open. Quit anyway?',
+        args: {'count': tabs},
+      ),
+      (final tabs, final forwards) => context.tr(
+        closeWindow
+            ? 'workspace.closeWindow.openTabsAndForwards'
+            : 'workspace.quit.openTabsAndForwards',
+        fallback: closeWindow
+            ? 'There are still {tabs} terminal tabs and {forwards} active port forwards. Close this window anyway?'
+            : 'There are still {tabs} terminal tabs and {forwards} active port forwards. Quit anyway?',
+        args: {'tabs': tabs, 'forwards': forwards},
+      ),
+    };
+    final behavior = workspaceRestoreBehavior;
+    final result = await _showWorkspaceDialog<_WorkspaceExitDecision>(
+      builder: (context) => _WorkspaceExitDialog(
+        title: context.tr(
+          closeWindow
+              ? 'workspace.dialog.closeWindow'
+              : 'workspace.dialog.quitNauterm',
+          fallback: closeWindow ? 'Close window?' : 'Quit Nauterm?',
+        ),
+        message: message,
+        confirmLabel: closeWindow ? 'Close' : 'Quit',
+        showRestoreOption: behavior == WorkspaceRestoreBehavior.ask,
+        restoreOnNextLaunch: behavior != WorkspaceRestoreBehavior.never,
+      ),
     );
-
-    return result ?? false;
+    if (result == null) return false;
+    _restoreOnShutdown = result.restoreOnNextLaunch;
+    return true;
   }
 
   Future<bool> _confirmDelete({

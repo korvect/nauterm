@@ -68,7 +68,8 @@
     "transferThreads": 8
   },
   "workspace": {
-    "enabled": true
+    "enabled": true,
+    "restoreBehavior": "ask"
   },
   "shortcuts": {
     "quickConnect": "ctrl+t",

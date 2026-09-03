@@ -84,6 +84,7 @@ class NautermConfigStore {
       shellPath: terminal.shellPath,
       window: config.window,
       workspacePageEnabled: config.workspace.enabled,
+      workspaceRestoreBehavior: config.workspace.restoreBehavior,
       recording: config.recording,
     );
   }
@@ -132,6 +133,7 @@ class NautermConfigStore {
         sftp: settings.sftp,
         workspace: NautermWorkspaceConfig(
           enabled: settings.workspacePageEnabled,
+          restoreBehavior: settings.workspaceRestoreBehavior,
         ),
         shortcuts: settings.shortcuts,
         ai: NautermAiConfig(

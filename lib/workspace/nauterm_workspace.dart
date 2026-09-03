@@ -64,6 +64,7 @@ import '../window/file_drop_channel.dart';
 import '../window/native_windowing.dart';
 import 'workspace_composer_completion.dart';
 import 'terminal_lifecycle_service.dart';
+import 'workspace_state_store.dart';
 
 part 'workspace_style.dart';
 part 'workspace_models.dart';
@@ -113,16 +114,25 @@ part 'workspace_terminal_theme_gallery.dart';
 part 'workspace_terminal_reconnect.dart';
 part 'workspace_ai_controls.dart';
 part 'workspace_ai_conversation.dart';
+part 'workspace_restore.dart';
 
 final Set<Future<void> Function()> _workspaceShutdownHooks = {};
 
 class NautermWorkspaceController extends ChangeNotifier {
+  NautermWorkspaceController({WorkspaceStateStore? workspaceStateStore})
+    : _workspaceStateStore =
+          workspaceStateStore ?? WorkspaceStateStore(NautermPaths.resolve());
+
+  final WorkspaceStateStore _workspaceStateStore;
   _NautermWorkspaceState? _state;
   StartupUpdateNotice? _updateNotice;
   final Completer<void> _initialDataReady = Completer<void>();
   Future<void>? _flushAndCloseFuture;
 
   bool get hasTerminalTabs => _state?._allTerminalTabs.isNotEmpty ?? false;
+  bool get hasActiveWorkspace =>
+      (_state?._allTerminalTabs.isNotEmpty ?? false) ||
+      (_state?._runningPortForwardIds.isNotEmpty ?? false);
   Future<void> get initialDataReady => _initialDataReady.future;
   Set<String> get selectedWorkspaceItemIds =>
       _state?._selectedWorkspaceItemIds ?? const <String>{};
@@ -161,6 +171,10 @@ class NautermWorkspaceController extends ChangeNotifier {
   Future<void> flushAndClose() {
     return _flushAndCloseFuture ??=
         _state?._flushAndClose() ?? Future<void>.value();
+  }
+
+  Future<void> saveRestorationStateForClose() async {
+    await _state?._saveRestorationStateForClose();
   }
 
   void _attach(_NautermWorkspaceState state) {
@@ -296,6 +310,8 @@ class _NautermWorkspaceState extends ConsumerState<NautermWorkspace> {
   NautermDataStore? _dataStore;
   Timer? _notificationTimer;
   Timer? _portForwardStatusTimer;
+  Timer? _workspaceStateSaveTimer;
+  Timer? _workspaceStateCheckpointTimer;
   final NautermOverlayController _overlayController =
       NautermOverlayController();
   final FocusNode _workspaceFocusNode = FocusNode(
@@ -337,6 +353,11 @@ class _NautermWorkspaceState extends ConsumerState<NautermWorkspace> {
   bool _aiAssistantResizing = false;
   bool _isClosing = false;
   Future<void>? _flushAndCloseFuture;
+  WorkspaceStateStore? _workspaceStateStore;
+  Future<NautermWorkspaceStateSnapshot?>? _previousWorkspaceState;
+  Future<void>? _workspaceRestoreInitializationFuture;
+  bool _workspaceStateReady = false;
+  bool _restoreOnShutdown = false;
   late final TerminalLifecycleService _terminalLifecycleService;
 
   _WorkspaceTab get _tab => _workspaceModel.tab;
@@ -765,6 +786,26 @@ class _NautermWorkspaceState extends ConsumerState<NautermWorkspace> {
     );
     _recordingService = RecordingService();
     widget.controller?._attach(this);
+    _workspaceStateStore = widget.controller?._workspaceStateStore;
+    final workspaceStateStore = _workspaceStateStore;
+    if (workspaceStateStore != null) {
+      _previousWorkspaceState = workspaceStateStore.beginRun().onError((
+        error,
+        stackTrace,
+      ) {
+        NautermLog.warning(
+          'workspace-restore',
+          'Unable to initialize workspace recovery state.',
+          error: error,
+          stackTrace: stackTrace,
+        );
+        return null;
+      });
+      _workspaceStateCheckpointTimer = Timer.periodic(
+        const Duration(seconds: 15),
+        (_) => _scheduleWorkspaceStateSave(),
+      );
+    }
     _portForwardStatusTimer = Timer.periodic(
       const Duration(seconds: 2),
       (_) => _syncPortForwardStatuses(),
@@ -807,6 +848,7 @@ class _NautermWorkspaceState extends ConsumerState<NautermWorkspace> {
       return;
     }
     _workspaceModel.mutate(fn);
+    _scheduleWorkspaceStateSave();
   }
 
   void _handleWorkspaceItemSelectionChanged(
@@ -891,6 +933,11 @@ class _NautermWorkspaceState extends ConsumerState<NautermWorkspace> {
   Future<void> _performFlushAndClose() async {
     _isClosing = true;
     _cancelShutdownTimers();
+
+    await _saveWorkspaceState(
+      cleanShutdown: true,
+      restoreOnNextLaunch: _restoreOnShutdown,
+    );
 
     await Future.wait([
       for (final hook in _workspaceShutdownHooks.toList(growable: false))
@@ -977,6 +1024,8 @@ class _NautermWorkspaceState extends ConsumerState<NautermWorkspace> {
     _recordingService.cancelScheduledSave();
     _notificationTimer?.cancel();
     _portForwardStatusTimer?.cancel();
+    _workspaceStateSaveTimer?.cancel();
+    _workspaceStateCheckpointTimer?.cancel();
     for (final timer in _localZshCompletionDebounceTimers.values) {
       timer.cancel();
     }

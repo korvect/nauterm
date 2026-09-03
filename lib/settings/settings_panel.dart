@@ -60,6 +60,10 @@ final ValueNotifier<int> nautermSyncStatusRevision = ValueNotifier(0);
 @visibleForTesting
 Future<void> Function(Directory directory)? settingsDirectoryOpenerOverride;
 
+@visibleForTesting
+Future<void> Function(NautermRuntimeSettings settings)?
+settingsRuntimeSettingsSaverOverride;
+
 void notifyNautermDatabaseBulkChange() {
   nautermDatabaseBulkChangeRevision.value++;
 }
@@ -192,6 +196,13 @@ const _settingsSearchEntries = <_SettingsSearchEntry>[
     title: 'Workspace Page',
     subtitle: 'Show the workspace overview page.',
     keywords: 'sessions',
+  ),
+  _SettingsSearchEntry(
+    page: _SettingsPage.general,
+    section: 'general-behavior',
+    title: 'Restore Workspace on Startup',
+    subtitle: 'Tabs, split panes, connections, and active port forwards.',
+    keywords: 'workspace restore reopen restart launch ask always never',
   ),
   _SettingsSearchEntry(
     page: _SettingsPage.general,
@@ -447,6 +458,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
   TerminalShortcutConfig _shortcutConfig = terminalShortcutConfig;
   bool _sftpTabEnabled = sftpTabEnabled;
   bool _workspacePageEnabled = workspacePageEnabled;
+  WorkspaceRestoreBehavior _workspaceRestoreBehavior = workspaceRestoreBehavior;
   String _sftpDefaultDownloadDir = sftpDefaultDownloadDir ?? '';
   List<String> _sftpTextFileExtensions = sftpTextFileExtensions;
   bool _sftpShowHiddenFiles = sftpShowHiddenFiles;
@@ -728,6 +740,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
         _sftpConcurrentTasks = settings.sftp.concurrentTasks;
         _sftpTransferThreads = settings.sftp.transferThreads;
         _workspacePageEnabled = settings.workspacePageEnabled;
+        _workspaceRestoreBehavior = settings.workspaceRestoreBehavior;
         _aiBaseUrlController.text = provider.config.baseUrl;
         _aiModelController.text = provider.config.model;
         _aiApiKeyController.text = provider.config.apiKey;
@@ -822,9 +835,13 @@ class _SettingsPanelState extends State<SettingsPanel> {
   }
 
   void _persistRuntimeSettings() {
+    final settings = currentNautermRuntimeSettings();
+    final saver = settingsRuntimeSettingsSaverOverride;
     unawaited(
-      NautermConfigStore(NautermPaths.resolve())
-          .saveRuntimeSettings(currentNautermRuntimeSettings()),
+      saver != null
+          ? saver(settings)
+          : NautermConfigStore(NautermPaths.resolve())
+                .saveRuntimeSettings(settings),
     );
     terminalConfigNotifier.value++;
   }

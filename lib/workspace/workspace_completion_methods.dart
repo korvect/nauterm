@@ -771,6 +771,7 @@ extension _NautermWorkspaceCompletionMethods on _NautermWorkspaceState {
 
     _sshWorkingDirectories[paneId] = directory;
     _pendingSshWorkingDirectories.remove(paneId);
+    _scheduleWorkspaceStateSave();
 
     final resolvedCacheKey = _sshCompletionCacheKey(paneId, profile, directory);
     if (cacheEntries is List<String>) {
@@ -862,6 +863,7 @@ extension _NautermWorkspaceCompletionMethods on _NautermWorkspaceState {
         expandHome: false,
       )!,
     );
+    _scheduleWorkspaceStateSave();
   }
 
   String? _promptDirectoryTokenFromSnapshot(TerminalSnapshot snapshot) {

@@ -368,6 +368,7 @@ void main() {
         sshKeepaliveIntervalSeconds: 45,
         sshPredictionMode: TerminalSshPredictionMode.always,
         hostIconMode: HostIconMode.osIcon,
+        workspaceRestoreBehavior: WorkspaceRestoreBehavior.always,
         recording: NautermRecordingConfig(
           enabled: false,
           captureEnabled: true,
@@ -404,6 +405,7 @@ void main() {
     expect(loaded.sshKeepaliveIntervalSeconds, 45);
     expect(loaded.sshPredictionMode, TerminalSshPredictionMode.always);
     expect(loaded.hostIconMode, HostIconMode.osIcon);
+    expect(loaded.workspaceRestoreBehavior, WorkspaceRestoreBehavior.always);
     expect(loaded.recording.enabled, isFalse);
     expect(loaded.recording.captureEnabled, isTrue);
     expect(loaded.recording.retentionDays, 14);
@@ -451,6 +453,7 @@ void main() {
     );
     expect((json['tabs'] as Map)['confirmOnClose'], isTrue);
     expect((json['ssh'] as Map)['keepaliveInterval'], 45000);
+    expect((json['workspace'] as Map)['restoreBehavior'], 'always');
     expect(json['shortcuts'], isA<Map>());
     expect((json['recording'] as Map)['retentionDays'], 14);
   });

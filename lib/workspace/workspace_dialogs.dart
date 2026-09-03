@@ -167,6 +167,180 @@ class _WorkspaceConfirmDialog extends StatelessWidget {
   }
 }
 
+class _WorkspaceExitDecision {
+  const _WorkspaceExitDecision({required this.restoreOnNextLaunch});
+
+  final bool restoreOnNextLaunch;
+}
+
+class _WorkspaceExitDialog extends StatefulWidget {
+  const _WorkspaceExitDialog({
+    required this.title,
+    required this.message,
+    required this.confirmLabel,
+    required this.showRestoreOption,
+    required this.restoreOnNextLaunch,
+  });
+
+  final String title;
+  final String message;
+  final String confirmLabel;
+  final bool showRestoreOption;
+  final bool restoreOnNextLaunch;
+
+  @override
+  State<_WorkspaceExitDialog> createState() => _WorkspaceExitDialogState();
+}
+
+class _WorkspaceExitDialogState extends State<_WorkspaceExitDialog> {
+  late bool _restoreOnNextLaunch = widget.restoreOnNextLaunch;
+
+  @override
+  Widget build(BuildContext context) {
+    return _WorkspaceDialogFrame(
+      width: 430,
+      title: Text(widget.title),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            widget.message,
+            style: TextStyle(
+              color: _text,
+              fontSize: NautermFontSizes.labelLarge,
+              fontWeight: NautermFontWeights.regular,
+              height: 1.35,
+              letterSpacing: 0,
+            ),
+          ),
+          if (widget.showRestoreOption) ...[
+            SizedBox(height: 16),
+            InkWell(
+              borderRadius: BorderRadius.circular(7),
+              onTap: () =>
+                  setState(() => _restoreOnNextLaunch = !_restoreOnNextLaunch),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Checkbox(
+                      value: _restoreOnNextLaunch,
+                      onChanged: (value) =>
+                          setState(() => _restoreOnNextLaunch = value ?? false),
+                      activeColor: _blue,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            context.tr(
+                              'workspace.restore.nextLaunch.label',
+                              fallback: 'Restore workspace on next launch',
+                            ),
+                            style: TextStyle(
+                              color: _text,
+                              fontSize: NautermFontSizes.labelLarge,
+                              fontWeight: NautermFontWeights.medium,
+                              height: 1.3,
+                            ),
+                          ),
+                          SizedBox(height: 2),
+                          Text(
+                            context.tr(
+                              'workspace.restore.nextLaunch.description',
+                              fallback: 'Recreates workspaces and split panes, reconnects terminals, and restarts active port forwards.',
+                            ),
+                            style: TextStyle(
+                              color: _mutedText,
+                              fontSize: NautermFontSizes.labelMedium,
+                              fontWeight: NautermFontWeights.regular,
+                              height: 1.35,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+      actions: [
+        _WorkspaceButton(
+          label: 'Cancel',
+          variant: _WorkspaceButtonVariant.text,
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        _WorkspaceButton(
+          label: widget.confirmLabel,
+          type: _WorkspaceButtonType.error,
+          variant: _WorkspaceButtonVariant.solid,
+          onPressed: () => Navigator.of(context).pop(
+            _WorkspaceExitDecision(restoreOnNextLaunch: _restoreOnNextLaunch),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _WorkspaceRecoveryDialog extends StatelessWidget {
+  const _WorkspaceRecoveryDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    return _WorkspaceDialogFrame(
+      width: 430,
+      title: Text(
+        context.tr(
+          'workspace.restore.unexpectedExit.title',
+          fallback: 'Nauterm closed unexpectedly',
+        ),
+      ),
+      content: Text(
+        context.tr(
+          'workspace.restore.unexpectedExit.description',
+          fallback: 'Restore your previous workspace? Terminals will reconnect and active port forwards will restart.',
+        ),
+        style: TextStyle(
+          color: _text,
+          fontSize: NautermFontSizes.labelLarge,
+          fontWeight: NautermFontWeights.regular,
+          height: 1.35,
+          letterSpacing: 0,
+        ),
+      ),
+      actions: [
+        _WorkspaceButton(
+          label: context.tr(
+            'workspace.restore.startFresh',
+            fallback: 'Start Fresh',
+          ),
+          variant: _WorkspaceButtonVariant.text,
+          onPressed: () => Navigator.of(context).pop(false),
+        ),
+        _WorkspaceButton(
+          label: context.tr(
+            'workspace.restore.restoreWorkspace',
+            fallback: 'Restore Workspace',
+          ),
+          type: _WorkspaceButtonType.primary,
+          variant: _WorkspaceButtonVariant.solid,
+          onPressed: () => Navigator.of(context).pop(true),
+        ),
+      ],
+    );
+  }
+}
+
 class _WorkspacePageTransition extends StatelessWidget {
   const _WorkspacePageTransition({required this.pageKey, required this.child});
 
@@ -215,11 +389,15 @@ class _TerminalSplitPaneView extends StatefulWidget {
     super.key,
     required this.axis,
     required this.theme,
+    required this.initialFractions,
+    required this.onFractionsChanged,
     required this.children,
   });
 
   final Axis axis;
   final TerminalTheme theme;
+  final List<double> initialFractions;
+  final ValueChanged<List<double>> onFractionsChanged;
   final List<Widget> children;
 
   @override
@@ -229,7 +407,10 @@ class _TerminalSplitPaneView extends StatefulWidget {
 class _TerminalSplitPaneViewState extends State<_TerminalSplitPaneView> {
   static const double _dividerExtent = 5;
 
-  late List<double> _fractions = _equalFractions(widget.children.length);
+  late List<double> _fractions = _validSplitFractions(
+    widget.initialFractions,
+    widget.children.length,
+  );
 
   @override
   void didUpdateWidget(covariant _TerminalSplitPaneView oldWidget) {
@@ -237,6 +418,15 @@ class _TerminalSplitPaneViewState extends State<_TerminalSplitPaneView> {
     if (oldWidget.children.length != widget.children.length ||
         oldWidget.axis != widget.axis) {
       _fractions = _equalFractions(widget.children.length);
+    } else if (!listEquals(
+          oldWidget.initialFractions,
+          widget.initialFractions,
+        ) &&
+        !listEquals(_fractions, widget.initialFractions)) {
+      _fractions = _validSplitFractions(
+        widget.initialFractions,
+        widget.children.length,
+      );
     }
   }
 
@@ -310,6 +500,7 @@ class _TerminalSplitPaneViewState extends State<_TerminalSplitPaneView> {
       _fractions[dividerIndex] = left + clampedDelta;
       _fractions[dividerIndex + 1] = right - clampedDelta;
     });
+    widget.onFractionsChanged(List<double>.unmodifiable(_fractions));
   }
 
   static List<double> _equalFractions(int count) {
