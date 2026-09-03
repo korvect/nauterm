@@ -89,6 +89,10 @@ class TerminalWidgetController {
     _state?._selectAllText();
   }
 
+  void clearSelection() {
+    _state?._clearSelection();
+  }
+
   void showSearch() {
     _state?._showSearch();
   }
@@ -770,6 +774,7 @@ class _TerminalViewState extends State<TerminalView>
     if (!sensitive && command.trim().isEmpty) {
       return;
     }
+    _terminalWidgetController.clearSelection();
     widget.controller.scrollToBottom();
     if (sensitive && command.isEmpty) {
       widget.controller.sendInput('\r', sensitive: true);

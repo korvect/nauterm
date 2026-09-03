@@ -1933,6 +1933,37 @@ void main() {
     expect(inputs, ['echo ready\r']);
   });
 
+  testWidgets('composer submission clears the selected command block', (
+    tester,
+  ) async {
+    final inputs = <String>[];
+    final driver = MemoryTerminalDriver(columns: 80, rows: 8);
+    final controller = TerminalController(driver: driver, onInput: inputs.add);
+    addTearDown(controller.dispose);
+    await _pumpTerminal(tester, controller, autofocusTerminal: true);
+    controller.write('user@host:~\$ ls\r\noutput');
+    await tester.pump();
+
+    final metrics = TerminalMetrics.measure(
+      defaultTerminalConfig.font.textStyle(),
+    );
+    await tester.tapAt(
+      _cellCenter(metrics, column: 2, row: 1),
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pump();
+    expect(_terminalPainter(tester).commandBlockSelection, isNotNull);
+    expect(controller.selectedCommandBlock, isNotNull);
+
+    await tester.enterText(find.byType(TextField), 'echo ready');
+    await tester.testTextInput.receiveAction(TextInputAction.send);
+    await tester.pump();
+
+    expect(_terminalPainter(tester).commandBlockSelection, isNull);
+    expect(controller.selectedCommandBlock, isNull);
+    expect(inputs, ['echo ready\r']);
+  });
+
   testWidgets('composer is centered as a floating surface', (tester) async {
     tester.view.physicalSize = const Size(1200, 400);
     tester.view.devicePixelRatio = 1;
