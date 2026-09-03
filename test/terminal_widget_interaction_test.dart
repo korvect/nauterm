@@ -1908,6 +1908,31 @@ void main() {
     expect(inputs, ['\x03']);
   });
 
+  testWidgets('composer submission scrolls the terminal to the bottom', (
+    tester,
+  ) async {
+    final inputs = <String>[];
+    final driver = _SnapshotDriver(
+      TerminalSnapshot.blank(
+        columns: 80,
+        rows: 8,
+        historyLines: 40,
+        displayOffset: 10,
+      ),
+    );
+    final controller = TerminalController(driver: driver, onInput: inputs.add);
+    addTearDown(controller.dispose);
+    await _pumpTerminal(tester, controller);
+
+    await tester.enterText(find.byType(TextField), 'echo ready');
+    await tester.testTextInput.receiveAction(TextInputAction.send);
+    await tester.pump();
+
+    expect(driver.snapshot.displayOffset, 0);
+    expect(driver.scrolledLines, -10);
+    expect(inputs, ['echo ready\r']);
+  });
+
   testWidgets('composer is centered as a floating surface', (tester) async {
     tester.view.physicalSize = const Size(1200, 400);
     tester.view.devicePixelRatio = 1;

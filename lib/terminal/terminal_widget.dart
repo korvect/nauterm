@@ -770,6 +770,7 @@ class _TerminalViewState extends State<TerminalView>
     if (!sensitive && command.trim().isEmpty) {
       return;
     }
+    widget.controller.scrollToBottom();
     if (sensitive && command.isEmpty) {
       widget.controller.sendInput('\r', sensitive: true);
     } else {
