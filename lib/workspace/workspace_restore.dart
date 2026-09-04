@@ -39,6 +39,10 @@ extension _NautermWorkspaceRestore on _NautermWorkspaceState {
     }
     if (!mounted || _isClosing) return;
 
+    // The launch-time recovery candidate has been consumed, whether the user
+    // restored it or started fresh. Do not let a later window close resurrect
+    // the stale unexpected-exit snapshot.
+    _previousWorkspaceState = Future.value(null);
     _workspaceStateReady = true;
     await _saveWorkspaceState(cleanShutdown: false, restoreOnNextLaunch: false);
   }
