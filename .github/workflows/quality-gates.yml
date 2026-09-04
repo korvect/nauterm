@@ -43,7 +43,7 @@ jobs:
       - name: Install Linux native build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libdbus-1-dev pkg-config
+          sudo apt-get install -y libdbus-1-dev libudev-dev pkg-config
 
       - name: Verify release metadata and generated assets
         run: |
@@ -168,7 +168,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y fish libdbus-1-dev pkg-config tmux
+          sudo apt-get install -y fish libdbus-1-dev libudev-dev pkg-config tmux
 
       - name: Install macOS integration dependencies
         if: runner.os == 'macOS'
