@@ -93,6 +93,15 @@ SshConnectionProfile refreshSavedHostSshProfile({
   );
 }
 
+@visibleForTesting
+Widget buildTerminalConnectionPageForTesting(TerminalController controller) {
+  return _TerminalConnectionPage(
+    controller: controller,
+    keys: const [],
+    identities: const [],
+  );
+}
+
 class _PendingHostConnectionPage extends StatefulWidget {
   const _PendingHostConnectionPage({
     super.key,
@@ -196,47 +205,38 @@ class _PendingHostConnectionPageState
     final host = widget.pending.host;
     final item = widget.pending.item;
     final address = _emptyToNull(host.host) ?? item.host ?? host.name;
-    return ColoredBox(
-      color: _surface,
-      child: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-          child: Material(
-            color: Colors.transparent,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 510),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 22),
+    return _ConnectionPageViewport(
+      child: _ConnectionPagePanel(
+        title: host.name,
+        subtitle: address,
+        hostOs: host.os,
+        hostDistro: host.distro,
+        progress: _ConnectionProgress(
+          icons: const [Icons.power_rounded, LucideIcons.squareTerminal],
+          reachedStep: 0,
+          spinningStep: _starting ? 0 : null,
+        ),
+        body: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              tr('common.label.protocol', fallback: 'Protocol'),
+              style: TextStyle(
+                color: _text,
+                fontSize: NautermFontSizes.titleSmall,
+                fontWeight: NautermFontWeights.semibold,
+                letterSpacing: 0,
+              ),
+            ),
+            SizedBox(height: 14),
+            Flexible(
+              fit: FlexFit.loose,
+              child: SingleChildScrollView(
+                key: const ValueKey('connection-protocol-scrollable'),
                 child: Column(
-                  mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _ConnectionPageHeader(
-                      title: host.name,
-                      subtitle: address,
-                      hostOs: host.os,
-                      hostDistro: host.distro,
-                    ),
-                    SizedBox(height: 22),
-                    _ConnectionProgress(
-                      icons: const [
-                        Icons.power_rounded,
-                        LucideIcons.squareTerminal,
-                      ],
-                      reachedStep: 0,
-                      spinningStep: _starting ? 0 : null,
-                    ),
-                    SizedBox(height: 28),
-                    Text(
-                      tr('common.label.protocol', fallback: 'Protocol'),
-                      style: TextStyle(
-                        color: _text,
-                        fontSize: NautermFontSizes.titleSmall,
-                        fontWeight: NautermFontWeights.semibold,
-                        letterSpacing: 0,
-                      ),
-                    ),
-                    SizedBox(height: 14),
                     if (host.sshEnabled)
                       _HostProtocolCard(
                         title: 'SSH',
@@ -284,29 +284,25 @@ class _PendingHostConnectionPageState
                         ),
                       ),
                     ],
-                    SizedBox(height: 24),
-                    Row(
-                      children: [
-                        _ConnectionButton(
-                          label: tr('common.action.close', fallback: 'Close'),
-                          onPressed: _starting ? null : widget.onCloseRequested,
-                        ),
-                        const Spacer(),
-                        _ConnectionButton(
-                          label: tr(
-                            'common.action.connect',
-                            fallback: 'Connect',
-                          ),
-                          primary: true,
-                          onPressed: _starting ? null : _connect,
-                        ),
-                      ],
-                    ),
                   ],
                 ),
               ),
             ),
-          ),
+          ],
+        ),
+        footer: Row(
+          children: [
+            _ConnectionButton(
+              label: tr('common.action.close', fallback: 'Close'),
+              onPressed: _starting ? null : widget.onCloseRequested,
+            ),
+            const Spacer(),
+            _ConnectionButton(
+              label: tr('common.action.connect', fallback: 'Connect'),
+              primary: true,
+              onPressed: _starting ? null : _connect,
+            ),
+          ],
         ),
       ),
     );
@@ -436,19 +432,8 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
         final serialProfile = widget.controller.serialProfile;
         _syncControllers(profile, status.phase);
 
-        return ColoredBox(
-          color: _surface,
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 140),
-                switchInCurve: Curves.easeOutCubic,
-                switchOutCurve: Curves.easeOutCubic,
-                child: _buildPage(status, profile, serialProfile),
-              ),
-            ),
-          ),
+        return _ConnectionPageViewport(
+          child: _buildPage(status, profile, serialProfile),
         );
       },
     );
@@ -525,7 +510,16 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
               diagnostics: diagnostics,
               onCopyDiagnostics: _copyDiagnostics,
             )
-          : _buildModeBody(mode, status, profile, serialProfile, events),
+          : SingleChildScrollView(
+              key: const ValueKey('connection-mode-scrollable'),
+              child: _buildModeBody(
+                mode,
+                status,
+                profile,
+                serialProfile,
+                events,
+              ),
+            ),
       footer: _buildFooter(mode, status),
     );
   }
@@ -1045,6 +1039,23 @@ class _ConnectionPageHeader extends StatelessWidget {
   }
 }
 
+class _ConnectionPageViewport extends StatelessWidget {
+  const _ConnectionPageViewport({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: _surface,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+        child: Center(child: child),
+      ),
+    );
+  }
+}
+
 class _ConnectionPagePanel extends StatelessWidget {
   const _ConnectionPagePanel({
     required this.title,
@@ -1080,25 +1091,37 @@ class _ConnectionPagePanel extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _ConnectionPageHeader(
-                title: title,
-                subtitle: subtitle,
-                actionLabel: actionLabel,
-                onAction: onAction,
-                hostOs: hostOs,
-                hostDistro: hostDistro,
+              KeyedSubtree(
+                key: const ValueKey('connection-page-header'),
+                child: _ConnectionPageHeader(
+                  title: title,
+                  subtitle: subtitle,
+                  actionLabel: actionLabel,
+                  onAction: onAction,
+                  hostOs: hostOs,
+                  hostDistro: hostDistro,
+                ),
               ),
               SizedBox(height: 22),
-              progress,
+              KeyedSubtree(
+                key: const ValueKey('connection-page-progress'),
+                child: progress,
+              ),
               SizedBox(height: 28),
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 140),
-                switchInCurve: Curves.easeOutCubic,
-                switchOutCurve: Curves.easeOutCubic,
-                child: body,
+              Flexible(
+                fit: FlexFit.loose,
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 140),
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeOutCubic,
+                  child: body,
+                ),
               ),
               SizedBox(height: 26),
-              footer,
+              KeyedSubtree(
+                key: const ValueKey('connection-page-footer'),
+                child: footer,
+              ),
             ],
           ),
         ),
@@ -1461,6 +1484,7 @@ class _ConnectionFailureDetails extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
@@ -1476,13 +1500,47 @@ class _ConnectionFailureDetails extends StatelessWidget {
           ),
         ),
         SizedBox(height: 16),
-        _ConnectionLogsCard(
-          logs: logs,
-          diagnostics: diagnostics,
-          onCopyDiagnostics: onCopyDiagnostics,
-          showHeader: false,
+        Flexible(
+          fit: FlexFit.loose,
+          child: _ConnectionLogsCard(
+            logs: logs,
+            diagnostics: diagnostics,
+            onCopyDiagnostics: onCopyDiagnostics,
+          ),
         ),
       ],
+    );
+  }
+}
+
+class _ConnectionLogsCopyButton extends StatelessWidget {
+  const _ConnectionLogsCopyButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tr(
+        'workspace.label.copyDiagnostics',
+        fallback: 'Copy diagnostics',
+      ),
+      child: IconButton(
+        key: const ValueKey('connection-logs-copy'),
+        onPressed: onPressed,
+        icon: Icon(Icons.content_copy_rounded),
+        color: _blue,
+        iconSize: 18,
+        splashRadius: 20,
+        padding: EdgeInsets.zero,
+        style: _workspaceDark
+            ? IconButton.styleFrom(
+                hoverColor: _blue.withValues(alpha: 0.12),
+                highlightColor: _blue.withValues(alpha: 0.16),
+              )
+            : null,
+        constraints: const BoxConstraints.tightFor(width: 34, height: 34),
+      ),
     );
   }
 }
@@ -1493,13 +1551,11 @@ class _ConnectionLogsCard extends StatelessWidget {
     required this.logs,
     required this.diagnostics,
     required this.onCopyDiagnostics,
-    this.showHeader = true,
   });
 
   final List<_ConnectionLogEntry> logs;
   final String diagnostics;
   final ValueChanged<String> onCopyDiagnostics;
-  final bool showHeader;
 
   @override
   Widget build(BuildContext context) {
@@ -1512,51 +1568,28 @@ class _ConnectionLogsCard extends StatelessWidget {
       ),
       child: Column(
         children: [
-          if (showHeader) ...[
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    tr(
-                      'workspace.label.connectionDiagnostics',
-                      fallback: 'Connection diagnostics',
-                    ),
-                    style: TextStyle(
-                      color: _text,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0,
-                    ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  tr(
+                    'workspace.label.connectionDiagnostics',
+                    fallback: 'Connection diagnostics',
+                  ),
+                  style: TextStyle(
+                    color: _text,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0,
                   ),
                 ),
-                Tooltip(
-                  message: tr(
-                    'workspace.label.copyDiagnostics',
-                    fallback: 'Copy diagnostics',
-                  ),
-                  child: IconButton(
-                    onPressed: () => onCopyDiagnostics(diagnostics),
-                    icon: Icon(Icons.content_copy_rounded),
-                    color: _blue,
-                    iconSize: 18,
-                    splashRadius: 20,
-                    padding: EdgeInsets.zero,
-                    style: _workspaceDark
-                        ? IconButton.styleFrom(
-                            hoverColor: _blue.withValues(alpha: 0.12),
-                            highlightColor: _blue.withValues(alpha: 0.16),
-                          )
-                        : null,
-                    constraints: const BoxConstraints.tightFor(
-                      width: 34,
-                      height: 34,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: 8),
-          ],
+              ),
+              _ConnectionLogsCopyButton(
+                onPressed: () => onCopyDiagnostics(diagnostics),
+              ),
+            ],
+          ),
+          SizedBox(height: 8),
           Expanded(
             child: logs.isEmpty
                 ? Align(
@@ -1574,12 +1607,19 @@ class _ConnectionLogsCard extends StatelessWidget {
                       ),
                     ),
                   )
-                : SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        for (final log in logs) _ConnectionLogRow(log: log),
-                      ],
+                : SelectionArea(
+                    child: SingleChildScrollView(
+                      key: const ValueKey('connection-logs-scrollable'),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          for (var index = 0; index < logs.length; index++)
+                            _ConnectionLogRow(
+                              log: logs[index],
+                              prependLineBreak: index > 0,
+                            ),
+                        ],
+                      ),
                     ),
                   ),
           ),
@@ -1590,9 +1630,10 @@ class _ConnectionLogsCard extends StatelessWidget {
 }
 
 class _ConnectionLogRow extends StatelessWidget {
-  const _ConnectionLogRow({required this.log});
+  const _ConnectionLogRow({required this.log, required this.prependLineBreak});
 
   final _ConnectionLogEntry log;
+  final bool prependLineBreak;
 
   @override
   Widget build(BuildContext context) {
@@ -1604,10 +1645,20 @@ class _ConnectionLogRow extends StatelessWidget {
         children: [
           SizedBox(
             width: 68,
-            child: Text(
-              log.timestamp == null
-                  ? '--:--:--'
-                  : _formatConnectionLogTime(log.timestamp!),
+            child: Text.rich(
+              TextSpan(
+                children: [
+                  if (prependLineBreak)
+                    TextSpan(
+                      text: '\n',
+                      style: TextStyle(fontSize: 0.1, height: 0.1),
+                    ),
+                  TextSpan(
+                    text:
+                        '${log.timestamp == null ? '--:--:--' : _formatConnectionLogTime(log.timestamp!)}  ',
+                  ),
+                ],
+              ),
               style: TextStyle(
                 color: _mutedText,
                 fontSize: 11,
@@ -1624,8 +1675,8 @@ class _ConnectionLogRow extends StatelessWidget {
             decoration: BoxDecoration(color: color, shape: BoxShape.circle),
           ),
           Expanded(
-            child: RichText(
-              text: TextSpan(
+            child: Text.rich(
+              TextSpan(
                 style: TextStyle(
                   color: _text,
                   fontSize: 12,
