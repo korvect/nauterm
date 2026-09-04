@@ -225,17 +225,25 @@ impl NautermDatabase {
         let dek = configured_dek(&self.connection)?;
         let private_key = encrypt_optional_field(dek.as_ref(), key.private_key.as_deref())?;
         let certificate = encrypt_optional_field(dek.as_ref(), key.certificate.as_deref())?;
+        let passphrase = encrypt_optional_field(dek.as_ref(), key.passphrase.as_deref())?;
         if let Some(id) = key.id {
             self.connection.execute(
                 r#"
                 UPDATE keys
-                SET name = ?, private_key = ?, public_key = ?, certificate = ?,
+                SET name = ?, private_key = ?, public_key = ?, certificate = ?, passphrase = ?,
                     updated_at = CAST(unixepoch('subsec') * 1000 AS INTEGER),
                     deleted_at = NULL,
                     version = COALESCE(version, 0) + 1
                 WHERE id = ?
                 "#,
-                params![key.name, private_key, key.public_key, certificate, id],
+                params![
+                    key.name,
+                    private_key,
+                    key.public_key,
+                    certificate,
+                    passphrase,
+                    id
+                ],
             )?;
             return Ok(id);
         }
@@ -244,14 +252,21 @@ impl NautermDatabase {
         self.connection.execute(
             r#"
             INSERT INTO keys (
-              uuid, name, private_key, public_key, certificate, created_at, updated_at
+              uuid, name, private_key, public_key, certificate, passphrase, created_at, updated_at
             )
             VALUES (
-              ?, ?, ?, ?, ?, CAST(unixepoch('subsec') * 1000 AS INTEGER),
+              ?, ?, ?, ?, ?, ?, CAST(unixepoch('subsec') * 1000 AS INTEGER),
               CAST(unixepoch('subsec') * 1000 AS INTEGER)
             )
             "#,
-            params![uuid, key.name, private_key, key.public_key, certificate],
+            params![
+                uuid,
+                key.name,
+                private_key,
+                key.public_key,
+                certificate,
+                passphrase
+            ],
         )?;
         Ok(self.connection.last_insert_rowid())
     }
@@ -270,6 +285,7 @@ impl NautermDatabase {
             .map(|mut key| {
                 key.private_key = decrypt_optional_field(dek.as_ref(), key.private_key)?;
                 key.certificate = decrypt_optional_field(dek.as_ref(), key.certificate)?;
+                key.passphrase = decrypt_optional_field(dek.as_ref(), key.passphrase)?;
                 Ok(key)
             })
             .transpose()
@@ -280,7 +296,7 @@ impl NautermDatabase {
         let mut statement = self
             .connection
             .prepare(
-                "SELECT id, uuid, name, NULL AS private_key, public_key, certificate, created_at, updated_at, deleted_at, version, created_device_id, updated_device_id FROM keys WHERE deleted_at IS NULL ORDER BY name COLLATE NOCASE",
+                "SELECT id, uuid, name, NULL AS private_key, public_key, certificate, NULL AS passphrase, created_at, updated_at, deleted_at, version, created_device_id, updated_device_id FROM keys WHERE deleted_at IS NULL ORDER BY name COLLATE NOCASE",
             )?;
         let mut values = statement
             .query_map([], key_from_row)?

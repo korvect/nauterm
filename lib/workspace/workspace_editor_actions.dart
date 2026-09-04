@@ -832,6 +832,10 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
     _openEditor(const _KeyEditorRequest(certificateMode: true));
   }
 
+  void _createFido2Key() {
+    _openEditor(const _Fido2KeyEditorRequest());
+  }
+
   void _generateKey() {
     _openEditor(const _KeyEditorRequest(generate: true));
   }
@@ -1041,7 +1045,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       'password': auth.password,
       'privateKey': auth.privateKey,
       'certificate': auth.certificate,
-      'passphrase': null,
+      'passphrase': auth.passphrase,
       'proxy': auth.proxy?.toJson(),
       'hostKeyTrustMode': SshHostKeyTrustMode.strict.wireValue,
       'publicKey': publicKey,
@@ -1630,6 +1634,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       password: auth.password,
       privateKey: auth.privateKey,
       certificate: auth.certificate,
+      passphrase: auth.passphrase,
       proxy: auth.proxy,
       knownHostsPath: NautermPaths.resolve().knownHostsFile.path,
       bindAddress: entry.bindAddress,
@@ -1686,12 +1691,10 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
     final username =
         _firstNonEmpty([identity?.username, host.username]) ?? 'user';
     final keyId = identity?.keyId ?? host.keyId;
-    final privateKey = keyId == null
-        ? null
-        : _emptyToNull(_dataStore?.getKey(keyId)?.privateKey);
-    final certificate = keyId == null
-        ? null
-        : _emptyToNull(_dataStore?.getKey(keyId)?.certificate);
+    final key = keyId == null ? null : _dataStore?.getKey(keyId);
+    final privateKey = _emptyToNull(key?.privateKey);
+    final certificate = _emptyToNull(key?.certificate);
+    final passphrase = _emptyToNull(key?.passphrase);
     final password = privateKey == null
         ? (identity == null
               ? _emptyToNull(host.password)
@@ -1708,6 +1711,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       password: password,
       privateKey: privateKey,
       certificate: certificate,
+      passphrase: passphrase,
       proxy: proxy,
     );
   }

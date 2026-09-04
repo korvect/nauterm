@@ -1,7 +1,7 @@
 part of 'terminal_ffi.dart';
 
 class _TerminalBindings {
-  static const _expectedAbiVersion = 4;
+  static const _expectedAbiVersion = 5;
 
   _TerminalBindings(this.library)
     : createLocalSessionConfigured = library
@@ -285,6 +285,18 @@ class _TerminalBindings {
           .lookupFunction<_ListSerialPortsNative, _ListSerialPortsDart>(
             'nauterm_serial_list_ports',
           ),
+      fido2ListDevices = library
+          .lookupFunction<_Fido2ListDevicesNative, _Fido2ListDevicesDart>(
+            'nauterm_fido2_list_devices',
+          ),
+      fido2VerifyPin = library
+          .lookupFunction<_Fido2VerifyPinNative, _Fido2VerifyPinDart>(
+            'nauterm_fido2_verify_pin',
+          ),
+      fido2Generate = library
+          .lookupFunction<_Fido2GenerateNative, _Fido2GenerateDart>(
+            'nauterm_fido2_generate',
+          ),
       startPortForward = library
           .lookupFunction<_StartPortForwardNative, _StartPortForwardDart>(
             'nauterm_port_forward_start',
@@ -444,6 +456,9 @@ class _TerminalBindings {
   final _SuppressOutputUntilDart suppressOutputUntil;
   final _CancelOutputSuppressionDart cancelOutputSuppression;
   final _ListSerialPortsDart listSerialPorts;
+  final _Fido2ListDevicesDart fido2ListDevices;
+  final _Fido2VerifyPinDart fido2VerifyPin;
+  final _Fido2GenerateDart fido2Generate;
   final _StartPortForwardDart startPortForward;
   final _StopPortForwardDart stopPortForward;
   final _StopAllPortForwardsDart stopAllPortForwards;

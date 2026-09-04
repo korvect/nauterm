@@ -21,7 +21,7 @@ mod schema;
 
 use schema::create_schema;
 
-const SCHEMA_VERSION: i32 = 3;
+const SCHEMA_VERSION: i32 = 4;
 #[cfg(test)]
 const DEFAULT_MOSH_SERVER_COMMAND: &str = "mosh-server new -s -l LANG=en_US.UTF-8";
 const DEVICE_ID_METADATA_KEY: &str = "device_id";
@@ -130,6 +130,8 @@ pub struct KeyEntry {
     pub public_key: Option<String>,
     #[serde(default)]
     pub certificate: Option<String>,
+    #[serde(default)]
+    pub passphrase: Option<String>,
     #[serde(default)]
     pub created_at: Option<i64>,
     #[serde(default)]
@@ -2707,6 +2709,7 @@ fn key_from_row(row: &Row<'_>) -> rusqlite::Result<KeyEntry> {
         private_key: row.get("private_key")?,
         public_key: row.get("public_key")?,
         certificate: row.get("certificate")?,
+        passphrase: row.get("passphrase")?,
         created_at: row.get("created_at")?,
         updated_at: row.get("updated_at")?,
         deleted_at: row.get("deleted_at")?,
@@ -3308,12 +3311,19 @@ mod tests {
             .unwrap();
         database
             .connection
-            .execute_batch("PRAGMA foreign_keys = OFF; PRAGMA user_version = 2;")
+            .execute_batch(
+                "PRAGMA foreign_keys = OFF;
+                 ALTER TABLE keys DROP COLUMN passphrase;
+                 PRAGMA user_version = 2;",
+            )
             .unwrap();
 
         migrations::migrate_schema(&mut database.connection, 2).unwrap();
 
-        assert_eq!(database.schema_version().unwrap(), 3);
+        assert_eq!(database.schema_version().unwrap(), SCHEMA_VERSION);
+        assert!(table_sql(&database.connection, "keys")
+            .unwrap()
+            .contains("passphrase TEXT"));
         assert_eq!(
             database
                 .connection
@@ -4389,6 +4399,7 @@ mod tests {
                 certificate: Some(
                     "ecdsa-sha2-nistp384-cert-v01@openssh.com certificate-body".to_string(),
                 ),
+                passphrase: Some("saved passphrase".to_string()),
                 created_at: None,
                 updated_at: None,
                 deleted_at: None,
@@ -4494,6 +4505,7 @@ mod tests {
             Some("ecdsa-sha2-nistp384-cert-v01@openssh.com")
         );
         assert_eq!(key_summary.private_key, None);
+        assert_eq!(key_summary.passphrase, None);
         assert_eq!(
             database
                 .get_key(key_id)
@@ -4502,6 +4514,15 @@ mod tests {
                 .certificate
                 .as_deref(),
             Some("ecdsa-sha2-nistp384-cert-v01@openssh.com certificate-body")
+        );
+        assert_eq!(
+            database
+                .get_key(key_id)
+                .unwrap()
+                .unwrap()
+                .passphrase
+                .as_deref(),
+            Some("saved passphrase")
         );
         let identities = database.list_identities().unwrap();
         assert_eq!(identities.len(), 1);

@@ -6,6 +6,7 @@ class _KeychainPane extends StatefulWidget {
     required this.identities,
     required this.onCreateKey,
     required this.onCreateCertificate,
+    required this.onCreateFido2Key,
     required this.onGenerateKey,
     required this.onCreateIdentity,
     required this.onKeyContextAction,
@@ -18,6 +19,7 @@ class _KeychainPane extends StatefulWidget {
   final List<_IdentityItem> identities;
   final VoidCallback onCreateKey;
   final VoidCallback onCreateCertificate;
+  final VoidCallback onCreateFido2Key;
   final VoidCallback onGenerateKey;
   final VoidCallback onCreateIdentity;
   final _WorkspaceContextAction<_KeyItem> onKeyContextAction;
@@ -74,6 +76,7 @@ class _KeychainPaneState extends State<_KeychainPane> {
         _KeychainToolbar(
           onCreateKey: widget.onCreateKey,
           onCreateCertificate: widget.onCreateCertificate,
+          onCreateFido2Key: widget.onCreateFido2Key,
           onGenerateKey: widget.onGenerateKey,
           onCreateIdentity: widget.onCreateIdentity,
           sortOrder: _sortOrder,
@@ -148,6 +151,7 @@ class _KeychainToolbar extends StatelessWidget {
   const _KeychainToolbar({
     required this.onCreateKey,
     required this.onCreateCertificate,
+    required this.onCreateFido2Key,
     required this.onGenerateKey,
     required this.onCreateIdentity,
     required this.sortOrder,
@@ -160,6 +164,7 @@ class _KeychainToolbar extends StatelessWidget {
 
   final VoidCallback onCreateKey;
   final VoidCallback onCreateCertificate;
+  final VoidCallback onCreateFido2Key;
   final VoidCallback onGenerateKey;
   final VoidCallback onCreateIdentity;
   final _WorkspaceSortOrder sortOrder;
@@ -183,6 +188,12 @@ class _KeychainToolbar extends StatelessWidget {
           icon: Icons.workspace_premium_rounded,
           label: 'Certificate',
           onTap: onCreateCertificate,
+        ),
+        SizedBox(width: 10),
+        _ModeButton(
+          icon: Icons.usb_rounded,
+          label: 'FIDO2',
+          onTap: onCreateFido2Key,
         ),
         Expanded(
           child: _ToolbarTrailingActions(

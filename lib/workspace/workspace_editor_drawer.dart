@@ -107,6 +107,10 @@ class _KeyExportEditorRequest extends _WorkspaceEditorRequest {
   final KeyEntry key;
 }
 
+class _Fido2KeyEditorRequest extends _WorkspaceEditorRequest {
+  const _Fido2KeyEditorRequest();
+}
+
 class _IdentityEditorRequest extends _WorkspaceEditorRequest {
   const _IdentityEditorRequest({this.initial, this.initialName});
 
@@ -345,6 +349,10 @@ class _WorkspaceEditorDrawer extends StatelessWidget {
         onExportToFile: onExportKeyToFile,
         onDelete: onDeleteKey,
       ),
+      _Fido2KeyEditorRequest() => _Fido2KeyEditorContent(
+        onClose: onClose,
+        onSave: onSaveGeneratedKey,
+      ),
       _KeyExportEditorRequest() => _KeyExportEditorContent(
         request: request,
         hosts: hosts,
@@ -433,6 +441,7 @@ Object _workspaceEditorRequestKey(_WorkspaceEditorRequest request) {
     ) =>
       'key:${initial?.id ?? (generate ? 'generate' : '${certificateMode ? 'certificate' : 'key'}:${credentialCreation ? 'credential' : 'direct'}')}',
     _KeyExportEditorRequest(key: final key) => 'key-export:${key.id}',
+    _Fido2KeyEditorRequest() => 'fido2-key:new',
     _IdentityEditorRequest(initial: final initial) =>
       'identity:${initial?.id ?? 'new'}',
     _PortForwardEditorRequest(

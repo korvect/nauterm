@@ -97,6 +97,7 @@ part 'workspace_editor_host_forms.dart';
 part 'workspace_editor_host_environment.dart';
 part 'workspace_editor_theme_gallery.dart';
 part 'workspace_editor_key_generation.dart';
+part 'workspace_editor_fido2.dart';
 part 'workspace_editor_key_export.dart';
 part 'workspace_editor_identity_forms.dart';
 part 'workspace_completion_methods.dart';

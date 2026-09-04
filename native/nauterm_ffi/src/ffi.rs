@@ -1,5 +1,6 @@
 mod capture;
 mod common;
+mod fido2;
 mod port_forward;
 mod runtime;
 mod serial;
@@ -11,6 +12,7 @@ mod ssh_fs;
 mod terminal;
 
 pub use capture::*;
+pub use fido2::*;
 pub use port_forward::*;
 pub use runtime::*;
 pub use serial::*;

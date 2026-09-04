@@ -316,6 +316,7 @@ class _PortForwardSshAuth {
     this.password,
     this.privateKey,
     this.certificate,
+    this.passphrase,
     this.proxy,
   });
 
@@ -325,6 +326,7 @@ class _PortForwardSshAuth {
   final String? password;
   final String? privateKey;
   final String? certificate;
+  final String? passphrase;
   final TerminalProxyConfig? proxy;
 }
 

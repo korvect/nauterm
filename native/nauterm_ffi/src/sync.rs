@@ -236,6 +236,7 @@ const SYNC_TABLES: &[SyncTable] = &[
             "private_key",
             "public_key",
             "certificate",
+            "passphrase",
             "created_at",
             "updated_at",
             "deleted_at",
@@ -1167,6 +1168,7 @@ fn is_sensitive_field(table: &str, column: &str) -> bool {
         (table, column),
         ("keys", "private_key")
             | ("keys", "certificate")
+            | ("keys", "passphrase")
             | ("identities", "password")
             | ("groups", "password")
             | ("groups", "telnet_password")

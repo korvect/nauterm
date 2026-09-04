@@ -73,6 +73,7 @@ SshConnectionProfile refreshSavedHostSshProfile({
   String? password,
   String? privateKey,
   String? certificate,
+  String? passphrase,
   TerminalProxyConfig? proxy,
 }) {
   return SshConnectionProfile(
@@ -86,6 +87,7 @@ SshConnectionProfile refreshSavedHostSshProfile({
     password: password,
     privateKey: privateKey,
     certificate: certificate,
+    passphrase: passphrase,
     proxy: proxy,
     shellPath: _emptyToNull(host.shellPath),
     environment: environment,
@@ -374,10 +376,12 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
   final TextEditingController _portController = TextEditingController();
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _fido2PinController = TextEditingController();
   TerminalConnectionPhase? _lastPhase;
   SshConnectionProfile? _lastProfile;
   bool _showLogs = false;
   bool _obscurePassword = true;
+  bool _obscureFido2Pin = true;
   _ConnectionAuthTab _authTab = _ConnectionAuthTab.password;
   int? _selectedKeyIndex;
   int? _selectedIdentityId;
@@ -402,16 +406,19 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
   void initState() {
     super.initState();
     _passwordController.addListener(_handlePasswordChanged);
+    _fido2PinController.addListener(_handleFido2PinChanged);
   }
 
   @override
   void dispose() {
     _connectedRevealTimer?.cancel();
     _passwordController.removeListener(_handlePasswordChanged);
+    _fido2PinController.removeListener(_handleFido2PinChanged);
     _hostController.dispose();
     _portController.dispose();
     _usernameController.dispose();
     _passwordController.dispose();
+    _fido2PinController.dispose();
     super.dispose();
   }
 
@@ -421,6 +428,15 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
       setState(() {});
     }
   }
+
+  void _handleFido2PinChanged() {
+    if (mounted && _requiresFido2Pin) {
+      setState(() {});
+    }
+  }
+
+  bool get _requiresFido2Pin =>
+      _hasLatestFido2PinRequest(widget.controller.connectionEvents);
 
   @override
   Widget build(BuildContext context) {
@@ -631,6 +647,54 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
   }
 
   Widget _buildAuthenticationBody() {
+    if (_requiresFido2Pin) {
+      return Column(
+        key: const ValueKey('fido2-pin'),
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Unlock FIDO2 security key',
+            style: TextStyle(
+              color: _text,
+              fontSize: 18,
+              fontWeight: NautermFontWeights.bold,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Enter the device PIN to continue SSH authentication.',
+            style: TextStyle(color: _mutedText),
+          ),
+          const SizedBox(height: 20),
+          _WorkspaceInput(
+            controller: _fido2PinController,
+            label: 'PIN',
+            size: _WorkspaceControlSize.large,
+            autofocus: true,
+            obscureText: _obscureFido2Pin,
+            onSubmitted: (_) {
+              if (_fido2PinController.text.isNotEmpty) {
+                _continueFido2Authentication();
+              }
+            },
+            trailing: _WorkspaceButton(
+              icon: _obscureFido2Pin
+                  ? Icons.visibility_off_rounded
+                  : Icons.visibility_rounded,
+              size: _WorkspaceControlSize.medium,
+              variant: _WorkspaceButtonVariant.text,
+              height: _WorkspaceControlSize.medium.inputHeight,
+              minWidth: _WorkspaceControlSize.medium.inputHeight,
+              tooltip: _obscureFido2Pin ? 'Show PIN' : 'Hide PIN',
+              onPressed: () {
+                setState(() => _obscureFido2Pin = !_obscureFido2Pin);
+              },
+            ),
+          ),
+        ],
+      );
+    }
     final availableKeys = widget.keys;
     final selectedKeyIndex = _selectedKeyIndex;
     final selectedIndex =
@@ -723,10 +787,13 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
         selectedKeyIndex >= 0 &&
         selectedKeyIndex < widget.keys.length;
     final hasSshProfile = widget.controller.sshProfile != null;
+    final requiresFido2Pin = _requiresFido2Pin;
     final canContinue = mode == _ConnectionPageMode.authentication
-        ? (_authTab == _ConnectionAuthTab.password
-              ? _passwordController.text.isNotEmpty
-              : hasSelectedKey)
+        ? requiresFido2Pin
+              ? _fido2PinController.text.isNotEmpty
+              : (_authTab == _ConnectionAuthTab.password
+                    ? _passwordController.text.isNotEmpty
+                    : hasSelectedKey)
         : true;
 
     return Row(
@@ -736,6 +803,7 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
           onPressed: _closePage,
         ),
         if (mode == _ConnectionPageMode.authentication &&
+            !requiresFido2Pin &&
             _authTab == _ConnectionAuthTab.publicKey) ...[
           SizedBox(width: 10),
           _ConnectionButton(
@@ -771,6 +839,13 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
             label: tr('workspace.label.startOver', fallback: 'Start over'),
             primary: true,
             onPressed: _reconnect,
+          ),
+        ] else if (mode == _ConnectionPageMode.authentication &&
+            requiresFido2Pin) ...[
+          _ConnectionButton(
+            label: tr('common.action.continue', fallback: 'Continue'),
+            primary: true,
+            onPressed: canContinue ? _continueFido2Authentication : null,
           ),
         ] else if (mode == _ConnectionPageMode.authentication) ...[
           _ConnectionButton(
@@ -898,11 +973,21 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
     );
   }
 
+  void _continueFido2Authentication() {
+    final pin = _fido2PinController.text;
+    if (pin.isEmpty) {
+      return;
+    }
+    _reconnect(fido2Pin: pin, password: null);
+    _fido2PinController.clear();
+  }
+
   void _reconnect({
     Object? password = _preserveReconnectValue,
     Object? privateKey = _preserveReconnectValue,
     Object? certificate = _preserveReconnectValue,
     Object? passphrase = _preserveReconnectValue,
+    Object? fido2Pin = _preserveReconnectValue,
     SshHostKeyTrustMode? hostKeyTrustMode,
   }) {
     final reloader = widget.onReloadConnection;
@@ -929,29 +1014,34 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
     var nextPrivateKey = privateKey;
     var nextCertificate = certificate;
     var nextPassphrase = passphrase;
+    var nextFido2Pin = fido2Pin;
     if (identity != null &&
         identical(password, _preserveReconnectValue) &&
         identical(privateKey, _preserveReconnectValue)) {
       final detail = widget.dataStore?.getIdentity(identity.id);
       final identityPassword = detail?.password?.trim();
-      final identityKey = detail?.keyId == null
+      final identityKeyEntry = detail?.keyId == null
           ? null
-          : widget.dataStore?.getKey(detail!.keyId!)?.privateKey?.trim();
-      final identityCertificate = detail?.keyId == null
-          ? null
-          : widget.dataStore?.getKey(detail!.keyId!)?.certificate?.trim();
+          : widget.dataStore?.getKey(detail!.keyId!);
+      final identityKey = identityKeyEntry?.privateKey?.trim();
+      final identityCertificate = identityKeyEntry?.certificate?.trim();
+      final identityPassphrase = identityKeyEntry?.passphrase?.trim();
       if (identityKey != null && identityKey.isNotEmpty) {
         nextPrivateKey = identityKey;
         nextCertificate = identityCertificate?.isEmpty == true
             ? null
             : identityCertificate;
         nextPassword = null;
-        nextPassphrase = null;
+        nextPassphrase = identityPassphrase?.isEmpty == true
+            ? null
+            : identityPassphrase;
+        nextFido2Pin = null;
       } else if (identityPassword != null && identityPassword.isNotEmpty) {
         nextPassword = identityPassword;
         nextPrivateKey = null;
         nextCertificate = null;
         nextPassphrase = null;
+        nextFido2Pin = null;
       }
     }
 
@@ -965,6 +1055,7 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
       privateKey: nextPrivateKey,
       certificate: nextCertificate,
       passphrase: nextPassphrase,
+      fido2Pin: nextFido2Pin,
       moshServerCommand: reloaded?.moshServerCommand,
       hostKeyTrustMode: hostKeyTrustMode ?? _sessionHostKeyTrustMode,
     );
@@ -2466,6 +2557,20 @@ bool _hasLatestActionableAuth(List<TerminalConnectionEvent> events) {
         return true;
       default:
         break;
+    }
+  }
+  return false;
+}
+
+bool _hasLatestFido2PinRequest(List<TerminalConnectionEvent> events) {
+  for (final event in events.reversed) {
+    if (event.kind == TerminalConnectionEventKind.authPassphraseRequired) {
+      return event.method == 'fido2';
+    }
+    if (event.kind == TerminalConnectionEventKind.connectStart ||
+        event.kind == TerminalConnectionEventKind.authSuccess ||
+        event.kind == TerminalConnectionEventKind.connected) {
+      return false;
     }
   }
   return false;

@@ -1712,11 +1712,13 @@ class _WorkspaceClearButton extends StatelessWidget {
 class _WorkspaceToggleRow extends StatefulWidget {
   const _WorkspaceToggleRow({
     required this.label,
+    this.description,
     required this.value,
     required this.onChanged,
   });
 
   final String label;
+  final String? description;
   final bool value;
   final ValueChanged<bool> onChanged;
 
@@ -1733,6 +1735,7 @@ class _WorkspaceToggleRowState extends State<_WorkspaceToggleRow> {
   @override
   Widget build(BuildContext context) {
     final trackColor = widget.value ? _blue : _sidebarDivider;
+    final description = widget.description;
     return Semantics(
       container: true,
       button: true,
@@ -1764,7 +1767,9 @@ class _WorkspaceToggleRowState extends State<_WorkspaceToggleRow> {
             key: ValueKey('workspace-toggle:${widget.label}'),
             duration: const Duration(milliseconds: 120),
             curve: Curves.easeOutCubic,
-            height: 36,
+            constraints: BoxConstraints(
+              minHeight: description == null ? 36 : 52,
+            ),
             padding: const EdgeInsets.symmetric(horizontal: 8),
             decoration: BoxDecoration(
               color: Colors.transparent,
@@ -1776,14 +1781,30 @@ class _WorkspaceToggleRowState extends State<_WorkspaceToggleRow> {
             child: Row(
               children: [
                 Expanded(
-                  child: Text(
-                    tr(widget.label),
-                    style: TextStyle(
-                      color: _text,
-                      fontSize: NautermFontSizes.labelLarge,
-                      fontWeight: NautermFontWeights.semibold,
-                      letterSpacing: 0,
-                    ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        tr(widget.label),
+                        style: TextStyle(
+                          color: _text,
+                          fontSize: NautermFontSizes.labelLarge,
+                          fontWeight: NautermFontWeights.semibold,
+                          letterSpacing: 0,
+                        ),
+                      ),
+                      if (description != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          tr(description),
+                          style: TextStyle(
+                            color: _mutedText,
+                            fontSize: NautermFontSizes.labelSmall,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
                 AnimatedScale(

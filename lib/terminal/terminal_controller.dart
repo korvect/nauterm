@@ -114,6 +114,21 @@ enum TerminalConnectionPhase {
 }
 
 const Object _preserveSshProfileValue = Object();
+const _sshAuthenticationSecretsPrefix = 'nauterm-auth-secrets:v1:';
+
+String? _encodeSshAuthenticationSecrets({
+  required String? passphrase,
+  required String? fido2Pin,
+}) {
+  if ((passphrase == null || passphrase.isEmpty) &&
+      (fido2Pin == null || fido2Pin.isEmpty)) {
+    return null;
+  }
+  return '$_sshAuthenticationSecretsPrefix${jsonEncode({
+    'keyPassphrase': passphrase,
+    'fido2Pin': fido2Pin,
+  })}';
+}
 
 @immutable
 class TerminalConnectionStatus {
@@ -151,6 +166,7 @@ class SshConnectionProfile {
     this.privateKey,
     this.certificate,
     this.passphrase,
+    this.fido2Pin,
     this.proxy,
     this.shellPath,
     this.environment = const {},
@@ -168,6 +184,7 @@ class SshConnectionProfile {
   final String? privateKey;
   final String? certificate;
   final String? passphrase;
+  final String? fido2Pin;
   final TerminalProxyConfig? proxy;
   final String? shellPath;
   final Map<String, String> environment;
@@ -185,6 +202,7 @@ class SshConnectionProfile {
     Object? privateKey = _preserveSshProfileValue,
     Object? certificate = _preserveSshProfileValue,
     Object? passphrase = _preserveSshProfileValue,
+    Object? fido2Pin = _preserveSshProfileValue,
     Object? proxy = _preserveSshProfileValue,
     Object? shellPath = _preserveSshProfileValue,
     Map<String, String>? environment,
@@ -212,6 +230,9 @@ class SshConnectionProfile {
       passphrase: identical(passphrase, _preserveSshProfileValue)
           ? this.passphrase
           : passphrase as String?,
+      fido2Pin: identical(fido2Pin, _preserveSshProfileValue)
+          ? this.fido2Pin
+          : fido2Pin as String?,
       proxy: identical(proxy, _preserveSshProfileValue)
           ? this.proxy
           : proxy as TerminalProxyConfig?,
@@ -328,6 +349,7 @@ class TerminalController extends ChangeNotifier {
     String? privateKey,
     String? certificate,
     String? passphrase,
+    String? fido2Pin,
     TerminalProxyConfig? proxy,
     String? shellPath,
     this._startupSnippet,
@@ -359,6 +381,7 @@ class TerminalController extends ChangeNotifier {
          privateKey: privateKey,
          certificate: certificate,
          passphrase: passphrase,
+         fido2Pin: fido2Pin,
          proxy: proxy,
          shellPath: shellPath,
          environment: environment,
@@ -382,7 +405,10 @@ class TerminalController extends ChangeNotifier {
           password: password,
           privateKey: privateKey,
           certificate: certificate,
-          passphrase: passphrase,
+          passphrase: _encodeSshAuthenticationSecrets(
+            passphrase: passphrase,
+            fido2Pin: fido2Pin,
+          ),
           proxy: proxy,
           environment: environment,
           encoding: encoding,
@@ -406,6 +432,7 @@ class TerminalController extends ChangeNotifier {
     String? privateKey,
     String? certificate,
     String? passphrase,
+    String? fido2Pin,
     TerminalProxyConfig? proxy,
     String? shellPath,
     this._startupSnippet,
@@ -437,6 +464,7 @@ class TerminalController extends ChangeNotifier {
          privateKey: privateKey,
          certificate: certificate,
          passphrase: passphrase,
+         fido2Pin: fido2Pin,
          proxy: proxy,
          shellPath: shellPath,
          environment: environment,
@@ -459,7 +487,10 @@ class TerminalController extends ChangeNotifier {
           password: password,
           privateKey: privateKey,
           certificate: certificate,
-          passphrase: passphrase,
+          passphrase: _encodeSshAuthenticationSecrets(
+            passphrase: passphrase,
+            fido2Pin: fido2Pin,
+          ),
           proxy: proxy,
           environment: environment,
           serverCommand: serverCommand,
@@ -924,6 +955,7 @@ class TerminalController extends ChangeNotifier {
     Object? privateKey = _preserveSshProfileValue,
     Object? certificate = _preserveSshProfileValue,
     Object? passphrase = _preserveSshProfileValue,
+    Object? fido2Pin = _preserveSshProfileValue,
     String? moshServerCommand,
     SshHostKeyTrustMode hostKeyTrustMode = SshHostKeyTrustMode.strict,
   }) {
@@ -953,6 +985,7 @@ class TerminalController extends ChangeNotifier {
       privateKey: privateKey,
       certificate: certificate,
       passphrase: passphrase,
+      fido2Pin: fido2Pin,
     );
     if (moshServerCommand != null) {
       _moshServerCommand = moshServerCommand;
@@ -1002,7 +1035,10 @@ class TerminalController extends ChangeNotifier {
                   password: nextProfile.password,
                   privateKey: nextProfile.privateKey,
                   certificate: nextProfile.certificate,
-                  passphrase: nextProfile.passphrase,
+                  passphrase: _encodeSshAuthenticationSecrets(
+                    passphrase: nextProfile.passphrase,
+                    fido2Pin: nextProfile.fido2Pin,
+                  ),
                   proxy: nextProfile.proxy,
                   hostKeyTrustMode: hostKeyTrustMode,
                   serverCommand: _moshServerCommand,
@@ -1015,7 +1051,10 @@ class TerminalController extends ChangeNotifier {
                   password: nextProfile.password,
                   privateKey: nextProfile.privateKey,
                   certificate: nextProfile.certificate,
-                  passphrase: nextProfile.passphrase,
+                  passphrase: _encodeSshAuthenticationSecrets(
+                    passphrase: nextProfile.passphrase,
+                    fido2Pin: nextProfile.fido2Pin,
+                  ),
                   proxy: nextProfile.proxy,
                   hostKeyTrustMode: hostKeyTrustMode,
                   keepaliveIntervalSeconds: config.sshKeepaliveIntervalSeconds,
@@ -1041,7 +1080,10 @@ class TerminalController extends ChangeNotifier {
         password: nextProfile.password,
         privateKey: nextProfile.privateKey,
         certificate: nextProfile.certificate,
-        passphrase: nextProfile.passphrase,
+        passphrase: _encodeSshAuthenticationSecrets(
+          passphrase: nextProfile.passphrase,
+          fido2Pin: nextProfile.fido2Pin,
+        ),
         proxy: nextProfile.proxy,
         hostKeyTrustMode: hostKeyTrustMode,
         environment: nextProfile.environment,
@@ -1061,7 +1103,10 @@ class TerminalController extends ChangeNotifier {
         password: nextProfile.password,
         privateKey: nextProfile.privateKey,
         certificate: nextProfile.certificate,
-        passphrase: nextProfile.passphrase,
+        passphrase: _encodeSshAuthenticationSecrets(
+          passphrase: nextProfile.passphrase,
+          fido2Pin: nextProfile.fido2Pin,
+        ),
         proxy: nextProfile.proxy,
         hostKeyTrustMode: hostKeyTrustMode,
         environment: nextProfile.environment,

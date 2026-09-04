@@ -9,9 +9,14 @@ pub(super) fn migrate_schema(connection: &mut Connection, version: i32) -> rusql
     match version {
         1 => {
             migrate_v1_to_v2(connection)?;
-            migrate_v2_to_v3(connection)
+            migrate_v2_to_v3(connection)?;
+            migrate_v3_to_v4(connection)
         }
-        2 => migrate_v2_to_v3(connection),
+        2 => {
+            migrate_v2_to_v3(connection)?;
+            migrate_v3_to_v4(connection)
+        }
+        3 => migrate_v3_to_v4(connection),
         SCHEMA_VERSION => Ok(()),
         _ => Err(rusqlite::Error::InvalidParameterName(format!(
             "database schema version {version} is unsupported; expected {SCHEMA_VERSION}"
@@ -338,6 +343,13 @@ fn migrate_v2_to_v3_inner(connection: &mut Connection) -> rusqlite::Result<()> {
             "snippets",
         ],
     )?;
-    transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+    transaction.pragma_update(None, "user_version", 3)?;
+    transaction.commit()
+}
+
+fn migrate_v3_to_v4(connection: &mut Connection) -> rusqlite::Result<()> {
+    let transaction = connection.transaction()?;
+    transaction.execute_batch("ALTER TABLE keys ADD COLUMN passphrase TEXT;")?;
+    transaction.pragma_update(None, "user_version", 4)?;
     transaction.commit()
 }

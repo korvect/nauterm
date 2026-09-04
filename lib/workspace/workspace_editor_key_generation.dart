@@ -497,7 +497,9 @@ class _KeyEditorContentState extends State<_KeyEditorContent> {
     _certificateController = TextEditingController(
       text: initial?.certificate ?? '',
     );
-    _passphraseController = TextEditingController();
+    _passphraseController = TextEditingController(
+      text: initial?.passphrase ?? '',
+    );
     _nameIsAutomatic = _nameController.text.trim().isEmpty;
     _nameController.addListener(_handleNameChanged);
     _privateController.addListener(_handlePrivateKeyChanged);
@@ -726,6 +728,7 @@ class _KeyEditorContentState extends State<_KeyEditorContent> {
         privateKey: _emptyToNull(_privateController.text),
         publicKey: _emptyToNull(_publicController.text),
         certificate: _emptyToNull(_certificateController.text),
+        passphrase: widget.request.initial?.passphrase,
       ),
     );
   }

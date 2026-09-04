@@ -2,6 +2,8 @@ use super::*;
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use std::sync::Arc;
 
+use crate::fido2::{self, Fido2SshAlgorithm};
+
 fn push_auth_event(
     events: &Arc<Mutex<Vec<SessionEvent>>>,
     wakeup: &Arc<Mutex<Option<WakeupCallback>>>,
@@ -19,6 +21,111 @@ fn push_auth_event(
 type DynamicAgentClient = AgentClient<Box<dyn AgentStream + Send + Unpin + 'static>>;
 
 const OPENSSH_CERTIFICATE_SUFFIX: &str = "-cert-v01@openssh.com";
+const SSH_SK_USER_PRESENCE_REQUIRED: u8 = 0x01;
+const SSH_SK_USER_VERIFICATION_REQUIRED: u8 = 0x04;
+const AUTH_SECRETS_PREFIX: &str = "nauterm-auth-secrets:v1:";
+
+struct AuthenticationSecrets {
+    key_passphrase: Option<String>,
+    fido2_pin: Option<String>,
+    packed: bool,
+}
+
+fn authentication_secrets(passphrase: Option<&str>) -> AuthenticationSecrets {
+    let Some(value) = passphrase else {
+        return AuthenticationSecrets {
+            key_passphrase: None,
+            fido2_pin: None,
+            packed: false,
+        };
+    };
+    let Some(json) = value.strip_prefix(AUTH_SECRETS_PREFIX) else {
+        return AuthenticationSecrets {
+            key_passphrase: Some(value.to_owned()),
+            fido2_pin: None,
+            packed: false,
+        };
+    };
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(json) else {
+        return AuthenticationSecrets {
+            key_passphrase: Some(value.to_owned()),
+            fido2_pin: None,
+            packed: false,
+        };
+    };
+    let string = |field: &str| {
+        value
+            .get(field)
+            .and_then(serde_json::Value::as_str)
+            .filter(|value| !value.is_empty())
+            .map(str::to_owned)
+    };
+    AuthenticationSecrets {
+        key_passphrase: string("keyPassphrase"),
+        fido2_pin: string("fido2Pin"),
+        packed: true,
+    }
+}
+
+#[derive(Debug)]
+struct Fido2SignerError(String);
+
+impl std::fmt::Display for Fido2SignerError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for Fido2SignerError {}
+
+impl From<russh::SendError> for Fido2SignerError {
+    fn from(_: russh::SendError) -> Self {
+        Self("SSH signing request was cancelled.".to_owned())
+    }
+}
+
+struct Fido2Signer {
+    application: String,
+    key_handle: Vec<u8>,
+    algorithm: Fido2SshAlgorithm,
+    pin: Option<String>,
+    require_user_presence: bool,
+}
+
+impl russh::Signer for Fido2Signer {
+    type Error = Fido2SignerError;
+
+    fn auth_sign(
+        &mut self,
+        _key: &russh::keys::agent::AgentIdentity,
+        _hash_alg: Option<HashAlg>,
+        mut to_sign: Vec<u8>,
+    ) -> impl std::future::Future<Output = Result<Vec<u8>, Self::Error>> + Send {
+        let application = self.application.clone();
+        let key_handle = self.key_handle.clone();
+        let algorithm = self.algorithm;
+        let pin = self.pin.clone();
+        let require_user_presence = self.require_user_presence;
+        let message = to_sign.clone();
+        async move {
+            let signature = tokio::task::spawn_blocking(move || {
+                fido2::sign_ssh(
+                    &application,
+                    &key_handle,
+                    algorithm,
+                    &message,
+                    pin.as_deref(),
+                    require_user_presence,
+                )
+                .map_err(Fido2SignerError)
+            })
+            .await
+            .map_err(|error| Fido2SignerError(error.to_string()))??;
+            to_sign.extend_from_slice(&signature);
+            Ok(to_sign)
+        }
+    }
+}
 
 fn decode_openssh_certificate(encoded: &str) -> Result<russh::keys::ssh_key::Certificate, String> {
     use russh::keys::ssh_key::Certificate;
@@ -157,6 +264,7 @@ pub(crate) async fn authenticate<H: client::Handler>(
     events: &Arc<Mutex<Vec<SessionEvent>>>,
     wakeup: &Arc<Mutex<Option<WakeupCallback>>>,
 ) -> Result<(), String> {
+    let secrets = authentication_secrets(passphrase);
     push_auth_event(
         events,
         wakeup,
@@ -226,9 +334,9 @@ pub(crate) async fn authenticate<H: client::Handler>(
             );
             "public_key"
         };
-        let private_key = match decode_secret_key(private_key, passphrase) {
+        let private_key = match decode_secret_key(private_key, secrets.key_passphrase.as_deref()) {
             Ok(private_key) => private_key,
-            Err(KeyError::KeyIsEncrypted) if passphrase.is_none() => {
+            Err(KeyError::KeyIsEncrypted) if secrets.key_passphrase.is_none() => {
                 push_auth_event(
                     events,
                     wakeup,
@@ -249,6 +357,113 @@ pub(crate) async fn authenticate<H: client::Handler>(
                 return Err(format!("failed to decode private key: {error}"));
             }
         };
+        let fido2_descriptor = private_key
+            .key_data()
+            .sk_ecdsa_p256()
+            .map(|key| {
+                (
+                    key.public().application().to_owned(),
+                    key.key_handle().to_vec(),
+                    key.flags(),
+                    Fido2SshAlgorithm::Ecdsa,
+                )
+            })
+            .or_else(|| {
+                private_key.key_data().sk_ed25519().map(|key| {
+                    (
+                        key.public().application().to_owned(),
+                        key.key_handle().to_vec(),
+                        key.flags(),
+                        Fido2SshAlgorithm::Ed25519,
+                    )
+                })
+            });
+        if let Some((application, key_handle, flags, algorithm)) = fido2_descriptor {
+            let require_user_presence = flags & SSH_SK_USER_PRESENCE_REQUIRED != 0;
+            let fido2_pin = if secrets.packed {
+                secrets.fido2_pin.as_deref()
+            } else {
+                secrets.key_passphrase.as_deref()
+            };
+            if flags & SSH_SK_USER_VERIFICATION_REQUIRED != 0 && fido2_pin.is_none() {
+                push_auth_event(
+                    events,
+                    wakeup,
+                    "auth_passphrase_required",
+                    "fido2",
+                    "FIDO2 security key requires its PIN.",
+                );
+                return Err("FIDO2 security key requires its PIN".to_owned());
+            }
+            push_auth_event(
+                events,
+                wakeup,
+                "auth_fido2_start",
+                "fido2",
+                if require_user_presence {
+                    "Touch or confirm the FIDO2 security key."
+                } else {
+                    "Signing with the FIDO2 security key."
+                },
+            );
+            let mut signer = Fido2Signer {
+                application,
+                key_handle,
+                algorithm,
+                pin: fido2_pin.map(str::to_owned),
+                require_user_presence,
+            };
+            let public_key = private_key.public_key().clone();
+            let result = if let Some(certificate) = certificate {
+                let certificate = decode_openssh_certificate_for_key(certificate, &private_key)?;
+                handle
+                    .authenticate_certificate_with(
+                        username.to_owned(),
+                        certificate,
+                        None,
+                        &mut signer,
+                    )
+                    .await
+            } else {
+                handle
+                    .authenticate_publickey_with(username.to_owned(), public_key, None, &mut signer)
+                    .await
+            };
+            match result {
+                Ok(result) if result.success() => {
+                    push_auth_event(
+                        events,
+                        wakeup,
+                        "auth_success",
+                        "fido2",
+                        "FIDO2 security key authentication succeeded.",
+                    );
+                    return Ok(());
+                }
+                Ok(AuthResult::Failure { .. }) => {
+                    push_auth_event(
+                        events,
+                        wakeup,
+                        "auth_key_rejected",
+                        "fido2",
+                        "FIDO2 security key authentication was rejected.",
+                    );
+                    return Err("FIDO2 security key authentication was rejected".to_owned());
+                }
+                Ok(AuthResult::Success) => return Ok(()),
+                Err(error) => {
+                    let error = error.to_string();
+                    push_auth_event(
+                        events,
+                        wakeup,
+                        "auth_key_failed",
+                        "fido2",
+                        format!("FIDO2 security key authentication failed: {error}"),
+                    );
+                    return Err(error);
+                }
+            }
+        }
         let private_key = Arc::new(private_key);
         let result = if let Some(certificate) = certificate {
             let certificate = decode_openssh_certificate_for_key(certificate, &private_key);

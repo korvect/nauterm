@@ -117,7 +117,7 @@ void main() {
       '${directory.path}${Platform.pathSeparator}nauterm.sqlite',
     );
 
-    expect(store.schemaVersion, 3);
+    expect(store.schemaVersion, 4);
     final deviceId = store.deviceId;
     expect(
       deviceId,
@@ -208,6 +208,7 @@ void main() {
         privateKey: 'certificate-private',
         publicKey: 'certificate-public',
         certificate: 'ssh-ed25519-cert-v01@openssh.com certificate',
+        passphrase: 'saved passphrase',
       ),
     );
     final keySummaries = store.listKeys();
@@ -220,9 +221,14 @@ void main() {
       'ssh-ed25519-cert-v01@openssh.com',
     );
     expect(
+      keySummaries.firstWhere((entry) => entry.id == certificateId).passphrase,
+      isNull,
+    );
+    expect(
       store.getKey(certificateId)?.certificate,
       'ssh-ed25519-cert-v01@openssh.com certificate',
     );
+    expect(store.getKey(certificateId)?.passphrase, 'saved passphrase');
     expect(store.getIdentity(identityId)?.password, 'secret');
     expect(store.getHost(hostId)?.host, '10.0.0.12');
     expect(store.getHost(hostId)?.groupUuid, store.listGroups().single.uuid);

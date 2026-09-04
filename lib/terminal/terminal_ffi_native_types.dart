@@ -1069,3 +1069,14 @@ typedef _SftpCloseSudoSessionDart = bool Function(Pointer<Utf8> sessionId);
 
 typedef _FreeStringNative = Void Function(Pointer<Utf8> text);
 typedef _FreeStringDart = void Function(Pointer<Utf8> text);
+
+typedef _Fido2ListDevicesNative = Pointer<Utf8> Function();
+typedef _Fido2ListDevicesDart = Pointer<Utf8> Function();
+typedef _Fido2VerifyPinNative = Pointer<Utf8> Function(
+  Pointer<Utf8> requestJson,
+);
+typedef _Fido2VerifyPinDart = Pointer<Utf8> Function(Pointer<Utf8> requestJson);
+typedef _Fido2GenerateNative = Pointer<Utf8> Function(
+  Pointer<Utf8> requestJson,
+);
+typedef _Fido2GenerateDart = Pointer<Utf8> Function(Pointer<Utf8> requestJson);

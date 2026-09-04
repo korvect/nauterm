@@ -66,6 +66,7 @@ pub(super) fn create_schema(connection: &Connection) -> rusqlite::Result<()> {
           private_key TEXT,
           public_key TEXT,
           certificate TEXT,
+          passphrase TEXT,
           created_at INTEGER NOT NULL DEFAULT (CAST(unixepoch('subsec') * 1000 AS INTEGER)),
           updated_at INTEGER NOT NULL DEFAULT (CAST(unixepoch('subsec') * 1000 AS INTEGER)),
           deleted_at INTEGER,

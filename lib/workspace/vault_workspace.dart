@@ -27,6 +27,7 @@ class _VaultWorkspace extends StatelessWidget {
     required this.onExportHosts,
     required this.onCreateKey,
     required this.onCreateCertificate,
+    required this.onCreateFido2Key,
     required this.onGenerateKey,
     required this.onCreateIdentity,
     required this.onCreateSnippet,
@@ -98,6 +99,7 @@ class _VaultWorkspace extends StatelessWidget {
   final VoidCallback onExportHosts;
   final VoidCallback onCreateKey;
   final VoidCallback onCreateCertificate;
+  final VoidCallback onCreateFido2Key;
   final VoidCallback onGenerateKey;
   final VoidCallback onCreateIdentity;
   final ValueChanged<int?> onCreateSnippet;
@@ -175,6 +177,7 @@ class _VaultWorkspace extends StatelessWidget {
             identities: identities,
             onCreateKey: onCreateKey,
             onCreateCertificate: onCreateCertificate,
+            onCreateFido2Key: onCreateFido2Key,
             onGenerateKey: onGenerateKey,
             onCreateIdentity: onCreateIdentity,
             onKeyContextAction: onKeyContextAction,

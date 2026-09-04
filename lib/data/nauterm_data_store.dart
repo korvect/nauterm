@@ -244,6 +244,7 @@ class KeyEntry {
     this.privateKey,
     this.publicKey,
     this.certificate,
+    this.passphrase,
     this.createdAt,
     this.updatedAt,
     this.deletedAt,
@@ -258,6 +259,7 @@ class KeyEntry {
   final String? privateKey;
   final String? publicKey;
   final String? certificate;
+  final String? passphrase;
   final DateTime? createdAt;
   final DateTime? updatedAt;
   final DateTime? deletedAt;
@@ -272,6 +274,7 @@ class KeyEntry {
     'private_key': privateKey,
     'public_key': publicKey,
     'certificate': certificate,
+    'passphrase': passphrase,
     'created_at': _dateTimeToJson(createdAt),
     'updated_at': _dateTimeToJson(updatedAt),
     'deleted_at': _dateTimeToJson(deletedAt),
@@ -289,6 +292,7 @@ class KeyEntry {
       privateKey: _stringOrNull(map['private_key']),
       publicKey: _stringOrNull(map['public_key']),
       certificate: _stringOrNull(map['certificate']),
+      passphrase: _stringOrNull(map['passphrase']),
       createdAt: _dateTimeOrNull(map['created_at']),
       updatedAt: _dateTimeOrNull(map['updated_at']),
       deletedAt: _dateTimeOrNull(map['deleted_at']),

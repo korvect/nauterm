@@ -138,6 +138,7 @@ extension _NautermWorkspaceTerminalActions on _NautermWorkspaceState {
         password: auth.password,
         privateKey: auth.privateKey,
         certificate: auth.certificate,
+        passphrase: auth.passphrase,
         proxy: auth.proxy,
         environment: _terminalEnvironmentForTheme(
           theme,
@@ -579,6 +580,7 @@ extension _NautermWorkspaceTerminalActions on _NautermWorkspaceState {
         password: auth.password,
         privateKey: auth.privateKey,
         certificate: auth.certificate,
+        passphrase: auth.passphrase,
         proxy: auth.proxy,
         knownHostsPath: NautermPaths.resolve().knownHostsFile.path,
       ),

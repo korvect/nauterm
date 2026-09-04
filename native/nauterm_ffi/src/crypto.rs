@@ -481,6 +481,7 @@ pub fn encrypt_unprotected_sensitive_fields(
     const FIELDS: &[(&str, &str)] = &[
         ("keys", "private_key"),
         ("keys", "certificate"),
+        ("keys", "passphrase"),
         ("identities", "password"),
         ("hosts", "password"),
         ("hosts", "telnet_password"),
@@ -799,7 +800,8 @@ mod tests {
                 CREATE TABLE keys (
                     id INTEGER PRIMARY KEY,
                     private_key TEXT,
-                    certificate TEXT
+                    certificate TEXT,
+                    passphrase TEXT
                 );
                 CREATE TABLE identities (id INTEGER PRIMARY KEY, password TEXT);
                 CREATE TABLE hosts (
@@ -808,8 +810,8 @@ mod tests {
                     telnet_password TEXT
                 );
                 CREATE TABLE proxies (id INTEGER PRIMARY KEY, password TEXT);
-                INSERT INTO keys (private_key, certificate)
-                VALUES ('private material', 'certificate material');
+                INSERT INTO keys (private_key, certificate, passphrase)
+                VALUES ('private material', 'certificate material', 'saved passphrase');
                 INSERT INTO identities (password) VALUES ('identity secret');
                 INSERT INTO hosts (password, telnet_password)
                 VALUES ('ssh secret', 'telnet secret');
@@ -821,7 +823,7 @@ mod tests {
 
         assert_eq!(
             encrypt_unprotected_sensitive_fields(&connection, &dek).unwrap(),
-            6
+            7
         );
         assert_eq!(
             encrypt_unprotected_sensitive_fields(&connection, &dek).unwrap(),
@@ -831,6 +833,7 @@ mod tests {
         for (table, column, expected) in [
             ("keys", "private_key", "private material"),
             ("keys", "certificate", "certificate material"),
+            ("keys", "passphrase", "saved passphrase"),
             ("identities", "password", "identity secret"),
             ("hosts", "password", "ssh secret"),
             ("hosts", "telnet_password", "telnet secret"),
