@@ -46,6 +46,13 @@ pub extern "C" fn nauterm_fido2_list_devices() -> *mut c_char {
 }
 
 #[no_mangle]
+/// Generates an SSH FIDO2 security key from a JSON request.
+///
+/// # Safety
+///
+/// `request_json` must either be null or point to a valid, NUL-terminated C
+/// string for the duration of this call. The returned string must be released
+/// with `nauterm_string_free`.
 pub unsafe extern "C" fn nauterm_fido2_generate(request_json: *const c_char) -> *mut c_char {
     guard(std::ptr::null_mut(), || {
         let Some(request_json) = string_from_ptr(request_json) else {
@@ -70,6 +77,13 @@ struct Fido2VerifyPinRequest {
 }
 
 #[no_mangle]
+/// Verifies a FIDO2 device PIN from a JSON request.
+///
+/// # Safety
+///
+/// `request_json` must either be null or point to a valid, NUL-terminated C
+/// string for the duration of this call. The returned string must be released
+/// with `nauterm_string_free`.
 pub unsafe extern "C" fn nauterm_fido2_verify_pin(request_json: *const c_char) -> *mut c_char {
     guard(std::ptr::null_mut(), || {
         let Some(request_json) = string_from_ptr(request_json) else {
