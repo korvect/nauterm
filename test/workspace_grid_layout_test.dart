@@ -6,6 +6,58 @@ import 'package:nauterm/workspace/nauterm_workspace.dart';
 
 void main() {
   testWidgets(
+    'command A requires selection and keeps groups separate from hosts',
+    (tester) async {
+      var selected = <Object>{};
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 600,
+              height: 400,
+              child: buildWorkspaceSelectionSurfaceForTesting(
+                onSelectionChanged: (value) => selected = value,
+                child: Column(
+                  children: [
+                    buildWorkspaceGroupGridForTesting(),
+                    const SizedBox(height: 20),
+                    buildWorkspaceCardEditGridForTesting(
+                      onEdit: (_) {},
+                      onActivate: () {},
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      Future<void> selectAll() async {
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+        await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+        await tester.pump();
+      }
+
+      await selectAll();
+      expect(selected, isEmpty);
+      await tester.tap(find.text('Host 1'));
+      await tester.pump();
+      await selectAll();
+      expect(selected, {'host:1', 'host:2'});
+      await tester.tap(find.text('Group 1'));
+      await tester.pump();
+      await selectAll();
+      expect(selected, {'group:1', 'group:2'});
+      await tester.tapAt(const Offset(300, 350));
+      await tester.pump();
+      await selectAll();
+      expect(selected, isEmpty);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
     'ordinary selection follows the editor but context and multiselect do not',
     (tester) async {
       final edited = <String>[];

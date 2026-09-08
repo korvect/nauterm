@@ -1,5 +1,34 @@
 part of 'nauterm_workspace.dart';
 
+bool _isWorkspaceSelectAll(KeyEvent event) =>
+    event.logicalKey == LogicalKeyboardKey.keyA &&
+    (HardwareKeyboard.instance.isMetaPressed ||
+        HardwareKeyboard.instance.isControlPressed) &&
+    !HardwareKeyboard.instance.isAltPressed &&
+    !HardwareKeyboard.instance.isShiftPressed;
+
+@visibleForTesting
+Widget buildWorkspaceGroupGridForTesting() => _WorkspaceItemGrid<_GroupItem>(
+  items: const [
+    _GroupItem(
+      id: 1,
+      parentId: null,
+      name: 'Group 1',
+      subtitle: '',
+      icon: Icons.folder,
+      color: Colors.blue,
+    ),
+    _GroupItem(
+      id: 2,
+      parentId: null,
+      name: 'Group 2',
+      subtitle: '',
+      icon: Icons.folder,
+      color: Colors.blue,
+    ),
+  ],
+);
+
 @visibleForTesting
 Widget buildWorkspaceSelectionSurfaceForTesting({
   required Widget child,
@@ -393,6 +422,24 @@ class _WorkspaceItemSelectionController extends ChangeNotifier {
   Object? get selectedIdentity => _activeIdentity;
 
   Set<Object> get selectedIdentities => Set.unmodifiable(_selectedIdentities);
+
+  bool selectAllInCollection(List<Object> identities, Object scope) {
+    if (_selectionScopeId != scope ||
+        !identities.any(_selectedIdentities.contains)) {
+      return false;
+    }
+    _setSelection(
+      selectedIdentities: identities.toSet(),
+      activeIdentity: identities.contains(_activeIdentity)
+          ? _activeIdentity
+          : identities.first,
+      anchorIdentity: identities.contains(_anchorIdentity)
+          ? _anchorIdentity
+          : identities.first,
+      selectionScopeId: scope,
+    );
+    return true;
+  }
 
   bool isSelected({
     required Object identity,
@@ -830,6 +877,15 @@ class _WorkspaceItemGridState<T extends _WorkspaceItemData>
     if (event is! KeyDownEvent || widget.items.isEmpty) {
       return KeyEventResult.ignored;
     }
+    if (_isWorkspaceSelectAll(event)) {
+      return _sharedSelection?.selectAllInCollection(
+                widget.items.map(_workspaceItemIdentity).toList(),
+                _workspaceItemSelectionScopeId(widget.items),
+              ) ==
+              true
+          ? KeyEventResult.handled
+          : KeyEventResult.ignored;
+    }
     final commandAction = _workspaceItemCommandAction(event);
     if (commandAction != null) {
       return _invokeSelectedContextAction(commandAction)
@@ -1179,6 +1235,15 @@ class _WorkspaceItemListState<T extends _WorkspaceItemData>
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent || widget.items.isEmpty) {
       return KeyEventResult.ignored;
+    }
+    if (_isWorkspaceSelectAll(event)) {
+      return _sharedSelection?.selectAllInCollection(
+                widget.items.map(_workspaceItemIdentity).toList(),
+                _workspaceItemSelectionScopeId(widget.items),
+              ) ==
+              true
+          ? KeyEventResult.handled
+          : KeyEventResult.ignored;
     }
     final current = _effectiveSelectedIndex ?? 0;
     final commandAction = _workspaceItemCommandAction(event);
