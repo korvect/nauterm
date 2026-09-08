@@ -379,6 +379,22 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
                                         _createKeyExportConnection,
                                     buildKeyExportConnectionPage:
                                         _buildKeyExportConnectionPage,
+                                    buildHostSelector:
+                                        (search, onBack, onSelected) =>
+                                            _SftpHostSelectorPane(
+                                              groups: _groups,
+                                              hosts: _hosts
+                                                  .where(
+                                                    (host) =>
+                                                        host.type == 'remote',
+                                                  )
+                                                  .toList(),
+                                              tags: _tagEntries,
+                                              searchController: search,
+                                              onBack: onBack,
+                                              onHostSelected: (host) =>
+                                                  onSelected(host.id),
+                                            ),
                                     onShowNotification: _showWorkspaceMessage,
                                     onSaveGroup: _saveGroup,
                                     onDuplicateGroup: (group) {

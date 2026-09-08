@@ -28,6 +28,23 @@ Widget buildKeyExportDrawerForTesting({
     onCloseRequested: onClose,
   ),
   onExport: (key, draft, connection) => onExport(connection),
+  buildHostSelector: (search, onBack, onSelected) => _SftpHostSelectorPane(
+    groups: const [],
+    tags: const [],
+    searchController: search,
+    onBack: onBack,
+    hosts: const [
+      _HostItem(
+        id: 1,
+        name: 'Test server',
+        subtitle: 'example.test',
+        icon: Icons.dns,
+        color: Colors.blue,
+        type: 'remote',
+      ),
+    ],
+    onHostSelected: (host) => onSelected(host.id),
+  ),
 );
 
 const String _defaultKeyExportScript = r'''if test ! -e "$1"; then
@@ -63,6 +80,7 @@ class _KeyExportEditorContent extends StatefulWidget {
     required this.onExport,
     required this.createConnection,
     required this.buildConnectionPage,
+    required this.buildHostSelector,
     required this.onShowNotification,
     this.initialHostId,
   });
@@ -74,6 +92,7 @@ class _KeyExportEditorContent extends StatefulWidget {
   final _ExportKey onExport;
   final _CreateKeyExportConnection createConnection;
   final _BuildKeyExportConnectionPage buildConnectionPage;
+  final _BuildDrawerHostSelector buildHostSelector;
   final _ShowWorkspaceNotification onShowNotification;
 
   @override
@@ -86,6 +105,8 @@ class _KeyExportEditorContentState extends State<_KeyExportEditorContent> {
   late final TextEditingController _filenameController;
   late final TextEditingController _scriptController;
   int? _hostId;
+  bool _selectingHost = false;
+  final _hostSearchController = TextEditingController();
   bool _exporting = false;
   TerminalController? _connection;
   _KeyExportDraft? _draft;
@@ -104,6 +125,7 @@ class _KeyExportEditorContentState extends State<_KeyExportEditorContent> {
   void initState() {
     super.initState();
     _hostId = widget.initialHostId;
+    _hostSearchController.addListener(_refreshHostSearch);
     _locationController = TextEditingController(text: '.ssh');
     _filenameController = TextEditingController(text: 'authorized_keys');
     _scriptController = TextEditingController(text: _defaultKeyExportScript);
@@ -114,6 +136,7 @@ class _KeyExportEditorContentState extends State<_KeyExportEditorContent> {
 
   @override
   void dispose() {
+    _hostSearchController.dispose();
     _completionTimer?.cancel();
     _connection?.removeListener(_handleConnection);
     _connection?.dispose();
@@ -131,6 +154,8 @@ class _KeyExportEditorContentState extends State<_KeyExportEditorContent> {
       setState(() => _locationError = null);
     }
   }
+
+  void _refreshHostSearch() => setState(() {});
 
   void _clearFilenameError() {
     if (_filenameError != null &&
@@ -351,6 +376,17 @@ class _KeyExportEditorContentState extends State<_KeyExportEditorContent> {
 
   @override
   Widget build(BuildContext context) {
+    if (_selectingHost) {
+      return widget.buildHostSelector(
+        _hostSearchController,
+        () => setState(() => _selectingHost = false),
+        (hostId) => setState(() {
+          _hostId = hostId;
+          _hostError = null;
+          _selectingHost = false;
+        }),
+      );
+    }
     final connection = _connection;
     if (connection != null) {
       return _EditorShell(
@@ -367,9 +403,9 @@ class _KeyExportEditorContentState extends State<_KeyExportEditorContent> {
       );
     }
     final key = widget.request.key;
-    final sshHosts = widget.hosts
-        .where((host) => host.id != null && host.type == NautermHostType.remote)
-        .toList(growable: false);
+    final selectedHost = widget.hosts
+        .where((host) => host.id == _hostId)
+        .firstOrNull;
 
     return _EditorShell(
       title: 'Export Key',
@@ -396,27 +432,37 @@ class _KeyExportEditorContentState extends State<_KeyExportEditorContent> {
         _WorkspaceFormSection(
           title: 'Destination',
           children: [
-            _WorkspaceSelect<int?>(
+            _WorkspaceFieldFrame(
+              key: const ValueKey('key-export-host-selector'),
               label: 'Host',
               isRequired: true,
-              value: _hostId,
+              size: _WorkspaceControlSize.large,
+              focused: false,
+              floatingLabel: true,
+              hasContent: selectedHost != null,
               errorText: _hostError,
-              editable: true,
-              searchable: true,
-              clearable: true,
-              items: [
-                for (final host in sshHosts)
-                  DropdownMenuItem<int?>(
-                    value: host.id,
-                    child: Text(_portForwardHostLabel(host)),
-                  ),
-              ],
-              onChanged: (value) => setState(() {
-                _hostId = value;
-                if (value != null) {
-                  _hostError = null;
-                }
-              }),
+              onTap: () => setState(() => _selectingHost = true),
+              child: LayoutBuilder(
+                builder: (context, constraints) => Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        selectedHost == null
+                            ? ''
+                            : _portForwardHostLabel(selectedHost),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (constraints.maxWidth >= 18)
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        size: 18,
+                        color: _mutedText,
+                      ),
+                  ],
+                ),
+              ),
             ),
             SizedBox(height: _workspaceFormFieldGap),
             _WorkspaceInput(

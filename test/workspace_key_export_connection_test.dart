@@ -26,6 +26,80 @@ class ExportDriver extends MemoryTerminalDriver {
 }
 
 void main() {
+  testWidgets('host field handles a width smaller than its trailing icon', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: buildKeyExportDrawerForTesting(
+            createConnection: () => throw StateError('Must not connect'),
+            onExport: (_) async {},
+          ),
+        ),
+      ),
+    );
+    final field = tester.widget(
+      find.byKey(const ValueKey('key-export-host-selector')),
+    );
+    for (final width in [32.9, 40.0, 360.0]) {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(width: width, child: field),
+            ),
+          ),
+        ),
+      );
+      expect(tester.takeException(), isNull);
+      expect(
+        find.byIcon(Icons.chevron_right_rounded),
+        width < 40 ? findsNothing : findsOneWidget,
+      );
+    }
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('host picker searches and returns to the preserved export form', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 360,
+            child: buildKeyExportDrawerForTesting(
+              createConnection: () =>
+                  throw StateError('Must not connect while selecting'),
+              onExport: (_) async {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byKey(const ValueKey('key-export-host-selector')));
+    await tester.pump();
+    expect(find.text('Select Host'), findsOneWidget);
+    expect(find.text('Local'), findsNothing);
+    await tester.enterText(find.byType(TextField), 'not-a-host');
+    await tester.pump();
+    expect(find.text('Test server'), findsNothing);
+    await tester.enterText(find.byType(TextField), 'Test');
+    await tester.pump();
+    await tester.tap(find.text('Test server'));
+    await tester.pump();
+    expect(find.text('Export to host'), findsOneWidget);
+    expect(find.text('authorized_keys'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('key-export-host-selector')));
+    await tester.pump();
+    await tester.tap(find.byIcon(Icons.arrow_back_rounded));
+    await tester.pump();
+    expect(find.text('Export to host'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('drawer key authentication buttons fit a narrow drawer', (
     tester,
   ) async {

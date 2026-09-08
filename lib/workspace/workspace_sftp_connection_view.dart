@@ -125,7 +125,7 @@ class _SftpHostSelectorPane extends StatefulWidget {
     required this.tags,
     required this.searchController,
     required this.onBack,
-    required this.onUseLocal,
+    this.onUseLocal,
     required this.onHostSelected,
   });
 
@@ -134,7 +134,7 @@ class _SftpHostSelectorPane extends StatefulWidget {
   final List<TagEntry> tags;
   final TextEditingController searchController;
   final VoidCallback onBack;
-  final VoidCallback onUseLocal;
+  final VoidCallback? onUseLocal;
   final ValueChanged<_HostItem> onHostSelected;
 
   @override
@@ -298,16 +298,17 @@ class _SftpHostSelectorPaneState extends State<_SftpHostSelectorPane> {
                     ],
                   ),
                 ),
-                _WorkspaceButton(
-                  icon: Icons.drive_folder_upload_rounded,
-                  label: tr('common.label.local', fallback: 'Local'),
-                  variant: _WorkspaceButtonVariant.solid,
-                  type: _WorkspaceButtonType.info,
-                  height: 30,
-                  horizontalPadding: 8,
-                  iconGap: 5,
-                  onPressed: widget.onUseLocal,
-                ),
+                if (widget.onUseLocal != null)
+                  _WorkspaceButton(
+                    icon: Icons.drive_folder_upload_rounded,
+                    label: tr('common.label.local', fallback: 'Local'),
+                    variant: _WorkspaceButtonVariant.solid,
+                    type: _WorkspaceButtonType.info,
+                    height: 30,
+                    horizontalPadding: 8,
+                    iconGap: 5,
+                    onPressed: widget.onUseLocal,
+                  ),
               ],
             ),
           ),

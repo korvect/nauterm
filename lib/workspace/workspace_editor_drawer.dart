@@ -1,5 +1,11 @@
 part of 'nauterm_workspace.dart';
 
+typedef _BuildDrawerHostSelector = Widget Function(
+  TextEditingController search,
+  VoidCallback onBack,
+  ValueChanged<int> onSelected,
+);
+
 typedef _SaveGroup = Future<void> Function(HostGroup group);
 typedef _SaveHost = Future<void> Function(HostEntry host);
 typedef _CreateTag = TagEntry? Function(String name);
@@ -210,6 +216,7 @@ class _WorkspaceEditorDrawer extends StatelessWidget {
     required this.onExportKey,
     required this.createKeyExportConnection,
     required this.buildKeyExportConnectionPage,
+    required this.buildHostSelector,
     required this.onShowNotification,
     required this.onSaveGroup,
     required this.onDuplicateGroup,
@@ -266,6 +273,7 @@ class _WorkspaceEditorDrawer extends StatelessWidget {
   final _ExportKey onExportKey;
   final _CreateKeyExportConnection createKeyExportConnection;
   final _BuildKeyExportConnectionPage buildKeyExportConnectionPage;
+  final _BuildDrawerHostSelector buildHostSelector;
   final _ShowWorkspaceNotification onShowNotification;
   final _SaveGroup onSaveGroup;
   final ValueChanged<HostGroup> onDuplicateGroup;
@@ -373,6 +381,7 @@ class _WorkspaceEditorDrawer extends StatelessWidget {
         onExport: onExportKey,
         createConnection: createKeyExportConnection,
         buildConnectionPage: buildKeyExportConnectionPage,
+        buildHostSelector: buildHostSelector,
         onShowNotification: onShowNotification,
       ),
       _IdentityEditorRequest() => _IdentityEditorContent(
