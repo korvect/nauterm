@@ -1,5 +1,27 @@
 part of 'nauterm_workspace.dart';
 
+@visibleForTesting
+Widget buildWorkspaceCardEditGridForTesting({
+  required ValueChanged<String> onEdit,
+  required VoidCallback onActivate,
+}) => _WorkspaceItemGrid<_HostItem>(
+  items: [
+    for (var id = 1; id <= 2; id++)
+      _HostItem(
+        id: id,
+        name: 'Host $id',
+        subtitle: '',
+        icon: Icons.dns,
+        color: Colors.blue,
+        type: 'remote',
+      ),
+  ],
+  onItemDoubleTap: (_) => onActivate(),
+  onContextAction: (item, action) {
+    if (action == _ContextMenuActionId.edit) onEdit(item.name);
+  },
+);
+
 typedef _WorkspaceContextAction<T extends _WorkspaceItemData> = void Function(
   T item,
   _ContextMenuActionId action,
@@ -773,6 +795,7 @@ class _WorkspaceItemGridState<T extends _WorkspaceItemData>
                   selected: _isSelected(index),
                   contextItems: _contextItemsFor(index),
                   onTap: () => _selectFromPointer(index),
+                  onSelectForEdit: () => _select(index),
                   onDoubleTap:
                       widget.onItemDoubleTap == null && widget.onItemTap == null
                       ? null
@@ -1165,6 +1188,7 @@ class _WorkspaceItemCard<T extends _WorkspaceItemData> extends StatefulWidget {
     required this.item,
     required this.selected,
     required this.contextItems,
+    required this.onSelectForEdit,
     this.onTap,
     this.onDoubleTap,
     this.onContextAction,
@@ -1172,6 +1196,7 @@ class _WorkspaceItemCard<T extends _WorkspaceItemData> extends StatefulWidget {
   });
 
   final double width;
+  final VoidCallback onSelectForEdit;
   final T item;
   final bool selected;
   final List<T> contextItems;
@@ -1322,9 +1347,13 @@ class _WorkspaceItemCardState<T extends _WorkspaceItemData>
                         child: IgnorePointer(
                           ignoring: !_hovered,
                           child: _WorkspaceCardEditButton(
-                            onPressed: () => widget.onContextAction!(
-                              _ContextMenuActionId.edit,
-                            ),
+                            onPressed: () {
+                              _tapTracker.reset();
+                              widget.onSelectForEdit();
+                              widget.onContextAction!(
+                                _ContextMenuActionId.edit,
+                              );
+                            },
                           ),
                         ),
                       ),

@@ -1,7 +1,53 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:nauterm/workspace/nauterm_workspace.dart';
 
 void main() {
+  testWidgets('hover edit selects the edited card without activating it', (
+    tester,
+  ) async {
+    String? edited;
+    var activations = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 600,
+            child: buildWorkspaceCardEditGridForTesting(
+              onEdit: (name) => edited = name,
+              onActivate: () => activations++,
+            ),
+          ),
+        ),
+      ),
+    );
+    final first = find.byKey(const ValueKey('workspace-item-card:host:1'));
+    final second = find.byKey(const ValueKey('workspace-item-card:host:2'));
+    await tester.tap(find.text('Host 1'));
+    await tester.pump();
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    await mouse.moveTo(tester.getCenter(second));
+    await tester.pumpAndSettle();
+    final edit = find.descendant(of: second, matching: find.byType(Tooltip));
+    await tester.tap(edit);
+    await tester.pumpAndSettle();
+    expect(edited, 'Host 2');
+    expect(activations, 0);
+    BorderSide border(Finder card) {
+      final material = tester.widget<Material>(
+        find.descendant(of: card, matching: find.byType(Material)).first,
+      );
+      return (material.shape! as RoundedRectangleBorder).side;
+    }
+
+    expect(border(first), BorderSide.none);
+    expect(border(second).width, 1.5);
+    await mouse.removePointer();
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   test('workspace grid never allocates more columns than items', () {
     expect(workspaceGridColumnCount(width: 680, itemCount: 2), 2);
     expect(workspaceGridColumnCount(width: 1200, itemCount: 1), 1);
