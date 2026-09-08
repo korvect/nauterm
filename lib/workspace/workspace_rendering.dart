@@ -375,6 +375,10 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
                                         _editHostEnvironmentForEditor,
                                     onSaveGeneratedKey: _saveGeneratedKey,
                                     onExportKey: _exportKeyToHost,
+                                    createKeyExportConnection:
+                                        _createKeyExportConnection,
+                                    buildKeyExportConnectionPage:
+                                        _buildKeyExportConnectionPage,
                                     onShowNotification: _showWorkspaceMessage,
                                     onSaveGroup: _saveGroup,
                                     onDuplicateGroup: (group) {

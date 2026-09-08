@@ -1,5 +1,125 @@
 use super::*;
 
+#[cfg(test)]
+mod key_export_tests {
+    use super::*;
+
+    struct ExportServer {
+        requests: Arc<AtomicU64>,
+    }
+    impl russh::server::Handler for ExportServer {
+        type Error = russh::Error;
+        async fn auth_none(&mut self, _: &str) -> Result<russh::server::Auth, Self::Error> {
+            Ok(russh::server::Auth::Accept)
+        }
+        async fn channel_open_session(
+            &mut self,
+            _: russh::Channel<russh::server::Msg>,
+            reply: russh::server::ChannelOpenHandle,
+            _: &mut russh::server::Session,
+        ) -> Result<(), Self::Error> {
+            reply.accept().await;
+            Ok(())
+        }
+        async fn exec_request(
+            &mut self,
+            channel: russh::ChannelId,
+            data: &[u8],
+            session: &mut russh::server::Session,
+        ) -> Result<(), Self::Error> {
+            self.requests.fetch_add(1, Ordering::SeqCst);
+            session.channel_success(channel)?;
+            session.eof(channel)?;
+            let command = String::from_utf8_lossy(data);
+            if !command.contains("missing-status") {
+                session
+                    .exit_status_request(channel, if command.contains("exit 7") { 7 } else { 0 })?;
+            }
+            session.close(channel)?;
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn key_export_reuses_authenticated_session_and_requires_exit_status() {
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let address = listener.local_addr().unwrap();
+            let requests = Arc::new(AtomicU64::new(0));
+            let count = requests.clone();
+            let server_task = tokio::spawn(async move {
+                let (stream, _) = listener.accept().await.unwrap();
+                let config = russh::server::Config {
+                    keys: vec![
+                        russh::keys::ssh_key::private::Ed25519Keypair::from_seed(&[42; 32]).into(),
+                    ],
+                    auth_rejection_time: Duration::ZERO,
+                    ..Default::default()
+                };
+                let session = russh::server::run_stream(
+                    Arc::new(config),
+                    stream,
+                    ExportServer { requests: count },
+                )
+                .await
+                .unwrap();
+                session.await.unwrap();
+            });
+            let handler = SshClientHandler {
+                host: address.ip().to_string(),
+                port: address.port(),
+                known_hosts_path: Some(std::env::temp_dir().join(format!(
+                    "nauterm-key-export-test-{}-{}",
+                    std::process::id(),
+                    address.port()
+                ))),
+                host_key_trust_mode: HostKeyTrustMode::AcceptOnce,
+                output: Arc::new(Mutex::new(Vec::new())),
+                events: Arc::new(Mutex::new(Vec::new())),
+                wakeup: Arc::new(Mutex::new(None)),
+            };
+            let mut handle = client::connect(ssh_client_config(), address, handler)
+                .await
+                .unwrap();
+            assert!(handle.authenticate_none("test").await.unwrap().success());
+            let mut request = SessionKeyExportRequest {
+                public_key: "ssh-ed25519 AAAATEST".into(),
+                location: ".ssh".into(),
+                filename: "authorized_keys".into(),
+                script: "exit 0".into(),
+            };
+            export_public_key_on_session(&mut handle, &request)
+                .await
+                .unwrap();
+            request.script = "exit 7".into();
+            assert!(export_public_key_on_session(&mut handle, &request)
+                .await
+                .unwrap_err()
+                .contains("exit 7"));
+            request.script = "# missing-status".into();
+            assert!(export_public_key_on_session(&mut handle, &request)
+                .await
+                .unwrap_err()
+                .contains("without confirming"));
+            request.filename = "../invalid".into();
+            assert!(export_public_key_on_session(&mut handle, &request)
+                .await
+                .is_err());
+            assert_eq!(requests.load(Ordering::SeqCst), 3);
+            handle
+                .disconnect(russh::Disconnect::ByApplication, "", "")
+                .await
+                .unwrap();
+            server_task.abort();
+        });
+    }
+}
+
 pub(super) async fn detect_host_os(
     host: &str,
     port: u16,
@@ -402,6 +522,45 @@ pub(super) async fn export_public_key(
             error: Some(error),
         },
     }
+}
+
+pub(super) async fn export_public_key_on_session(
+    handle: &mut client::Handle<SshClientHandler>,
+    request: &SessionKeyExportRequest,
+) -> Result<(), String> {
+    let public_key = normalize_public_key_for_export(&request.public_key)?;
+    let location = validate_export_location(&request.location)?;
+    let filename = validate_export_filename(&request.filename)?;
+    let script = if request.script.trim().is_empty() {
+        EXPORT_PUBLIC_KEY_SCRIPT.to_owned()
+    } else {
+        validate_export_script(&request.script)?
+    };
+    let command = build_public_key_export_command(&script, &public_key, &location, &filename);
+    tokio::time::timeout(Duration::from_secs(15), async {
+        let mut channel = handle.channel_open_session().await.map_err(|e| e.to_string())?;
+        channel.exec(true, command).await.map_err(|e| e.to_string())?;
+        let mut status = None;
+        let mut stderr = Vec::new();
+        while let Some(message) = channel.wait().await {
+            match message {
+                ChannelMsg::ExitStatus { exit_status } => status = Some(exit_status),
+                ChannelMsg::ExtendedData { data, .. } => {
+                    let count = data.len().min(8192_usize.saturating_sub(stderr.len()));
+                    stderr.extend_from_slice(&data[..count]);
+                }
+                ChannelMsg::Failure => return Err("Server rejected the key export command.".to_owned()),
+                ChannelMsg::Close => break,
+                _ => {}
+            }
+        }
+        let _ = channel.close().await;
+        match status {
+            Some(0) => Ok(()),
+            Some(code) => Err(format!("Key export failed (exit {code}): {}", String::from_utf8_lossy(&stderr).trim())),
+            None => Err("SSH connection closed without confirming key export. Check the remote file before retrying.".to_owned()),
+        }
+    }).await.map_err(|_| "Key export timed out. Check the remote file before retrying.".to_owned())?
 }
 
 pub(super) fn normalize_public_key_for_export(value: &str) -> Result<String, String> {

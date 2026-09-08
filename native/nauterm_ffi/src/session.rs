@@ -1165,6 +1165,20 @@ impl SessionManager {
             .unwrap_or_else(|| Err("terminal session actor stopped".to_owned()))
     }
 
+    pub fn request_ssh_key_export(
+        &mut self,
+        id: SessionId,
+        request: crate::ssh::SessionKeyExportRequest,
+    ) -> Result<crate::ssh::KeyExportReceiver, String> {
+        let actor = self.sessions.get(&id).ok_or("SSH session was not found.")?;
+        actor
+            .call(move |session| match &mut session.transport {
+                SessionTransport::Ssh(ssh) => ssh.request_key_export(request),
+                _ => Err("Session is not an SSH connection.".into()),
+            })
+            .unwrap_or_else(|| Err("SSH session actor stopped.".into()))
+    }
+
     pub fn send_input_bytes(&mut self, id: SessionId, bytes: &[u8]) -> bool {
         self.send_input_bytes_status(id, bytes) == INPUT_STATUS_ACCEPTED
     }

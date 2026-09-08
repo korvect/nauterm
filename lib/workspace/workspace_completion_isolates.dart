@@ -34,29 +34,6 @@ FfiHostSystemInfoResult _runHostSystemInfo(Map<String, Object?> arguments) {
   );
 }
 
-FfiSshPublicKeyExportResult _runSshPublicKeyExport(
-  Map<String, Object?> arguments,
-) {
-  return FfiSshPublicKeyExporter.export(
-    host: arguments['host'] as String,
-    port: arguments['port'] as int,
-    username: arguments['username'] as String,
-    knownHostsPath: arguments['knownHostsPath'] as String,
-    publicKey: arguments['publicKey'] as String,
-    location: arguments['location'] as String,
-    filename: arguments['filename'] as String,
-    script: arguments['script'] as String,
-    password: arguments['password'] as String?,
-    privateKey: arguments['privateKey'] as String?,
-    certificate: arguments['certificate'] as String?,
-    passphrase: arguments['passphrase'] as String?,
-    proxy: _terminalProxyFromArguments(arguments['proxy']),
-    hostKeyTrustMode: SshHostKeyTrustMode.fromWireValue(
-      arguments['hostKeyTrustMode'],
-    ),
-  );
-}
-
 FfiSshDirectoryListingResult _runSshDirectoryListing(
   Map<String, Object?> arguments,
 ) {
@@ -177,30 +154,6 @@ Future<FfiHostSystemInfoResult> _spawnHostSystemInfo(
     }
     return const FfiHostSystemInfoResult(
       error: 'Host system information isolate returned an invalid message.',
-    );
-  } finally {
-    receivePort.close();
-  }
-}
-
-Future<FfiSshPublicKeyExportResult> _spawnSshPublicKeyExport(
-  Map<String, Object?> arguments,
-) async {
-  final receivePort = ReceivePort();
-  try {
-    await Isolate.spawn(_sshPublicKeyExportIsolateMain, [
-      receivePort.sendPort,
-      arguments,
-    ]);
-    final message = await receivePort.first;
-    if (message is Map) {
-      return FfiSshPublicKeyExportResult.fromJson(
-        message.cast<String, Object?>(),
-      );
-    }
-    return const FfiSshPublicKeyExportResult(
-      ok: false,
-      error: 'SSH key export isolate returned an invalid message.',
     );
   } finally {
     receivePort.close();
@@ -799,16 +752,6 @@ void _hostSystemInfoIsolateMain(List<Object?> message) {
     sendPort.send(_runHostSystemInfo(arguments).toJson());
   } on Object catch (error) {
     sendPort.send({'error': '$error', 'events': const []});
-  }
-}
-
-void _sshPublicKeyExportIsolateMain(List<Object?> message) {
-  final sendPort = message[0] as SendPort;
-  final arguments = (message[1] as Map).cast<String, Object?>();
-  try {
-    sendPort.send(_runSshPublicKeyExport(arguments).toJson());
-  } on Object catch (error) {
-    sendPort.send({'ok': false, 'error': '$error', 'events': const []});
   }
 }
 

@@ -58,6 +58,16 @@ const SFTP_MAX_CHANNEL_WINDOW_SIZE: u32 = 16 * 1024 * 1024;
 
 pub type ShellHistoryResult = Result<(Option<String>, String), String>;
 pub type ShellHistoryReceiver = Receiver<ShellHistoryResult>;
+pub type KeyExportReceiver = Receiver<Result<(), String>>;
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionKeyExportRequest {
+    pub public_key: String,
+    pub location: String,
+    pub filename: String,
+    pub script: String,
+}
 const SSH_SESSION_CANCELLED: &str = "SSH session cancelled.";
 const CELL_WIDTH_PIXELS: u32 = 8;
 const CELL_HEIGHT_PIXELS: u32 = 16;
@@ -1408,6 +1418,7 @@ fn shell_quote(value: &str) -> String {
 }
 
 enum SshCommand {
+    ExportPublicKey(SessionKeyExportRequest, Sender<Result<(), String>>),
     Input(Vec<u8>),
     Resize(TerminalGeometry),
     ReadShellHistory(Sender<ShellHistoryResult>),
@@ -1523,6 +1534,20 @@ impl SshTransport {
         let (reply, receiver) = mpsc::channel();
         self.sender
             .send(SshCommand::ReadShellHistory(reply))
+            .map_err(|_| "SSH session is unavailable.".to_owned())?;
+        Ok(receiver)
+    }
+
+    pub fn request_key_export(
+        &self,
+        request: SessionKeyExportRequest,
+    ) -> Result<KeyExportReceiver, String> {
+        if self.exited.load(Ordering::Acquire) {
+            return Err("SSH session has exited.".into());
+        }
+        let (reply, receiver) = mpsc::channel();
+        self.sender
+            .send(SshCommand::ExportPublicKey(request, reply))
             .map_err(|_| "SSH session is unavailable.".to_owned())?;
         Ok(receiver)
     }
@@ -2167,6 +2192,10 @@ async fn drain_ssh_commands(
                     .and_then(|command| parse_shell_history_output(&command.stdout));
                 let _ = reply.send(result);
             }
+            Ok(SshCommand::ExportPublicKey(request, reply)) => {
+                let result = export_public_key_on_session(handle, &request).await;
+                let _ = reply.send(result);
+            }
             Ok(SshCommand::Shutdown) | Err(TryRecvError::Disconnected) => return Ok(false),
             Err(TryRecvError::Empty) => return Ok(true),
         }
@@ -2235,6 +2264,9 @@ async fn wait_for_ssh_shutdown(receiver: &Receiver<SshCommand>, shutdown: &Atomi
             Ok(SshCommand::Shutdown) | Err(TryRecvError::Disconnected) => return,
             Ok(SshCommand::Input(_)) | Ok(SshCommand::Resize(_)) => {}
             Ok(SshCommand::ReadShellHistory(reply)) => {
+                let _ = reply.send(Err("SSH session is not connected yet.".to_owned()));
+            }
+            Ok(SshCommand::ExportPublicKey(_, reply)) => {
                 let _ = reply.send(Err("SSH session is not connected yet.".to_owned()));
             }
             Err(TryRecvError::Empty) => {

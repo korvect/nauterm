@@ -1,5 +1,7 @@
 part of 'nauterm_workspace.dart';
 
+const _connectionCompletionHoldDuration = Duration(milliseconds: 333);
+
 @visibleForTesting
 bool shouldBeginConnectionCompletionHold({
   required TerminalConnectionPhase phase,
@@ -72,7 +74,6 @@ class _TerminalSessionView extends StatefulWidget {
 }
 
 class _TerminalSessionViewState extends State<_TerminalSessionView> {
-  static const _minimumConnectionPageDuration = Duration(milliseconds: 333);
   DateTime? _connectionPageShownAt;
   Timer? _connectionPageTimer;
   bool _holdingConnectedPage = false;
@@ -198,7 +199,7 @@ class _TerminalSessionViewState extends State<_TerminalSessionView> {
     }
     _lastConnectionPhase = status.phase;
     final elapsed = DateTime.now().difference(_connectionPageShownAt!);
-    final remaining = _minimumConnectionPageDuration - elapsed;
+    final remaining = _connectionCompletionHoldDuration - elapsed;
     if (remaining <= Duration.zero) {
       return false;
     }

@@ -1025,43 +1025,67 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
     return filename.isEmpty ? 'id_key' : filename;
   }
 
-  Future<void> _exportKeyToHost(KeyEntry key, _KeyExportDraft draft) async {
-    final publicKey = _emptyToNull(key.publicKey);
-    if (publicKey == null) {
-      throw StateError('A public key is required.');
-    }
-    final host = _hostEntries
-        .where((entry) => entry.id == draft.hostId)
-        .firstOrNull;
+  TerminalController _createKeyExportConnection(int hostId) {
+    final host = _hostEntries.where((entry) => entry.id == hostId).firstOrNull;
     final auth = _sshAuthForHost(host, feature: 'Key export');
-    if (auth == null) {
+    if (auth == null || host == null) {
       throw StateError('Host authentication is not available.');
     }
-    final result = await _spawnSshPublicKeyExport({
-      'host': auth.host,
-      'port': auth.port,
-      'username': auth.username,
-      'knownHostsPath': NautermPaths.resolve().knownHostsFile.path,
-      'password': auth.password,
-      'privateKey': auth.privateKey,
-      'certificate': auth.certificate,
-      'passphrase': auth.passphrase,
-      'proxy': auth.proxy?.toJson(),
-      'hostKeyTrustMode': SshHostKeyTrustMode.strict.wireValue,
-      'publicKey': publicKey,
-      'location': draft.location,
-      'filename': draft.filename,
-      'script': draft.script,
-    });
-    final error = _emptyToNull(result.error);
-    if (!result.ok || error != null) {
-      throw StateError(error ?? 'The host rejected the key export.');
+    return TerminalController.ssh(
+      host: auth.host,
+      port: auth.port,
+      username: auth.username,
+      knownHostsPath: NautermPaths.resolve().knownHostsFile.path,
+      hostId: host.id,
+      identityId: host.identityId,
+      label: host.name,
+      password: auth.password,
+      privateKey: auth.privateKey,
+      certificate: auth.certificate,
+      passphrase: auth.passphrase,
+      proxy: auth.proxy,
+      config: currentTerminalConfig(),
+    );
+  }
+
+  Widget _buildKeyExportConnectionPage(
+    TerminalController connection,
+    VoidCallback onClose,
+  ) {
+    return _TerminalConnectionPage(
+      inDrawer: true,
+      controller: connection,
+      keys: _terminalConnectionKeys,
+      identities: _terminalConnectionIdentities,
+      dataStore: _dataStore,
+      onSaveAuth: _saveTerminalAuth,
+      onCloseRequested: onClose,
+    );
+  }
+
+  Future<void> _exportKeyToHost(
+    KeyEntry key,
+    _KeyExportDraft draft,
+    TerminalController connection,
+  ) async {
+    final publicKey = _emptyToNull(key.publicKey);
+    if (publicKey == null) throw StateError('A public key is required.');
+    final sessionId = connection.nativeSessionId;
+    if (sessionId == null ||
+        connection.connectionStatus.phase !=
+            TerminalConnectionPhase.connected) {
+      throw StateError('The SSH connection is not ready.');
     }
-    if (!mounted) {
-      return;
+    final result = await FfiSshPublicKeyExporter.exportOnSession(
+      sessionId: sessionId,
+      publicKey: publicKey,
+      location: draft.location,
+      filename: draft.filename,
+      script: draft.script,
+    );
+    if (!result.ok || _emptyToNull(result.error) != null) {
+      throw StateError(result.error ?? 'The host rejected the key export.');
     }
-    _closeEditor();
-    _showWorkspaceMessage('Key exported to ${host?.name ?? auth.host}.');
   }
 
   Future<void> _saveKey(KeyEntry key) async {

@@ -547,6 +547,36 @@ pub extern "C" fn nauterm_session_read_shell_history(session_id: SessionId) -> *
     })
 }
 
+/// Exports a public key using an existing authenticated SSH session.
+///
+/// # Safety
+/// `request_json` must be null or a readable, NUL-terminated string for this call.
+/// Release the returned string using `nauterm_string_free`.
+#[no_mangle]
+pub unsafe extern "C" fn nauterm_session_export_public_key(
+    session_id: SessionId,
+    request_json: *const c_char,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let result = (|| {
+            let text = string_from_ptr(request_json).ok_or("Missing key export request.")?;
+            let request = serde_json::from_str::<ssh::SessionKeyExportRequest>(&text)
+                .map_err(|e| e.to_string())?;
+            let receiver =
+                with_session_manager(Err("Session manager unavailable.".into()), |manager| {
+                    manager.request_ssh_key_export(session_id, request)
+                })?;
+            receiver
+                .recv_timeout(Duration::from_secs(20))
+                .map_err(|_| {
+                    "Key export did not complete. Check the remote file before retrying.".to_owned()
+                })?
+        })();
+        let error = result.err();
+        string_to_c_ptr(serde_json::json!({"ok": error.is_none(), "error": error}).to_string())
+    })
+}
+
 #[no_mangle]
 pub extern "C" fn nauterm_session_notify_network_changed(session_id: SessionId) -> bool {
     guard(false, || {

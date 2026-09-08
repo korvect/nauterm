@@ -316,6 +316,7 @@ class _TerminalConnectionPage extends StatefulWidget {
     required this.controller,
     required this.keys,
     required this.identities,
+    this.inDrawer = false,
     this.onSaveAuth,
     this.onAddKeyRequested,
     this.onEditHostRequested,
@@ -325,6 +326,7 @@ class _TerminalConnectionPage extends StatefulWidget {
   });
 
   final TerminalController controller;
+  final bool inDrawer;
   final List<TerminalConnectionKeyOption> keys;
   final List<TerminalConnectionIdentityOption> identities;
   final TerminalConnectionAuthSaver? onSaveAuth;
@@ -448,8 +450,14 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
         final serialProfile = widget.controller.serialProfile;
         _syncControllers(profile, status.phase);
 
-        return _ConnectionPageViewport(
-          child: _buildPage(status, profile, serialProfile),
+        return _WorkspaceControlSizeScope(
+          size: widget.inDrawer
+              ? _WorkspaceControlSize.tiny
+              : _WorkspaceControlSize.small,
+          child: _ConnectionPageViewport(
+            horizontalPadding: widget.inDrawer ? 16 : 24,
+            child: _buildPage(status, profile, serialProfile),
+          ),
         );
       },
     );
@@ -479,6 +487,7 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
     );
 
     return _ConnectionPagePanel(
+      horizontalPadding: widget.inDrawer ? 0 : 22,
       title: profile == null
           ? serialProfile?.label ??
                 serialProfile?.serialPort ??
@@ -682,10 +691,16 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
               icon: _obscureFido2Pin
                   ? Icons.visibility_off_rounded
                   : Icons.visibility_rounded,
-              size: _WorkspaceControlSize.medium,
+              size: widget.inDrawer
+                  ? _WorkspaceControlSize.tiny
+                  : _WorkspaceControlSize.medium,
               variant: _WorkspaceButtonVariant.text,
-              height: _WorkspaceControlSize.medium.inputHeight,
-              minWidth: _WorkspaceControlSize.medium.inputHeight,
+              height: widget.inDrawer
+                  ? 24
+                  : _WorkspaceControlSize.medium.inputHeight,
+              minWidth: widget.inDrawer
+                  ? 24
+                  : _WorkspaceControlSize.medium.inputHeight,
               tooltip: _obscureFido2Pin ? 'Show PIN' : 'Hide PIN',
               onPressed: () {
                 setState(() => _obscureFido2Pin = !_obscureFido2Pin);
@@ -723,10 +738,16 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
               icon: _obscurePassword
                   ? Icons.visibility_off_rounded
                   : Icons.visibility_rounded,
-              size: _WorkspaceControlSize.medium,
+              size: widget.inDrawer
+                  ? _WorkspaceControlSize.tiny
+                  : _WorkspaceControlSize.medium,
               variant: _WorkspaceButtonVariant.text,
-              height: _WorkspaceControlSize.medium.inputHeight,
-              minWidth: _WorkspaceControlSize.medium.inputHeight,
+              height: widget.inDrawer
+                  ? 24
+                  : _WorkspaceControlSize.medium.inputHeight,
+              minWidth: widget.inDrawer
+                  ? 24
+                  : _WorkspaceControlSize.medium.inputHeight,
               tooltip: _obscurePassword ? 'Show password' : 'Hide password',
               onPressed: () {
                 setState(() => _obscurePassword = !_obscurePassword);
@@ -796,85 +817,100 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
                     : hasSelectedKey)
         : true;
 
-    return Row(
-      children: [
+    final secondaryActions = <Widget>[
+      _ConnectionButton(
+        label: tr('common.action.close', fallback: 'Close'),
+        onPressed: _closePage,
+      ),
+      if (mode == _ConnectionPageMode.authentication &&
+          !requiresFido2Pin &&
+          _authTab == _ConnectionAuthTab.publicKey) ...[
+        SizedBox(width: 10),
         _ConnectionButton(
-          label: tr('common.action.close', fallback: 'Close'),
-          onPressed: _closePage,
+          label: tr('workspace.label.addKey', fallback: 'Add key'),
+          onPressed: widget.onAddKeyRequested,
         ),
-        if (mode == _ConnectionPageMode.authentication &&
-            !requiresFido2Pin &&
-            _authTab == _ConnectionAuthTab.publicKey) ...[
-          SizedBox(width: 10),
-          _ConnectionButton(
-            label: tr('workspace.label.addKey', fallback: 'Add key'),
-            onPressed: widget.onAddKeyRequested,
+      ],
+      if (mode == _ConnectionPageMode.failed &&
+          widget.onEditHostRequested != null) ...[
+        SizedBox(width: 10),
+        _ConnectionButton(
+          label: tr('workspace.label.editHost', fallback: 'Edit Host'),
+          onPressed: widget.onEditHostRequested,
+        ),
+      ],
+    ];
+    final primaryActions = <Widget>[
+      if (mode == _ConnectionPageMode.hostKey) ...[
+        _ConnectionButton(
+          label: tr('common.action.continue', fallback: 'Continue'),
+          onPressed: _trustHostKeyForSession,
+        ),
+        SizedBox(width: 10),
+        _ConnectionButton(
+          label: tr(
+            'common.label.addAndContinue',
+            fallback: 'Add and continue',
           ),
-        ],
-        if (mode == _ConnectionPageMode.failed &&
-            widget.onEditHostRequested != null) ...[
-          SizedBox(width: 10),
-          _ConnectionButton(
-            label: tr('workspace.label.editHost', fallback: 'Edit Host'),
-            onPressed: widget.onEditHostRequested,
+          primary: true,
+          onPressed: _trustHostKey,
+        ),
+      ] else if (mode == _ConnectionPageMode.failed && hasSshProfile) ...[
+        _ConnectionButton(
+          label: tr('workspace.label.startOver', fallback: 'Start over'),
+          primary: true,
+          onPressed: _reconnect,
+        ),
+      ] else if (mode == _ConnectionPageMode.authentication &&
+          requiresFido2Pin) ...[
+        _ConnectionButton(
+          label: tr('common.action.continue', fallback: 'Continue'),
+          primary: true,
+          onPressed: canContinue ? _continueFido2Authentication : null,
+        ),
+      ] else if (mode == _ConnectionPageMode.authentication) ...[
+        _ConnectionButton(
+          label: tr(
+            'workspace.label.continueSave',
+            fallback: 'Continue & Save',
           ),
-        ],
-        const Spacer(),
-        if (mode == _ConnectionPageMode.hostKey) ...[
-          _ConnectionButton(
-            label: tr('common.action.continue', fallback: 'Continue'),
-            onPressed: _trustHostKeyForSession,
+          primary: true,
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.horizontal(left: Radius.circular(8)),
           ),
-          SizedBox(width: 10),
-          _ConnectionButton(
-            label: tr(
-              'common.label.addAndContinue',
-              fallback: 'Add and continue',
-            ),
-            primary: true,
-            onPressed: _trustHostKey,
-          ),
-        ] else if (mode == _ConnectionPageMode.failed && hasSshProfile) ...[
-          _ConnectionButton(
-            label: tr('workspace.label.startOver', fallback: 'Start over'),
-            primary: true,
-            onPressed: _reconnect,
-          ),
-        ] else if (mode == _ConnectionPageMode.authentication &&
-            requiresFido2Pin) ...[
-          _ConnectionButton(
-            label: tr('common.action.continue', fallback: 'Continue'),
-            primary: true,
-            onPressed: canContinue ? _continueFido2Authentication : null,
-          ),
-        ] else if (mode == _ConnectionPageMode.authentication) ...[
-          _ConnectionButton(
-            label: tr(
-              'workspace.label.continueSave',
-              fallback: 'Continue & Save',
-            ),
-            primary: true,
-            shape: const RoundedRectangleBorder(
-              borderRadius: BorderRadius.horizontal(left: Radius.circular(8)),
-            ),
-            onPressed: canContinue
-                ? () => _continueAuthentication(save: true)
-                : null,
-          ),
-          SizedBox(width: 2),
-          _AuthenticationContinueMenuButton(
-            enabled: canContinue,
-            onContinue: () => _continueAuthentication(save: false),
-          ),
-        ] else if (_showLogs &&
-            status.phase == TerminalConnectionPhase.connecting &&
-            hasSshProfile) ...[
-          _ConnectionButton(
-            label: tr('workspace.label.startOver', fallback: 'Start over'),
-            primary: true,
-            onPressed: _reconnect,
-          ),
-        ],
+          onPressed: canContinue
+              ? () => _continueAuthentication(save: true)
+              : null,
+        ),
+        SizedBox(width: 2),
+        _AuthenticationContinueMenuButton(
+          enabled: canContinue,
+          onContinue: () => _continueAuthentication(save: false),
+        ),
+      ] else if (_showLogs &&
+          status.phase == TerminalConnectionPhase.connecting &&
+          hasSshProfile) ...[
+        _ConnectionButton(
+          label: tr('workspace.label.startOver', fallback: 'Start over'),
+          primary: true,
+          onPressed: _reconnect,
+        ),
+      ],
+    ];
+    if (!widget.inDrawer) {
+      return Row(
+        children: [...secondaryActions, const Spacer(), ...primaryActions],
+      );
+    }
+    return OverflowBar(
+      alignment: MainAxisAlignment.spaceBetween,
+      spacing: 8,
+      overflowSpacing: 8,
+      overflowAlignment: OverflowBarAlignment.end,
+      children: [
+        Row(mainAxisSize: MainAxisSize.min, children: secondaryActions),
+        if (primaryActions.isNotEmpty)
+          Row(mainAxisSize: MainAxisSize.min, children: primaryActions),
       ],
     );
   }
@@ -1131,16 +1167,23 @@ class _ConnectionPageHeader extends StatelessWidget {
 }
 
 class _ConnectionPageViewport extends StatelessWidget {
-  const _ConnectionPageViewport({required this.child});
+  const _ConnectionPageViewport({
+    required this.child,
+    this.horizontalPadding = 24,
+  });
 
   final Widget child;
+  final double horizontalPadding;
 
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
       color: _surface,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+        padding: EdgeInsets.symmetric(
+          horizontal: horizontalPadding,
+          vertical: 32,
+        ),
         child: Center(child: child),
       ),
     );
@@ -1154,6 +1197,7 @@ class _ConnectionPagePanel extends StatelessWidget {
     required this.progress,
     required this.body,
     required this.footer,
+    this.horizontalPadding = 22,
     this.actionLabel,
     this.onAction,
     this.hostOs,
@@ -1161,6 +1205,7 @@ class _ConnectionPagePanel extends StatelessWidget {
   });
 
   final String title;
+  final double horizontalPadding;
   final String subtitle;
   final Widget progress;
   final Widget body;
@@ -1177,7 +1222,7 @@ class _ConnectionPagePanel extends StatelessWidget {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 510),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 22),
+          padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1611,6 +1656,9 @@ class _ConnectionLogsCopyButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final small =
+        _WorkspaceControlSizeScope.maybeOf(context) ==
+        _WorkspaceControlSize.tiny;
     return Tooltip(
       message: tr(
         'workspace.label.copyDiagnostics',
@@ -1621,7 +1669,7 @@ class _ConnectionLogsCopyButton extends StatelessWidget {
         onPressed: onPressed,
         icon: Icon(Icons.content_copy_rounded),
         color: _blue,
-        iconSize: 18,
+        iconSize: small ? 16 : 18,
         splashRadius: 20,
         padding: EdgeInsets.zero,
         style: _workspaceDark
@@ -1630,7 +1678,10 @@ class _ConnectionLogsCopyButton extends StatelessWidget {
                 highlightColor: _blue.withValues(alpha: 0.16),
               )
             : null,
-        constraints: const BoxConstraints.tightFor(width: 34, height: 34),
+        constraints: BoxConstraints.tightFor(
+          width: small ? 24 : 34,
+          height: small ? 24 : 34,
+        ),
       ),
     );
   }
@@ -1889,8 +1940,11 @@ class _AuthTabs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final small =
+        _WorkspaceControlSizeScope.maybeOf(context) ==
+        _WorkspaceControlSize.tiny;
     return Container(
-      height: 36,
+      height: small ? 28 : 36,
       padding: const EdgeInsets.all(1),
       decoration: BoxDecoration(
         color: _workspaceDark ? _sidebarHover : _sidebarDivider,
@@ -2141,14 +2195,22 @@ class _ConnectionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final small =
+        _WorkspaceControlSizeScope.maybeOf(context) ==
+        _WorkspaceControlSize.tiny;
+    final height = small ? 24.0 : 36.0;
     return _WorkspaceButton(
       label: compact && icon != null ? null : label,
       icon: icon,
       onPressed: onPressed,
-      size: _WorkspaceControlSize.small,
-      height: 36,
-      minWidth: compact ? 36 : null,
-      horizontalPadding: compact ? 0 : 16,
+      size: small ? _WorkspaceControlSize.tiny : _WorkspaceControlSize.small,
+      height: height,
+      minWidth: compact ? height : null,
+      horizontalPadding: compact
+          ? 0
+          : small
+          ? 8
+          : 16,
       variant: primary
           ? _WorkspaceButtonVariant.solid
           : _WorkspaceButtonVariant.filled,

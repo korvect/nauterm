@@ -1,5 +1,35 @@
 part of 'nauterm_workspace.dart';
 
+@visibleForTesting
+Widget buildKeyExportDrawerForTesting({
+  required TerminalController Function() createConnection,
+  required Future<void> Function(TerminalController) onExport,
+}) => _KeyExportEditorContent(
+  request: const _KeyExportEditorRequest(
+    key: KeyEntry(name: 'Test key', publicKey: 'ssh-ed25519 AAAATEST'),
+  ),
+  hosts: const [
+    HostEntry(
+      id: 1,
+      name: 'Test server',
+      host: 'example.test',
+      type: NautermHostType.remote,
+    ),
+  ],
+  initialHostId: 1,
+  onClose: () {},
+  onShowNotification: (message, {type = _WorkspaceNotificationType.info}) {},
+  createConnection: (_) => createConnection(),
+  buildConnectionPage: (connection, onClose) => _TerminalConnectionPage(
+    inDrawer: true,
+    controller: connection,
+    keys: const [],
+    identities: const [],
+    onCloseRequested: onClose,
+  ),
+  onExport: (key, draft, connection) => onExport(connection),
+);
+
 const String _defaultKeyExportScript = r'''if test ! -e "$1"; then
   mkdir -p "$1"
   chmod 700 "$1"
@@ -31,13 +61,19 @@ class _KeyExportEditorContent extends StatefulWidget {
     required this.hosts,
     required this.onClose,
     required this.onExport,
+    required this.createConnection,
+    required this.buildConnectionPage,
     required this.onShowNotification,
+    this.initialHostId,
   });
 
   final _KeyExportEditorRequest request;
   final List<HostEntry> hosts;
+  final int? initialHostId;
   final VoidCallback onClose;
   final _ExportKey onExport;
+  final _CreateKeyExportConnection createConnection;
+  final _BuildKeyExportConnectionPage buildConnectionPage;
   final _ShowWorkspaceNotification onShowNotification;
 
   @override
@@ -51,6 +87,12 @@ class _KeyExportEditorContentState extends State<_KeyExportEditorContent> {
   late final TextEditingController _scriptController;
   int? _hostId;
   bool _exporting = false;
+  TerminalController? _connection;
+  _KeyExportDraft? _draft;
+  bool _commandStarted = false;
+  Timer? _completionTimer;
+  bool _exported = false;
+  String? _exportError;
   bool _advancedExpanded = false;
   bool _advancedHovered = false;
   String? _hostError;
@@ -61,6 +103,7 @@ class _KeyExportEditorContentState extends State<_KeyExportEditorContent> {
   @override
   void initState() {
     super.initState();
+    _hostId = widget.initialHostId;
     _locationController = TextEditingController(text: '.ssh');
     _filenameController = TextEditingController(text: 'authorized_keys');
     _scriptController = TextEditingController(text: _defaultKeyExportScript);
@@ -71,6 +114,9 @@ class _KeyExportEditorContentState extends State<_KeyExportEditorContent> {
 
   @override
   void dispose() {
+    _completionTimer?.cancel();
+    _connection?.removeListener(_handleConnection);
+    _connection?.dispose();
     _locationController.removeListener(_clearLocationError);
     _filenameController.removeListener(_clearFilenameError);
     _scriptController.removeListener(_clearScriptError);
@@ -131,35 +177,195 @@ class _KeyExportEditorContentState extends State<_KeyExportEditorContent> {
       return;
     }
 
-    setState(() => _exporting = true);
     try {
-      await widget.onExport(
-        widget.request.key,
-        _KeyExportDraft(
-          hostId: hostId!,
-          location: location,
-          filename: filename,
-          script: script,
-        ),
+      _draft = _KeyExportDraft(
+        hostId: hostId!,
+        location: location,
+        filename: filename,
+        script: script,
       );
-      if (mounted) {
-        setState(() => _exporting = false);
-      }
-    } on Object catch (error) {
-      if (!mounted) {
+      final connection = widget.createConnection(hostId);
+      setState(() {
+        _connection = connection;
+        _exporting = true;
+        _commandStarted = false;
+        _exportError = null;
+        _exported = false;
+      });
+      connection.addListener(_handleConnection);
+      _handleConnection();
+    } catch (error) {
+      _showError('Failed to start key export: $error');
+    }
+  }
+
+  void _handleConnection() {
+    if (!mounted || _commandStarted) return;
+    if (_connection?.connectionStatus.phase !=
+        TerminalConnectionPhase.connected) {
+      _completionTimer?.cancel();
+      _completionTimer = null;
+      return;
+    }
+    _completionTimer ??= Timer(_connectionCompletionHoldDuration, () {
+      _completionTimer = null;
+      if (!mounted ||
+          _connection?.connectionStatus.phase !=
+              TerminalConnectionPhase.connected) {
         return;
       }
-      setState(() => _exporting = false);
-      _showError('Failed to export key: $error');
+      setState(() => _commandStarted = true);
+      unawaited(_runExport());
+    });
+  }
+
+  Future<void> _runExport() async {
+    final connection = _connection!;
+    try {
+      await widget.onExport(widget.request.key, _draft!, connection);
+      if (!mounted || !identical(connection, _connection)) return;
+      setState(() {
+        _exported = true;
+        _exporting = false;
+      });
+    } catch (error) {
+      if (!mounted || !identical(connection, _connection)) return;
+      setState(() {
+        _exportError = '$error';
+        _exporting = false;
+      });
     }
+  }
+
+  void _backToExportForm() {
+    _completionTimer?.cancel();
+    _completionTimer = null;
+    _connection?.removeListener(_handleConnection);
+    _connection?.dispose();
+    setState(() {
+      _connection = null;
+      _exporting = false;
+      _commandStarted = false;
+      _exported = false;
+      _exportError = null;
+    });
   }
 
   void _showError(String message) {
     widget.onShowNotification(message, type: _WorkspaceNotificationType.error);
   }
 
+  Widget _buildResultPage() {
+    final statusColor = _exported
+        ? const Color(0xff34a853)
+        : const Color(0xffe5453d);
+    final host = widget.hosts
+        .where((host) => host.id == _draft?.hostId)
+        .firstOrNull;
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        key: const ValueKey('key-export-result-page'),
+        padding: const EdgeInsets.all(24),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            minHeight: math.max(0, constraints.maxHeight - 48),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (_exporting)
+                const SizedBox(
+                  width: 40,
+                  height: 40,
+                  child: CircularProgressIndicator(),
+                )
+              else
+                Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    _exported
+                        ? Icons.check_rounded
+                        : Icons.error_outline_rounded,
+                    color: statusColor,
+                    size: 32,
+                  ),
+                ),
+              const SizedBox(height: 20),
+              Text(
+                _exporting
+                    ? 'Exporting key...'
+                    : _exported
+                    ? 'Key exported successfully.'
+                    : 'Key export failed',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: _text,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '${widget.request.key.name} → ${host?.name ?? 'Host'}',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: _mutedText),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '${_draft!.location}/${_draft!.filename}',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: _mutedText),
+              ),
+              if (_exportError != null) ...[
+                const SizedBox(height: 24),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: _card,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: SelectableText(
+                    _exportError!,
+                    style: TextStyle(color: _text),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Check the remote file before retrying. The command may have partially completed.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: _mutedText),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final connection = _connection;
+    if (connection != null) {
+      return _EditorShell(
+        title: 'Export Key',
+        onClose: widget.onClose,
+        onSave: _exported ? widget.onClose : _backToExportForm,
+        saveLabel: _exported ? 'Done' : 'Back',
+        saving: _commandStarted && _exporting,
+        savingLabel: 'Exporting...',
+        body: !_commandStarted
+            ? widget.buildConnectionPage(connection, _backToExportForm)
+            : _buildResultPage(),
+        children: const [],
+      );
+    }
     final key = widget.request.key;
     final sshHosts = widget.hosts
         .where((host) => host.id != null && host.type == NautermHostType.remote)

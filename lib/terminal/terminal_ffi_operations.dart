@@ -897,6 +897,40 @@ class FfiSshPublicKeyExportResult {
 class FfiSshPublicKeyExporter {
   const FfiSshPublicKeyExporter._();
 
+  static Future<FfiSshPublicKeyExportResult> exportOnSession({
+    required int sessionId,
+    required String publicKey,
+    required String location,
+    required String filename,
+    required String script,
+  }) => Isolate.run(() {
+    final bindings = _TerminalBindings.open();
+    final execute = bindings.library
+        .lookupFunction<
+          Pointer<Utf8> Function(Uint64, Pointer<Utf8>),
+          Pointer<Utf8> Function(int, Pointer<Utf8>)
+        >('nauterm_session_export_public_key');
+    final request = jsonEncode({
+      'publicKey': publicKey,
+      'location': location,
+      'filename': filename,
+      'script': script,
+    }).toNativeUtf8();
+    try {
+      final result = execute(sessionId, request);
+      if (result == nullptr) throw StateError('No key export result.');
+      try {
+        return FfiSshPublicKeyExportResult.fromJson(
+          (jsonDecode(result.toDartString()) as Map).cast<String, Object?>(),
+        );
+      } finally {
+        bindings.freeString(result);
+      }
+    } finally {
+      malloc.free(request);
+    }
+  });
+
   static FfiSshPublicKeyExportResult export({
     required String host,
     required int port,

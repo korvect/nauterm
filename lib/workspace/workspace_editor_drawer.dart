@@ -13,7 +13,16 @@ typedef _EditHostEnvironment = void Function(
 );
 typedef _SaveKey = Future<void> Function(KeyEntry key);
 typedef _SaveGeneratedKey = Future<void> Function(KeyEntry key);
-typedef _ExportKey = Future<void> Function(KeyEntry key, _KeyExportDraft draft);
+typedef _ExportKey = Future<void> Function(
+  KeyEntry key,
+  _KeyExportDraft draft,
+  TerminalController connection,
+);
+typedef _CreateKeyExportConnection = TerminalController Function(int hostId);
+typedef _BuildKeyExportConnectionPage = Widget Function(
+  TerminalController connection,
+  VoidCallback onClose,
+);
 typedef _ShowWorkspaceNotification = void Function(
   String message, {
   _WorkspaceNotificationType type,
@@ -199,6 +208,8 @@ class _WorkspaceEditorDrawer extends StatelessWidget {
     required this.onEditHostEnvironment,
     required this.onSaveGeneratedKey,
     required this.onExportKey,
+    required this.createKeyExportConnection,
+    required this.buildKeyExportConnectionPage,
     required this.onShowNotification,
     required this.onSaveGroup,
     required this.onDuplicateGroup,
@@ -253,6 +264,8 @@ class _WorkspaceEditorDrawer extends StatelessWidget {
   final _EditHostEnvironment onEditHostEnvironment;
   final _SaveGeneratedKey onSaveGeneratedKey;
   final _ExportKey onExportKey;
+  final _CreateKeyExportConnection createKeyExportConnection;
+  final _BuildKeyExportConnectionPage buildKeyExportConnectionPage;
   final _ShowWorkspaceNotification onShowNotification;
   final _SaveGroup onSaveGroup;
   final ValueChanged<HostGroup> onDuplicateGroup;
@@ -358,6 +371,8 @@ class _WorkspaceEditorDrawer extends StatelessWidget {
         hosts: hosts,
         onClose: onClose,
         onExport: onExportKey,
+        createConnection: createKeyExportConnection,
+        buildConnectionPage: buildKeyExportConnectionPage,
         onShowNotification: onShowNotification,
       ),
       _IdentityEditorRequest() => _IdentityEditorContent(
@@ -735,6 +750,7 @@ class _EditorShell extends StatelessWidget {
     required this.onClose,
     required this.onSave,
     required this.children,
+    this.body,
     // Retained for drawers that need secondary header context in the future.
     // ignore: unused_element_parameter
     this.subtitle,
@@ -750,6 +766,7 @@ class _EditorShell extends StatelessWidget {
   final VoidCallback onClose;
   final VoidCallback onSave;
   final List<Widget> children;
+  final Widget? body;
   final bool saving;
   final String? error;
   final String saveLabel;
@@ -816,28 +833,30 @@ class _EditorShell extends StatelessWidget {
           ),
         ),
         Expanded(
-          child: _WorkspaceControlSizeScope(
-            size: _WorkspaceControlSize.large,
-            child: ListView(
-              key: const ValueKey('workspace-editor-scroll-view'),
-              padding: const EdgeInsets.all(16),
-              children: [
-                ...children,
-                if (error != null) ...[
-                  SizedBox(height: 12),
-                  Text(
-                    error!,
-                    style: TextStyle(
-                      color: Color(0xffe5453d),
-                      fontSize: NautermFontSizes.labelMedium,
-                      fontWeight: NautermFontWeights.medium,
-                      letterSpacing: 0,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
+          child:
+              body ??
+              _WorkspaceControlSizeScope(
+                size: _WorkspaceControlSize.large,
+                child: ListView(
+                  key: const ValueKey('workspace-editor-scroll-view'),
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    ...children,
+                    if (error != null) ...[
+                      SizedBox(height: 12),
+                      Text(
+                        error!,
+                        style: TextStyle(
+                          color: Color(0xffe5453d),
+                          fontSize: NautermFontSizes.labelMedium,
+                          fontWeight: NautermFontWeights.medium,
+                          letterSpacing: 0,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
         ),
         Container(
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
