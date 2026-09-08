@@ -617,6 +617,50 @@ class _NautermWorkspaceState extends ConsumerState<NautermWorkspace> {
     if (value != null) {
       _editorStack.add(_WorkspaceEditorStackEntry(request: value));
     }
+    _syncEditorSelection();
+  }
+
+  void _syncEditorSelection() {
+    (Object, Object)? edited;
+    for (final entry in _editorStack.reversed) {
+      edited = switch (entry.request) {
+        _HostEditorRequest(initial: HostEntry(id: final id?)) => (
+          'host:$id',
+          _HostItem,
+        ),
+        _GroupEditorRequest(initial: HostGroup(id: final id?)) => (
+          'group:$id',
+          _GroupItem,
+        ),
+        _KeyEditorRequest(initial: KeyEntry(id: final id?)) => (
+          'key:$id',
+          _KeyItem,
+        ),
+        _IdentityEditorRequest(initial: IdentityEntry(id: final id?)) => (
+          'identity:$id',
+          _IdentityItem,
+        ),
+        _ProxyEditorRequest(initial: ProxyEntry(id: final id?)) => (
+          'proxy:$id',
+          _ProxyItem,
+        ),
+        _PortForwardEditorRequest(initial: PortForwardEntry(id: final id?)) => (
+          'port-forward:$id',
+          _PortForwardItem,
+        ),
+        _SnippetEditorRequest(initial: final item?) => (
+          _workspaceItemIdentity(item),
+          _SnippetItem,
+        ),
+        _SnippetPackageEditorRequest(initial: final item?) => (
+          _workspaceItemIdentity(item),
+          _SnippetPackageItem,
+        ),
+        _ => null,
+      };
+      if (edited != null) break;
+    }
+    _itemSelectionControllers[_section]!.setEditing(edited?.$1, edited?.$2);
   }
 
   _WorkspaceRuntimeState get _selectedWorkspace {
@@ -775,6 +819,16 @@ class _NautermWorkspaceState extends ConsumerState<NautermWorkspace> {
     _itemSelectionControllers = {
       for (final section in _SidebarSection.values)
         section: _WorkspaceItemSelectionController(
+          onItemSelected: (item) {
+            if (section == _section && _editorRequest != null) {
+              _editSelectedWorkspaceItem(item);
+            }
+          },
+          onClearBackground: () {
+            if (section == _section) {
+              _setWorkspaceState(() => _editorRequest = null);
+            }
+          },
           onSelectionChanged: (identities) =>
               _handleWorkspaceItemSelectionChanged(section, identities),
         ),

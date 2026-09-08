@@ -223,7 +223,7 @@ class _HostsPaneState extends State<_HostsPane> {
                             actionLabel: 'Add host',
                             onAction: () => widget.onCreateHost(currentGroupId),
                           )
-                        : SingleChildScrollView(
+                        : _WorkspaceItemScrollView(
                             padding: _workspacePanePadding,
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,

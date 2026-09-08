@@ -1,6 +1,69 @@
 part of 'nauterm_workspace.dart';
 
 @visibleForTesting
+Widget buildWorkspaceSelectionSurfaceForTesting({
+  required Widget child,
+  required ValueChanged<Set<Object>> onSelectionChanged,
+  int? editingHostId,
+  VoidCallback? onCloseEditor,
+  ValueChanged<String>? onItemSelected,
+}) => _WorkspaceSelectionTestSurface(
+  onSelectionChanged: onSelectionChanged,
+  editingHostId: editingHostId,
+  onCloseEditor: onCloseEditor,
+  onItemSelected: onItemSelected,
+  child: child,
+);
+
+class _WorkspaceSelectionTestSurface extends StatefulWidget {
+  const _WorkspaceSelectionTestSurface({
+    required this.child,
+    required this.onSelectionChanged,
+    this.editingHostId,
+    this.onCloseEditor,
+    this.onItemSelected,
+  });
+  final Widget child;
+  final ValueChanged<Set<Object>> onSelectionChanged;
+  final int? editingHostId;
+  final VoidCallback? onCloseEditor;
+  final ValueChanged<String>? onItemSelected;
+  @override
+  State<_WorkspaceSelectionTestSurface> createState() =>
+      _WorkspaceSelectionTestSurfaceState();
+}
+
+class _WorkspaceSelectionTestSurfaceState
+    extends State<_WorkspaceSelectionTestSurface> {
+  late final _WorkspaceItemSelectionController _controller =
+      _WorkspaceItemSelectionController(
+        onSelectionChanged: widget.onSelectionChanged,
+        onItemSelected: (item) => widget.onItemSelected?.call(item.name),
+        onClearBackground: () {
+          _controller.setEditing(null, null);
+          widget.onCloseEditor?.call();
+        },
+      )..setEditing(
+        widget.editingHostId == null ? null : 'host:${widget.editingHostId}',
+        widget.editingHostId == null ? null : _HostItem,
+      );
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => _WorkspaceItemSelectionScope(
+    controller: _controller,
+    child: _WorkspaceItemScrollView(
+      padding: const EdgeInsets.all(16),
+      child: widget.child,
+    ),
+  );
+}
+
+@visibleForTesting
 Widget buildWorkspaceCardEditGridForTesting({
   required ValueChanged<String> onEdit,
   required VoidCallback onActivate,
@@ -57,6 +120,22 @@ ValueChanged<A> workspaceContextActionSnapshot<T, A>({
 const double _workspaceGridMinCardWidth = 210;
 const double _workspaceGridMaxCardWidth = 320;
 const double _workspaceGridColumnSpacing = 18;
+
+class _WorkspaceItemScrollView extends StatelessWidget {
+  const _WorkspaceItemScrollView({required this.padding, required this.child});
+
+  final EdgeInsetsGeometry padding;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => SizedBox.expand(
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: _WorkspaceItemSelectionScope.maybeOf(context)?.clearFromBackground,
+      child: SingleChildScrollView(padding: padding, child: child),
+    ),
+  );
+}
 
 @visibleForTesting
 int workspaceGridColumnCount({
@@ -263,7 +342,47 @@ workspaceItemSelectionForDirectionalMove({
 }
 
 class _WorkspaceItemSelectionController extends ChangeNotifier {
-  _WorkspaceItemSelectionController({this.onSelectionChanged});
+  _WorkspaceItemSelectionController({
+    this.onSelectionChanged,
+    this.onClearBackground,
+    this.onItemSelected,
+  });
+
+  final ValueChanged<_WorkspaceItemData>? onItemSelected;
+
+  final VoidCallback? onClearBackground;
+  Object? editingIdentity;
+  Object? _editingScope;
+  int _contextGeneration = 0;
+
+  void setEditing(Object? identity, Object? scope) {
+    final wasEditing = editingIdentity != null;
+    editingIdentity = identity;
+    _editingScope = scope;
+    _contextGeneration++;
+    if (identity != null && scope != null) {
+      select(identity: identity, selectionScopeId: scope);
+    } else if (wasEditing) {
+      clear();
+    }
+  }
+
+  VoidCallback beginContextSelection(Object identity, Object scope) {
+    final generation = ++_contextGeneration;
+    if (!isSelected(identity: identity, selectionScopeId: scope)) {
+      select(identity: identity, selectionScopeId: scope);
+    }
+    return () {
+      if (generation != _contextGeneration || editingIdentity == null) return;
+      select(identity: editingIdentity!, selectionScopeId: _editingScope!);
+    };
+  }
+
+  void clearFromBackground() {
+    _contextGeneration++;
+    onClearBackground?.call();
+    clear();
+  }
 
   final ValueChanged<Set<Object>>? onSelectionChanged;
   Set<Object> _selectedIdentities = <Object>{};
@@ -644,6 +763,9 @@ class _WorkspaceItemGridState<T extends _WorkspaceItemData>
       return;
     }
     _select(index, respectSelectionModifiers: true);
+    if (!_workspaceItemMultiSelectionPressed) {
+      _sharedSelection?.onItemSelected?.call(widget.items[index]);
+    }
   }
 
   List<T> _contextItemsFor(int index) {
@@ -792,10 +914,23 @@ class _WorkspaceItemGridState<T extends _WorkspaceItemData>
                       )
                       .toDouble(),
                   item: widget.items[index],
-                  selected: _isSelected(index),
+                  selected:
+                      _isSelected(index) ||
+                      _sharedSelection?.editingIdentity ==
+                          _workspaceItemIdentity(widget.items[index]),
                   contextItems: _contextItemsFor(index),
                   onTap: () => _selectFromPointer(index),
                   onSelectForEdit: () => _select(index),
+                  onSelectForContextMenu: () {
+                    if (_sharedSelection != null) {
+                      return _sharedSelection!.beginContextSelection(
+                        _workspaceItemIdentity(widget.items[index]),
+                        _workspaceItemSelectionScopeId(widget.items),
+                      );
+                    }
+                    if (!_isSelected(index)) _select(index);
+                    return () {};
+                  },
                   onDoubleTap:
                       widget.onItemDoubleTap == null && widget.onItemTap == null
                       ? null
@@ -999,6 +1134,9 @@ class _WorkspaceItemListState<T extends _WorkspaceItemData>
       return;
     }
     _select(index, respectSelectionModifiers: true);
+    if (!_workspaceItemMultiSelectionPressed) {
+      _sharedSelection?.onItemSelected?.call(widget.items[index]);
+    }
   }
 
   List<T> _contextItemsFor(int index) {
@@ -1097,9 +1235,22 @@ class _WorkspaceItemListState<T extends _WorkspaceItemData>
                 'workspace-item-row:${_workspaceItemIdentity(widget.items[index])}',
               ),
               item: widget.items[index],
-              selected: _isSelected(index),
+              selected:
+                  _isSelected(index) ||
+                  _sharedSelection?.editingIdentity ==
+                      _workspaceItemIdentity(widget.items[index]),
               contextItems: _contextItemsFor(index),
               onTap: () => _selectFromPointer(index),
+              onSelectForContextMenu: () {
+                if (_sharedSelection != null) {
+                  return _sharedSelection!.beginContextSelection(
+                    _workspaceItemIdentity(widget.items[index]),
+                    _workspaceItemSelectionScopeId(widget.items),
+                  );
+                }
+                if (!_isSelected(index)) _select(index);
+                return () {};
+              },
               onDoubleTap:
                   widget.onItemDoubleTap == null && widget.onItemTap == null
                   ? null
@@ -1189,6 +1340,7 @@ class _WorkspaceItemCard<T extends _WorkspaceItemData> extends StatefulWidget {
     required this.selected,
     required this.contextItems,
     required this.onSelectForEdit,
+    required this.onSelectForContextMenu,
     this.onTap,
     this.onDoubleTap,
     this.onContextAction,
@@ -1197,6 +1349,7 @@ class _WorkspaceItemCard<T extends _WorkspaceItemData> extends StatefulWidget {
 
   final double width;
   final VoidCallback onSelectForEdit;
+  final VoidCallback Function() onSelectForContextMenu;
   final T item;
   final bool selected;
   final List<T> contextItems;
@@ -1369,6 +1522,7 @@ class _WorkspaceItemCardState<T extends _WorkspaceItemData>
   }
 
   void _showContextMenu(TapDownDetails details) {
+    final restoreSelection = widget.onSelectForContextMenu();
     _removeContextMenu(keepHover: true);
     setState(() => _hovered = true);
 
@@ -1379,6 +1533,7 @@ class _WorkspaceItemCardState<T extends _WorkspaceItemData>
       token: _contextMenuOverlayToken,
       dismissExisting: true,
       onDismissed: () {
+        restoreSelection();
         _contextMenuOverlay = null;
         if (mounted) {
           setState(() => _hovered = false);
@@ -1461,12 +1616,14 @@ class _WorkspaceItemListRow<T extends _WorkspaceItemData>
     required this.item,
     required this.selected,
     required this.contextItems,
+    required this.onSelectForContextMenu,
     this.onTap,
     this.onDoubleTap,
     this.onContextAction,
     this.contextWorkspaceName,
   });
 
+  final VoidCallback Function() onSelectForContextMenu;
   final T item;
   final bool selected;
   final List<T> contextItems;
@@ -1621,6 +1778,7 @@ class _WorkspaceItemListRowState<T extends _WorkspaceItemData>
 
   void _showContextMenu(TapDownDetails details) {
     _removeContextMenu(keepHover: true);
+    final restoreSelection = widget.onSelectForContextMenu();
     setState(() => _hovered = true);
 
     final overlayBox =
@@ -1630,6 +1788,7 @@ class _WorkspaceItemListRowState<T extends _WorkspaceItemData>
       token: _contextMenuOverlayToken,
       dismissExisting: true,
       onDismissed: () {
+        restoreSelection();
         _contextMenuOverlay = null;
         if (mounted) {
           setState(() => _hovered = false);

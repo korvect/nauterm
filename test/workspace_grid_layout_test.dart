@@ -1,9 +1,153 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:nauterm/workspace/nauterm_workspace.dart';
 
 void main() {
+  testWidgets(
+    'ordinary selection follows the editor but context and multiselect do not',
+    (tester) async {
+      final edited = <String>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 600,
+              height: 400,
+              child: buildWorkspaceSelectionSurfaceForTesting(
+                editingHostId: 1,
+                onSelectionChanged: (_) {},
+                onItemSelected: edited.add,
+                child: buildWorkspaceCardEditGridForTesting(
+                  onEdit: (_) {},
+                  onActivate: () {},
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Host 2'));
+      await tester.pump();
+      expect(edited, ['Host 2']);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.tap(find.text('Host 1'));
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pump();
+      expect(edited, ['Host 2']);
+      await tester.tap(find.text('Host 1'), buttons: kSecondaryMouseButton);
+      await tester.pumpAndSettle();
+      expect(edited, ['Host 2']);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'editing card stays highlighted during a temporary context selection',
+    (tester) async {
+      var selected = <Object>{};
+      var closed = false;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 600,
+              height: 400,
+              child: buildWorkspaceSelectionSurfaceForTesting(
+                editingHostId: 1,
+                onCloseEditor: () => closed = true,
+                onSelectionChanged: (value) => selected = value,
+                child: buildWorkspaceCardEditGridForTesting(
+                  onEdit: (_) {},
+                  onActivate: () {},
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      bool highlighted(int id) {
+        final material = tester.widget<Material>(
+          find
+              .descendant(
+                of: find.byKey(ValueKey('workspace-item-card:host:$id')),
+                matching: find.byType(Material),
+              )
+              .first,
+        );
+        return (material.shape! as RoundedRectangleBorder).side !=
+            BorderSide.none;
+      }
+
+      await tester.tap(find.text('Host 2'), buttons: kSecondaryMouseButton);
+      await tester.pumpAndSettle();
+      expect(selected, {'host:2'});
+      expect(highlighted(1), isTrue);
+      expect(highlighted(2), isTrue);
+      await tester.tapAt(const Offset(700, 450));
+      await tester.pumpAndSettle();
+      expect(selected, {'host:1'});
+      expect(highlighted(1), isTrue);
+      expect(highlighted(2), isFalse);
+      expect(closed, isFalse);
+      await tester.tapAt(const Offset(300, 350));
+      await tester.pumpAndSettle();
+      expect(closed, isTrue);
+      expect(selected, isEmpty);
+      expect(highlighted(1), isFalse);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'right click preserves selected targets and blank space clears them',
+    (tester) async {
+      var selected = <Object>{};
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 600,
+              height: 400,
+              child: buildWorkspaceSelectionSurfaceForTesting(
+                onSelectionChanged: (value) => selected = value,
+                child: buildWorkspaceCardEditGridForTesting(
+                  onEdit: (_) {},
+                  onActivate: () {},
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Host 1'));
+      await tester.pump();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.tap(find.text('Host 2'));
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pump();
+      expect(selected, {'host:1', 'host:2'});
+      await tester.tap(find.text('Host 1'), buttons: kSecondaryMouseButton);
+      await tester.pumpAndSettle();
+      expect(selected, {'host:1', 'host:2'});
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      await tester.tapAt(const Offset(300, 350));
+      await tester.pumpAndSettle();
+      // The menu barrier consumes the first outside click to dismiss itself.
+      await tester.tapAt(const Offset(300, 350));
+      await tester.pumpAndSettle();
+      expect(selected, isEmpty);
+      await tester.tap(find.text('Host 1'));
+      await tester.pump();
+      await tester.tap(find.text('Host 2'), buttons: kSecondaryMouseButton);
+      await tester.pumpAndSettle();
+      expect(selected, {'host:2'});
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
   testWidgets('hover edit selects the edited card without activating it', (
     tester,
   ) async {

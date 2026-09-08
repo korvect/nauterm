@@ -3,6 +3,29 @@ part of 'nauterm_workspace.dart';
 const _replayYieldChunkInterval = 8;
 
 extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
+  void _editSelectedWorkspaceItem(_WorkspaceItemData item) {
+    switch (item) {
+      case _HostItem():
+        _editHost(item);
+      case _GroupItem():
+        _editGroup(item);
+      case _KeyItem():
+        _editKey(item);
+      case _IdentityItem():
+        _editIdentity(item);
+      case _ProxyItem():
+        _editProxy(item);
+      case _PortForwardItem():
+        _editPortForward(item);
+      case _SnippetPackageItem():
+        _editSnippetPackage(item);
+      case _SnippetItem():
+        unawaited(_editSnippet(item));
+      default:
+        break;
+    }
+  }
+
   void _openEditor(_WorkspaceEditorRequest request) {
     _setWorkspaceState(() => _editorRequest = request);
   }
@@ -15,6 +38,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       _editorStack.add(
         _WorkspaceEditorStackEntry(request: request, onSaved: onSaved),
       );
+      _syncEditorSelection();
     });
   }
 
@@ -22,6 +46,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
     _setWorkspaceState(() {
       if (_editorStack.length > 1) {
         _editorStack.removeLast();
+        _syncEditorSelection();
       } else {
         _editorRequest = null;
       }
@@ -33,6 +58,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
     _setWorkspaceState(() {
       if (_editorStack.length > 1) {
         onSaved = _editorStack.removeLast().onSaved;
+        _syncEditorSelection();
       } else {
         _editorRequest = null;
       }

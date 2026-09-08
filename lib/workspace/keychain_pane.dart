@@ -95,7 +95,7 @@ class _KeychainPaneState extends State<_KeychainPane> {
                   actionLabel: 'Add key',
                   onAction: widget.onCreateKey,
                 )
-              : SingleChildScrollView(
+              : _WorkspaceItemScrollView(
                   padding: _workspacePanePadding,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,

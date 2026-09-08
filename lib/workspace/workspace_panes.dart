@@ -392,7 +392,7 @@ class _KnownHostsPaneState extends State<_KnownHostsPane> {
             onViewModeChanged: (value) => setState(() => _viewMode = value),
           ),
           Expanded(
-            child: SingleChildScrollView(
+            child: _WorkspaceItemScrollView(
               padding: _workspacePanePadding,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -573,7 +573,7 @@ class _SnippetsPaneState extends State<_SnippetsPane> {
                     actionLabel: 'Add snippet',
                     onAction: () => widget.onCreateSnippet(currentPackageId),
                   )
-                : SingleChildScrollView(
+                : _WorkspaceItemScrollView(
                     padding: _workspacePanePadding,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -751,7 +751,7 @@ class _PortForwardingPaneState extends State<_PortForwardingPane> {
                     actionLabel: 'Add forwarding',
                     onAction: () => widget.onCreateForward('local'),
                   )
-                : SingleChildScrollView(
+                : _WorkspaceItemScrollView(
                     padding: _workspacePanePadding,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -857,7 +857,7 @@ class _ProxiesPaneState extends State<_ProxiesPane> {
                     actionLabel: 'Add proxy',
                     onAction: widget.onCreateProxy,
                   )
-                : SingleChildScrollView(
+                : _WorkspaceItemScrollView(
                     padding: _workspacePanePadding,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
