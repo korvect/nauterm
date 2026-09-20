@@ -705,7 +705,7 @@ extension _NautermWorkspaceTerminalActions on _NautermWorkspaceState {
         message: message,
         confirmLabel: closeWindow ? 'Close' : 'Quit',
         showRestoreOption: behavior == WorkspaceRestoreBehavior.ask,
-        restoreOnNextLaunch: behavior != WorkspaceRestoreBehavior.never,
+        restoreOnNextLaunch: behavior == WorkspaceRestoreBehavior.always,
       ),
     );
     if (result == null) return false;
