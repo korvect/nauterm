@@ -359,6 +359,7 @@ class _NautermWorkspaceState extends ConsumerState<NautermWorkspace> {
   Future<void>? _workspaceRestoreInitializationFuture;
   bool _workspaceStateReady = false;
   bool _restoreOnShutdown = false;
+  final _hostsSearchController = TextEditingController();
   late final TerminalLifecycleService _terminalLifecycleService;
 
   _WorkspaceTab get _tab => _workspaceModel.tab;
@@ -1102,6 +1103,7 @@ class _NautermWorkspaceState extends ConsumerState<NautermWorkspace> {
 
   @override
   void dispose() {
+    _hostsSearchController.dispose();
     widget.controller?._markInitialDataReady();
     HardwareKeyboard.instance.removeHandler(_handleGlobalWorkspaceKeyEvent);
     sftpTabEnabledListenable.removeListener(_handleSftpTabEnabledChanged);

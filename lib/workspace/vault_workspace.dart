@@ -2,6 +2,7 @@ part of 'nauterm_workspace.dart';
 
 class _VaultWorkspace extends StatelessWidget {
   const _VaultWorkspace({
+    required this.hostsSearchController,
     required this.selectedSection,
     required this.groups,
     required this.hosts,
@@ -74,6 +75,7 @@ class _VaultWorkspace extends StatelessWidget {
   });
 
   final _SidebarSection selectedSection;
+  final TextEditingController hostsSearchController;
   final NautermDataStore? dataStore;
   final List<_GroupItem> groups;
   final List<_HostItem> hosts;
@@ -152,6 +154,7 @@ class _VaultWorkspace extends StatelessWidget {
         final collapsed = constraints.maxWidth < _sidebarCollapseBreakpoint;
         final content = switch (selectedSection) {
           _SidebarSection.hosts => _HostsPane(
+            searchController: hostsSearchController,
             groups: groups,
             hosts: hosts,
             tags: tags,

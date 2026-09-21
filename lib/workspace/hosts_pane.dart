@@ -2,6 +2,7 @@ part of 'nauterm_workspace.dart';
 
 class _HostsPane extends StatefulWidget {
   const _HostsPane({
+    required this.searchController,
     required this.groups,
     required this.hosts,
     required this.tags,
@@ -24,6 +25,7 @@ class _HostsPane extends StatefulWidget {
   });
 
   final List<_GroupItem> groups;
+  final TextEditingController searchController;
   final List<_HostItem> hosts;
   final List<TagEntry> tags;
   final bool loading;
@@ -48,7 +50,7 @@ class _HostsPane extends StatefulWidget {
 }
 
 class _HostsPaneState extends State<_HostsPane> {
-  final _searchController = TextEditingController();
+  TextEditingController get _searchController => widget.searchController;
   final _groupNavigation = _WorkspaceItemCollectionNavigationController();
   final _hostNavigation = _WorkspaceItemCollectionNavigationController();
   late final FocusNode _searchFocusNode;
@@ -69,7 +71,6 @@ class _HostsPaneState extends State<_HostsPane> {
   @override
   void dispose() {
     _searchFocusNode.dispose();
-    _searchController.dispose();
     super.dispose();
   }
 

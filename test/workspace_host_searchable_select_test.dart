@@ -6,6 +6,28 @@ import 'package:nauterm/app/nauterm_app.dart';
 import 'package:nauterm/ui/terminal_theme_preview.dart';
 
 void main() {
+  testWidgets('hosts search survives switching sidebar pages', (tester) async {
+    await tester.pumpWidget(NautermApp(onOpenSettings: () {}));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    final search = find.descendant(
+      of: find.byKey(const ValueKey('host-search-input')),
+      matching: find.byType(TextField),
+    );
+    await tester.enterText(search, 'missing-host-retained-query');
+    await tester.pump();
+    await tester.tap(_sidebarSectionFinder('Keychain'));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(search, findsNothing);
+    await tester.tap(_sidebarSectionFinder('Hosts'));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(
+      tester.widget<TextField>(search).controller!.text,
+      'missing-host-retained-query',
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('host search input uses medium control height', (tester) async {
     await tester.pumpWidget(NautermApp(onOpenSettings: () {}));
     await tester.pump();

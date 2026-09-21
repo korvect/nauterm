@@ -124,6 +124,7 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
       key: ValueKey('workspace-item-selection:${_section.name}'),
       controller: _itemSelectionControllers[_section]!,
       child: _VaultWorkspace(
+        hostsSearchController: _hostsSearchController,
         selectedSection: _section,
         groups: _groups,
         hosts: _hosts,
