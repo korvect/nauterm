@@ -8,6 +8,7 @@ use std::rc::Rc;
 use std::slice;
 use std::sync::Mutex;
 use std::sync::Once;
+use std::time::{Duration, Instant};
 
 use crate::ffi::FfiTerminalCell;
 use crate::pty::{LocalPty, WakeupCallback};
@@ -35,6 +36,8 @@ const TERMINAL_OPT_DEFAULT_CURSOR_BLINK: c_int = 23;
 const TERMINAL_OPT_CLIPBOARD_WRITE: c_int = 26;
 const TERMINAL_OPT_SCROLLBACK_MAX_BYTES: c_int = 27;
 const TERMINAL_OPT_SCROLLBACK_MAX_LINES: c_int = 28;
+const TERMINAL_OPT_MODE: c_int = 34;
+const TERMINAL_OPT_RENDER_HOLD: c_int = 41;
 
 const TERMINAL_DATA_ACTIVE_SCREEN: c_int = 6;
 const TERMINAL_DATA_SCROLLBAR: c_int = 9;
@@ -360,6 +363,8 @@ struct GhosttyCallbackState {
     writes: Vec<u8>,
     clipboard: String,
     bell_count: u64,
+    render_state: usize,
+    render_hold_started: Option<Instant>,
 }
 
 struct OutputSuppression {
@@ -630,7 +635,10 @@ impl GhosttyTerminalEngine {
             default_cursor,
             cell_width_px: 1,
             cell_height_px: 1,
-            callbacks: Box::new(Mutex::new(GhosttyCallbackState::default())),
+            callbacks: Box::new(Mutex::new(GhosttyCallbackState {
+                render_state: render_state as usize,
+                ..Default::default()
+            })),
             pty: None,
             wakeup_callback: None,
             input_echo_override: None,
@@ -678,6 +686,10 @@ impl GhosttyTerminalEngine {
                 write_pty as *const () as *const c_void,
             ),
             (TERMINAL_OPT_BELL, bell as *const () as *const c_void),
+            (
+                TERMINAL_OPT_RENDER_HOLD,
+                render_hold as *const () as *const c_void,
+            ),
             (
                 TERMINAL_OPT_COLOR_FOREGROUND,
                 &foreground as *const _ as *const c_void,
@@ -733,6 +745,33 @@ impl GhosttyTerminalEngine {
         if !bytes.is_empty() {
             unsafe { ghostty_terminal_vt_write(self.terminal, bytes.as_ptr(), bytes.len()) };
         }
+    }
+
+    fn render_held(&self) -> bool {
+        let Ok(mut state) = self.callbacks.lock() else {
+            return false;
+        };
+        let Some(started) = state.render_hold_started else {
+            return false;
+        };
+        if started.elapsed() < Duration::from_secs(1) {
+            return true;
+        }
+        state.render_hold_started = None;
+        drop(state);
+        // Setting MODE does not invoke render_hold, unlike a VT reset.
+        let mode = GhosttyTerminalModeConfig {
+            mode: 2026,
+            value: false,
+        };
+        unsafe {
+            ghostty_terminal_set(
+                self.terminal,
+                TERMINAL_OPT_MODE,
+                &mode as *const _ as *const c_void,
+            );
+        }
+        false
     }
 
     fn take_ghostty_writes(&mut self) -> Vec<String> {
@@ -1241,8 +1280,10 @@ impl GhosttyTerminalEngine {
         if self.force_snapshot_failure {
             return None;
         }
-        if unsafe { ghostty_render_state_update(self.render_state, self.terminal) }
-            != GHOSTTY_SUCCESS
+        let held = self.render_held();
+        if !held
+            && unsafe { ghostty_render_state_update(self.render_state, self.terminal) }
+                != GHOSTTY_SUCCESS
         {
             return None;
         }
@@ -1751,7 +1792,7 @@ impl TerminalEmulator for GhosttyTerminalEngine {
     }
 
     fn pump_local_pty(&mut self) -> bool {
-        let mut changed = false;
+        let mut changed = self.poll_render();
         let mut exited = false;
         for _ in 0..MAX_POLL_OUTPUT_CHUNKS {
             let pump = {
@@ -1780,6 +1821,14 @@ impl TerminalEmulator for GhosttyTerminalEngine {
 
     fn is_exited(&self) -> bool {
         self.exited
+    }
+
+    fn poll_render(&mut self) -> bool {
+        let was_held = self
+            .callbacks
+            .lock()
+            .is_ok_and(|state| state.render_hold_started.is_some());
+        was_held && !self.render_held()
     }
 
     fn set_input_echo_enabled(&mut self, enabled: bool) {
@@ -2692,6 +2741,25 @@ unsafe extern "C" fn bell(_terminal: GhosttyTerminal, userdata: *mut c_void) {
     }
 }
 
+unsafe extern "C" fn render_hold(terminal: GhosttyTerminal, userdata: *mut c_void, held: bool) {
+    if userdata.is_null() {
+        return;
+    }
+    let state = unsafe { &*(userdata as *const Mutex<GhosttyCallbackState>) };
+    if let Ok(mut state) = state.lock() {
+        if held {
+            // Capture at the exact stream boundary, even if a release and the
+            // next hold arrive together between two UI frames.
+            let result = unsafe {
+                ghostty_render_state_update(state.render_state as GhosttyRenderState, terminal)
+            };
+            state.render_hold_started = (result == GHOSTTY_SUCCESS).then(Instant::now);
+        } else {
+            state.render_hold_started = None;
+        }
+    }
+}
+
 unsafe extern "C" fn clipboard_write(
     terminal: GhosttyTerminal,
     userdata: *mut c_void,
@@ -2830,6 +2898,49 @@ mod tests {
     use std::{thread, time::Duration, time::Instant};
 
     use super::*;
+
+    fn visible_text(terminal: &GhosttyTerminalEngine) -> String {
+        let snapshot = terminal.snapshot();
+        snapshot
+            .cells
+            .iter()
+            .map(|cell| {
+                let start = cell.text_offset as usize;
+                let end = start + cell.text_len as usize;
+                std::str::from_utf8(&snapshot.text[start..end]).unwrap()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn synchronized_output_captures_each_hold_boundary() {
+        let mut terminal = GhosttyTerminalEngine::new(10, 2, TerminalOptions::default()).unwrap();
+        terminal.write_bytes(b"before\x1b[?2026h\r\x1b[2Kafter");
+        assert!(visible_text(&terminal).contains("before"));
+        assert!(!visible_text(&terminal).contains("after"));
+        // A release and another hold within one input must capture the new frame.
+        terminal.write_bytes(b"\x1b[?2026l\x1b[?2026h\r\x1b[2Kthird");
+        assert!(visible_text(&terminal).contains("after"));
+        terminal.write_bytes(b"\x1b[?2026l");
+        assert!(visible_text(&terminal).contains("third"));
+    }
+
+    #[test]
+    fn synchronized_output_times_out_without_transport_output() {
+        let mut terminal = GhosttyTerminalEngine::new(10, 2, TerminalOptions::default()).unwrap();
+        terminal.write_bytes(b"before\x1b[?2026h\r\x1b[2Kafter");
+        terminal.callbacks.lock().unwrap().render_hold_started =
+            Some(Instant::now() - Duration::from_secs(2));
+        assert!(terminal.poll_render());
+        assert!(visible_text(&terminal).contains("after"));
+        assert!(!terminal.poll_render());
+        terminal.write_bytes(b"\x1b[?2026h");
+        assert!(terminal.render_held());
+        terminal.resize(12, 3, 8, 16);
+        assert!(!terminal.render_held());
+        terminal.write_bytes(b"\x1b[?2026h\x1bc");
+        assert!(!terminal.render_held());
+    }
 
     #[test]
     fn clipboard_write_replies_synchronously() {

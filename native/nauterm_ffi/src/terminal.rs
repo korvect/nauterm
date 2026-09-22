@@ -647,6 +647,10 @@ pub trait TerminalEmulator {
     fn set_wakeup_callback(&mut self, callback: Option<WakeupCallback>);
     fn send_input_bytes(&mut self, bytes: &[u8]) -> bool;
     fn pump_local_pty(&mut self) -> bool;
+    /// Advance renderer deadlines even when the transport has no new output.
+    fn poll_render(&mut self) -> bool {
+        false
+    }
     fn is_exited(&self) -> bool;
     fn set_input_echo_enabled(&mut self, enabled: bool);
     fn mark_exited(&mut self);

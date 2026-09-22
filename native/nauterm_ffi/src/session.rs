@@ -1388,8 +1388,9 @@ pub(crate) fn create_terminal_emulator(
 
 impl TerminalSession {
     fn poll(&mut self) -> bool {
+        let render_changed = self.engine.poll_render();
         let (mosh_batches, output, exited) = match &mut self.transport {
-            SessionTransport::Local => return self.engine.pump_local_pty(),
+            SessionTransport::Local => return self.engine.pump_local_pty() || render_changed,
             SessionTransport::Ssh(ssh) => {
                 let (output, exited) = drain_ssh_output(ssh, &mut self.events);
                 (Vec::new(), output, exited)
@@ -1406,10 +1407,10 @@ impl TerminalSession {
                 let (output, exited) = drain_telnet_output(telnet, &mut self.events);
                 (Vec::new(), output, exited)
             }
-            SessionTransport::Disconnected => return false,
+            SessionTransport::Disconnected => return render_changed,
         };
 
-        let changed = !mosh_batches.is_empty() || !output.is_empty() || exited;
+        let changed = render_changed || !mosh_batches.is_empty() || !output.is_empty() || exited;
         if let Some(enabled) =
             self.events
                 .iter()
