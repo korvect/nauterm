@@ -26,12 +26,23 @@ enum TerminalInputStatus {
 }
 
 class TerminalSearchResult {
-  const TerminalSearchResult({this.selection, this.error});
+  const TerminalSearchResult({
+    this.selection,
+    this.error,
+    this.matchIndex,
+    this.totalMatches,
+  });
 
-  const TerminalSearchResult.notFound({this.error}) : selection = null;
+  const TerminalSearchResult.notFound({this.error, this.totalMatches})
+    : selection = null,
+      matchIndex = null;
 
   final TerminalSelection? selection;
   final String? error;
+
+  /// Zero-based position in screen order, when supplied by the backend.
+  final int? matchIndex;
+  final int? totalMatches;
 
   bool get found => selection != null;
 }

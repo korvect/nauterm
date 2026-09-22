@@ -303,6 +303,13 @@ struct GhosttySelection {
     rectangle: bool,
 }
 
+#[repr(C)]
+struct GhosttySelectionBuffer {
+    ptr: *mut GhosttySelection,
+    cap: usize,
+    len: usize,
+}
+
 impl Default for GhosttySelection {
     fn default() -> Self {
         Self {
@@ -439,6 +446,21 @@ struct GhosttySysImage {
 
 #[cfg_attr(windows, link(name = "ghostty-vt", kind = "raw-dylib"))]
 unsafe extern "C" {
+    fn ghostty_search_new(
+        allocator: *const c_void,
+        search: *mut *mut c_void,
+        terminal: GhosttyTerminal,
+    ) -> c_int;
+    fn ghostty_search_free(search: *mut c_void);
+    fn ghostty_search_set(search: *mut c_void, option: c_int, value: *const c_void) -> c_int;
+    fn ghostty_search_get(search: *mut c_void, data: c_int, value: *mut c_void) -> c_int;
+    fn ghostty_search_run(search: *mut c_void) -> c_int;
+    fn ghostty_terminal_point_from_grid_ref(
+        terminal: GhosttyTerminal,
+        grid_ref: *const GhosttyGridRef,
+        tag: c_int,
+        point: *mut GhosttyPointCoordinate,
+    ) -> c_int;
     fn ghostty_sys_set(option: c_int, value: *const c_void) -> c_int;
     fn ghostty_alloc(allocator: *const c_void, len: usize) -> *mut u8;
     fn ghostty_terminal_new(
@@ -599,6 +621,7 @@ pub struct GhosttyTerminalEngine {
     prompt_click_enabled: bool,
     prompt_input_active: bool,
     last_snapshot: RefCell<Option<TerminalSnapshot>>,
+    search: *mut c_void,
     #[cfg(test)]
     force_snapshot_failure: bool,
     _not_send_sync: PhantomData<Rc<()>>,
@@ -655,6 +678,7 @@ impl GhosttyTerminalEngine {
             prompt_click_enabled: false,
             prompt_input_active: false,
             last_snapshot: RefCell::new(None),
+            search: ptr::null_mut(),
             #[cfg(test)]
             force_snapshot_failure: false,
             _not_send_sync: PhantomData,
@@ -1030,11 +1054,19 @@ impl GhosttyTerminalEngine {
     }
 
     fn format_selection(&self, selection: &GhosttySelection) -> Option<String> {
+        self.format_selection_with_trim(selection, true)
+    }
+
+    fn format_selection_with_trim(
+        &self,
+        selection: &GhosttySelection,
+        trim: bool,
+    ) -> Option<String> {
         let options = GhosttySelectionFormatOptions {
             size: std::mem::size_of::<GhosttySelectionFormatOptions>(),
             emit: FORMATTER_FORMAT_PLAIN,
             unwrap: true,
-            trim: true,
+            trim,
             selection,
         };
         let mut required = 0usize;
@@ -1637,6 +1669,7 @@ impl Drop for GhosttyTerminalEngine {
             }
         }
         unsafe {
+            ghostty_search_free(self.search);
             ghostty_render_state_free(self.render_state);
             ghostty_terminal_free(self.terminal);
         }
@@ -1703,49 +1736,98 @@ impl TerminalEmulator for GhosttyTerminalEngine {
         if query.is_empty() {
             return TerminalSearchResult::not_found(self.size.columns, self.size.rows);
         }
-        let rows = self.screen_rows();
+        if self.search.is_null()
+            && unsafe { ghostty_search_new(ptr::null(), &mut self.search, self.terminal) }
+                != GHOSTTY_SUCCESS
+        {
+            return TerminalSearchResult::not_found(self.size.columns, self.size.rows);
+        }
+        let needle = GhosttyString {
+            ptr: query.as_ptr(),
+            len: query.len(),
+        };
+        if unsafe { ghostty_search_set(self.search, 0, &needle as *const _ as *const c_void) }
+            != GHOSTTY_SUCCESS
+            || unsafe { ghostty_search_run(self.search) } != GHOSTTY_SUCCESS
+        {
+            return TerminalSearchResult::not_found(self.size.columns, self.size.rows);
+        }
+        let mut buffer = GhosttySelectionBuffer {
+            ptr: ptr::null_mut(),
+            cap: 0,
+            len: 0,
+        };
+        let result =
+            unsafe { ghostty_search_get(self.search, 5, &mut buffer as *mut _ as *mut c_void) };
+        if result != GHOSTTY_SUCCESS && result != GHOSTTY_OUT_OF_SPACE {
+            return TerminalSearchResult::not_found(self.size.columns, self.size.rows);
+        }
+        let mut selections = vec![GhosttySelection::default(); buffer.len];
+        buffer.ptr = selections.as_mut_ptr();
+        buffer.cap = selections.len();
+        if unsafe { ghostty_search_get(self.search, 5, &mut buffer as *mut _ as *mut c_void) }
+            != GHOSTTY_SUCCESS
+        {
+            return TerminalSearchResult::not_found(self.size.columns, self.size.rows);
+        }
+        selections.truncate(buffer.len);
         let scrollback =
             terminal_get_usize(self.terminal, TERMINAL_DATA_SCROLLBACK_ROWS).unwrap_or(0);
         let scrollbar = terminal_scrollbar(self.terminal);
         let viewport_top = scrollbar.offset as usize;
         let origin_absolute_row = viewport_top
             .saturating_add(origin_row)
-            .min(rows.len().saturating_sub(1));
+            .min(scrollback.saturating_add(self.size.rows).saturating_sub(1));
         let mut matches = Vec::new();
-        for (row_index, cells) in rows.iter().enumerate() {
-            let mut text = String::new();
-            let mut byte_columns = Vec::new();
-            for (column, grapheme) in cells.iter().enumerate() {
-                for _ in grapheme.as_bytes() {
-                    byte_columns.push(column);
-                }
-                text.push_str(grapheme);
+        for selection in selections {
+            let mut start = GhosttyPointCoordinate::default();
+            let mut end = GhosttyPointCoordinate::default();
+            if unsafe {
+                ghostty_terminal_point_from_grid_ref(
+                    self.terminal,
+                    &selection.start,
+                    POINT_TAG_SCREEN,
+                    &mut start,
+                )
+            } != GHOSTTY_SUCCESS
+                || unsafe {
+                    ghostty_terminal_point_from_grid_ref(
+                        self.terminal,
+                        &selection.end,
+                        POINT_TAG_SCREEN,
+                        &mut end,
+                    )
+                } != GHOSTTY_SUCCESS
+            {
+                continue;
             }
-            for (byte_start, _) in text.match_indices(query) {
-                let byte_end = byte_start + query.len();
-                let start_column = byte_columns.get(byte_start).copied().unwrap_or(0);
-                let end_column = byte_columns
-                    .get(byte_end.saturating_sub(1))
-                    .copied()
-                    .unwrap_or(start_column)
-                    .saturating_add(1);
-                matches.push((row_index, start_column, end_column));
-            }
+            matches.push((
+                start.y as usize,
+                start.x as usize,
+                end.y as usize,
+                end.x as usize + 1,
+            ));
         }
+        matches.sort_unstable();
         let found = match direction {
             TerminalSearchDirection::Forward => matches
                 .iter()
-                .find(|(row, column, _)| (*row, *column) > (origin_absolute_row, origin_column))
+                .find(|(row, column, _, _)| (*row, *column) >= (origin_absolute_row, origin_column))
                 .or_else(|| matches.first()),
             TerminalSearchDirection::Backward => matches
                 .iter()
                 .rev()
-                .find(|(row, column, _)| (*row, *column) < (origin_absolute_row, origin_column))
+                .find(|(row, column, _, _)| (*row, *column) <= (origin_absolute_row, origin_column))
                 .or_else(|| matches.last()),
         };
-        let Some(&(row, start_column, end_column)) = found else {
-            return TerminalSearchResult::not_found(self.size.columns, self.size.rows);
+        let Some(&(row, start_column, end_row, end_column)) = found else {
+            return TerminalSearchResult {
+                total_matches: Some(0),
+                ..TerminalSearchResult::not_found(self.size.columns, self.size.rows)
+            };
         };
+        // Number in screen order so Next advances the displayed counter.
+        let match_index = matches.iter().position(|entry| Some(entry) == found);
         let viewport_row = row.min(scrollback.saturating_add(self.size.rows).saturating_sub(1));
         let target_top = viewport_row
             .saturating_sub(self.size.rows / 2)
@@ -1753,11 +1835,13 @@ impl TerminalEmulator for GhosttyTerminalEngine {
         self.scroll(SCROLL_VIEWPORT_ROW, target_top as isize);
         TerminalSearchResult {
             found: true,
+            match_index,
+            total_matches: Some(matches.len()),
             columns: self.size.columns,
             rows: self.size.rows,
             start_row: row.saturating_sub(target_top),
             start_column,
-            end_row: row.saturating_sub(target_top),
+            end_row: end_row.saturating_sub(target_top),
             end_column,
             error: None,
         }
@@ -2997,6 +3081,71 @@ mod tests {
         }
         assert_eq!(result, 0);
         assert_eq!(terminal.clipboard(), "hello");
+    }
+
+    #[test]
+    fn native_search_counts_adjacent_matches_from_the_requested_origin() {
+        let mut terminal = GhosttyTerminalEngine::new(10, 2, TerminalOptions::default()).unwrap();
+        terminal.write_bytes(b"aAa");
+        for column in 0..3 {
+            let result = terminal.search("a", TerminalSearchDirection::Forward, 0, column);
+            assert_eq!(result.match_index, Some(column));
+            assert_eq!(result.total_matches, Some(3));
+        }
+        let previous = terminal.search("A", TerminalSearchDirection::Backward, 0, 1);
+        assert_eq!(previous.match_index, Some(1));
+    }
+
+    #[test]
+    fn native_search_ignores_ascii_case_and_handles_wrapping() {
+        let mut terminal = GhosttyTerminalEngine::new(6, 4, TerminalOptions::default()).unwrap();
+        terminal.write_bytes(b"abcdefgh\r\nABC\r\nabc");
+        let wrapped = terminal.search("defgh", TerminalSearchDirection::Forward, 0, 0);
+        assert!(wrapped.found);
+        assert_eq!(
+            (
+                wrapped.start_row,
+                wrapped.start_column,
+                wrapped.end_row,
+                wrapped.end_column
+            ),
+            (0, 3, 1, 2)
+        );
+        let lower = terminal.search("abc", TerminalSearchDirection::Backward, 3, 5);
+        assert!(lower.found);
+        assert_eq!(lower.start_row, 3);
+        assert_eq!(lower.match_index, Some(2));
+        assert_eq!(lower.total_matches, Some(3));
+        let upper = terminal.search("ABC", TerminalSearchDirection::Forward, 0, 1);
+        assert!(upper.found);
+        assert_eq!(upper.start_row, 2);
+        assert_eq!(upper.match_index, Some(1));
+        assert_eq!(upper.total_matches, Some(3));
+        let wrapped_next = terminal.search("AbC", TerminalSearchDirection::Forward, 3, 5);
+        assert_eq!(wrapped_next.match_index, Some(0));
+        assert_eq!(wrapped_next.total_matches, Some(3));
+        let absent = terminal.search("missing", TerminalSearchDirection::Forward, 0, 0);
+        assert!(!absent.found);
+        assert_eq!(absent.match_index, None);
+        assert_eq!(absent.total_matches, Some(0));
+        terminal.write_bytes(b"\r\nnew ");
+        assert!(
+            terminal
+                .search("new", TerminalSearchDirection::Forward, 0, 0)
+                .found
+        );
+        terminal.write_bytes(b"\x1b[?1049hother");
+        assert!(
+            !terminal
+                .search("defgh", TerminalSearchDirection::Forward, 0, 0)
+                .found
+        );
+        terminal.write_bytes(b"\x1b[?1049l");
+        assert!(
+            terminal
+                .search("defgh", TerminalSearchDirection::Forward, 0, 0)
+                .found
+        );
     }
 
     #[test]

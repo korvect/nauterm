@@ -466,6 +466,8 @@ impl TerminalSearchDirection {
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct TerminalSearchResult {
     pub found: bool,
+    pub match_index: Option<usize>,
+    pub total_matches: Option<usize>,
     pub columns: usize,
     pub rows: usize,
     pub start_row: usize,
@@ -606,6 +608,8 @@ impl TerminalSearchResult {
     pub fn not_found(columns: usize, rows: usize) -> Self {
         Self {
             found: false,
+            match_index: None,
+            total_matches: None,
             columns,
             rows,
             start_row: 0,
@@ -845,6 +849,8 @@ impl TerminalEngine {
 
         TerminalSearchResult {
             found: true,
+            match_index: None,
+            total_matches: None,
             columns: self.size.columns,
             rows: self.size.rows,
             start_row: start_viewport.line,

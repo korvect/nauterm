@@ -513,8 +513,12 @@ TerminalSearchResult _searchResultFromNative(
     }
     final result = decoded.cast<String, Object?>();
     final error = result['error'] as String?;
+    final totalMatches = result['total_matches'] as int?;
     if (result['found'] != true) {
-      return TerminalSearchResult.notFound(error: error);
+      return TerminalSearchResult.notFound(
+        error: error,
+        totalMatches: totalMatches,
+      );
     }
 
     final columns = result['columns'] as int? ?? 0;
@@ -544,6 +548,8 @@ TerminalSearchResult _searchResultFromNative(
     return TerminalSearchResult(
       selection: TerminalSelection(start: start, end: end),
       error: error,
+      matchIndex: result['match_index'] as int?,
+      totalMatches: totalMatches,
     );
   } on Object catch (error) {
     return TerminalSearchResult.notFound(error: error.toString());
@@ -570,6 +576,8 @@ extension on TerminalSearchResult {
         -snapshot.displayOffset * snapshot.columns,
       ),
       error: error,
+      matchIndex: matchIndex,
+      totalMatches: totalMatches,
     );
   }
 }

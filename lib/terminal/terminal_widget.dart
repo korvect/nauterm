@@ -1241,6 +1241,8 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
   TerminalMetrics? _lastHoverMetrics;
   bool _searchVisible = false;
   bool _searchHasResult = false;
+  int? _searchMatchIndex;
+  int? _searchTotalMatches;
   String? _searchError;
   int? _dragAnchorOffset;
   int? _dragPointer;
@@ -1695,10 +1697,12 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
     final mutedForeground = foreground.withValues(alpha: 0.58);
     final statusText = query.isEmpty
         ? ''
-        : _searchHasResult
-        ? 'Found'
         : (_searchError?.isNotEmpty ?? false)
         ? 'Error'
+        : _searchTotalMatches != null
+        ? '${_searchHasResult ? (_searchMatchIndex ?? -1) + 1 : 0} / $_searchTotalMatches'
+        : _searchHasResult
+        ? 'Found'
         : 'No results';
     final statusColor = _searchHasResult
         ? theme.primary.accent
@@ -2043,6 +2047,8 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
     setState(() {
       _searchVisible = false;
       _searchHasResult = false;
+      _searchMatchIndex = null;
+      _searchTotalMatches = null;
       _searchError = null;
       _selection = null;
     });
@@ -2081,6 +2087,8 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
     if (query.isEmpty) {
       setState(() {
         _searchHasResult = false;
+        _searchMatchIndex = null;
+        _searchTotalMatches = null;
         _searchError = null;
         _selection = null;
       });
@@ -2101,6 +2109,8 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
 
     setState(() {
       _searchHasResult = result.found;
+      _searchMatchIndex = result.matchIndex;
+      _searchTotalMatches = result.totalMatches;
       _searchError = result.error;
       _selection = result.selection;
     });

@@ -9,6 +9,47 @@ import 'package:nauterm/terminal/terminal_models.dart';
 import 'package:nauterm/terminal/terminal_selection.dart';
 
 void main() {
+  test('Ghostty search preserves counts in scrollback and at the bottom', () {
+    final driver = NativeReplayTerminalDriver.create(
+      columns: 20,
+      rows: 4,
+      config: defaultTerminalConfig.copyWith(
+        emulatorBackend: TerminalEmulatorBackend.ghostty,
+      ),
+    );
+    addTearDown(driver.dispose);
+    driver.writeBytes(
+      utf8.encode(List.generate(8, (index) => 'match $index').join('\r\n')),
+    );
+    driver.scrollLines(driver.snapshot.historyLines);
+
+    var origin = const TerminalCellPosition(row: 0, column: 0);
+    var sawScrollback = false;
+    var sawBottom = false;
+    for (var index = 0; index < 8; index++) {
+      final result = driver.search(
+        'MATCH',
+        direction: TerminalSearchDirection.next,
+        origin: origin,
+      );
+      final snapshot = driver.snapshot;
+      expect(result.found, isTrue);
+      expect(result.matchIndex, index);
+      expect(result.totalMatches, 8);
+      expect(driver.selectionText(result.selection!), 'match');
+      sawScrollback |= snapshot.displayOffset > 0;
+      sawBottom |= snapshot.displayOffset == 0;
+      final end =
+          result.selection!.end + snapshot.displayOffset * snapshot.columns;
+      origin = TerminalCellPosition(
+        row: end ~/ snapshot.columns,
+        column: end % snapshot.columns,
+      );
+    }
+    expect(sawScrollback, isTrue);
+    expect(sawBottom, isTrue);
+  });
+
   test('Ghostty replay terminal crosses FFI with Kitty graphics', () {
     final driver = NativeReplayTerminalDriver.create(
       columns: 8,

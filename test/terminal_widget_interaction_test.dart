@@ -1587,6 +1587,40 @@ void main() {
     expect(inputs, ['\x1b[200~paste\rok\x1b[201~']);
   });
 
+  testWidgets('search displays optional backend match counts', (tester) async {
+    final driver = _SnapshotDriver(
+      TerminalSnapshot.blank(columns: 80, rows: 8),
+    );
+    final controller = TerminalController(driver: driver);
+    addTearDown(controller.dispose);
+    await _pumpTerminal(tester, controller);
+    await _sendShortcut(tester, LogicalKeyboardKey.keyF);
+    await tester.pump();
+    final field = find.byKey(const ValueKey('terminal-search-field'));
+    driver.searchResult = const TerminalSearchResult(
+      selection: TerminalSelection(start: 1, end: 4),
+      matchIndex: 1,
+      totalMatches: 3,
+    );
+    await tester.enterText(field, 'abc');
+    await tester.pump();
+    expect(find.text('2 / 3'), findsOneWidget);
+    driver.searchResult = const TerminalSearchResult.notFound(totalMatches: 0);
+    await tester.enterText(field, 'missing');
+    await tester.pump();
+    expect(find.text('0 / 0'), findsOneWidget);
+    driver.searchResult = const TerminalSearchResult(
+      selection: TerminalSelection(start: 1, end: 4),
+    );
+    await tester.enterText(field, 'legacy');
+    await tester.pump();
+    expect(find.text('Found'), findsOneWidget);
+    expect(find.text('0 / 0'), findsNothing);
+    await tester.enterText(field, '');
+    await tester.pump();
+    expect(find.text('Found'), findsNothing);
+  });
+
   testWidgets('search field keeps focus and accepts text input', (
     tester,
   ) async {
@@ -2691,6 +2725,7 @@ class _SnapshotDriver implements TerminalDriver {
   final TerminalPromptClickMove? promptClickMovement;
   final bool preserveSnapshotOnResize;
   int scrolledLines = 0;
+  TerminalSearchResult searchResult = const TerminalSearchResult.notFound();
 
   @override
   TerminalSnapshot get snapshot => _snapshot;
@@ -2767,7 +2802,7 @@ class _SnapshotDriver implements TerminalDriver {
     required TerminalSearchDirection direction,
     required TerminalCellPosition origin,
   }) {
-    return const TerminalSearchResult.notFound();
+    return searchResult;
   }
 
   @override
