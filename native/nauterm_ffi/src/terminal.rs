@@ -2038,9 +2038,17 @@ fn is_command_block_marker_character(character: char) -> bool {
 }
 
 fn literal_search_regex(query: &str) -> String {
-    let mut escaped = String::with_capacity(query.len());
+    // Override Alacritty's smart-case default, which also folds Unicode.
+    let mut escaped = String::from("(?-i:");
     for character in query.chars() {
         match character {
+            // Explicit pairs fold only ASCII, without Unicode case folding.
+            character if character.is_ascii_alphabetic() => {
+                escaped.push('[');
+                escaped.push(character.to_ascii_lowercase());
+                escaped.push(character.to_ascii_uppercase());
+                escaped.push(']');
+            }
             '\\' | '.' | '+' | '*' | '?' | '(' | ')' | '|' | '[' | ']' | '{' | '}' | '^' | '$' => {
                 escaped.push('\\');
                 escaped.push(character);
@@ -2048,6 +2056,7 @@ fn literal_search_regex(query: &str) -> String {
             _ => escaped.push(character),
         }
     }
+    escaped.push(')');
     escaped
 }
 
@@ -3056,6 +3065,38 @@ mod tests {
         assert_eq!(result.start_column, 0);
         assert_eq!(result.end_row, 1);
         assert_eq!(result.end_column, 4);
+    }
+
+    #[test]
+    fn search_ignores_only_ascii_case_and_keeps_query_literal() {
+        let mut terminal = TerminalEngine::new(40, 4);
+        terminal.write_bytes("prefix\r\nAbC.[x] É K 中文".as_bytes());
+        for direction in [
+            TerminalSearchDirection::Forward,
+            TerminalSearchDirection::Backward,
+        ] {
+            let result = terminal.search("aBc.[X]", direction, 0, 0);
+            assert!(result.found);
+            assert_eq!(
+                (result.start_row, result.start_column, result.end_column),
+                (1, 0, 7)
+            );
+            assert_eq!(result.total_matches, None);
+        }
+        for query in ["É", "K", "中文"] {
+            assert!(
+                terminal
+                    .search(query, TerminalSearchDirection::Forward, 0, 0)
+                    .found
+            );
+        }
+        for query in ["é", "k", "AbCz[x]"] {
+            assert!(
+                !terminal
+                    .search(query, TerminalSearchDirection::Forward, 0, 0)
+                    .found
+            );
+        }
     }
 
     #[test]
