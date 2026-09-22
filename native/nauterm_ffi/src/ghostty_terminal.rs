@@ -339,6 +339,20 @@ struct GhosttyClipboardWrite {
     location: c_int,
     contents: *const GhosttyClipboardContent,
     contents_len: usize,
+    name: GhosttyString,
+    granted: bool,
+    can_remember: bool,
+    ctx: *const c_void,
+    reply: Option<
+        unsafe extern "C" fn(*const GhosttyClipboardWrite, *const GhosttyClipboardWriteReply),
+    >,
+}
+
+#[repr(C)]
+struct GhosttyClipboardWriteReply {
+    size: usize,
+    result: c_int,
+    remember: bool,
 }
 
 #[derive(Default)]
@@ -2679,6 +2693,31 @@ unsafe extern "C" fn bell(_terminal: GhosttyTerminal, userdata: *mut c_void) {
 }
 
 unsafe extern "C" fn clipboard_write(
+    terminal: GhosttyTerminal,
+    userdata: *mut c_void,
+    write: *const GhosttyClipboardWrite,
+) {
+    if write.is_null() {
+        return;
+    }
+    // Requests are borrowed only for this callback, including the reply handle.
+    if unsafe { (*write).size } < std::mem::size_of::<GhosttyClipboardWrite>() {
+        return;
+    }
+    let result = unsafe { receive_clipboard_write(terminal, userdata, write) };
+    if let Some(reply) = unsafe { (*write).reply } {
+        let response = GhosttyClipboardWriteReply {
+            size: std::mem::size_of::<GhosttyClipboardWriteReply>(),
+            result,
+            remember: false,
+        };
+        unsafe {
+            reply(write, &response);
+        }
+    }
+}
+
+unsafe fn receive_clipboard_write(
     _terminal: GhosttyTerminal,
     userdata: *mut c_void,
     write: *const GhosttyClipboardWrite,
@@ -2791,6 +2830,50 @@ mod tests {
     use std::{thread, time::Duration, time::Instant};
 
     use super::*;
+
+    #[test]
+    fn clipboard_write_replies_synchronously() {
+        unsafe extern "C" fn reply(
+            write: *const GhosttyClipboardWrite,
+            result: *const GhosttyClipboardWriteReply,
+        ) {
+            unsafe {
+                *((*write).ctx as *mut c_int) = (*result).result;
+            }
+        }
+        let terminal = GhosttyTerminalEngine::new(10, 2, TerminalOptions::default()).unwrap();
+        let mut result = -1;
+        let content = GhosttyClipboardContent {
+            mime: GhosttyString {
+                ptr: b"text/plain".as_ptr(),
+                len: 10,
+            },
+            data: GhosttyString {
+                ptr: b"hello".as_ptr(),
+                len: 5,
+            },
+        };
+        let request = GhosttyClipboardWrite {
+            size: std::mem::size_of::<GhosttyClipboardWrite>(),
+            location: 0,
+            contents: &content,
+            contents_len: 1,
+            name: GhosttyString::default(),
+            granted: false,
+            can_remember: false,
+            ctx: &mut result as *mut c_int as *const c_void,
+            reply: Some(reply),
+        };
+        unsafe {
+            clipboard_write(
+                terminal.terminal,
+                terminal.callbacks.as_ref() as *const _ as *mut c_void,
+                &request,
+            );
+        }
+        assert_eq!(result, 0);
+        assert_eq!(terminal.clipboard(), "hello");
+    }
 
     #[test]
     fn renders_styled_wide_and_combining_text() {
