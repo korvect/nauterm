@@ -38,6 +38,8 @@ const TERMINAL_OPT_SCROLLBACK_MAX_BYTES: c_int = 27;
 const TERMINAL_OPT_SCROLLBACK_MAX_LINES: c_int = 28;
 const TERMINAL_OPT_MODE: c_int = 34;
 const TERMINAL_OPT_RENDER_HOLD: c_int = 41;
+#[cfg(windows)]
+const TERMINAL_OPT_RESIZE_PULL_SCROLLBACK: c_int = 40;
 
 const TERMINAL_DATA_ACTIVE_SCREEN: c_int = 6;
 const TERMINAL_DATA_SCROLLBAR: c_int = 9;
@@ -1764,6 +1766,17 @@ impl TerminalEmulator for GhosttyTerminalEngine {
     fn start_local_pty(&mut self) -> bool {
         match LocalPty::spawn(self.size, &self.options) {
             Ok(mut pty) => {
+                // Only the local Windows PTY has ConPTY's separate screen buffer.
+                // SSH sessions on Windows must retain the normal resize behavior.
+                #[cfg(windows)]
+                unsafe {
+                    let enabled = false;
+                    ghostty_terminal_set(
+                        self.terminal,
+                        TERMINAL_OPT_RESIZE_PULL_SCROLLBACK,
+                        &enabled as *const bool as *const c_void,
+                    );
+                }
                 pty.set_wakeup_callback(self.wakeup_callback);
                 self.pty = Some(pty);
                 self.exited = false;
