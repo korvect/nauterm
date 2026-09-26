@@ -20,6 +20,8 @@ use crate::terminal::{
 };
 use base64::Engine as _;
 
+mod abi;
+
 const GHOSTTY_SUCCESS: c_int = 0;
 const GHOSTTY_OUT_OF_SPACE: c_int = -3;
 
@@ -470,6 +472,7 @@ struct GhosttySysImage {
 
 #[cfg_attr(windows, link(name = "ghostty-vt", kind = "raw-dylib"))]
 unsafe extern "C" {
+    fn ghostty_type_json() -> *const std::ffi::c_char;
     fn ghostty_terminal_paste(
         terminal: GhosttyTerminal,
         paste: *const GhosttyPaste,
@@ -658,6 +661,7 @@ pub struct GhosttyTerminalEngine {
 
 impl GhosttyTerminalEngine {
     pub fn new(columns: usize, rows: usize, options: TerminalOptions) -> Result<Self, String> {
+        abi::verify()?;
         install_png_decoder();
         let columns = columns.clamp(1, u16::MAX as usize) as u16;
         let rows = rows.clamp(1, u16::MAX as usize) as u16;
