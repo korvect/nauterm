@@ -3119,6 +3119,37 @@ mod tests {
     }
 
     #[test]
+    fn reverse_wrap_preserves_cursor_above_top_margin() {
+        let mut terminal = GhosttyTerminalEngine::new(5, 5, TerminalOptions::default()).unwrap();
+        terminal.write_bytes(b"\x1b[?7h\x1b[?45h\x1b[?69h\x1b[1;2sAB\x1b7");
+        terminal.write_bytes(b"\x1b[2;5s\x1b[3;5r\x1b8\x1b[D");
+        let snapshot = terminal.snapshot();
+        assert_eq!((snapshot.cursor_column, snapshot.cursor_row), (1, 0));
+        terminal.write_bytes(b"X");
+        assert!(visible_text(&terminal).starts_with("AX"));
+    }
+
+    #[test]
+    fn batched_special_graphics_and_british_charset_reach_snapshot() {
+        let mut terminal = GhosttyTerminalEngine::new(5, 3, TerminalOptions::default()).unwrap();
+        terminal.write_bytes(b"\x1b(0lqqqkmqqqj\x1b(A#\x1b(B#");
+        assert!(visible_text(&terminal).starts_with("┌───┐└───┘£#"));
+    }
+
+    #[test]
+    fn render_rows_remain_viewport_relative_without_overscan() {
+        let mut terminal = GhosttyTerminalEngine::new(4, 2, TerminalOptions::default()).unwrap();
+        terminal.write_bytes(b"1111\r\n2222\r\n3333\r\n4444");
+        assert_eq!(visible_text(&terminal), "33334444");
+        terminal.scroll_lines(1);
+        assert_eq!(visible_text(&terminal), "22223333");
+        terminal.scroll_lines(1);
+        assert_eq!(visible_text(&terminal), "11112222");
+        terminal.scroll_to_bottom();
+        assert_eq!(visible_text(&terminal), "33334444");
+    }
+
+    #[test]
     fn synchronized_output_captures_each_hold_boundary() {
         let mut terminal = GhosttyTerminalEngine::new(10, 2, TerminalOptions::default()).unwrap();
         terminal.write_bytes(b"before\x1b[?2026h\r\x1b[2Kafter");
