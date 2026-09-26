@@ -14,6 +14,33 @@ import 'terminal_theme.dart';
 const TerminalConfig defaultTerminalConfig = TerminalConfig();
 const int maxSshKeepaliveIntervalSeconds = 0xffffffff;
 
+// Ghostty's default separators. Backends add NUL internally.
+const String defaultTerminalWordBoundaries = " \t'\"│`|:;,()[]{}<>\$";
+String terminalWordBoundaries = defaultTerminalWordBoundaries;
+
+String formatTerminalWordBoundaries(String value) =>
+    value.replaceAll(r'\', r'\\').replaceAll('\t', r'\t');
+
+String parseTerminalWordBoundaries(String value) {
+  final result = StringBuffer();
+  for (var i = 0; i < value.length; i++) {
+    if (value[i] == r'\' && i + 1 < value.length) {
+      if (value[i + 1] == 't') {
+        result.write('\t');
+        i++;
+        continue;
+      }
+      if (value[i + 1] == r'\') {
+        result.write(r'\');
+        i++;
+        continue;
+      }
+    }
+    result.write(value[i]);
+  }
+  return result.toString();
+}
+
 bool terminalCopyOnSelect = false;
 bool terminalSelectCommandBlockOnClick = true;
 bool terminalComposerEnabled = true;
@@ -441,6 +468,7 @@ class NautermRuntimeSettings {
     required this.font,
     required this.keyboard,
     this.selectCommandBlockOnClick = true,
+    this.wordBoundaries = defaultTerminalWordBoundaries,
     this.shortcuts = const TerminalShortcutConfig(),
     this.sftp = const SftpConfig(),
     this.aiAssistant = const AiAssistantConfig(),
@@ -472,6 +500,7 @@ class NautermRuntimeSettings {
 
   final bool copyOnSelect;
   final bool selectCommandBlockOnClick;
+  final String wordBoundaries;
   final TerminalFontConfig font;
   final TerminalKeyboardConfig keyboard;
   final TerminalShortcutConfig shortcuts;
@@ -506,6 +535,7 @@ class NautermRuntimeSettings {
 void applyNautermRuntimeSettings(NautermRuntimeSettings settings) {
   terminalCopyOnSelect = settings.copyOnSelect;
   terminalSelectCommandBlockOnClick = settings.selectCommandBlockOnClick;
+  terminalWordBoundaries = settings.wordBoundaries;
   terminalComposerEnabled = settings.composerEnabled;
   terminalAutocompleteEnabled = settings.autocompleteEnabled;
   terminalMultiTabEnabled = settings.multiTabEnabled;
@@ -575,6 +605,7 @@ NautermRuntimeSettings currentNautermRuntimeSettings() {
     autocompleteEnabled: terminalAutocompleteEnabled,
     multiTabEnabled: terminalMultiTabEnabled,
     scrollbarEnabled: terminalScrollbarEnabled,
+    wordBoundaries: terminalWordBoundaries,
     scrollbackLines: terminalScrollbackLines,
     sshKeepaliveIntervalSeconds: terminalSshKeepaliveIntervalSeconds,
     sshPredictionMode: terminalSshPredictionMode,

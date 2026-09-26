@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 
 import 'terminal_models.dart';
+import 'terminal_config.dart' show defaultTerminalWordBoundaries;
 
 @immutable
 class TerminalCellPosition {
@@ -138,27 +139,45 @@ class TerminalPromptClickMove {
   bool get isEmpty => left == 0 && right == 0;
 }
 
+// Keep aligned with libghostty-vt's default_word_boundaries and the native
+// Alacritty implementation. These are separators, not allowed word characters.
+bool? _wordBoundaryAt(
+  TerminalSnapshot snapshot,
+  int row,
+  int column,
+  Set<int> boundaries,
+) {
+  var cell = snapshot.cellAt(row, column);
+  if (cell.wideCharSpacer && column > 0) {
+    cell = snapshot.cellAt(row, column - 1);
+  }
+  if (cell.text.isEmpty || cell.leadingWideCharSpacer) return null;
+  return boundaries.contains(cell.text.runes.first);
+}
+
 TerminalSelection? terminalWordSelectionAt(
   TerminalSnapshot snapshot,
-  TerminalCellPosition position,
-) {
+  TerminalCellPosition position, {
+  String boundaries = defaultTerminalWordBoundaries,
+}) {
   final normalized = _normalizePosition(snapshot, position);
   final row = normalized.row;
   final column = normalized.column;
-  final kind = _selectableKind(snapshot.cellAt(row, column));
-  if (kind == _SelectableKind.blank) {
+  final codepoints = {0, ...boundaries.runes};
+  final boundary = _wordBoundaryAt(snapshot, row, column, codepoints);
+  if (boundary == null) {
     return null;
   }
 
   var start = column;
   while (start > 0 &&
-      _selectableKind(snapshot.cellAt(row, start - 1)) == kind) {
+      _wordBoundaryAt(snapshot, row, start - 1, codepoints) == boundary) {
     start--;
   }
 
   var end = column + 1;
   while (end < snapshot.columns &&
-      _selectableKind(snapshot.cellAt(row, end)) == kind) {
+      _wordBoundaryAt(snapshot, row, end, codepoints) == boundary) {
     end++;
   }
 

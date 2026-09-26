@@ -45,6 +45,7 @@
     "behavior": {
       "copyOnSelect": false,
       "selectCommandBlockOnClick": true,
+      "wordBoundaries": " \t'\"│`|:;,()[]{}<>$",
       "scrollbackLines": 10000
     },
     "features": {

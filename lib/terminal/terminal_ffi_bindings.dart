@@ -1,7 +1,7 @@
 part of 'terminal_ffi.dart';
 
 class _TerminalBindings {
-  static const _expectedAbiVersion = 6;
+  static const _expectedAbiVersion = 7;
 
   _TerminalBindings(this.library)
     : createLocalSessionConfigured = library
@@ -195,6 +195,16 @@ class _TerminalBindings {
             _TerminalSelectionTextNative,
             _TerminalSelectionTextDart
           >('nauterm_terminal_selection_text'),
+      wordSelectionAt = library
+          .lookupFunction<
+            _WordSelectionSessionNative,
+            _WordSelectionSessionDart
+          >('nauterm_session_word_selection_at'),
+      terminalWordSelectionAt = library
+          .lookupFunction<
+            _TerminalWordSelectionNative,
+            _TerminalWordSelectionDart
+          >('nauterm_terminal_word_selection_at'),
       commandBlockAt = library
           .lookupFunction<_CommandBlockSessionNative, _CommandBlockSessionDart>(
             'nauterm_session_command_block_at',
@@ -444,6 +454,8 @@ class _TerminalBindings {
   final _SelectionTextSessionDart selectionText;
   final _TerminalSelectionTextDart terminalSelectionText;
   final _CommandBlockSessionDart commandBlockAt;
+  final _WordSelectionSessionDart wordSelectionAt;
+  final _TerminalWordSelectionDart terminalWordSelectionAt;
   final _TerminalCommandBlockDart terminalCommandBlockAt;
   final _PromptClickMoveSessionDart promptClickMove;
   final _TerminalPromptClickMoveDart terminalPromptClickMove;
@@ -613,6 +625,27 @@ extension on TerminalSearchResult {
       matchIndex: matchIndex,
       totalMatches: totalMatches,
     );
+  }
+}
+
+TerminalSelection? _wordSelectionFromNative(
+  _TerminalBindings bindings,
+  String boundaries,
+  Pointer<Utf8> Function(Pointer<Utf8>) select,
+) {
+  final request = jsonEncode(boundaries).toNativeUtf8();
+  Pointer<Utf8> pointer = nullptr;
+  try {
+    pointer = select(request);
+    if (pointer == nullptr) return null;
+    final decoded = jsonDecode(pointer.toDartString());
+    if (decoded case [final int start, final int end] when start < end) {
+      return TerminalSelection(start: start, end: end);
+    }
+    return null;
+  } finally {
+    malloc.free(request);
+    if (pointer != nullptr) bindings.freeString(pointer);
   }
 }
 

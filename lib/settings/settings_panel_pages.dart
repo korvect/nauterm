@@ -1055,6 +1055,22 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
                 ),
                 SizedBox(height: 18),
                 _SettingsRow(
+                  localizationKey: 'settings.terminal.wordBoundaries',
+                  title: 'Word Selection Boundaries',
+                  subtitle: r'Characters that separate words on double-click. Use \t for Tab and \\ for a backslash.',
+                  trailing: _SettingsTextField(
+                    key: const ValueKey('settings-terminal-word-boundaries'),
+                    controller: state._wordBoundariesController,
+                    onChanged: (value) {
+                      terminalWordBoundaries = parseTerminalWordBoundaries(
+                        value,
+                      );
+                      state._persistRuntimeSettings();
+                    },
+                  ),
+                ),
+                SizedBox(height: 18),
+                _SettingsRow(
                   localizationKey: 'settings.terminal.composer',
                   title: 'Composer',
                   subtitle: 'Show the command input bar below the terminal.',

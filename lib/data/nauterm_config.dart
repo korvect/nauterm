@@ -327,6 +327,7 @@ class NautermTerminalBehaviorConfig {
   const NautermTerminalBehaviorConfig({
     this.copyOnSelect = false,
     this.selectCommandBlockOnClick = true,
+    this.wordBoundaries = defaultTerminalWordBoundaries,
     this.scrollbackLines = 10000,
     this.bell = const TerminalBellConfig(),
     this.pointer = const TerminalPointerConfig(),
@@ -334,6 +335,7 @@ class NautermTerminalBehaviorConfig {
 
   final bool copyOnSelect;
   final bool selectCommandBlockOnClick;
+  final String wordBoundaries;
   final int scrollbackLines;
   final TerminalBellConfig bell;
   final TerminalPointerConfig pointer;
@@ -344,6 +346,8 @@ class NautermTerminalBehaviorConfig {
       copyOnSelect: json['copyOnSelect'] as bool? ?? false,
       selectCommandBlockOnClick:
           json['selectCommandBlockOnClick'] as bool? ?? true,
+      wordBoundaries:
+          json['wordBoundaries'] as String? ?? defaultTerminalWordBoundaries,
       scrollbackLines: (json['scrollbackLines'] as num?)?.toInt() ?? 10000,
       bell: _terminalBellFromJson(json['bell']),
       pointer: _terminalPointerFromJson(json['pointer']),
@@ -353,6 +357,7 @@ class NautermTerminalBehaviorConfig {
   Map<String, Object?> toJson() => <String, Object?>{
     'copyOnSelect': copyOnSelect,
     'selectCommandBlockOnClick': selectCommandBlockOnClick,
+    'wordBoundaries': wordBoundaries,
     'scrollbackLines': scrollbackLines,
     'bell': _terminalBellToJson(bell),
     'pointer': _terminalPointerToJson(pointer),

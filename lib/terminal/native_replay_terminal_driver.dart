@@ -1,7 +1,7 @@
 part of 'terminal_ffi.dart';
 
 class NativeReplayTerminalDriver
-    implements TerminalDriver, TerminalPasteEncoder {
+    implements TerminalDriver, TerminalPasteEncoder, TerminalWordSelector {
   @override
   String encodePaste(String text) => _encodeNativePaste(
     _bindings,
@@ -199,6 +199,23 @@ class NativeReplayTerminalDriver
     } finally {
       _bindings.freeString(pointer);
     }
+  }
+
+  @override
+  TerminalSelection? wordSelectionAt(
+    TerminalCellPosition position, {
+    required String boundaries,
+  }) {
+    if (_handle == nullptr) return null;
+    return _wordSelectionFromNative(
+      _bindings,
+      boundaries,
+      (request) => _bindings.terminalWordSelectionAt(
+        _handle,
+        terminalCellOffset(snapshot, position),
+        request,
+      ),
+    );
   }
 
   @override

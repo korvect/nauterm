@@ -1,7 +1,7 @@
 use alacritty_terminal::event::{Event, EventListener};
 use alacritty_terminal::grid::{Dimensions, Scroll};
 use alacritty_terminal::index::{Column, Direction, Line, Point, Side};
-use alacritty_terminal::term::cell::{Cell, Flags};
+use alacritty_terminal::term::cell::{Cell, Flags, LineLength};
 use alacritty_terminal::term::search::RegexSearch;
 use alacritty_terminal::term::{
     point_to_viewport, viewport_to_point, Config, Osc52, Term, TermMode,
@@ -681,6 +681,7 @@ pub trait TerminalEmulator {
     fn snapshot(&self) -> TerminalSnapshot;
     fn plain_text(&self) -> String;
     fn selection_text(&self, start: i64, end: i64) -> String;
+    fn word_selection_at(&self, offset: i64, boundaries: &str) -> Option<(i64, i64)>;
     fn command_block_at(&self, offset: i64) -> Option<TerminalCommandBlock>;
     fn prompt_click_move(&self, offset: i64) -> Option<TerminalPromptClickMove>;
     fn clipboard(&self) -> String;
@@ -1439,7 +1440,7 @@ impl TerminalEngine {
 
         let start_line = start.div_euclid(columns);
         let end_line = (end - 1).div_euclid(columns);
-        let mut lines = Vec::with_capacity((end_line - start_line + 1) as usize);
+        let mut lines: Vec<String> = Vec::with_capacity((end_line - start_line + 1) as usize);
         for line_index in start_line..=end_line {
             let start_column = if line_index == start_line {
                 start.rem_euclid(columns) as usize
@@ -1467,13 +1468,85 @@ impl TerminalEngine {
                     text.push_str(&cell_text(cell.c, cell));
                 }
             }
-            while text.ends_with(' ') {
-                text.pop();
+            if line_index == end_line
+                || !grid[line][Column(columns as usize - 1)]
+                    .flags
+                    .contains(Flags::WRAPLINE)
+            {
+                while text.ends_with(' ') {
+                    text.pop();
+                }
             }
-            lines.push(text);
+            if line_index > start_line
+                && grid[Line(line_index as i32 - 1)][Column(columns as usize - 1)]
+                    .flags
+                    .contains(Flags::WRAPLINE)
+            {
+                if let Some(previous) = lines.last_mut() {
+                    previous.push_str(&text);
+                }
+            } else {
+                lines.push(text);
+            }
         }
 
         lines.join("\n")
+    }
+
+    pub fn word_selection_at(&self, offset: i64, boundaries: &str) -> Option<(i64, i64)> {
+        let grid = self.term.grid();
+        let columns = grid.columns() as i64;
+        let minimum = -(grid.history_size() as i64) * columns;
+        let maximum = grid.screen_lines() as i64 * columns;
+        if !(minimum..maximum).contains(&offset) {
+            return None;
+        }
+        let cell_at = |at: i64| {
+            &grid[Line(at.div_euclid(columns) as i32)][Column(at.rem_euclid(columns) as usize)]
+        };
+        let boundary_at = |mut at: i64| -> Option<bool> {
+            let cell = cell_at(at);
+            if cell.flags.contains(Flags::WIDE_CHAR_SPACER) {
+                at -= 1;
+            } else if cell.flags.contains(Flags::LEADING_WIDE_CHAR_SPACER) {
+                at += 1;
+            }
+            if !(minimum..maximum).contains(&at) {
+                return None;
+            }
+            let line = &grid[Line(at.div_euclid(columns) as i32)];
+            let column = at.rem_euclid(columns) as usize;
+            // Alacritty does not distinguish unwritten cells from trailing
+            // spaces; don't select unused padding past the line's content.
+            if cell_at(at).c == ' ' && column >= line.line_length() {
+                return None;
+            }
+            Some(cell_at(at).c == '\0' || boundaries.contains(cell_at(at).c))
+        };
+        let boundary = boundary_at(offset)?;
+        let mut start = offset;
+        while start > minimum {
+            let previous = start - 1;
+            if start.rem_euclid(columns) == 0 && !cell_at(previous).flags.contains(Flags::WRAPLINE)
+            {
+                break;
+            }
+            if boundary_at(previous) != Some(boundary) {
+                break;
+            }
+            start = previous;
+        }
+        let mut end = offset + 1;
+        while end < maximum {
+            if end.rem_euclid(columns) == 0 && !cell_at(end - 1).flags.contains(Flags::WRAPLINE) {
+                break;
+            }
+            if boundary_at(end) != Some(boundary) {
+                break;
+            }
+            end += 1;
+        }
+        Some((start, end))
     }
 
     pub fn command_block_at(&self, offset: i64) -> Option<TerminalCommandBlock> {
@@ -1779,6 +1852,10 @@ impl TerminalEmulator for TerminalEngine {
 
     fn selection_text(&self, start: i64, end: i64) -> String {
         TerminalEngine::selection_text(self, start, end)
+    }
+
+    fn word_selection_at(&self, offset: i64, boundaries: &str) -> Option<(i64, i64)> {
+        TerminalEngine::word_selection_at(self, offset, boundaries)
     }
 
     fn command_block_at(&self, offset: i64) -> Option<TerminalCommandBlock> {

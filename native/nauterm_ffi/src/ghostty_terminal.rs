@@ -22,6 +22,14 @@ use base64::Engine as _;
 
 mod abi;
 
+#[repr(C)]
+struct GhosttySelectWordOptions {
+    size: usize,
+    reference: GhosttyGridRef,
+    boundary_codepoints: *const u32,
+    boundary_codepoints_len: usize,
+}
+
 const GHOSTTY_SUCCESS: c_int = 0;
 const GHOSTTY_OUT_OF_SPACE: c_int = -3;
 
@@ -472,6 +480,11 @@ struct GhosttySysImage {
 
 #[cfg_attr(windows, link(name = "ghostty-vt", kind = "raw-dylib"))]
 unsafe extern "C" {
+    fn ghostty_terminal_select_word(
+        terminal: GhosttyTerminal,
+        options: *const GhosttySelectWordOptions,
+        selection: *mut GhosttySelection,
+    ) -> c_int;
     fn ghostty_type_json() -> *const std::ffi::c_char;
     fn ghostty_terminal_paste(
         terminal: GhosttyTerminal,
@@ -2087,6 +2100,46 @@ impl TerminalEmulator for GhosttyTerminalEngine {
             .unwrap_or_default()
     }
 
+    fn word_selection_at(&self, offset: i64, boundaries: &str) -> Option<(i64, i64)> {
+        let columns = self.size.columns as i64;
+        let scrollback = terminal_get_usize(self.terminal, TERMINAL_DATA_SCROLLBACK_ROWS)? as i64;
+        let total = terminal_get_usize(self.terminal, TERMINAL_DATA_TOTAL_ROWS)? as i64;
+        if !(-scrollback * columns..(total - scrollback) * columns).contains(&offset) {
+            return None;
+        }
+        let reference = self.selection_for_offsets(offset, offset + 1)?.start;
+        // Always provide an explicit set; an empty user setting must not
+        // silently revert to Ghostty's defaults. NUL is an internal boundary.
+        let codepoints: Vec<u32> = std::iter::once(0)
+            .chain(boundaries.chars().map(u32::from))
+            .collect();
+        let options = GhosttySelectWordOptions {
+            size: std::mem::size_of::<GhosttySelectWordOptions>(),
+            reference,
+            boundary_codepoints: codepoints.as_ptr(),
+            boundary_codepoints_len: codepoints.len(),
+        };
+        let mut selection = GhosttySelection::default();
+        if unsafe { ghostty_terminal_select_word(self.terminal, &options, &mut selection) }
+            != GHOSTTY_SUCCESS
+        {
+            return None;
+        }
+        let to_offset = |reference: &GhosttyGridRef| {
+            let mut point = GhosttyPointCoordinate::default();
+            (unsafe {
+                ghostty_terminal_point_from_grid_ref(
+                    self.terminal,
+                    reference,
+                    POINT_TAG_SCREEN,
+                    &mut point,
+                )
+            } == GHOSTTY_SUCCESS)
+                .then_some((point.y as i64 - scrollback) * columns + point.x as i64)
+        };
+        Some((to_offset(&selection.start)?, to_offset(&selection.end)? + 1))
+    }
+
     fn command_block_at(&self, offset: i64) -> Option<TerminalCommandBlock> {
         if self.is_alt_screen() || self.size.columns == 0 {
             return None;
@@ -3085,6 +3138,83 @@ mod tests {
     use std::{thread, time::Duration, time::Instant};
 
     use super::*;
+
+    #[test]
+    fn word_selection_matches_alacritty_boundaries_and_wrapping() {
+        let boundaries = " \t'\"│`|:;,()[]{}<>$";
+        let cases = [
+            (40, "/usr/local/bin", 6, "/usr/local/bin"),
+            (40, "foo_bar-baz.txt", 8, "foo_bar-baz.txt"),
+            (40, "admin@host:2022", 7, "admin@host"),
+            (40, "git:main*", 5, "main*"),
+            (40, "a ,;() b", 3, " ,;()"),
+            (40, "中文测试", 1, "中文测试"),
+            (40, "a中b文c", 4, "a中b文c"),
+            (40, "e\u{301}clair", 0, "e\u{301}clair"),
+            (5, "abcdefghij", 6, "abcdefghij"),
+            (5, "abcde\r\nfghij", 4, "abcde"),
+            (5, "abcde\r\nfghij", 5, "fghij"),
+            (5, "abcd中文", 4, "abcd中文"),
+            (4, "中文\r\n测试", 3, "中文"),
+            (4, "中文\r\n测试", 4, "测试"),
+        ];
+        for (columns, text, offset, expected) in cases {
+            let mut ghostty =
+                GhosttyTerminalEngine::new(columns, 4, TerminalOptions::default()).unwrap();
+            let mut alacritty = crate::terminal::TerminalEngine::new(columns, 4);
+            ghostty.write_bytes(text.as_bytes());
+            alacritty.write_bytes(text.as_bytes());
+            let selection = ghostty.word_selection_at(offset, boundaries).expect(text);
+            assert_eq!(
+                Some(selection),
+                alacritty.word_selection_at(offset, boundaries),
+                "{text:?} at {offset}"
+            );
+            for terminal in [
+                &ghostty as &dyn TerminalEmulator,
+                &alacritty as &dyn TerminalEmulator,
+            ] {
+                assert_eq!(
+                    terminal.selection_text(selection.0, selection.1),
+                    expected,
+                    "{text:?}"
+                );
+                assert_eq!(terminal.word_selection_at(i64::MIN, boundaries), None);
+                assert_eq!(terminal.word_selection_at(i64::MAX, boundaries), None);
+            }
+        }
+    }
+
+    #[test]
+    fn word_selection_spans_scrollback_and_ignores_empty_cells() {
+        for mut terminal in [
+            Box::new(GhosttyTerminalEngine::new(5, 2, TerminalOptions::default()).unwrap())
+                as Box<dyn TerminalEmulator>,
+            Box::new(crate::terminal::TerminalEngine::new(5, 2)) as Box<dyn TerminalEmulator>,
+        ] {
+            assert_eq!(terminal.word_selection_at(0, " "), None);
+            terminal.write_bytes(b"abcdefghijklmnop");
+            assert_eq!(terminal.word_selection_at(0, " "), Some((-10, 6)));
+            assert_eq!(terminal.selection_text(-10, 6), "abcdefghijklmnop");
+            terminal.scroll_lines(2);
+            assert_eq!(terminal.word_selection_at(-10, " "), Some((-10, 6)));
+        }
+    }
+
+    #[test]
+    fn word_selection_accepts_custom_unicode_and_empty_boundaries() {
+        for mut terminal in [
+            Box::new(GhosttyTerminalEngine::new(40, 2, TerminalOptions::default()).unwrap())
+                as Box<dyn TerminalEmulator>,
+            Box::new(crate::terminal::TerminalEngine::new(40, 2)) as Box<dyn TerminalEmulator>,
+        ] {
+            terminal.write_bytes("foo/bar中baz qux".as_bytes());
+            assert_eq!(terminal.word_selection_at(5, "/"), Some((4, 16)));
+            assert_eq!(terminal.word_selection_at(5, "中"), Some((0, 7)));
+            assert_eq!(terminal.word_selection_at(8, "中"), Some((7, 9)));
+            assert_eq!(terminal.word_selection_at(5, ""), Some((0, 16)));
+        }
+    }
 
     #[test]
     fn paste_uses_live_modes_and_preserves_pending_protocol_output() {

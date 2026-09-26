@@ -10,7 +10,7 @@ use crate::terminal::{
 
 // The native FFI is intentionally strict: old dynamic libraries are not
 // compatible with the current Dart bindings.
-pub const NAUTERM_FFI_ABI_VERSION: u32 = 6;
+pub const NAUTERM_FFI_ABI_VERSION: u32 = 7;
 
 #[no_mangle]
 pub extern "C" fn nauterm_ffi_abi_version() -> u32 {

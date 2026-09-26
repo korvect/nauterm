@@ -10,6 +10,71 @@ import 'package:nauterm/terminal/terminal_models.dart';
 import 'package:nauterm/terminal/terminal_selection.dart';
 
 void main() {
+  test('custom word boundaries update existing sessions on both backends', () {
+    final original = terminalWordBoundaries;
+    addTearDown(() => terminalWordBoundaries = original);
+    for (final backend in [
+      TerminalEmulatorBackend.ghostty,
+      TerminalEmulatorBackend.alacritty,
+    ]) {
+      final driver = NativeReplayTerminalDriver.create(
+        columns: 40,
+        rows: 2,
+        config: defaultTerminalConfig.copyWith(emulatorBackend: backend),
+      );
+      final controller = TerminalController(driver: driver);
+      addTearDown(controller.dispose);
+      driver.writeBytes(utf8.encode('foo/bar中baz qux'));
+      const position = TerminalCellPosition(row: 0, column: 5);
+      for (final entry in <String, String>{
+        defaultTerminalWordBoundaries: 'foo/bar中baz',
+        ' /': 'bar中baz',
+        '中': 'foo/bar',
+        '': 'foo/bar中baz qux',
+      }.entries) {
+        terminalWordBoundaries = entry.key;
+        expect(
+          controller.selectionText(controller.wordSelectionAt(position)!),
+          entry.value,
+        );
+      }
+    }
+  });
+
+  test('both backends select native words through the controller', () {
+    for (final backend in [
+      TerminalEmulatorBackend.ghostty,
+      TerminalEmulatorBackend.alacritty,
+    ]) {
+      final driver = NativeReplayTerminalDriver.create(
+        columns: 5,
+        rows: 2,
+        config: defaultTerminalConfig.copyWith(emulatorBackend: backend),
+      );
+      final controller = TerminalController(driver: driver);
+      addTearDown(controller.dispose);
+      expect(
+        controller.wordSelectionAt(
+          const TerminalCellPosition(row: 0, column: 0),
+        ),
+        isNull,
+      );
+      driver.writeBytes(utf8.encode('/usr/local/bin'));
+      final selected = controller.wordSelectionAt(
+        const TerminalCellPosition(row: 0, column: 1),
+      );
+      expect(selected, const TerminalSelection(start: -5, end: 9));
+      expect(controller.selectionText(selected!), '/usr/local/bin');
+      driver.scrollLines(1);
+      expect(
+        controller.wordSelectionAt(
+          const TerminalCellPosition(row: 0, column: 0),
+        ),
+        selected,
+      );
+    }
+  });
+
   test('controller sends Ghostty paste through its input sink once', () {
     final driver = NativeReplayTerminalDriver.create(
       columns: 20,

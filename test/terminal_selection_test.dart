@@ -9,6 +9,24 @@ import 'package:nauterm/terminal/terminal_theme.dart';
 import 'package:nauterm/terminal/terminal_widget.dart';
 
 void main() {
+  test('fallback word selection honors custom and empty boundaries', () {
+    final snapshot = _snapshotFromLines(['foo/bar baz'], columns: 11);
+    const position = TerminalCellPosition(row: 0, column: 5);
+    expect(
+      terminalSelectedText(
+        snapshot,
+        terminalWordSelectionAt(snapshot, position, boundaries: ' /'),
+      ),
+      'bar',
+    );
+    expect(
+      terminalSelectedText(
+        snapshot,
+        terminalWordSelectionAt(snapshot, position, boundaries: ''),
+      ),
+      'foo/bar baz',
+    );
+  });
   test('word selection treats underscores and hyphens as word characters', () {
     final snapshot = _snapshotFromLines(['abc foo_bar-baz qux']);
 
@@ -20,7 +38,7 @@ void main() {
     expect(terminalSelectedText(snapshot, selection), 'foo_bar-baz');
   });
 
-  test('word selection stops at punctuation outside the word set', () {
+  test('word selection uses Ghostty separators, keeping asterisk in words', () {
     final snapshot = _snapshotFromLines(['git:main*']);
 
     final selection = terminalWordSelectionAt(
@@ -28,7 +46,66 @@ void main() {
       const TerminalCellPosition(row: 0, column: 4),
     );
 
-    expect(terminalSelectedText(snapshot, selection), 'main');
+    expect(terminalSelectedText(snapshot, selection), 'main*');
+  });
+
+  test('word selection keeps paths and groups consecutive separators', () {
+    final snapshot = _snapshotFromLines(['/usr/local/bin ,;() next']);
+    expect(
+      terminalSelectedText(
+        snapshot,
+        terminalWordSelectionAt(
+          snapshot,
+          const TerminalCellPosition(row: 0, column: 5),
+        ),
+      ),
+      '/usr/local/bin',
+    );
+    expect(
+      terminalWordSelectionAt(
+        snapshot,
+        const TerminalCellPosition(row: 0, column: 16),
+      ),
+      const TerminalSelection(start: 14, end: 20),
+    );
+  });
+
+  test('word selection follows wide-character spacers', () {
+    final snapshot = _snapshotFromCells([
+      const TerminalCell(
+        text: '中',
+        foreground: terminalDefaultForeground,
+        background: terminalDefaultBackground,
+        flags: terminalFlagWideChar,
+      ),
+      const TerminalCell(
+        text: ' ',
+        foreground: terminalDefaultForeground,
+        background: terminalDefaultBackground,
+        flags: terminalFlagWideCharSpacer,
+      ),
+      const TerminalCell(
+        text: '文',
+        foreground: terminalDefaultForeground,
+        background: terminalDefaultBackground,
+        flags: terminalFlagWideChar,
+      ),
+      const TerminalCell(
+        text: ' ',
+        foreground: terminalDefaultForeground,
+        background: terminalDefaultBackground,
+        flags: terminalFlagWideCharSpacer,
+      ),
+    ]);
+    for (var column = 0; column < 4; column++) {
+      expect(
+        terminalWordSelectionAt(
+          snapshot,
+          TerminalCellPosition(row: 0, column: column),
+        ),
+        const TerminalSelection(start: 0, end: 4),
+      );
+    }
   });
 
   test('line selection copies a whole row without trailing cell padding', () {

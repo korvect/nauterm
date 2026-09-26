@@ -669,6 +669,21 @@ class TerminalController extends ChangeNotifier {
     return _driver.selectionText(selection);
   }
 
+  TerminalSelection? wordSelectionAt(TerminalCellPosition position) {
+    if (_disposed) return null;
+    final driver = _driver;
+    return driver is TerminalWordSelector
+        ? (driver as TerminalWordSelector).wordSelectionAt(
+            position,
+            boundaries: terminalWordBoundaries,
+          )
+        : terminalWordSelectionAt(
+            snapshot,
+            position,
+            boundaries: terminalWordBoundaries,
+          );
+  }
+
   TerminalCommandBlock? commandBlockAt(TerminalCellPosition position) {
     return _driver.commandBlockAt(position);
   }

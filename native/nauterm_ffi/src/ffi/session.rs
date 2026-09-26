@@ -679,6 +679,25 @@ pub extern "C" fn nauterm_session_selection_text(
 }
 
 #[no_mangle]
+pub extern "C" fn nauterm_session_word_selection_at(
+    session_id: SessionId,
+    offset: i64,
+    boundaries_json: *const c_char,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let Ok(boundaries) =
+            serde_json::from_str::<String>(&string_from_ptr(boundaries_json).unwrap_or_default())
+        else {
+            return ptr::null_mut();
+        };
+        let selection = with_session_manager(None, |manager| {
+            manager.word_selection_at(session_id, offset, boundaries)
+        });
+        string_to_c_ptr(serde_json::to_string(&selection).unwrap_or_else(|_| "null".to_owned()))
+    })
+}
+
+#[no_mangle]
 pub extern "C" fn nauterm_session_command_block_at(
     session_id: SessionId,
     offset: i64,

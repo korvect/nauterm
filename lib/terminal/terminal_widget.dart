@@ -2641,7 +2641,7 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
 
     switch (tapCount) {
       case 2:
-        _setSelection(terminalWordSelectionAt(snapshot, position));
+        _setSelection(widget.controller.wordSelectionAt(position));
       case 3:
         _setSelection(
           TerminalSelection.line(row: position.row, snapshot: snapshot),

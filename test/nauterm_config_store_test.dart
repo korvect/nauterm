@@ -17,6 +17,39 @@ import 'package:nauterm/terminal/terminal_theme.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('word boundaries default and preserve explicit empty values', () async {
+    expect(
+      NautermTerminalBehaviorConfig.fromJson({}).wordBoundaries,
+      defaultTerminalWordBoundaries,
+    );
+    for (final value in ['', ' /\t中\\']) {
+      final behavior = NautermTerminalBehaviorConfig(wordBoundaries: value);
+      expect(
+        NautermTerminalBehaviorConfig.fromJson(behavior.toJson())
+            .wordBoundaries,
+        value,
+      );
+      expect(
+        parseTerminalWordBoundaries(formatTerminalWordBoundaries(value)),
+        value,
+      );
+    }
+    expect(parseTerminalWordBoundaries(r'\t\\x'), '\t\\x');
+    for (final asset in [
+      nautermLinuxDefaultConfigAsset,
+      nautermMacOSDefaultConfigAsset,
+      nautermWindowsDefaultConfigAsset,
+    ]) {
+      final config = NautermConfig.fromJson(
+        jsonDecode(await rootBundle.loadString(asset)),
+      );
+      expect(
+        config.terminal.behavior.wordBoundaries,
+        defaultTerminalWordBoundaries,
+      );
+    }
+  });
+
   test('automatic sync defaults to three days', () {
     expect(const NautermSyncConfig().interval, 3 * 24 * 60 * 60 * 1000);
   });
@@ -315,6 +348,7 @@ void main() {
       const NautermRuntimeSettings(
         copyOnSelect: true,
         selectCommandBlockOnClick: false,
+        wordBoundaries: ' /\t中',
         font: TerminalFontConfig(
           family: 'JetBrains Mono',
           cjkFamily: 'Sarasa Mono SC',
@@ -382,6 +416,7 @@ void main() {
     final loaded = await store.loadRuntimeSettings();
     expect(loaded.copyOnSelect, isTrue);
     expect(loaded.selectCommandBlockOnClick, isFalse);
+    expect(loaded.wordBoundaries, ' /\t中');
     expect(loaded.font.family, 'JetBrains Mono');
     expect(loaded.font.cjkFamily, 'Sarasa Mono SC');
     expect(loaded.font.size, 15);
@@ -435,6 +470,7 @@ void main() {
     expect((terminal['appearance'] as Map)['scrollbar'], isFalse);
     expect((terminal['behavior'] as Map)['copyOnSelect'], isTrue);
     expect((terminal['behavior'] as Map)['selectCommandBlockOnClick'], isFalse);
+    expect((terminal['behavior'] as Map)['wordBoundaries'], ' /\t中');
     expect((terminal['behavior'] as Map)['bell'], {
       'sound': false,
       'visual': true,

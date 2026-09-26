@@ -52,6 +52,14 @@ abstract interface class TerminalPasteEncoder {
   String encodePaste(String text);
 }
 
+/// Selection computed from the backend grid, including offscreen wrapped rows.
+abstract interface class TerminalWordSelector {
+  TerminalSelection? wordSelectionAt(
+    TerminalCellPosition position, {
+    required String boundaries,
+  });
+}
+
 abstract interface class TerminalDriver {
   TerminalSnapshot get snapshot;
 

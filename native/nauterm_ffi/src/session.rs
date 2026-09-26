@@ -1089,6 +1089,18 @@ impl SessionManager {
             .call(move |session| session.engine.selection_text(start, end))
     }
 
+    pub fn word_selection_at(
+        &self,
+        id: SessionId,
+        offset: i64,
+        boundaries: String,
+    ) -> Option<(i64, i64)> {
+        self.sessions
+            .get(&id)?
+            .call(move |session| session.engine.word_selection_at(offset, &boundaries))
+            .flatten()
+    }
+
     pub fn command_block_at(&self, id: SessionId, offset: i64) -> Option<TerminalCommandBlock> {
         self.sessions
             .get(&id)?

@@ -77,7 +77,8 @@ class _NetworkInterfaceChangeMonitor {
   }
 }
 
-class NativeTerminalDriver implements TerminalDriver, TerminalPasteEncoder {
+class NativeTerminalDriver
+    implements TerminalDriver, TerminalPasteEncoder, TerminalWordSelector {
   @override
   String encodePaste(String text) => _encodeNativePaste(
     _bindings,
@@ -824,6 +825,23 @@ class NativeTerminalDriver implements TerminalDriver, TerminalPasteEncoder {
     } finally {
       _bindings.freeString(pointer);
     }
+  }
+
+  @override
+  TerminalSelection? wordSelectionAt(
+    TerminalCellPosition position, {
+    required String boundaries,
+  }) {
+    if (_sessionId == 0) return null;
+    return _wordSelectionFromNative(
+      _bindings,
+      boundaries,
+      (request) => _bindings.wordSelectionAt(
+        _sessionId,
+        terminalCellOffset(snapshot, position),
+        request,
+      ),
+    );
   }
 
   @override

@@ -630,6 +630,27 @@ typedef _TerminalSelectionTextDart = Pointer<Utf8> Function(
   int end,
 );
 
+typedef _WordSelectionSessionNative = Pointer<Utf8> Function(
+  Uint64 sessionId,
+  Int64 offset,
+  Pointer<Utf8> boundaries,
+);
+typedef _WordSelectionSessionDart = Pointer<Utf8> Function(
+  int sessionId,
+  int offset,
+  Pointer<Utf8> boundaries,
+);
+typedef _TerminalWordSelectionNative = Pointer<Utf8> Function(
+  Pointer<Void> handle,
+  Int64 offset,
+  Pointer<Utf8> boundaries,
+);
+typedef _TerminalWordSelectionDart = Pointer<Utf8> Function(
+  Pointer<Void> handle,
+  int offset,
+  Pointer<Utf8> boundaries,
+);
+
 typedef _CommandBlockSessionNative = Pointer<Utf8> Function(
   Uint64 sessionId,
   Int64 offset,

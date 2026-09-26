@@ -277,6 +277,13 @@ const _settingsSearchEntries = <_SettingsSearchEntry>[
   _SettingsSearchEntry(
     page: _SettingsPage.terminal,
     section: 'terminal-interaction',
+    title: 'Word Selection Boundaries',
+    subtitle: r'Characters that separate words on double-click. Use \t for Tab and \\ for a backslash.',
+    keywords: 'word selection boundaries separators double click 选词 边界 分隔符 双击',
+  ),
+  _SettingsSearchEntry(
+    page: _SettingsPage.terminal,
+    section: 'terminal-interaction',
     title: 'Composer',
     subtitle: 'Selection, command blocks, composer, and multiple tabs.',
     keywords: 'input suggestions autocomplete selection click command block multi tab',
@@ -488,6 +495,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
   late TextEditingController _aiModelController;
   late TextEditingController _aiApiKeyController;
   late TextEditingController _scrollbackLinesController;
+  late TextEditingController _wordBoundariesController;
   late TextEditingController _sshKeepaliveIntervalSecondsController;
   late TextEditingController _sftpDownloadDirController;
   late TextEditingController _sftpTextFileExtensionsController;
@@ -568,6 +576,9 @@ class _SettingsPanelState extends State<SettingsPanel> {
     _aiApiKeyController = TextEditingController(text: aiAssistantConfig.apiKey);
     _shellPaths = discoverSystemShells(current: _shellPath);
     _scrollbackLinesController = TextEditingController(text: _scrollbackLines);
+    _wordBoundariesController = TextEditingController(
+      text: formatTerminalWordBoundaries(terminalWordBoundaries),
+    );
     _sshKeepaliveIntervalSecondsController = TextEditingController(
       text: _sshKeepaliveIntervalSeconds,
     );
@@ -708,6 +719,9 @@ class _SettingsPanelState extends State<SettingsPanel> {
         _shellPaths = discoverSystemShells(current: _shellPath);
         _scrollbackLines = settings.scrollbackLines.toString();
         _scrollbackLinesController.text = _scrollbackLines;
+        _wordBoundariesController.text = formatTerminalWordBoundaries(
+          settings.wordBoundaries,
+        );
         _sshKeepaliveIntervalSeconds = settings.sshKeepaliveIntervalSeconds
             .toString();
         _sshKeepaliveIntervalSecondsController.text =
@@ -1217,6 +1231,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
     _aiModelController.dispose();
     _aiApiKeyController.dispose();
     _scrollbackLinesController.dispose();
+    _wordBoundariesController.dispose();
     _sshKeepaliveIntervalSecondsController.dispose();
     _sftpDownloadDirController.dispose();
     _sftpTextFileExtensionsController.dispose();
@@ -1458,6 +1473,10 @@ class _SettingsPanelState extends State<SettingsPanel> {
         _shellPaths = discoverSystemShells(current: _shellPath);
         _scrollbackLines = defaults.scrollbackLines.toString();
         terminalScrollbackLines = defaults.scrollbackLines;
+        terminalWordBoundaries = defaults.wordBoundaries;
+        _wordBoundariesController.text = formatTerminalWordBoundaries(
+          defaults.wordBoundaries,
+        );
         _scrollbackLinesController.text = _scrollbackLines;
         _sshKeepaliveIntervalSeconds = defaults.sshKeepaliveIntervalSeconds
             .toString();

@@ -321,6 +321,31 @@ pub unsafe extern "C" fn nauterm_terminal_selection_text(
 /// `nauterm_terminal_create`. The returned string must be released with
 /// `nauterm_string_free`.
 #[no_mangle]
+/// `boundaries_json` must be null or a valid NUL-terminated UTF-8 JSON string.
+pub unsafe extern "C" fn nauterm_terminal_word_selection_at(
+    handle: *mut TerminalHandle,
+    offset: i64,
+    boundaries_json: *const c_char,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let Ok(boundaries) =
+            serde_json::from_str::<String>(&string_from_ptr(boundaries_json).unwrap_or_default())
+        else {
+            return ptr::null_mut();
+        };
+        let selection = handle_ref(handle)
+            .and_then(|handle| {
+                handle.call(move |terminal| terminal.word_selection_at(offset, &boundaries))
+            })
+            .flatten();
+        string_to_c_ptr(serde_json::to_string(&selection).unwrap_or_else(|_| "null".to_owned()))
+    })
+}
+
+/// # Safety
+/// `handle` must be null or a live terminal handle. Free the result with
+/// `nauterm_string_free`.
+#[no_mangle]
 pub unsafe extern "C" fn nauterm_terminal_command_block_at(
     handle: *mut TerminalHandle,
     offset: i64,

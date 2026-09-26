@@ -19,6 +19,53 @@ import 'package:nauterm/window/native_windowing.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 void main() {
+  testWidgets('word boundary field decodes tabs and permits an empty set', (
+    tester,
+  ) async {
+    final original = terminalWordBoundaries;
+    terminalWordBoundaries = defaultTerminalWordBoundaries;
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1000, 820);
+    addTearDown(() {
+      terminalWordBoundaries = original;
+      tester.view.resetDevicePixelRatio();
+      tester.view.resetPhysicalSize();
+    });
+    await tester.pumpWidget(
+      const MaterialApp(home: SettingsPanel(detectExternalEditors: false)),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('settings-nav-terminal')));
+    await tester.pump();
+    final field = find.byKey(
+      const ValueKey('settings-terminal-word-boundaries'),
+    );
+    await tester.scrollUntilVisible(
+      field,
+      300,
+      scrollable: find
+          .descendant(
+            of: find.byKey(const ValueKey('settings-terminal-scroll-view')),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    final input = find.descendant(
+      of: field,
+      matching: find.byType(EditableText),
+    );
+    expect(
+      tester.widget<EditableText>(input).controller.text,
+      formatTerminalWordBoundaries(defaultTerminalWordBoundaries),
+    );
+    await tester.enterText(input, r' /\t');
+    await tester.pump();
+    expect(terminalWordBoundaries, ' /\t');
+    await tester.enterText(input, '');
+    await tester.pump();
+    expect(terminalWordBoundaries, '');
+  });
+
   setUp(() async {
     setAppLanguage(AppLanguage.english);
     NautermLocalizations.current = await NautermLocalizations.load(

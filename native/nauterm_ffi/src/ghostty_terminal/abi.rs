@@ -68,6 +68,24 @@ fn validate(manifest: &Value) -> Result<(), String> {
         }};
     }
     layout!(GhosttyColorRgb, "GhosttyColorRgb", r, g, b);
+    layout!(
+        GhosttySelectWordOptions,
+        "GhosttyTerminalSelectWordOptions",
+        size,
+        boundary_codepoints,
+        boundary_codepoints_len
+    );
+    let reference = &types["GhosttyTerminalSelectWordOptions"]["fields"]["ref"];
+    expect(
+        &reference["offset"],
+        offset_of!(GhosttySelectWordOptions, reference),
+        "GhosttyTerminalSelectWordOptions.ref.offset",
+    )?;
+    expect(
+        &reference["size"],
+        size_of::<GhosttyGridRef>(),
+        "GhosttyTerminalSelectWordOptions.ref.size",
+    )?;
     layout!(GhosttyString, "GhosttyString", ptr, len);
     layout!(GhosttyBuffer, "GhosttyBuffer", ptr, cap, len);
     layout!(GhosttyStyleColor, "GhosttyStyleColor", tag, value);
