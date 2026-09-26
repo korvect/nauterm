@@ -634,6 +634,18 @@ impl TerminalSearchResult {
 /// and every borrowed handle derived from it are owned by one session actor
 /// thread for their full lifetime.
 pub trait TerminalEmulator {
+    /// Prepare a user-initiated text paste for the existing input transport.
+    fn encode_paste(&mut self, text: &str) -> Result<String, String> {
+        let text = text
+            .replace("\r\n", "\n")
+            .replace('\r', "\n")
+            .replace('\n', "\r");
+        Ok(if self.snapshot().keyboard_mode & 0x04 != 0 {
+            format!("\x1b[200~{text}\x1b[201~")
+        } else {
+            text
+        })
+    }
     fn resize(&mut self, columns: usize, rows: usize, cell_width_px: u32, cell_height_px: u32);
     fn is_alt_screen(&self) -> bool;
     fn scroll_lines(&mut self, lines: i32);

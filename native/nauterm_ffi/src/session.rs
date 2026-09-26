@@ -1055,6 +1055,13 @@ impl SessionManager {
             .unwrap_or(false)
     }
 
+    pub fn encode_paste(&mut self, id: SessionId, text: String) -> Result<String, String> {
+        let actor = self.sessions.get(&id).ok_or("Terminal session is closed")?;
+        actor
+            .call(move |session| session.engine.encode_paste(&text))
+            .ok_or_else(|| "Terminal session is closed".to_owned())?
+    }
+
     pub fn search(
         &mut self,
         id: SessionId,

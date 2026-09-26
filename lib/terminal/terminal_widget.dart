@@ -3413,9 +3413,7 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
     }
 
     _clearSelection();
-    widget.controller.sendInput(
-      terminalPasteSequence(text, widget.controller.snapshot.keyboardMode),
-    );
+    widget.controller.paste(text);
   }
 
   void _setSelection(TerminalSelection? selection) {

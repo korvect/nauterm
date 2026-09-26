@@ -1,6 +1,13 @@
 part of 'terminal_ffi.dart';
 
-class NativeReplayTerminalDriver implements TerminalDriver {
+class NativeReplayTerminalDriver
+    implements TerminalDriver, TerminalPasteEncoder {
+  @override
+  String encodePaste(String text) => _encodeNativePaste(
+    _bindings,
+    text,
+    (request) => _bindings.terminalEncodePaste(_handle, request),
+  );
   NativeReplayTerminalDriver._(this._bindings, this._handle);
 
   factory NativeReplayTerminalDriver.create({

@@ -346,6 +346,30 @@ struct GhosttyClipboardContent {
 }
 
 #[repr(C)]
+#[derive(Clone, Copy)]
+struct GhosttyWriter {
+    write: unsafe extern "C" fn(*mut c_void, *const u8, usize) -> bool,
+    userdata: *mut c_void,
+}
+
+#[repr(C)]
+struct GhosttyMimeReader {
+    read: unsafe extern "C" fn(*mut c_void, GhosttyString, GhosttyWriter) -> bool,
+    userdata: *mut c_void,
+}
+
+#[repr(C)]
+struct GhosttyPaste {
+    size: usize,
+    location: c_int,
+    source: c_int,
+    mimes: *const GhosttyString,
+    mimes_len: usize,
+    reader: GhosttyMimeReader,
+    allow_unsafe: bool,
+}
+
+#[repr(C)]
 struct GhosttyClipboardWrite {
     size: usize,
     location: c_int,
@@ -446,6 +470,11 @@ struct GhosttySysImage {
 
 #[cfg_attr(windows, link(name = "ghostty-vt", kind = "raw-dylib"))]
 unsafe extern "C" {
+    fn ghostty_terminal_paste(
+        terminal: GhosttyTerminal,
+        paste: *const GhosttyPaste,
+        written: *mut bool,
+    ) -> c_int;
     fn ghostty_search_new(
         allocator: *const c_void,
         search: *mut *mut c_void,
@@ -1677,6 +1706,51 @@ impl Drop for GhosttyTerminalEngine {
 }
 
 impl TerminalEmulator for GhosttyTerminalEngine {
+    fn encode_paste(&mut self, text: &str) -> Result<String, String> {
+        // Normalize OS clipboard newlines before Ghostty applies terminal modes.
+        let text = text.replace("\r\n", "\n").replace('\r', "\n");
+        let mime = GhosttyString {
+            ptr: b"text/plain".as_ptr(),
+            len: 10,
+        };
+        let mut input = GhosttyString {
+            ptr: text.as_ptr(),
+            len: text.len(),
+        };
+        let paste = GhosttyPaste {
+            size: std::mem::size_of::<GhosttyPaste>(),
+            location: 0,
+            source: 0,
+            mimes: &mime,
+            mimes_len: 1,
+            reader: GhosttyMimeReader {
+                read: read_paste,
+                userdata: &mut input as *mut _ as *mut c_void,
+            },
+            // Preserve explicit user-paste behavior, including multiline input.
+            // Ghostty still strips unsafe control bytes and frames the text.
+            allow_unsafe: true,
+        };
+        let pending = self
+            .callbacks
+            .lock()
+            .map_err(|_| "Ghostty callback lock poisoned")?
+            .writes
+            .len();
+        let result = unsafe { ghostty_terminal_paste(self.terminal, &paste, ptr::null_mut()) };
+        // Preserve protocol responses and remove paste output to avoid a second
+        // send. Session actors serialize access to this engine.
+        let bytes = self
+            .callbacks
+            .lock()
+            .map_err(|_| "Ghostty callback lock poisoned")?
+            .writes
+            .split_off(pending);
+        if result != GHOSTTY_SUCCESS {
+            return Err(format!("Ghostty paste failed with result {result}"));
+        }
+        String::from_utf8(bytes).map_err(|error| format!("Invalid Ghostty paste output: {error}"))
+    }
     fn resize(&mut self, columns: usize, rows: usize, cell_width_px: u32, cell_height_px: u32) {
         self.size = TerminalGeometry::new(columns, rows);
         if let Some(pty) = &mut self.pty {
@@ -2828,6 +2902,18 @@ unsafe extern "C" fn write_pty(
     }
 }
 
+unsafe extern "C" fn read_paste(
+    userdata: *mut c_void,
+    _mime: GhosttyString,
+    writer: GhosttyWriter,
+) -> bool {
+    if userdata.is_null() {
+        return false;
+    }
+    let text = unsafe { &*(userdata as *const GhosttyString) };
+    text.len == 0 || unsafe { (writer.write)(writer.userdata, text.ptr, text.len) }
+}
+
 unsafe extern "C" fn bell(_terminal: GhosttyTerminal, userdata: *mut c_void) {
     if userdata.is_null() {
         return;
@@ -2995,6 +3081,25 @@ mod tests {
     use std::{thread, time::Duration, time::Instant};
 
     use super::*;
+
+    #[test]
+    fn paste_uses_live_modes_and_preserves_pending_protocol_output() {
+        let mut terminal = GhosttyTerminalEngine::new(20, 4, TerminalOptions::default()).unwrap();
+        terminal.write_bytes(b"\x1b[5n");
+        assert_eq!(terminal.encode_paste("one\r\ntwo").unwrap(), "one\rtwo");
+        assert_eq!(terminal.drain_transport_writes().concat(), "\x1b[0n");
+        assert!(terminal.drain_transport_writes().is_empty());
+        terminal.write_bytes(b"\x1b[?2004h");
+        let pasted = terminal.encode_paste("中文\nnext\x1b[201~\0end").unwrap();
+        assert!(pasted.starts_with("\x1b[200~中文"));
+        assert!(pasted.ends_with("end\x1b[201~"));
+        assert_eq!(pasted.matches("\x1b[201~").count(), 1);
+        assert!(!pasted.contains('\0'));
+        assert!(terminal.drain_transport_writes().is_empty());
+        assert_eq!(terminal.encode_paste("").unwrap(), "");
+        terminal.write_bytes(b"\x1b[?2004l");
+        assert_eq!(terminal.encode_paste("a\nb").unwrap(), "a\rb");
+    }
 
     fn visible_text(terminal: &GhosttyTerminalEngine) -> String {
         let snapshot = terminal.snapshot();

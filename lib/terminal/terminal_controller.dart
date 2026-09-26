@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 
 import '../app/nauterm_log.dart';
 import 'terminal_driver.dart';
+import 'terminal_key_encoder.dart';
 import 'terminal_config.dart';
 import 'terminal_capture_sanitizer.dart';
 import 'terminal_ffi.dart';
@@ -124,10 +125,7 @@ String? _encodeSshAuthenticationSecrets({
       (fido2Pin == null || fido2Pin.isEmpty)) {
     return null;
   }
-  return '$_sshAuthenticationSecretsPrefix${jsonEncode({
-    'keyPassphrase': passphrase,
-    'fido2Pin': fido2Pin,
-  })}';
+  return '$_sshAuthenticationSecretsPrefix${jsonEncode({'keyPassphrase': passphrase, 'fido2Pin': fido2Pin})}';
 }
 
 @immutable
@@ -1126,6 +1124,28 @@ class TerminalController extends ChangeNotifier {
 
     _connectionStatus = const TerminalConnectionStatus.idle();
     notifyListeners();
+  }
+
+  bool paste(String text) {
+    if (_disposed || text.isEmpty) return false;
+    final driver = _driver;
+    final String encoded;
+    try {
+      encoded = driver is TerminalPasteEncoder
+          ? (driver as TerminalPasteEncoder).encodePaste(text)
+          : terminalPasteSequence(text, driver.snapshot.keyboardMode);
+    } on Object catch (error, stackTrace) {
+      NautermLog.error(
+        'terminal',
+        'Paste preparation failed',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      return false;
+    }
+    if (encoded.isEmpty) return false;
+    sendInput(encoded);
+    return true;
   }
 
   void sendInput(String data, {bool sensitive = false}) {

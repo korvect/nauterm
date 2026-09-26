@@ -224,6 +224,28 @@ pub unsafe extern "C" fn nauterm_terminal_scroll_page_down(handle: *mut Terminal
 }
 
 /// # Safety
+/// `handle` must be null or a live terminal handle. `request_json` must be
+/// null or a valid NUL-terminated UTF-8 JSON string containing the paste text.
+#[no_mangle]
+pub unsafe extern "C" fn nauterm_terminal_encode_paste(
+    handle: *mut TerminalHandle,
+    request_json: *const c_char,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let result =
+            serde_json::from_str::<String>(&string_from_ptr(request_json).unwrap_or_default())
+                .map_err(|error| error.to_string())
+                .and_then(|text| {
+                    let handle = handle_ref(handle).ok_or("Terminal is closed")?;
+                    handle
+                        .call(move |terminal| terminal.encode_paste(&text))
+                        .ok_or_else(|| "Terminal is closed".to_owned())?
+                });
+        string_to_c_ptr(serde_json::to_string(&result).unwrap_or_else(|_| "null".into()))
+    })
+}
+
+/// # Safety
 ///
 /// `handle` must either be null or a live pointer returned by
 /// `nauterm_terminal_create`. `query` must either be null or a valid

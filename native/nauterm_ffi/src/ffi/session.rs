@@ -499,6 +499,24 @@ pub extern "C" fn nauterm_session_close(session_id: SessionId) -> bool {
 }
 
 #[no_mangle]
+pub extern "C" fn nauterm_session_encode_paste(
+    session_id: SessionId,
+    request_json: *const c_char,
+) -> *mut c_char {
+    guard(ptr::null_mut(), || {
+        let result =
+            serde_json::from_str::<String>(&string_from_ptr(request_json).unwrap_or_default())
+                .map_err(|error| error.to_string())
+                .and_then(|text| {
+                    with_session_manager(Err("Session manager unavailable".to_owned()), |manager| {
+                        manager.encode_paste(session_id, text)
+                    })
+                });
+        string_to_c_ptr(serde_json::to_string(&result).unwrap_or_else(|_| "null".into()))
+    })
+}
+
+#[no_mangle]
 pub extern "C" fn nauterm_session_resize(
     session_id: SessionId,
     columns: u32,

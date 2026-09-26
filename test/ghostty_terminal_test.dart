@@ -3,12 +3,57 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nauterm/terminal/terminal_config.dart';
+import 'package:nauterm/terminal/terminal_controller.dart';
 import 'package:nauterm/terminal/terminal_driver.dart';
 import 'package:nauterm/terminal/terminal_ffi.dart';
 import 'package:nauterm/terminal/terminal_models.dart';
 import 'package:nauterm/terminal/terminal_selection.dart';
 
 void main() {
+  test('controller sends Ghostty paste through its input sink once', () {
+    final driver = NativeReplayTerminalDriver.create(
+      columns: 20,
+      rows: 4,
+      config: defaultTerminalConfig.copyWith(
+        emulatorBackend: TerminalEmulatorBackend.ghostty,
+      ),
+    );
+    final sent = <String>[];
+    final controller = TerminalController(driver: driver, onInput: sent.add);
+    addTearDown(controller.dispose);
+    driver.writeBytes(utf8.encode('\x1b[?2004h'));
+    expect(controller.paste('a\x1b[201~b'), isTrue);
+    expect(sent, hasLength(1));
+    expect(sent.single, driver.encodePaste('a\x1b[201~b'));
+    expect(controller.paste(''), isFalse);
+    expect(sent, hasLength(1));
+  });
+
+  test('native paste crosses FFI without truncating NUL or sending twice', () {
+    for (final backend in [
+      TerminalEmulatorBackend.ghostty,
+      TerminalEmulatorBackend.alacritty,
+    ]) {
+      final driver = NativeReplayTerminalDriver.create(
+        columns: 20,
+        rows: 4,
+        config: defaultTerminalConfig.copyWith(emulatorBackend: backend),
+      );
+      addTearDown(driver.dispose);
+      expect(driver.encodePaste('one\r\ntwo'), 'one\rtwo');
+      driver.writeBytes(utf8.encode('\x1b[?2004h'));
+      final encoded = driver.encodePaste('中文\u0000tail\x1b[201~');
+      expect(encoded, startsWith('\x1b[200~中文'));
+      expect(encoded, endsWith('\x1b[201~'));
+      expect(encoded, contains('tail'));
+      if (backend == TerminalEmulatorBackend.ghostty) {
+        expect(encoded, isNot(contains('\u0000')));
+        expect('\x1b[201~'.allMatches(encoded), hasLength(1));
+      }
+      expect(driver.plainText.trim(), isEmpty);
+    }
+  });
+
   test('Ghostty search preserves counts in scrollback and at the bottom', () {
     final driver = NativeReplayTerminalDriver.create(
       columns: 20,

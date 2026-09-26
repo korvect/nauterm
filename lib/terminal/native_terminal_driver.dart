@@ -77,7 +77,13 @@ class _NetworkInterfaceChangeMonitor {
   }
 }
 
-class NativeTerminalDriver implements TerminalDriver {
+class NativeTerminalDriver implements TerminalDriver, TerminalPasteEncoder {
+  @override
+  String encodePaste(String text) => _encodeNativePaste(
+    _bindings,
+    text,
+    (request) => _bindings.encodePaste(_sessionId, request),
+  );
   NativeTerminalDriver._(
     this._bindings,
     this._sessionId, {

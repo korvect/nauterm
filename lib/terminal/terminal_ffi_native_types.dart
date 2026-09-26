@@ -576,6 +576,23 @@ typedef _ScrollLinesDart = bool Function(int sessionId, int lines);
 typedef _ScrollPageNative = Bool Function(Uint64 sessionId);
 typedef _ScrollPageDart = bool Function(int sessionId);
 
+typedef _EncodePasteNative = Pointer<Utf8> Function(
+  Uint64 sessionId,
+  Pointer<Utf8> request,
+);
+typedef _EncodePasteDart = Pointer<Utf8> Function(
+  int sessionId,
+  Pointer<Utf8> request,
+);
+typedef _TerminalEncodePasteNative = Pointer<Utf8> Function(
+  Pointer<Void> handle,
+  Pointer<Utf8> request,
+);
+typedef _TerminalEncodePasteDart = Pointer<Utf8> Function(
+  Pointer<Void> handle,
+  Pointer<Utf8> request,
+);
+
 typedef _SearchSessionNative = Pointer<Utf8> Function(
   Uint64 sessionId,
   Pointer<Utf8> query,

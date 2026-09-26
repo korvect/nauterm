@@ -1,7 +1,7 @@
 part of 'terminal_ffi.dart';
 
 class _TerminalBindings {
-  static const _expectedAbiVersion = 5;
+  static const _expectedAbiVersion = 6;
 
   _TerminalBindings(this.library)
     : createLocalSessionConfigured = library
@@ -173,6 +173,14 @@ class _TerminalBindings {
       search = library.lookupFunction<_SearchSessionNative, _SearchSessionDart>(
         'nauterm_session_search',
       ),
+      encodePaste = library
+          .lookupFunction<_EncodePasteNative, _EncodePasteDart>(
+            'nauterm_session_encode_paste',
+          ),
+      terminalEncodePaste = library
+          .lookupFunction<_TerminalEncodePasteNative, _TerminalEncodePasteDart>(
+            'nauterm_terminal_encode_paste',
+          ),
       terminalSearch = library
           .lookupFunction<_TerminalSearchNative, _TerminalSearchDart>(
             'nauterm_terminal_search',
@@ -430,6 +438,8 @@ class _TerminalBindings {
   final _TerminalScrollPageDart terminalScrollPageDown;
   final _ScrollPageDart scrollToBottom;
   final _SearchSessionDart search;
+  final _EncodePasteDart encodePaste;
+  final _TerminalEncodePasteDart terminalEncodePaste;
   final _TerminalSearchDart terminalSearch;
   final _SelectionTextSessionDart selectionText;
   final _TerminalSelectionTextDart terminalSelectionText;
@@ -495,6 +505,30 @@ T _withNativeBytesResult<T>(
     return work(pointer, bytes.length);
   } finally {
     malloc.free(pointer);
+  }
+}
+
+String _encodeNativePaste(
+  _TerminalBindings bindings,
+  String text,
+  Pointer<Utf8> Function(Pointer<Utf8>) encode,
+) {
+  // JSON preserves embedded NUL characters across the C string boundary.
+  final request = jsonEncode(text).toNativeUtf8();
+  Pointer<Utf8> response = nullptr;
+  try {
+    response = encode(request);
+    if (response == nullptr) {
+      throw StateError('Native paste preparation failed');
+    }
+    final result = jsonDecode(response.toDartString()) as Map<String, dynamic>;
+    if (result['Ok'] case final String encoded) return encoded;
+    throw StateError(
+      result['Err'] as String? ?? 'Native paste preparation failed',
+    );
+  } finally {
+    malloc.free(request);
+    if (response != nullptr) bindings.freeString(response);
   }
 }
 

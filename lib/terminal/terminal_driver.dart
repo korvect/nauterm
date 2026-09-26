@@ -47,6 +47,11 @@ class TerminalSearchResult {
   bool get found => selection != null;
 }
 
+/// Native paste preparation; sending still uses the controller's input path.
+abstract interface class TerminalPasteEncoder {
+  String encodePaste(String text);
+}
+
 abstract interface class TerminalDriver {
   TerminalSnapshot get snapshot;
 
