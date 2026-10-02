@@ -4,6 +4,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/src/widgets/_window.dart';
+import 'package:flutter/src/widgets/_window_linux.dart';
 import 'package:nativeapi_flutter/windowing.dart';
 
 import '../app/nauterm_app.dart';
@@ -12,6 +13,7 @@ import '../terminal/terminal_config.dart';
 import '../workspace/nauterm_workspace.dart';
 import 'native_windowing.dart';
 import 'file_drop_channel.dart';
+import 'linux_window_chrome.dart';
 
 class MainWindow extends StatefulWidget {
   const MainWindow({
@@ -58,6 +60,9 @@ class _MainWindowState extends State<MainWindow> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    if (_windowController case final WindowControllerLinux controller) {
+      configureLinuxWindowChrome(controller.windowHandle);
+    }
     NautermFileDropChannel.instance.attachWindow(
       _windowController.nativeWindow,
     );
@@ -96,6 +101,15 @@ class _MainWindowState extends State<MainWindow> with WidgetsBindingObserver {
   }
 
   void _startWindowDrag() {
+    if (_windowController case final WindowControllerLinux controller) {
+      unawaited(
+        startLinuxWindowDrag(
+          controller.windowHandle,
+          controller.flutterViewHandle,
+        ),
+      );
+      return;
+    }
     startMainWindowDrag();
   }
 

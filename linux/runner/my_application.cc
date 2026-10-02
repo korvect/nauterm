@@ -17,6 +17,7 @@ struct _MyApplication {
   char** dart_entrypoint_arguments;
   FlMethodChannel* file_drop_channel;
   FlMethodChannel* system_fonts_channel;
+  FlMethodChannel* window_channel;
   gboolean file_drop_enabled;
 };
 
@@ -410,6 +411,88 @@ static void setup_system_fonts_channel(MyApplication* self, FlView* view) {
       self->system_fonts_channel, system_fonts_method_call_cb, self, nullptr);
 }
 
+static void window_method_call_cb(FlMethodChannel* channel,
+                                 FlMethodCall* method_call,
+                                 gpointer user_data) {
+  if (std::strcmp(fl_method_call_get_name(method_call), "startWindowDrag") != 0) {
+    fl_method_call_respond_not_implemented(method_call, nullptr);
+    return;
+  }
+  FlValue* args = fl_method_call_get_args(method_call);
+  FlValue* window_arg = nullptr;
+  FlValue* view_arg = nullptr;
+  if (args != nullptr && fl_value_get_type(args) == FL_VALUE_TYPE_MAP) {
+    window_arg = fl_value_lookup_string(args, "window");
+    view_arg = fl_value_lookup_string(args, "view");
+  }
+  if (window_arg == nullptr || view_arg == nullptr ||
+      fl_value_get_type(window_arg) != FL_VALUE_TYPE_INT ||
+      fl_value_get_type(view_arg) != FL_VALUE_TYPE_INT) {
+    fl_method_call_respond_error(
+        method_call, "invalid-arguments",
+        "Window and view handles are required", nullptr, nullptr);
+    return;
+  }
+  GtkWidget* window = reinterpret_cast<GtkWidget*>(fl_value_get_int(window_arg));
+  GtkWidget* view = reinterpret_cast<GtkWidget*>(fl_value_get_int(view_arg));
+  GdkWindow* surface = gtk_widget_get_window(window);
+  GdkSeat* seat = surface == nullptr
+                      ? nullptr
+                      : gdk_display_get_default_seat(
+                            gdk_window_get_display(surface));
+  GdkDevice* pointer = seat == nullptr ? nullptr : gdk_seat_get_pointer(seat);
+  if (pointer != nullptr) {
+    const guint32 timestamp = gtk_get_current_event_time();
+    gint root_x = 0, root_y = 0;
+    gdk_device_get_position(pointer, nullptr, &root_x, &root_y);
+    gdk_window_begin_move_drag_for_device(
+        surface, pointer, GDK_BUTTON_PRIMARY, root_x, root_y, timestamp);
+    // The compositor consumes the real button release during a move/snap.
+    // Restore the synthetic release from the former vendored cnativeapi fix,
+    // otherwise its pointer manager drops the next button press as a duplicate.
+    GList* children = gtk_container_get_children(GTK_CONTAINER(view));
+    for (GList* item = children; item != nullptr; item = item->next) {
+      GtkWidget* event_box = GTK_WIDGET(item->data);
+      if (!GTK_IS_EVENT_BOX(event_box)) {
+        continue;
+      }
+      GdkWindow* event_window = gtk_widget_get_window(event_box);
+      if (event_window == nullptr) {
+        continue;
+      }
+      GdkEvent* release = gdk_event_new(GDK_BUTTON_RELEASE);
+      release->button.window = GDK_WINDOW(g_object_ref(event_window));
+      release->button.send_event = TRUE;
+      release->button.time = timestamp;
+      release->button.button = GDK_BUTTON_PRIMARY;
+      gint x = 0, y = 0;
+      GdkModifierType state = static_cast<GdkModifierType>(0);
+      gdk_window_get_device_position(event_window, pointer, &x, &y, &state);
+      release->button.x = x;
+      release->button.y = y;
+      release->button.x_root = root_x;
+      release->button.y_root = root_y;
+      release->button.state = static_cast<GdkModifierType>(0);
+      gdk_event_set_device(release, pointer);
+      gdk_event_set_source_device(release, pointer);
+      gtk_widget_event(event_box, release);
+      gdk_event_free(release);
+    }
+    g_list_free(children);
+  }
+  fl_method_call_respond_success(method_call, nullptr, nullptr);
+}
+
+static void setup_window_channel(MyApplication* self, FlView* view) {
+  FlBinaryMessenger* messenger =
+      fl_engine_get_binary_messenger(fl_view_get_engine(view));
+  g_autoptr(FlStandardMethodCodec) codec = fl_standard_method_codec_new();
+  self->window_channel = fl_method_channel_new(
+      messenger, "com.korvect.nauterm/window", FL_METHOD_CODEC(codec));
+  fl_method_channel_set_method_call_handler(
+      self->window_channel, window_method_call_cb, self, nullptr);
+}
+
 // Called when first Flutter frame received.
 static void first_frame_cb(MyApplication* self, FlView* view) {
   gtk_widget_show(gtk_widget_get_toplevel(GTK_WIDGET(view)));
@@ -483,6 +566,7 @@ static void my_application_activate(GApplication* application) {
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
   setup_file_drop_channel(self, view);
   setup_system_fonts_channel(self, view);
+  setup_window_channel(self, view);
 
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }
@@ -531,6 +615,7 @@ static void my_application_dispose(GObject* object) {
   MyApplication* self = MY_APPLICATION(object);
   g_clear_object(&self->file_drop_channel);
   g_clear_object(&self->system_fonts_channel);
+  g_clear_object(&self->window_channel);
   g_clear_pointer(&self->dart_entrypoint_arguments, g_strfreev);
   G_OBJECT_CLASS(my_application_parent_class)->dispose(object);
 }
