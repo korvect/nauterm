@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
+import 'package:nativeapi/nativeapi.dart' as native;
 
 enum NautermFileDropEventType { dragging, dropped, exited }
 
@@ -30,6 +32,71 @@ class NautermFileDropChannel {
   final StreamController<NautermFileDropEvent> _events =
       StreamController<NautermFileDropEvent>.broadcast();
   bool _initialized = false;
+  bool _enabled = false;
+  native.Window? _window;
+  native.DropTarget? _target;
+  int? _listenerId;
+
+  // macOS previously supplied these events from the vendored cnativeapi fork.
+  // Keep the existing stream contract while using upstream's native drop target.
+  void attachWindow(native.Window? window) {
+    _releaseTarget();
+    _window = window;
+    _syncTarget();
+  }
+
+  void _releaseTarget() {
+    final target = _target;
+    if (target != null) {
+      if (_listenerId case final id?) {
+        target.removeListener(id);
+      }
+      target.dispose();
+    }
+    _target = null;
+    _listenerId = null;
+  }
+
+  void _syncTarget() {
+    if (!_enabled ||
+        _window == null ||
+        defaultTargetPlatform != TargetPlatform.macOS) {
+      return;
+    }
+    _target ??= native.DropTarget.create(_window);
+    _listenerId ??= _target?.addListener((event) {
+      switch (event) {
+        case native.DropTargetEnteredEvent(:final position):
+        case native.DropTargetMovedEvent(:final position):
+          _events.add(
+            NautermFileDropEvent(
+              type: NautermFileDropEventType.dragging,
+              x: position.x,
+              y: position.y,
+            ),
+          );
+        case native.DropTargetExitedEvent():
+          _events.add(
+            const NautermFileDropEvent(type: NautermFileDropEventType.exited),
+          );
+        case native.DropTargetDroppedEvent(:final position, :final filePaths):
+          if (filePaths.isNotEmpty) {
+            _events.add(
+              NautermFileDropEvent(
+                type: NautermFileDropEventType.dropped,
+                paths: filePaths,
+                x: position.x,
+                y: position.y,
+              ),
+            );
+          } else {
+            _events.add(
+              const NautermFileDropEvent(type: NautermFileDropEventType.exited),
+            );
+          }
+      }
+    });
+  }
 
   Stream<NautermFileDropEvent> get events => _events.stream;
 
@@ -43,6 +110,15 @@ class NautermFileDropChannel {
 
   Future<void> setEnabled(bool enabled) async {
     ensureInitialized();
+    _enabled = enabled;
+    if (defaultTargetPlatform == TargetPlatform.macOS) {
+      if (enabled) {
+        _syncTarget();
+      } else {
+        _releaseTarget();
+      }
+      return;
+    }
     try {
       await _channel.invokeMethod<void>('setEnabled', {'enabled': enabled});
     } on MissingPluginException {

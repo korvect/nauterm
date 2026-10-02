@@ -37,9 +37,8 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
-  cnativeapi:
-    path: third_party/cnativeapi
-  nativeapi: ^0.1.4
+  nativeapi: ^0.4.0
+  nativeapi_flutter: ^0.4.0
   ffi: ^2.2.0
   flutter_riverpod: ^3.3.1
   crypto: ^3.0.7
@@ -55,10 +54,6 @@ dependencies:
   ollama_dart: ^2.5.0
   package_info_plus: ^10.2.0
   path_provider: ^2.1.5
-
-dependency_overrides:
-  cnativeapi:
-    path: third_party/cnativeapi
 
 dev_dependencies:
   flutter_test:

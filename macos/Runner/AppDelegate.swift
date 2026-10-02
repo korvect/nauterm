@@ -37,13 +37,12 @@ private func installFlutterHotRestartWorkaround() {
 @main
 class AppDelegate: FlutterAppDelegate {
   private var appMenuChannel: FlutterMethodChannel?
-  private var fileDropChannel: FlutterMethodChannel?
   private var systemFontsChannel: FlutterMethodChannel?
   private var externalEditorsChannel: FlutterMethodChannel?
   private var sparkleChannel: FlutterMethodChannel?
   private var titleBarRegionsChannel: FlutterMethodChannel?
   private var sparkleUpdaterController: SPUStandardUpdaterController?
-  private var fileDropEnabled = false
+  private var positioningWindowControls = false
   private var titleBarInteractiveRegions: [NSRect] = []
   private var titleBarEventMonitor: Any?
 
@@ -63,10 +62,6 @@ class AppDelegate: FlutterAppDelegate {
       RegisterGeneratedPlugins(registry: engine)
       appMenuChannel = FlutterMethodChannel(
         name: "com.korvect.nauterm/app_menu",
-        binaryMessenger: engine.binaryMessenger
-      )
-      fileDropChannel = FlutterMethodChannel(
-        name: "com.korvect.nauterm/file_drop",
         binaryMessenger: engine.binaryMessenger
       )
       systemFontsChannel = FlutterMethodChannel(
@@ -119,23 +114,15 @@ class AppDelegate: FlutterAppDelegate {
           result(FlutterMethodNotImplemented)
         }
       }
-      fileDropChannel?.setMethodCallHandler { [weak self] call, result in
-        switch call.method {
-        case "setEnabled":
-          let arguments = call.arguments as? [String: Any]
-          let enabled = arguments?["enabled"] as? Bool ?? false
-          self?.fileDropEnabled = enabled
-          NotificationCenter.default.post(
-            name: Notification.Name("com.korvect.nauterm.file_drop_enabled"),
-            object: self,
-            userInfo: ["enabled": enabled]
-          )
-          result(nil)
-        default:
-          result(FlutterMethodNotImplemented)
-        }
-      }
       titleBarRegionsChannel?.setMethodCallHandler { [weak self] call, result in
+        if call.method == "positionWindowControls" {
+          self?.positionMainWindowControls()
+          DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            self?.positionMainWindowControls()
+          }
+          result(nil)
+          return
+        }
         guard call.method == "setInteractiveRegions" else {
           result(FlutterMethodNotImplemented)
           return
@@ -144,18 +131,16 @@ class AppDelegate: FlutterAppDelegate {
         result(nil)
       }
       installTitleBarEventMonitor()
-      NotificationCenter.default.addObserver(
-        self,
-        selector: #selector(handleFileDrop(_:)),
-        name: Notification.Name("com.korvect.nauterm.file_drop"),
-        object: nil
-      )
-      NotificationCenter.default.addObserver(
-        self,
-        selector: #selector(handleFullscreenChanged(_:)),
-        name: Notification.Name("com.korvect.nauterm.fullscreen_changed"),
-        object: nil
-      )
+      for name in [NSWindow.didResizeNotification, NSWindow.didBecomeKeyNotification,
+                   NSWindow.didBecomeMainNotification, NSWindow.didResignKeyNotification,
+                   NSWindow.didResignMainNotification, NSWindow.didMiniaturizeNotification,
+                   NSWindow.didDeminiaturizeNotification, NSWindow.didExposeNotification,
+                   NSWindow.willExitFullScreenNotification,
+                   NSWindow.didExitFullScreenNotification, NSWindow.didEnterFullScreenNotification] {
+        NotificationCenter.default.addObserver(
+          self, selector: #selector(handleWindowChromeChanged(_:)), name: name, object: nil
+        )
+      }
     }
   }
 
@@ -323,27 +308,46 @@ class AppDelegate: FlutterAppDelegate {
     appMenuChannel?.invokeMethod("closeSelectedTerminalTab", arguments: nil)
   }
 
-  @objc private func handleFullscreenChanged(_ notification: Notification) {
-    let fullscreen = notification.userInfo?["fullscreen"] as? Bool ?? false
-    appMenuChannel?.invokeMethod("fullscreenChanged", arguments: fullscreen)
+  // nativeapi owns the window style. Only Nauterm's 44-point traffic-light
+  // layout remains here; 0.4.0 does not expose control-button positioning.
+  private func positionMainWindowControls() {
+    guard !positioningWindowControls,
+          let window = NSApp.windows.first(where: { $0.title == "Nauterm" }),
+          !window.styleMask.contains(.fullScreen),
+          let close = window.standardWindowButton(.closeButton),
+          let mini = window.standardWindowButton(.miniaturizeButton),
+          let zoom = window.standardWindowButton(.zoomButton),
+          let container = close.superview?.superview else { return }
+    positioningWindowControls = true
+    defer { positioningWindowControls = false }
+    let height = close.frame.height + 32
+    var frame = container.frame
+    frame.size.height = height
+    frame.origin.y = window.frame.height - height
+    container.setFrameSize(frame.size)
+    container.setFrameOrigin(frame.origin)
+    let spacing = mini.frame.minX - close.frame.minX
+    let y = (height - close.frame.height) / 2
+    close.setFrameOrigin(NSPoint(x: 8, y: y))
+    mini.setFrameOrigin(NSPoint(x: 8 + spacing, y: y))
+    zoom.setFrameOrigin(NSPoint(x: 8 + spacing * 2, y: y))
   }
 
-  @objc private func handleFileDrop(_ notification: Notification) {
-    guard fileDropEnabled else {
+  @objc private func handleWindowChromeChanged(_ notification: Notification) {
+    guard let window = notification.object as? NSWindow,
+          window.title == "Nauterm" else { return }
+    let container = window.standardWindowButton(.closeButton)?.superview?.superview
+    if notification.name == NSWindow.willExitFullScreenNotification {
+      container?.isHidden = true
       return
     }
-    let method = notification.userInfo?["method"] as? String ?? "filesDropped"
-    let paths = notification.userInfo?["paths"] as? [String] ?? []
-    if method == "filesDropped" && paths.isEmpty {
-      return
+    positionMainWindowControls()
+    if notification.name == NSWindow.didExitFullScreenNotification {
+      container?.isHidden = false
+      appMenuChannel?.invokeMethod("fullscreenChanged", arguments: false)
+    } else if notification.name == NSWindow.didEnterFullScreenNotification {
+      appMenuChannel?.invokeMethod("fullscreenChanged", arguments: true)
     }
-    var arguments: [String: Any] = ["paths": paths]
-    if let x = notification.userInfo?["x"] as? NSNumber,
-       let y = notification.userInfo?["y"] as? NSNumber {
-      arguments["x"] = x.doubleValue
-      arguments["y"] = y.doubleValue
-    }
-    fileDropChannel?.invokeMethod(method, arguments: arguments)
   }
 
   private func prepareNativeShutdown() {

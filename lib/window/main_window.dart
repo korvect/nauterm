@@ -4,12 +4,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/src/widgets/_window.dart';
+import 'package:nativeapi_flutter/windowing.dart';
 
 import '../app/nauterm_app.dart';
 import '../app/window_config.dart';
 import '../terminal/terminal_config.dart';
 import '../workspace/nauterm_workspace.dart';
 import 'native_windowing.dart';
+import 'file_drop_channel.dart';
 
 class MainWindow extends StatefulWidget {
   const MainWindow({
@@ -56,6 +58,9 @@ class _MainWindowState extends State<MainWindow> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    NautermFileDropChannel.instance.attachWindow(
+      _windowController.nativeWindow,
+    );
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       hideMainWindowTitleBar();
@@ -64,6 +69,7 @@ class _MainWindowState extends State<MainWindow> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    NautermFileDropChannel.instance.attachWindow(null);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
