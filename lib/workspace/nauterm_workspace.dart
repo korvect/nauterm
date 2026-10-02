@@ -21,6 +21,8 @@ import 'package:nativeapi/nativeapi.dart' hide Dialog;
 import 'package:path_provider/path_provider.dart';
 
 import '../ai/ai_client.dart';
+import '../ai/ai_message_scroll_controller.dart';
+import '../ai/ai_message_viewport.dart';
 import '../ai/ai_attachment.dart';
 import '../ai/ai_config.dart';
 import '../ai/ai_conversation.dart';

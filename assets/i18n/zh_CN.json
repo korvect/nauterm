@@ -7,6 +7,7 @@
   "ai.label.noMatchingConversations": "没有匹配的对话",
   "ai.label.recentOutput": "最近输出",
   "ai.label.saveAndResend": "保存并重新发送",
+  "ai.label.scrollToBottom": "回到底部",
   "ai.label.searchConversations": "搜索对话",
   "ai.label.thinking": "思考中",
   "common.action.activate": "启用",

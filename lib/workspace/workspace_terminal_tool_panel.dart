@@ -262,7 +262,8 @@ class _AiAssistantPanel extends StatefulWidget {
 class _AiAssistantPanelState extends State<_AiAssistantPanel> {
   final TextEditingController _composerController = TextEditingController();
   late final FocusNode _composerFocusNode;
-  final ScrollController _messageScrollController = ScrollController();
+  final AiMessageScrollController _messageScrollController =
+      AiMessageScrollController();
   TerminalController? _boundTerminalController;
   bool _pickingAttachments = false;
   String? _attachmentError;
@@ -341,7 +342,7 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
       _historyEntries = const [];
       _historyError = null;
       _syncSelectedProviderFromConversation();
-      _scrollToLatestMessage();
+      _scrollToLatestMessage(resume: true);
     }
     _syncTerminalController();
   }
@@ -553,17 +554,8 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
         controller.snapshot.inputEchoEnabled;
   }
 
-  void _scrollToLatestMessage() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_messageScrollController.hasClients) {
-        return;
-      }
-      _messageScrollController.animateTo(
-        _messageScrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 120),
-        curve: Curves.easeOutCubic,
-      );
-    });
+  void _scrollToLatestMessage({bool resume = false}) {
+    _messageScrollController.scrollToLatest(resume: resume);
   }
 
   void _send() {
@@ -574,6 +566,7 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
       return;
     }
     _composerController.clear();
+    _scrollToLatestMessage(resume: true);
     unawaited(
       widget.conversation.send(
         text,
@@ -821,7 +814,7 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
       }
       if (opened) {
         setState(() => _historyOpen = false);
-        _scrollToLatestMessage();
+        _scrollToLatestMessage(resume: true);
       } else {
         setState(
           () => _historyError = 'This conversation cannot be opened now.',
@@ -1155,27 +1148,38 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
                       selectionColor: Color.lerp(background, accent, 0.32),
                       cursorColor: accent,
                       child: SelectionArea(
-                        child: SingleChildScrollView(
+                        child: AiMessageViewport(
                           controller: _messageScrollController,
-                          padding: const EdgeInsets.fromLTRB(14, 16, 14, 12),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              for (
-                                var index = 0;
-                                index < timeline.length;
-                                index += 1
-                              ) ...[
-                                _buildTimelineItem(timeline[index]),
-                                if (index + 1 < timeline.length)
-                                  SizedBox(
-                                    height: _timelineItemSpacing(
-                                      timeline[index],
-                                      timeline[index + 1],
+                          streaming: widget.conversation.sending,
+                          background: background,
+                          foreground: widget.colors.foreground,
+                          border: border,
+                          scrollToBottomLabel: tr(
+                            'ai.label.scrollToBottom',
+                            fallback: 'Scroll to bottom',
+                          ),
+                          child: SingleChildScrollView(
+                            controller: _messageScrollController,
+                            padding: const EdgeInsets.fromLTRB(14, 16, 14, 12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                for (
+                                  var index = 0;
+                                  index < timeline.length;
+                                  index += 1
+                                ) ...[
+                                  _buildTimelineItem(timeline[index]),
+                                  if (index + 1 < timeline.length)
+                                    SizedBox(
+                                      height: _timelineItemSpacing(
+                                        timeline[index],
+                                        timeline[index + 1],
+                                      ),
                                     ),
-                                  ),
+                                ],
                               ],
-                            ],
+                            ),
                           ),
                         ),
                       ),
