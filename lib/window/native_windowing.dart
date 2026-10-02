@@ -300,6 +300,11 @@ void hideMainWindowTitleBar() {
 }
 
 void _applyMainWindowChrome(Window window) {
+  if (defaultTargetPlatform == TargetPlatform.linux) {
+    // nativeapi reserves a gutter for the shadow of borderless Linux windows.
+    // Keep the GTK backing transparent so only the shadow is visible there.
+    window.backgroundColor = const Color(0x00000000).toNative();
+  }
   if (_usesNativeWindowControls()) {
     window.setContentUnderTitleBar(true);
   } else {
