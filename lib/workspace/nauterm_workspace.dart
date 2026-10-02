@@ -17,7 +17,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
-import 'package:nativeapi/nativeapi.dart' hide Dialog;
+import 'package:nativeapi/nativeapi.dart' show UrlOpener;
 import 'package:path_provider/path_provider.dart';
 
 import '../ai/ai_client.dart';

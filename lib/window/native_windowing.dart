@@ -7,8 +7,8 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
-import 'package:nativeapi/nativeapi.dart';
-import 'package:cnativeapi/cnativeapi.dart';
+import 'package:nativeapi/nativeapi.dart' show Display;
+import 'package:nativeapi_flutter/nativeapi_flutter.dart';
 
 import '../app/window_config.dart';
 import '../data/nauterm_config_store.dart';
@@ -83,30 +83,30 @@ void configureNativeWindowing() {
 
   final primaryDisplay = DisplayManager.instance.getPrimary();
 
-  WindowManager.instance.addCallbackListener<WindowMaximizedEvent>((
-    WindowMaximizedEvent event,
-  ) {
+  WindowManager.instance.addListener((event) {
+    if (event is! WindowMaximizedEvent) return;
     if (event.windowId == _mainWindowId) {
       _mainWindowMaximized = true;
       hideMainWindowTitleBar();
     }
   });
-  WindowManager.instance.addCallbackListener<WindowRestoredEvent>((
-    WindowRestoredEvent event,
-  ) {
+  WindowManager.instance.addListener((event) {
+    if (event is! WindowRestoredEvent) return;
     if (event.windowId == _mainWindowId) {
       _mainWindowMaximized = false;
       hideMainWindowTitleBar();
       _scheduleMainWindowGeometryPersist();
     }
   });
-  WindowManager.instance.addCallbackListener<WindowMovedEvent>((event) {
+  WindowManager.instance.addListener((event) {
+    if (event is! WindowMovedEvent) return;
     if (event.windowId != _mainWindowId || _mainWindowMaximized) {
       return;
     }
     _scheduleMainWindowGeometryPersist();
   });
-  WindowManager.instance.addCallbackListener<WindowResizedEvent>((event) {
+  WindowManager.instance.addListener((event) {
+    if (event is! WindowResizedEvent) return;
     if (event.windowId != _mainWindowId || _mainWindowMaximized) {
       return;
     }
@@ -114,7 +114,7 @@ void configureNativeWindowing() {
   });
 
   WindowManager.instance.setWillShowHook((windowId) {
-    final window = WindowManager.instance.getById(windowId);
+    final window = WindowManager.instance.get(windowId);
     if (window != null && primaryDisplay != null) {
       switch (window.title) {
         case mainWindowTitle:
@@ -123,10 +123,7 @@ void configureNativeWindowing() {
           if (_positionedWindowIds.add(windowId)) {
             _restoreMainWindowGeometry(window, primaryDisplay);
           } else {
-            window.setMinimumSize(
-              mainWindowMinSize.width,
-              mainWindowMinSize.height,
-            );
+            window.minimumSize = mainWindowMinSize.toNative();
           }
           break;
         case settingsWindowTitle:
@@ -138,15 +135,12 @@ void configureNativeWindowing() {
               minSize: settingsWindowMinSize,
             );
           } else {
-            window.setMinimumSize(
-              settingsWindowMinSize.width,
-              settingsWindowMinSize.height,
-            );
+            window.minimumSize = settingsWindowMinSize.toNative();
           }
-          return _settingsWindowRequested;
+          if (!_settingsWindowRequested) return;
       }
     }
-    return true;
+    WindowManager.instance.callOriginalShow(windowId);
   });
 }
 
@@ -238,7 +232,7 @@ void hideMainWindow() {
   }
   window.hide();
   if (_isNormalWindow(window)) {
-    _applyMainWindowBounds(window.bounds);
+    _applyMainWindowBounds(window.bounds.toRect());
     _scheduleMainWindowGeometryPersist();
   }
 }
@@ -293,7 +287,7 @@ void markSettingsWindowRequested(bool requested) {
 void hideMainWindowTitleBar() {
   final id = _mainWindowId;
   if (id != null) {
-    final window = WindowManager.instance.getById(id);
+    final window = WindowManager.instance.get(id);
     if (window != null) {
       _applyMainWindowChrome(window);
     }
@@ -306,8 +300,12 @@ void hideMainWindowTitleBar() {
 }
 
 void _applyMainWindowChrome(Window window) {
-  window.titleBarStyle = TitleBarStyle.hidden;
-  window.windowControlButtonsVisible = _usesNativeWindowControls();
+  if (_usesNativeWindowControls()) {
+    window.setContentUnderTitleBar(true);
+  } else {
+    window.titleBarStyle = TitleBarStyle.hidden;
+  }
+  window.isWindowControlButtonsVisible = _usesNativeWindowControls();
   _centerTrafficLights(window);
 }
 
@@ -363,10 +361,8 @@ void _centerTrafficLights(Window window) {
   // Tauri uses: titleBarHeight = buttonHeight + y
   // Top bar is 44px, buttons are ~12px, so y = 44 - 12 = 32
   // x is the left offset (default macOS is 8).
-  cnativeApiBindings.native_window_set_window_control_buttons_position(
-    window.nativeHandle,
-    8,
-    32,
+  unawaited(
+    _titleBarRegionsChannel.invokeMethod<void>('positionWindowControls'),
   );
 }
 
@@ -382,7 +378,7 @@ Size resizeMainWindow(Size requestedSize) {
   final window = _mainWindow();
   final display =
       _displayForWindow(window) ?? DisplayManager.instance.getPrimary();
-  final size = _clampMainWindowSize(requestedSize, display?.workArea);
+  final size = _clampMainWindowSize(requestedSize, display?.workArea.toRect());
   terminalWindowWidth = size.width;
   terminalWindowHeight = size.height;
   if (window != null) {
@@ -390,7 +386,7 @@ Size resizeMainWindow(Size requestedSize) {
       window.unmaximize();
       _mainWindowMaximized = false;
     }
-    window.setSize(size.width, size.height);
+    window.setSize(size.toNative(), false);
   }
   _scheduleMainWindowGeometryPersist();
   return size;
@@ -401,7 +397,7 @@ void captureMainWindowGeometry() {
   if (window == null || !_isNormalWindow(window)) {
     return;
   }
-  _applyMainWindowBounds(window.bounds);
+  _applyMainWindowBounds(window.bounds.toRect());
   _scheduleMainWindowGeometryPersist();
 }
 
@@ -426,7 +422,7 @@ void withMainWindow(void Function(Window window) action) {
 Window? _mainWindow() {
   final id = _mainWindowId;
   if (id != null) {
-    final window = WindowManager.instance.getById(id);
+    final window = WindowManager.instance.get(id);
     if (window != null) {
       return window;
     }
@@ -461,13 +457,17 @@ void _restoreMainWindowGeometry(Window window, Display primaryDisplay) {
   final targetDisplay = savedPosition == null
       ? primaryDisplay
       : _displayForSavedGeometry(savedPosition, savedSize) ?? primaryDisplay;
-  final size = _clampMainWindowSize(savedSize, targetDisplay.workArea);
+  final size = _clampMainWindowSize(savedSize, targetDisplay.workArea.toRect());
 
-  window.setMinimumSize(mainWindowMinSize.width, mainWindowMinSize.height);
-  window.setSize(size.width, size.height);
+  window.minimumSize = mainWindowMinSize.toNative();
+  window.setSize(size.toNative(), false);
   if (savedPosition != null &&
-      _windowPositionIsVisible(savedPosition, size, targetDisplay.workArea)) {
-    window.setPosition(savedPosition.dx, savedPosition.dy);
+      _windowPositionIsVisible(
+        savedPosition,
+        size,
+        targetDisplay.workArea.toRect(),
+      )) {
+    window.position = savedPosition.toNative();
   } else {
     _centerWindow(window, targetDisplay, size);
   }
@@ -476,7 +476,7 @@ void _restoreMainWindowGeometry(Window window, Display primaryDisplay) {
 Display? _displayForSavedGeometry(Offset position, Size size) {
   final bounds = position & size;
   for (final display in _allDisplays()) {
-    final visible = bounds.intersect(display.workArea);
+    final visible = bounds.intersect(display.workArea.toRect());
     if (visible.width >= 64 && visible.height >= 48) {
       return display;
     }
@@ -488,11 +488,11 @@ Display? _displayForWindow(Window? window) {
   if (window == null) {
     return null;
   }
-  final bounds = window.bounds;
+  final bounds = window.bounds.toRect();
   Display? best;
   var bestArea = 0.0;
   for (final display in _allDisplays()) {
-    final visible = bounds.intersect(display.workArea);
+    final visible = bounds.intersect(display.workArea.toRect());
     final area = math.max(0.0, visible.width) * math.max(0.0, visible.height);
     if (area > bestArea) {
       bestArea = area;
@@ -542,7 +542,7 @@ bool _isNormalWindow(Window window) {
   return !_mainWindowMaximized &&
       !window.isMaximized &&
       !window.isMinimized &&
-      !window.isFullscreen;
+      !window.isFullScreen;
 }
 
 void _applyMainWindowBounds(Rect bounds) {
@@ -573,19 +573,19 @@ void _positionWindow(
   required Size size,
   required Size minSize,
 }) {
-  final workArea = display.workArea;
+  final workArea = display.workArea.toRect();
   final clampedSize = _clampWindowSize(size, minSize, workArea);
 
-  window.setMinimumSize(minSize.width, minSize.height);
-  window.setSize(clampedSize.width, clampedSize.height);
+  window.minimumSize = minSize.toNative();
+  window.setSize(clampedSize.toNative(), false);
   _centerWindow(window, display, clampedSize);
 }
 
 void _centerWindow(Window window, Display display, Size size) {
-  final workArea = display.workArea;
+  final workArea = display.workArea.toRect();
   final startX = workArea.left + (workArea.width - size.width) / 2;
   final startY = workArea.top + (workArea.height - size.height) / 2;
-  window.setPosition(startX, startY);
+  window.position = Offset(startX, startY).toNative();
 }
 
 bool _usesNativeWindowControls() {
