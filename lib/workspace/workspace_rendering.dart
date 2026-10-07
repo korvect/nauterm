@@ -620,6 +620,7 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
   }
 
   Widget _buildTerminalTabSftpPage(_TerminalTab tab, {required bool active}) {
+    final sshView = _terminalViewForSftp(tab, _selectedTerminalViewId);
     return _SftpPane(
       key: ValueKey('terminal-sftp:${tab.id}'),
       sessionId: 'terminal:${tab.id}:sftp-page',
@@ -633,10 +634,17 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
       onRemoteConnected: _handleSftpRemoteConnected,
       manageFileDrop: false,
       remoteOnly: true,
-      sshEditorController: _terminalViewForSftp(
-        tab,
-        _selectedTerminalViewId,
-      )?.controller,
+      sshEditorController: sshView?.controller,
+      sshWorkingDirectoryResolver: () {
+        if (sshView == null || sshView.controller.sshProfile == null)
+          return null;
+        return _promptWorkingDirectoryFromSnapshot(
+              sshView.controller.snapshot,
+              requireLocalDirectory: false,
+              expandHome: false,
+            ) ??
+            _sshWorkingDirectories[sshView.id];
+      },
       onSshEditorOpened: () => _showTerminalTabSsh(tab.id),
       onSshSelected: () => _showTerminalTabSsh(tab.id),
     );
@@ -1172,6 +1180,19 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
                           ? null
                           : _sftpHostItemForProfile(sshProfile),
                       terminalController: terminalController,
+                      sshWorkingDirectoryResolver: () {
+                        final paneId = _selectedTerminalViewId;
+                        if (paneId == null ||
+                            terminalController?.sshProfile == null) {
+                          return null;
+                        }
+                        return _promptWorkingDirectoryFromSnapshot(
+                              terminalController!.snapshot,
+                              requireLocalDirectory: false,
+                              expandHome: false,
+                            ) ??
+                            _sshWorkingDirectories[paneId];
+                      },
                       createHostRequest: _sftpConnectRequestForHostItem,
                       onRemoteConnected: _handleSftpRemoteConnected,
                     )

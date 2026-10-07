@@ -15,6 +15,7 @@ class _SftpPane extends ConsumerStatefulWidget {
     this.manageFileDrop = true,
     this.remoteOnly = false,
     this.sshEditorController,
+    this.sshWorkingDirectoryResolver,
     this.onSshEditorOpened,
     this.onSshSelected,
     this.compact = false,
@@ -33,6 +34,7 @@ class _SftpPane extends ConsumerStatefulWidget {
   final bool manageFileDrop;
   final bool remoteOnly;
   final TerminalController? sshEditorController;
+  final String? Function()? sshWorkingDirectoryResolver;
   final VoidCallback? onSshEditorOpened;
   final VoidCallback? onSshSelected;
   final bool compact;
@@ -1376,6 +1378,24 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
       return;
     }
     unawaited(_loadRemotePath(session, auth, '~', host: connection.host));
+  }
+
+  void _goRemoteSshDirectory(_SftpRemotePaneSession session) {
+    if (!_remoteSessionSharesSshEditor(session)) return;
+    final directory = _emptyToNull(widget.sshWorkingDirectoryResolver?.call());
+    final connection = session.connection;
+    final auth = connection?.auth;
+    if (connection == null || auth == null) return;
+    if (directory == null) {
+      _showSftpSnack(
+        tr(
+          'sftp.message.sshDirectoryUnavailable',
+          fallback: 'SSH current directory is not available yet.',
+        ),
+      );
+      return;
+    }
+    unawaited(_loadRemotePath(session, auth, directory, host: connection.host));
   }
 
   void _goRemoteForward(_SftpRemotePaneSession session) {
@@ -4922,6 +4942,11 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
               _controller.favoriteListSlot == paneSlot,
           favoritePaths: session.favoritePaths,
           onHome: () => _goRemoteHome(session),
+          onSshDirectory:
+              _remoteSessionSharesSshEditor(session) &&
+                  widget.sshWorkingDirectoryResolver != null
+              ? () => _goRemoteSshDirectory(session)
+              : null,
           onBack: () => _goRemoteBack(session),
           onForward: () => _goRemoteForward(session),
           onPathEditRequested: () {
@@ -5008,6 +5033,11 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
         showCloseAction: slot != null,
         sshEditorAvailable: _remoteSessionSharesSshEditor(session),
         onSshSelected: widget.onSshSelected,
+        showSshDirectory: widget.sshWorkingDirectoryResolver != null,
+        onSshDirectory:
+            !session.loading && _remoteSessionSharesSshEditor(session)
+            ? () => _goRemoteSshDirectory(session)
+            : null,
         tasks: _tasksForSlot(paneSlot),
         taskListOpen:
             _controller.taskListOpen && _controller.taskListSlot == paneSlot,

@@ -39,6 +39,8 @@ class _SftpLocalPane extends StatelessWidget {
     required this.showCloseAction,
     this.sshEditorAvailable = false,
     this.onSshSelected,
+    this.showSshDirectory = false,
+    this.onSshDirectory,
     required this.tasks,
     required this.taskListOpen,
     required this.favoriteListOpen,
@@ -92,6 +94,8 @@ class _SftpLocalPane extends StatelessWidget {
   final bool showCloseAction;
   final bool sshEditorAvailable;
   final VoidCallback? onSshSelected;
+  final bool showSshDirectory;
+  final VoidCallback? onSshDirectory;
   final List<_SftpTask> tasks;
   final bool taskListOpen;
   final bool favoriteListOpen;
@@ -182,6 +186,8 @@ class _SftpLocalPane extends StatelessWidget {
                     canGoBack: canGoBack,
                     canGoForward: canGoForward,
                     onHome: onHome,
+                    showSshDirectory: showSshDirectory,
+                    onSshDirectory: onSshDirectory,
                     onBack: onBack,
                     onForward: onForward,
                     onEditRequested: onPathEditRequested,
@@ -704,6 +710,8 @@ class _SftpToolbarFilterState extends State<_SftpToolbarFilter> {
 
 class _SftpPathBar extends StatelessWidget {
   const _SftpPathBar({
+    this.showSshDirectory = false,
+    this.onSshDirectory,
     required this.remote,
     required this.path,
     required this.controller,
@@ -730,6 +738,8 @@ class _SftpPathBar extends StatelessWidget {
 
   final bool remote;
   final String path;
+  final bool showSshDirectory;
+  final VoidCallback? onSshDirectory;
   final TextEditingController controller;
   final FocusNode focusNode;
   final bool editing;
@@ -768,6 +778,18 @@ class _SftpPathBar extends StatelessWidget {
                 enabled: true,
                 onTap: onHome,
               ),
+              if (showSshDirectory) ...[
+                const SizedBox(width: 10),
+                _SftpPathNavButton(
+                  tooltip: tr(
+                    'sftp.action.goToSshDirectory',
+                    fallback: 'Go to SSH current directory',
+                  ),
+                  icon: LucideIcons.folderInput,
+                  enabled: onSshDirectory != null,
+                  onTap: () => onSshDirectory?.call(),
+                ),
+              ],
               SizedBox(width: 10),
               _SftpPathNavButton(
                 tooltip: tr('common.action.back', fallback: 'Back'),

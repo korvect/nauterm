@@ -11,6 +11,7 @@ class _TerminalSftpPanel extends ConsumerStatefulWidget {
     required this.profile,
     required this.profileHost,
     required this.terminalController,
+    required this.sshWorkingDirectoryResolver,
     required this.createHostRequest,
     this.onRemoteConnected,
   });
@@ -24,6 +25,7 @@ class _TerminalSftpPanel extends ConsumerStatefulWidget {
   final SshConnectionProfile? profile;
   final _HostItem? profileHost;
   final TerminalController? terminalController;
+  final String? Function() sshWorkingDirectoryResolver;
   final _SftpConnectRequest? Function(int requestId, _HostItem host)
   createHostRequest;
   final void Function(_HostItem host, _SftpRemoteAuth auth)? onRemoteConnected;
@@ -132,6 +134,7 @@ class _TerminalSftpPanelState extends ConsumerState<_TerminalSftpPanel> {
               manageFileDrop: false,
               remoteOnly: true,
               sshEditorController: widget.terminalController,
+              sshWorkingDirectoryResolver: widget.sshWorkingDirectoryResolver,
               compact: true,
               panelColors: widget.colors,
             )
@@ -171,6 +174,7 @@ class _TerminalSftpBrowser extends StatefulWidget {
     required this.favoriteListOpen,
     required this.favoritePaths,
     required this.onHome,
+    required this.onSshDirectory,
     required this.onBack,
     required this.onForward,
     required this.onPathEditRequested,
@@ -217,6 +221,7 @@ class _TerminalSftpBrowser extends StatefulWidget {
   final bool favoriteListOpen;
   final List<String> favoritePaths;
   final VoidCallback onHome;
+  final VoidCallback? onSshDirectory;
   final VoidCallback onBack;
   final VoidCallback onForward;
   final VoidCallback onPathEditRequested;
@@ -484,6 +489,16 @@ class _TerminalSftpBrowserState extends State<_TerminalSftpBrowser> {
                       icon: LucideIcons.house,
                       colors: colors,
                       onPressed: widget.onHome,
+                    ),
+                    _TerminalSftpIconButton(
+                      key: const ValueKey('terminal-sftp-ssh-directory'),
+                      tooltip: tr(
+                        'sftp.action.goToSshDirectory',
+                        fallback: 'Go to SSH current directory',
+                      ),
+                      icon: LucideIcons.folderInput,
+                      colors: colors,
+                      onPressed: widget.loading ? null : widget.onSshDirectory,
                     ),
                     _TerminalSftpIconButton(
                       tooltip: tr('common.action.back', fallback: 'Back'),
