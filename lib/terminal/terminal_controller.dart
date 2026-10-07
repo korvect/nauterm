@@ -18,6 +18,7 @@ import 'terminal_shell_integration.dart';
 import 'terminal_ssh_prediction.dart';
 import 'terminal_theme.dart';
 import 'terminal_text_width.dart';
+import 'terminal_working_directory.dart';
 
 typedef TerminalInputSink = void Function(String data);
 
@@ -619,6 +620,7 @@ class TerminalController extends ChangeNotifier {
   _TelnetAutoLogin? _telnetAutoLogin;
   TerminalConnectionStatus _connectionStatus;
   late TerminalSnapshot _snapshot;
+  final TerminalWorkingDirectory _workingDirectory = TerminalWorkingDirectory();
   bool _snapshotRefreshQueued = false;
   final Stopwatch _snapshotRefreshClock = Stopwatch()..start();
   Duration _lastSnapshotRefreshAt = Duration.zero;
@@ -662,6 +664,8 @@ class TerminalController extends ChangeNotifier {
   Timer? _moshNetworkRestoredTimer;
 
   TerminalSnapshot get snapshot => _snapshot;
+  String? get workingDirectory => _workingDirectory.value;
+  ValueListenable<String?> get workingDirectoryListenable => _workingDirectory;
   String get selectedText => _selectedText;
   TerminalCommandBlock? get selectedCommandBlock => _selectedCommandBlock;
 
@@ -1857,6 +1861,7 @@ class TerminalController extends ChangeNotifier {
   void _refreshSnapshot() {
     final nextSnapshot = _driver.snapshot;
     _snapshot = nextSnapshot;
+    _workingDirectory.updateSnapshot(nextSnapshot);
     _reconcileSshPrediction(nextSnapshot);
     _reconcileMoshPredictionBatches();
     _invalidateMoshPredictionAtOrAfterCursor(nextSnapshot.cursor);
@@ -1962,6 +1967,7 @@ class TerminalController extends ChangeNotifier {
     if (_disposed || bytes.isEmpty) {
       return;
     }
+    _workingDirectory.addOutput(bytes);
     _reportedShellPath =
         _shellAnnouncementParser.add(bytes) ?? _reportedShellPath;
     if (_outputListeners.isEmpty) {
@@ -2498,6 +2504,7 @@ class TerminalController extends ChangeNotifier {
     _flushCaptureSanitizer();
     _recorder?.finish(message: _connectionStatus.message);
     _driver.dispose();
+    _workingDirectory.dispose();
     super.dispose();
   }
 }

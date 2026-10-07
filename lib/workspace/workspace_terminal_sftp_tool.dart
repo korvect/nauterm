@@ -175,6 +175,8 @@ class _TerminalSftpBrowser extends StatefulWidget {
     required this.favoritePaths,
     required this.onHome,
     required this.onSshDirectory,
+    required this.followSshDirectory,
+    required this.onFollowSshDirectory,
     required this.onBack,
     required this.onForward,
     required this.onPathEditRequested,
@@ -222,6 +224,8 @@ class _TerminalSftpBrowser extends StatefulWidget {
   final List<String> favoritePaths;
   final VoidCallback onHome;
   final VoidCallback? onSshDirectory;
+  final bool followSshDirectory;
+  final VoidCallback? onFollowSshDirectory;
   final VoidCallback onBack;
   final VoidCallback onForward;
   final VoidCallback onPathEditRequested;
@@ -499,6 +503,22 @@ class _TerminalSftpBrowserState extends State<_TerminalSftpBrowser> {
                       icon: LucideIcons.folderInput,
                       colors: colors,
                       onPressed: widget.loading ? null : widget.onSshDirectory,
+                    ),
+                    _TerminalSftpIconButton(
+                      key: const ValueKey('terminal-sftp-follow-ssh-directory'),
+                      tooltip: widget.followSshDirectory
+                          ? tr(
+                              'sftp.action.stopFollowingSshDirectory',
+                              fallback: 'Stop following SSH current directory',
+                            )
+                          : tr(
+                              'sftp.action.followSshDirectory',
+                              fallback: 'Follow SSH current directory',
+                            ),
+                      icon: LucideIcons.link,
+                      colors: colors,
+                      selected: widget.followSshDirectory,
+                      onPressed: widget.onFollowSshDirectory,
                     ),
                     _TerminalSftpIconButton(
                       tooltip: tr('common.action.back', fallback: 'Back'),

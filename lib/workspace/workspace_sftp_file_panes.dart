@@ -41,6 +41,8 @@ class _SftpLocalPane extends StatelessWidget {
     this.onSshSelected,
     this.showSshDirectory = false,
     this.onSshDirectory,
+    this.followSshDirectory = false,
+    this.onFollowSshDirectory,
     required this.tasks,
     required this.taskListOpen,
     required this.favoriteListOpen,
@@ -96,6 +98,8 @@ class _SftpLocalPane extends StatelessWidget {
   final VoidCallback? onSshSelected;
   final bool showSshDirectory;
   final VoidCallback? onSshDirectory;
+  final bool followSshDirectory;
+  final VoidCallback? onFollowSshDirectory;
   final List<_SftpTask> tasks;
   final bool taskListOpen;
   final bool favoriteListOpen;
@@ -188,6 +192,8 @@ class _SftpLocalPane extends StatelessWidget {
                     onHome: onHome,
                     showSshDirectory: showSshDirectory,
                     onSshDirectory: onSshDirectory,
+                    followSshDirectory: followSshDirectory,
+                    onFollowSshDirectory: onFollowSshDirectory,
                     onBack: onBack,
                     onForward: onForward,
                     onEditRequested: onPathEditRequested,
@@ -712,6 +718,8 @@ class _SftpPathBar extends StatelessWidget {
   const _SftpPathBar({
     this.showSshDirectory = false,
     this.onSshDirectory,
+    this.followSshDirectory = false,
+    this.onFollowSshDirectory,
     required this.remote,
     required this.path,
     required this.controller,
@@ -741,6 +749,8 @@ class _SftpPathBar extends StatelessWidget {
   final bool showSshDirectory;
   final VoidCallback? onSshDirectory;
   final TextEditingController controller;
+  final bool followSshDirectory;
+  final VoidCallback? onFollowSshDirectory;
   final FocusNode focusNode;
   final bool editing;
   final bool canGoBack;
@@ -788,6 +798,22 @@ class _SftpPathBar extends StatelessWidget {
                   icon: LucideIcons.folderInput,
                   enabled: onSshDirectory != null,
                   onTap: () => onSshDirectory?.call(),
+                ),
+                const SizedBox(width: 10),
+                _SftpPathNavButton(
+                  tooltip: followSshDirectory
+                      ? tr(
+                          'sftp.action.stopFollowingSshDirectory',
+                          fallback: 'Stop following SSH current directory',
+                        )
+                      : tr(
+                          'sftp.action.followSshDirectory',
+                          fallback: 'Follow SSH current directory',
+                        ),
+                  icon: LucideIcons.link,
+                  selected: followSshDirectory,
+                  enabled: onFollowSshDirectory != null,
+                  onTap: () => onFollowSshDirectory?.call(),
                 ),
               ],
               SizedBox(width: 10),
@@ -1141,12 +1167,14 @@ class _SftpPathNavButton extends StatelessWidget {
     required this.icon,
     required this.enabled,
     required this.onTap,
+    this.selected = false,
   });
 
   final String tooltip;
   final IconData icon;
   final bool enabled;
   final VoidCallback onTap;
+  final bool selected;
 
   @override
   Widget build(BuildContext context) {
@@ -1158,7 +1186,7 @@ class _SftpPathNavButton extends StatelessWidget {
         child: Icon(
           icon,
           size: 18,
-          color: enabled ? _text : const Color(0xffb9c9ce),
+          color: enabled ? (selected ? _blue : _text) : const Color(0xffb9c9ce),
         ),
       ),
     );

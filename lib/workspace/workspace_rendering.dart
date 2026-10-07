@@ -636,13 +636,10 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
       remoteOnly: true,
       sshEditorController: sshView?.controller,
       sshWorkingDirectoryResolver: () {
-        if (sshView == null || sshView.controller.sshProfile == null)
+        if (sshView == null || sshView.controller.sshProfile == null) {
           return null;
-        return _promptWorkingDirectoryFromSnapshot(
-              sshView.controller.snapshot,
-              requireLocalDirectory: false,
-              expandHome: false,
-            ) ??
+        }
+        return sshView.controller.workingDirectory ??
             _sshWorkingDirectories[sshView.id];
       },
       onSshEditorOpened: () => _showTerminalTabSsh(tab.id),
@@ -1186,11 +1183,7 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
                             terminalController?.sshProfile == null) {
                           return null;
                         }
-                        return _promptWorkingDirectoryFromSnapshot(
-                              terminalController!.snapshot,
-                              requireLocalDirectory: false,
-                              expandHome: false,
-                            ) ??
+                        return terminalController!.workingDirectory ??
                             _sshWorkingDirectories[paneId];
                       },
                       createHostRequest: _sftpConnectRequestForHostItem,

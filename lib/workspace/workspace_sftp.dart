@@ -122,6 +122,8 @@ class _SftpRemotePaneSession {
   bool showHiddenFiles = sftpShowHiddenFiles;
   bool editingPath = false;
   bool selectingHost = false;
+  bool followSshDirectory = false;
+  String? followedSshDirectory;
   final List<String> favoritePaths = <String>[];
   int loadGeneration = 0;
   _SftpListingCancellation? listingCancellation;
@@ -494,6 +496,8 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
   late final Future<void> Function() _shutdownHook;
   bool _shuttingDown = false;
   Future<void>? _shutdownFuture;
+  bool _sshDirectoryFollowScheduled = false;
+  bool _sshDirectoryFollowStopped = false;
 
   TextEditingController get _hostSearchController =>
       _controller.hostSearchController;
@@ -549,6 +553,9 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     _workspaceShutdownHooks.add(_shutdownHook);
     _controllerKey = widget.sessionId;
     _controller = ref.read(_sftpPaneControllerProvider(_controllerKey));
+    widget.sshEditorController?.workingDirectoryListenable.addListener(
+      _scheduleSshDirectoryFollow,
+    );
     NautermFileDropChannel.instance.ensureInitialized();
     _syncManagedFileDrop();
     _fileDropSubscription = NautermFileDropChannel.instance.events.listen(
@@ -559,6 +566,7 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
         return;
       }
       _loadInitialState();
+      _scheduleSshDirectoryFollow();
     });
   }
 
@@ -579,6 +587,17 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
   @override
   void didUpdateWidget(covariant _SftpPane oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.sshEditorController != oldWidget.sshEditorController) {
+      oldWidget.sshEditorController?.workingDirectoryListenable.removeListener(
+        _scheduleSshDirectoryFollow,
+      );
+      widget.sshEditorController?.workingDirectoryListenable.addListener(
+        _scheduleSshDirectoryFollow,
+      );
+      _leftRemote.followedSshDirectory = null;
+      _rightRemote.followedSshDirectory = null;
+    }
+    _scheduleSshDirectoryFollow();
     if (widget.active != oldWidget.active ||
         widget.manageFileDrop != oldWidget.manageFileDrop) {
       _syncManagedFileDrop();
@@ -655,6 +674,10 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
 
   @override
   void dispose() {
+    _sshDirectoryFollowStopped = true;
+    widget.sshEditorController?.workingDirectoryListenable.removeListener(
+      _scheduleSshDirectoryFollow,
+    );
     _workspaceShutdownHooks.remove(_shutdownHook);
     unawaited(_fileDropSubscription?.cancel());
     _leftRemote.listingCancellation?.cancel();
@@ -678,6 +701,10 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
   }
 
   Future<void> _performFlushAndClose() async {
+    _sshDirectoryFollowStopped = true;
+    widget.sshEditorController?.workingDirectoryListenable.removeListener(
+      _scheduleSshDirectoryFollow,
+    );
     await _fileDropSubscription?.cancel();
     _fileDropSubscription = null;
     _leftRemote.listingCancellation?.cancel();
@@ -882,6 +909,8 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
           _rightPaneEndpoint = _SftpPaneEndpoint.local;
       }
       session.selectingHost = false;
+      session.followSshDirectory = false;
+      session.followedSshDirectory = null;
       _clearRemoteSelection(session);
     });
   }
@@ -968,6 +997,8 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     _setSftpState(() {
       session.selectingHost = false;
       session.connection = _SftpConnectionState.connecting(request.host);
+      session.followSshDirectory = false;
+      session.followedSshDirectory = null;
       session.path = '~';
       session.pathController.text = session.path;
       session.entries = const [];
@@ -1167,6 +1198,7 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     bool recordHistory = true,
     bool clearForward = true,
     bool initial = false,
+    bool fromSshFollow = false,
   }) async {
     final generation = ++session.loadGeneration;
     session.listingCancellation?.cancel();
@@ -1174,6 +1206,10 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     session.listingCancellation = cancellation;
     final normalized = _normalizeRemoteSftpPath(path, base: session.path);
     _setSftpState(() {
+      if (!initial && !fromSshFollow && normalized != session.path) {
+        session.followSshDirectory = false;
+        session.followedSshDirectory = null;
+      }
       session.loading = true;
       session.loadError = null;
       session.editingPath = false;
@@ -1260,6 +1296,7 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
       if (identical(session.listingCancellation, cancellation)) {
         session.listingCancellation = null;
       }
+      _scheduleSshDirectoryFollow();
     }
   }
 
@@ -1396,6 +1433,70 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
       return;
     }
     unawaited(_loadRemotePath(session, auth, directory, host: connection.host));
+  }
+
+  void _toggleSshDirectoryFollow(_SftpRemotePaneSession session) {
+    if (!session.followSshDirectory &&
+        !_remoteSessionSharesSshEditor(session)) {
+      return;
+    }
+    _setSftpState(() {
+      session.followSshDirectory = !session.followSshDirectory;
+      session.followedSshDirectory = null;
+    });
+    _scheduleSshDirectoryFollow();
+  }
+
+  void _scheduleSshDirectoryFollow() {
+    if (!mounted ||
+        _shuttingDown ||
+        _sshDirectoryFollowStopped ||
+        !widget.active ||
+        _sshDirectoryFollowScheduled ||
+        !(_leftRemote.followSshDirectory || _rightRemote.followSshDirectory)) {
+      return;
+    }
+    _sshDirectoryFollowScheduled = true;
+    scheduleMicrotask(() {
+      _sshDirectoryFollowScheduled = false;
+      if (!mounted ||
+          _shuttingDown ||
+          _sshDirectoryFollowStopped ||
+          !widget.active) {
+        return;
+      }
+      for (final session in [_leftRemote, _rightRemote]) {
+        if (!session.followSshDirectory ||
+            session.loading ||
+            session.editingPath ||
+            session.selectingHost ||
+            !_remoteSessionSharesSshEditor(session)) {
+          continue;
+        }
+        final directory = _emptyToNull(
+          widget.sshWorkingDirectoryResolver?.call(),
+        );
+        if (directory == null || directory == session.followedSshDirectory) {
+          continue;
+        }
+        session.followedSshDirectory = directory;
+        if (_normalizeRemoteSftpPath(directory, base: session.path) ==
+            session.path) {
+          continue;
+        }
+        final connection = session.connection!;
+        unawaited(
+          _loadRemotePath(
+            session,
+            connection.auth!,
+            directory,
+            host: connection.host,
+            recordHistory: false,
+            fromSshFollow: true,
+          ),
+        );
+      }
+    });
   }
 
   void _goRemoteForward(_SftpRemotePaneSession session) {
@@ -4947,6 +5048,12 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
                   widget.sshWorkingDirectoryResolver != null
               ? () => _goRemoteSshDirectory(session)
               : null,
+          followSshDirectory: session.followSshDirectory,
+          onFollowSshDirectory:
+              session.followSshDirectory ||
+                  _remoteSessionSharesSshEditor(session)
+              ? () => _toggleSshDirectoryFollow(session)
+              : null,
           onBack: () => _goRemoteBack(session),
           onForward: () => _goRemoteForward(session),
           onPathEditRequested: () {
@@ -4963,6 +5070,7 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
               session.editingPath = false;
               session.pathController.text = session.path;
             });
+            _scheduleSshDirectoryFollow();
           },
           onSelectionChanged: (selection) {
             _setSftpState(() => _setRemoteSelection(session, selection));
@@ -5034,6 +5142,11 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
         sshEditorAvailable: _remoteSessionSharesSshEditor(session),
         onSshSelected: widget.onSshSelected,
         showSshDirectory: widget.sshWorkingDirectoryResolver != null,
+        followSshDirectory: session.followSshDirectory,
+        onFollowSshDirectory:
+            session.followSshDirectory || _remoteSessionSharesSshEditor(session)
+            ? () => _toggleSshDirectoryFollow(session)
+            : null,
         onSshDirectory:
             !session.loading && _remoteSessionSharesSshEditor(session)
             ? () => _goRemoteSshDirectory(session)
@@ -5064,6 +5177,7 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
             session.editingPath = false;
             session.pathController.text = session.path;
           });
+          _scheduleSshDirectoryFollow();
         },
         onSelectionChanged: (selection) {
           _setSftpState(() {
