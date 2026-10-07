@@ -515,14 +515,13 @@ class _TerminalSftpBrowserState extends State<_TerminalSftpBrowser> {
                     const SizedBox(width: 2),
                     Expanded(
                       child: widget.editingPath
-                          ? SizedBox.expand(
+                          ? Center(
                               child: TextField(
                                 controller: widget.pathController,
                                 focusNode: widget.pathFocusNode,
                                 autofocus: true,
-                                expands: true,
-                                minLines: null,
-                                maxLines: null,
+                                maxLines: 1,
+                                textInputAction: TextInputAction.done,
                                 textAlignVertical: TextAlignVertical.center,
                                 onSubmitted: widget.onPathSubmitted,
                                 onTapOutside: (_) =>
@@ -530,15 +529,19 @@ class _TerminalSftpBrowserState extends State<_TerminalSftpBrowser> {
                                 style: TextStyle(
                                   color: colors.foreground,
                                   fontSize: 11.5,
-                                  height: 1,
                                   fontFamily: 'monospace',
                                   letterSpacing: 0,
                                 ),
                                 cursorColor: colors.accent,
                                 decoration: const InputDecoration(
-                                  isCollapsed: true,
+                                  isDense: true,
+                                  filled: false,
                                   border: InputBorder.none,
-                                  contentPadding: EdgeInsets.zero,
+                                  enabledBorder: InputBorder.none,
+                                  focusedBorder: InputBorder.none,
+                                  contentPadding: EdgeInsets.symmetric(
+                                    vertical: 6,
+                                  ),
                                 ),
                               ),
                             )
@@ -554,7 +557,6 @@ class _TerminalSftpBrowserState extends State<_TerminalSftpBrowser> {
                                   style: TextStyle(
                                     color: colors.foreground,
                                     fontSize: 11.5,
-                                    height: 1,
                                     fontFamily: 'monospace',
                                     letterSpacing: 0,
                                   ),
