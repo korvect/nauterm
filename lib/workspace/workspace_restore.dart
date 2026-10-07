@@ -27,8 +27,12 @@ extension _NautermWorkspaceRestore on _NautermWorkspaceState {
 
     final previous = await _previousWorkspaceState;
     if (!mounted || _isClosing) return;
-    final restore = switch (previous?.launchAction) {
-      WorkspaceRestoreLaunchAction.ask => await _askToRestoreUnexpectedExit(),
+    final restore = switch (previous?.launchActionFor(
+      workspaceRestoreBehavior,
+    )) {
+      WorkspaceRestoreLaunchAction.ask => await _askToRestoreWorkspace(
+        unexpectedExit: previous?.cleanShutdown == false,
+      ),
       WorkspaceRestoreLaunchAction.restore => true,
       WorkspaceRestoreLaunchAction.none || null => false,
     };
@@ -47,11 +51,27 @@ extension _NautermWorkspaceRestore on _NautermWorkspaceState {
     await _saveWorkspaceState(cleanShutdown: false, restoreOnNextLaunch: false);
   }
 
-  Future<bool> _askToRestoreUnexpectedExit() async {
-    final result = await _showWorkspaceDialog<bool>(
-      builder: (context) => const _WorkspaceRecoveryDialog(),
+  Future<bool> _askToRestoreWorkspace({required bool unexpectedExit}) async {
+    final result = await _showWorkspaceDialog<_WorkspaceRecoveryDecision>(
+      builder: (context) =>
+          _WorkspaceRecoveryDialog(unexpectedExit: unexpectedExit),
     );
-    return result ?? false;
+    if (result == null || !result.restore) return false;
+    if (result.alwaysRestore) {
+      workspaceRestoreBehavior = WorkspaceRestoreBehavior.always;
+      try {
+        await NautermConfigStore(_workspaceStateStore!.paths)
+            .saveRuntimeSettings(currentNautermRuntimeSettings());
+      } on Object catch (error, stackTrace) {
+        NautermLog.warning(
+          'workspace-restore',
+          'Unable to save restore preference.',
+          error: error,
+          stackTrace: stackTrace,
+        );
+      }
+    }
+    return true;
   }
 
   Future<void> _saveRestorationStateForClose() async {

@@ -167,45 +167,53 @@ class _WorkspaceConfirmDialog extends StatelessWidget {
   }
 }
 
-class _WorkspaceExitDecision {
-  const _WorkspaceExitDecision({required this.restoreOnNextLaunch});
-
-  final bool restoreOnNextLaunch;
-}
-
-class _WorkspaceExitDialog extends StatefulWidget {
-  const _WorkspaceExitDialog({
-    required this.title,
-    required this.message,
-    required this.confirmLabel,
-    required this.showRestoreOption,
-    required this.restoreOnNextLaunch,
+class _WorkspaceRecoveryDecision {
+  const _WorkspaceRecoveryDecision({
+    required this.restore,
+    this.alwaysRestore = false,
   });
 
-  final String title;
-  final String message;
-  final String confirmLabel;
-  final bool showRestoreOption;
-  final bool restoreOnNextLaunch;
-
-  @override
-  State<_WorkspaceExitDialog> createState() => _WorkspaceExitDialogState();
+  final bool restore;
+  final bool alwaysRestore;
 }
 
-class _WorkspaceExitDialogState extends State<_WorkspaceExitDialog> {
-  late bool _restoreOnNextLaunch = widget.restoreOnNextLaunch;
+class _WorkspaceRecoveryDialog extends StatefulWidget {
+  const _WorkspaceRecoveryDialog({required this.unexpectedExit});
+
+  final bool unexpectedExit;
+
+  @override
+  State<_WorkspaceRecoveryDialog> createState() =>
+      _WorkspaceRecoveryDialogState();
+}
+
+class _WorkspaceRecoveryDialogState extends State<_WorkspaceRecoveryDialog> {
+  bool _alwaysRestore = false;
 
   @override
   Widget build(BuildContext context) {
     return _WorkspaceDialogFrame(
       width: 430,
-      title: Text(widget.title),
+      title: Text(
+        widget.unexpectedExit
+            ? context.tr(
+                'workspace.restore.unexpectedExit.title',
+                fallback: 'Nauterm closed unexpectedly',
+              )
+            : context.tr(
+                'workspace.restore.startup.title',
+                fallback: 'Restore previous workspace?',
+              ),
+      ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            widget.message,
+            context.tr(
+              'workspace.restore.unexpectedExit.description',
+              fallback: 'Restore your previous workspace? Terminals will reconnect and active port forwards will restart.',
+            ),
             style: TextStyle(
               color: _text,
               fontSize: NautermFontSizes.labelLarge,
@@ -214,109 +222,35 @@ class _WorkspaceExitDialogState extends State<_WorkspaceExitDialog> {
               letterSpacing: 0,
             ),
           ),
-          if (widget.showRestoreOption) ...[
-            SizedBox(height: 16),
+          if (!widget.unexpectedExit) ...[
+            const SizedBox(height: 16),
             InkWell(
               borderRadius: BorderRadius.circular(7),
-              onTap: () =>
-                  setState(() => _restoreOnNextLaunch = !_restoreOnNextLaunch),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 3),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Checkbox(
-                      value: _restoreOnNextLaunch,
-                      onChanged: (value) =>
-                          setState(() => _restoreOnNextLaunch = value ?? false),
-                      activeColor: _blue,
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      visualDensity: VisualDensity.compact,
-                    ),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            context.tr(
-                              'workspace.restore.nextLaunch.label',
-                              fallback: 'Restore workspace on next launch',
-                            ),
-                            style: TextStyle(
-                              color: _text,
-                              fontSize: NautermFontSizes.labelLarge,
-                              fontWeight: NautermFontWeights.medium,
-                              height: 1.3,
-                            ),
-                          ),
-                          SizedBox(height: 2),
-                          Text(
-                            context.tr(
-                              'workspace.restore.nextLaunch.description',
-                              fallback: 'Recreates workspaces and split panes, reconnects terminals, and restarts active port forwards.',
-                            ),
-                            style: TextStyle(
-                              color: _mutedText,
-                              fontSize: NautermFontSizes.labelMedium,
-                              fontWeight: NautermFontWeights.regular,
-                              height: 1.35,
-                            ),
-                          ),
-                        ],
+              onTap: () => setState(() => _alwaysRestore = !_alwaysRestore),
+              child: Row(
+                children: [
+                  Checkbox(
+                    value: _alwaysRestore,
+                    onChanged: (value) =>
+                        setState(() => _alwaysRestore = value ?? false),
+                    activeColor: _blue,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      context.tr(
+                        'workspace.restore.dontAskAgain',
+                        fallback: "Don't ask again",
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ],
         ],
-      ),
-      actions: [
-        _WorkspaceButton(
-          label: 'Cancel',
-          variant: _WorkspaceButtonVariant.text,
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        _WorkspaceButton(
-          label: widget.confirmLabel,
-          type: _WorkspaceButtonType.error,
-          variant: _WorkspaceButtonVariant.solid,
-          onPressed: () => Navigator.of(context).pop(
-            _WorkspaceExitDecision(restoreOnNextLaunch: _restoreOnNextLaunch),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _WorkspaceRecoveryDialog extends StatelessWidget {
-  const _WorkspaceRecoveryDialog();
-
-  @override
-  Widget build(BuildContext context) {
-    return _WorkspaceDialogFrame(
-      width: 430,
-      title: Text(
-        context.tr(
-          'workspace.restore.unexpectedExit.title',
-          fallback: 'Nauterm closed unexpectedly',
-        ),
-      ),
-      content: Text(
-        context.tr(
-          'workspace.restore.unexpectedExit.description',
-          fallback: 'Restore your previous workspace? Terminals will reconnect and active port forwards will restart.',
-        ),
-        style: TextStyle(
-          color: _text,
-          fontSize: NautermFontSizes.labelLarge,
-          fontWeight: NautermFontWeights.regular,
-          height: 1.35,
-          letterSpacing: 0,
-        ),
       ),
       actions: [
         _WorkspaceButton(
@@ -325,7 +259,9 @@ class _WorkspaceRecoveryDialog extends StatelessWidget {
             fallback: 'Start Fresh',
           ),
           variant: _WorkspaceButtonVariant.text,
-          onPressed: () => Navigator.of(context).pop(false),
+          onPressed: () =>
+              Navigator.of(context)
+                  .pop(const _WorkspaceRecoveryDecision(restore: false)),
         ),
         _WorkspaceButton(
           label: context.tr(
@@ -334,7 +270,12 @@ class _WorkspaceRecoveryDialog extends StatelessWidget {
           ),
           type: _WorkspaceButtonType.primary,
           variant: _WorkspaceButtonVariant.solid,
-          onPressed: () => Navigator.of(context).pop(true),
+          onPressed: () => Navigator.of(context).pop(
+            _WorkspaceRecoveryDecision(
+              restore: true,
+              alwaysRestore: _alwaysRestore,
+            ),
+          ),
         ),
       ],
     );

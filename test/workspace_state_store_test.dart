@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nauterm/data/nauterm_paths.dart';
+import 'package:nauterm/terminal/terminal_config.dart';
 import 'package:nauterm/workspace/workspace_state_store.dart';
 
 void main() {
@@ -166,6 +167,44 @@ void main() {
       WorkspaceRestoreLaunchAction.none,
     );
   });
+
+  test(
+    'startup preference decides how a clean recovery candidate is handled',
+    () {
+      final snapshot = _restorableSnapshot(
+        cleanShutdown: true,
+        restoreOnNextLaunch: true,
+      );
+      expect(
+        snapshot.launchActionFor(WorkspaceRestoreBehavior.ask),
+        WorkspaceRestoreLaunchAction.ask,
+      );
+      expect(
+        snapshot.launchActionFor(WorkspaceRestoreBehavior.always),
+        WorkspaceRestoreLaunchAction.restore,
+      );
+      expect(
+        snapshot.launchActionFor(WorkspaceRestoreBehavior.never),
+        WorkspaceRestoreLaunchAction.none,
+      );
+      for (final behavior in WorkspaceRestoreBehavior.values) {
+        expect(
+          snapshot.copyWith(cleanShutdown: false).launchActionFor(behavior),
+          WorkspaceRestoreLaunchAction.ask,
+        );
+        expect(
+          NautermWorkspaceStateSnapshot.running().launchActionFor(behavior),
+          WorkspaceRestoreLaunchAction.none,
+        );
+        expect(
+          snapshot
+              .copyWith(restoreOnNextLaunch: false)
+              .launchActionFor(behavior),
+          WorkspaceRestoreLaunchAction.none,
+        );
+      }
+    },
+  );
 
   test('beginRun preserves a clean snapshot selected for restore', () async {
     await store.save(

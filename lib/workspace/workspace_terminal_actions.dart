@@ -693,23 +693,23 @@ extension _NautermWorkspaceTerminalActions on _NautermWorkspaceState {
         args: {'tabs': tabs, 'forwards': forwards},
       ),
     };
-    final behavior = workspaceRestoreBehavior;
-    final result = await _showWorkspaceDialog<_WorkspaceExitDecision>(
-      builder: (context) => _WorkspaceExitDialog(
-        title: context.tr(
-          closeWindow
-              ? 'workspace.dialog.closeWindow'
-              : 'workspace.dialog.quitNauterm',
-          fallback: closeWindow ? 'Close window?' : 'Quit Nauterm?',
+    final result = await _showWorkspaceDialog<bool>(
+      builder: (context) => _WorkspaceConfirmDialog(
+        title: Text(
+          context.tr(
+            closeWindow
+                ? 'workspace.dialog.closeWindow'
+                : 'workspace.dialog.quitNauterm',
+            fallback: closeWindow ? 'Close window?' : 'Quit Nauterm?',
+          ),
         ),
         message: message,
         confirmLabel: closeWindow ? 'Close' : 'Quit',
-        showRestoreOption: behavior == WorkspaceRestoreBehavior.ask,
-        restoreOnNextLaunch: behavior == WorkspaceRestoreBehavior.always,
       ),
     );
-    if (result == null) return false;
-    _restoreOnShutdown = result.restoreOnNextLaunch;
+    if (result != true) return false;
+    _restoreOnShutdown =
+        workspaceRestoreBehavior != WorkspaceRestoreBehavior.never;
     return true;
   }
 

@@ -223,7 +223,7 @@ Widget _buildSettingsGeneralContent(_SettingsPanelState state) {
                             value: WorkspaceRestoreBehavior.ask,
                             label: state.context.tr(
                               'settings.general.workspaceRestore.ask',
-                              fallback: 'Ask When Quitting',
+                              fallback: 'Ask on Startup',
                             ),
                           ),
                           _SettingsRadioOption(

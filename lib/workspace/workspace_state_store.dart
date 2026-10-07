@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../data/nauterm_paths.dart';
+import '../terminal/terminal_config.dart' show WorkspaceRestoreBehavior;
 
 const int workspaceStateSchemaVersion = 1;
 
@@ -299,6 +300,19 @@ class NautermWorkspaceStateSnapshot {
     return restoreOnNextLaunch
         ? WorkspaceRestoreLaunchAction.restore
         : WorkspaceRestoreLaunchAction.none;
+  }
+
+  WorkspaceRestoreLaunchAction launchActionFor(
+    WorkspaceRestoreBehavior behavior,
+  ) {
+    if (launchAction != WorkspaceRestoreLaunchAction.restore) {
+      return launchAction;
+    }
+    return switch (behavior) {
+      WorkspaceRestoreBehavior.ask => WorkspaceRestoreLaunchAction.ask,
+      WorkspaceRestoreBehavior.always => WorkspaceRestoreLaunchAction.restore,
+      WorkspaceRestoreBehavior.never => WorkspaceRestoreLaunchAction.none,
+    };
   }
 
   NautermWorkspaceStateSnapshot copyWith({

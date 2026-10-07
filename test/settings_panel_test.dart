@@ -226,7 +226,7 @@ void main() {
     await tester.ensureVisible(group);
     await tester.pumpAndSettle();
     expect(find.text('Restore Workspace on Startup'), findsOneWidget);
-    expect(find.text('Ask When Quitting'), findsOneWidget);
+    expect(find.text('Ask on Startup'), findsOneWidget);
     expect(
       find.descendant(
         of: group,
@@ -245,7 +245,7 @@ void main() {
     final groupLeft = tester.getTopLeft(group).dx;
     final askLabelLeft = tester
         .getTopLeft(
-          find.descendant(of: group, matching: find.text('Ask When Quitting')),
+          find.descendant(of: group, matching: find.text('Ask on Startup')),
         )
         .dx;
     expect(askLabelLeft - groupLeft, lessThan(40));
