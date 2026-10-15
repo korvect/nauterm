@@ -322,6 +322,14 @@ class _LinuxWindowControls extends StatelessWidget {
       _ => null,
     };
 
+    Widget maximizeButtonArea(Widget button) {
+      if (!isWindows || regularWindowController == null) return button;
+      return MaximizeButtonArea(
+        window: regularWindowController.nativeWindow,
+        child: button,
+      );
+    }
+
     Widget buildControls(bool isMaximized) {
       return SizedBox(
         width: _linuxWindowControlsWidth,
@@ -341,33 +349,35 @@ class _LinuxWindowControls extends StatelessWidget {
                     ? null
                     : () => regularWindowController.setMinimized(true),
               ),
-              _LinuxWindowControlButton(
-                tooltip: isMaximized ? 'Restore' : 'Maximize',
-                icon: isMaximized
-                    ? SvgPicture.asset(
-                        'assets/icons/ui/window-restore.svg',
-                        key: const ValueKey('window-restore-icon'),
-                        width: 15,
-                        height: 15,
-                        colorFilter: ColorFilter.mode(
-                          foreground,
-                          BlendMode.srcIn,
+              maximizeButtonArea(
+                _LinuxWindowControlButton(
+                  tooltip: isMaximized ? 'Restore' : 'Maximize',
+                  icon: isMaximized
+                      ? SvgPicture.asset(
+                          'assets/icons/ui/window-restore.svg',
+                          key: const ValueKey('window-restore-icon'),
+                          width: 15,
+                          height: 15,
+                          colorFilter: ColorFilter.mode(
+                            foreground,
+                            BlendMode.srcIn,
+                          ),
+                        )
+                      : const Icon(
+                          LucideIcons.square,
+                          key: ValueKey('window-maximize-icon'),
+                          size: 13,
                         ),
-                      )
-                    : const Icon(
-                        LucideIcons.square,
-                        key: ValueKey('window-maximize-icon'),
-                        size: 13,
-                      ),
-                foreground: foreground,
-                onPressed: regularWindowController == null
-                    ? null
-                    : () {
-                        regularWindowController.setMaximized(!isMaximized);
-                        if (isWindows) {
-                          hideMainWindowTitleBar();
-                        }
-                      },
+                  foreground: foreground,
+                  onPressed: regularWindowController == null
+                      ? null
+                      : () {
+                          regularWindowController.setMaximized(!isMaximized);
+                          if (isWindows) {
+                            hideMainWindowTitleBar();
+                          }
+                        },
+                ),
               ),
               _LinuxWindowControlButton(
                 tooltip: tr('common.action.close', fallback: 'Close'),

@@ -112,6 +112,19 @@ void configureNativeWindowing() {
     }
     _scheduleMainWindowGeometryPersist();
   });
+  WindowManager.instance.addListener((event) {
+    if (event.windowId != _mainWindowId) return;
+    switch (event) {
+      case WindowEnteredFullScreenEvent():
+        fullscreenNotifier.value = true;
+      case WindowExitedFullScreenEvent():
+        fullscreenNotifier.value = false;
+        hideMainWindowTitleBar();
+        _scheduleMainWindowGeometryPersist();
+      default:
+        break;
+    }
+  });
 
   WindowManager.instance.setWillShowHook((windowId) {
     final window = WindowManager.instance.get(windowId);
@@ -166,9 +179,6 @@ Future<Object?> _handleAppMenuMethodCall(MethodCall call) async {
         await persistMainWindowGeometry();
       }
       return shouldQuit;
-    case 'fullscreenChanged':
-      fullscreenNotifier.value = call.arguments as bool? ?? false;
-      return null;
     default:
       throw MissingPluginException('Unknown app menu method: ${call.method}');
   }
@@ -274,6 +284,7 @@ void forgetMainWindow() {
   _windowGeometryPersistTimer = null;
   _mainWindowId = null;
   _mainWindowMaximized = false;
+  fullscreenNotifier.value = false;
 }
 
 void hideSettingsWindow() {

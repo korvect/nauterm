@@ -18,6 +18,9 @@ import 'package:flutter_riverpod/legacy.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:nativeapi/nativeapi.dart' show UrlOpener;
+import 'package:nativeapi_flutter/nativeapi_flutter.dart'
+    show MaximizeButtonArea;
+import 'package:nativeapi_flutter/windowing.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../ai/ai_client.dart';

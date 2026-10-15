@@ -2,6 +2,7 @@
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/src/widgets/_window.dart';
 import 'package:flutter/src/widgets/_window_linux.dart';
@@ -113,7 +114,11 @@ class _MainWindowState extends State<MainWindow> with WidgetsBindingObserver {
     startMainWindowDrag();
   }
 
-  void _toggleWindowMaximized() {
+  void _handleTitleBarDoubleClick() {
+    if (defaultTargetPlatform == TargetPlatform.macOS) {
+      _windowController.nativeWindow?.performTitleBarDoubleClick();
+      return;
+    }
     _windowController.setMaximized(!_windowController.isMaximized);
     hideMainWindowTitleBar();
   }
@@ -129,7 +134,7 @@ class _MainWindowState extends State<MainWindow> with WidgetsBindingObserver {
                   showSettingsWindow(page: NautermSettingsPage.terminal),
               workspaceController: widget.workspaceController,
               onStartWindowDrag: _startWindowDrag,
-              onToggleWindowMaximized: _toggleWindowMaximized,
+              onToggleWindowMaximized: _handleTitleBarDoubleClick,
             )
           : const SizedBox.shrink(),
     );

@@ -136,7 +136,7 @@ class AppDelegate: FlutterAppDelegate {
                    NSWindow.didResignMainNotification, NSWindow.didMiniaturizeNotification,
                    NSWindow.didDeminiaturizeNotification, NSWindow.didExposeNotification,
                    NSWindow.willExitFullScreenNotification,
-                   NSWindow.didExitFullScreenNotification, NSWindow.didEnterFullScreenNotification] {
+                   NSWindow.didExitFullScreenNotification] {
         NotificationCenter.default.addObserver(
           self, selector: #selector(handleWindowChromeChanged(_:)), name: name, object: nil
         )
@@ -309,7 +309,7 @@ class AppDelegate: FlutterAppDelegate {
   }
 
   // nativeapi owns the window style. Only Nauterm's 44-point traffic-light
-  // layout remains here; 0.4.0 does not expose control-button positioning.
+  // layout remains here; nativeapi does not expose control-button positioning.
   private func positionMainWindowControls() {
     guard !positioningWindowControls,
           let window = NSApp.windows.first(where: { $0.title == "Nauterm" }),
@@ -344,9 +344,6 @@ class AppDelegate: FlutterAppDelegate {
     positionMainWindowControls()
     if notification.name == NSWindow.didExitFullScreenNotification {
       container?.isHidden = false
-      appMenuChannel?.invokeMethod("fullscreenChanged", arguments: false)
-    } else if notification.name == NSWindow.didEnterFullScreenNotification {
-      appMenuChannel?.invokeMethod("fullscreenChanged", arguments: true)
     }
   }
 
