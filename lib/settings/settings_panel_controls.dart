@@ -34,18 +34,12 @@ class _SettingsSidebar extends StatelessWidget {
                   ? MainAxisAlignment.center
                   : MainAxisAlignment.start,
               children: [
-                Container(
+                Image.asset(
+                  'assets/icons/generated/png/app_icon_128.png',
                   width: 24,
                   height: 24,
-                  decoration: BoxDecoration(
-                    color: _primary,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Icon(
-                    LucideIcons.squareTerminal,
-                    color: Colors.white,
-                    size: 15,
-                  ),
+                  semanticLabel: 'Nauterm',
+                  excludeFromSemantics: !compact,
                 ),
                 if (!compact) ...[
                   SizedBox(width: 9),
