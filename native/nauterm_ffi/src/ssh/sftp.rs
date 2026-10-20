@@ -306,8 +306,10 @@ pub(super) async fn open_sudo_sftp_session(
 }
 
 fn sftp_client_config(transfer_threads: usize) -> SftpClientConfig {
+    let concurrency = transfer_threads.clamp(1, 32);
     SftpClientConfig {
-        max_concurrent_writes: transfer_threads.clamp(1, 32),
+        max_concurrent_reads: concurrency,
+        max_concurrent_writes: concurrency,
         ..SftpClientConfig::default()
     }
 }
@@ -1921,6 +1923,15 @@ async fn resolve_sftp_directory(sftp: &SftpSession, directory: &str) -> Result<S
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sftp_read_and_write_concurrency_follow_transfer_threads() {
+        for (threads, expected) in [(0, 1), (1, 1), (4, 4), (32, 32), (usize::MAX, 32)] {
+            let config = sftp_client_config(threads);
+            assert_eq!(config.max_concurrent_reads, expected);
+            assert_eq!(config.max_concurrent_writes, expected);
+        }
+    }
 
     fn test_directory(name: &str) -> PathBuf {
         std::env::temp_dir().join(format!(

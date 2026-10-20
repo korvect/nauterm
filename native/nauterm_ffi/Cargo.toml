@@ -52,7 +52,7 @@ encoding_rs = "0.8.35"
 futures-util = "0.3"
 rusqlite = { version = "0.40", features = ["bundled-sqlcipher", "backup"] }
 russh = { version = "0.64.1", default-features = false, features = ["ring"] }
-russh-sftp = "2.4"
+russh-sftp = "3.0.1"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 sha2 = "0.11"
