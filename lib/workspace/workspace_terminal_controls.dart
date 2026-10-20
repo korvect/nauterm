@@ -35,6 +35,7 @@ class _TerminalToolDropdownState<T> extends State<_TerminalToolDropdown<T>> {
   late String _committedLabel;
   VoidCallback? _dismissMenu;
   bool _hovered = false;
+  bool _focused = false;
   bool _open = false;
 
   String get _selectedLabel =>
@@ -164,8 +165,12 @@ class _TerminalToolDropdownState<T> extends State<_TerminalToolDropdown<T>> {
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
-      child: Container(
+      child: AnimatedContainer(
         key: _fieldKey,
+        duration: MediaQuery.disableAnimationsOf(context)
+            ? Duration.zero
+            : const Duration(milliseconds: 150),
+        curve: Curves.easeInOut,
         height: widget.outlined ? 34 : 26,
         decoration: BoxDecoration(
           color: _hovered || _open
@@ -175,7 +180,9 @@ class _TerminalToolDropdownState<T> extends State<_TerminalToolDropdown<T>> {
               : Colors.transparent,
           borderRadius: BorderRadius.circular(radius),
           border: widget.outlined
-              ? Border.all(color: _open ? colors.accent : colors.border)
+              ? Border.all(
+                  color: _open || _focused ? colors.accent : colors.border,
+                )
               : null,
         ),
         clipBehavior: Clip.antiAlias,
@@ -242,8 +249,13 @@ class _TerminalToolDropdownState<T> extends State<_TerminalToolDropdown<T>> {
         ),
       ),
     );
+    final focusableContent = Focus(
+      canRequestFocus: false,
+      onFocusChange: (focused) => setState(() => _focused = focused),
+      child: content,
+    );
     if (!widget.searchable) {
-      return content;
+      return focusableContent;
     }
     return Listener(
       behavior: HitTestBehavior.opaque,
@@ -252,7 +264,7 @@ class _TerminalToolDropdownState<T> extends State<_TerminalToolDropdown<T>> {
           unawaited(_showMenu());
         }
       },
-      child: content,
+      child: focusableContent,
     );
   }
 }

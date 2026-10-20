@@ -240,10 +240,12 @@ void main() {
     expect(find.byTooltip('Clear Serial Port'), findsOneWidget);
     expect(find.byTooltip('Clear Baud Rate').hitTestable(), findsNothing);
     expect(
-      find.descendant(
-        of: _suffixForLabel('Serial Port'),
-        matching: find.byIcon(Icons.keyboard_arrow_down_rounded),
-      ).hitTestable(),
+      find
+          .descendant(
+            of: _suffixForLabel('Serial Port'),
+            matching: find.byIcon(Icons.keyboard_arrow_down_rounded),
+          )
+          .hitTestable(),
       findsNothing,
     );
 

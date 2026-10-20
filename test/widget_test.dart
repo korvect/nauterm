@@ -1438,6 +1438,53 @@ void main() {
     );
     expect(find.byKey(const ValueKey('terminal-font-family')), findsOneWidget);
     expect(find.byKey(const ValueKey('terminal-font-size')), findsOneWidget);
+    final fontControl = find.byKey(const ValueKey('terminal-font-family'));
+    final fontSurface = find
+        .descendant(of: fontControl, matching: find.byType(AnimatedContainer))
+        .first;
+    Color renderedFontBorderColor() {
+      final decoration =
+          tester
+                  .widget<DecoratedBox>(
+                    find
+                        .descendant(
+                          of: fontSurface,
+                          matching: find.byType(DecoratedBox),
+                        )
+                        .first,
+                  )
+                  .decoration
+              as BoxDecoration;
+      return (decoration.border! as Border).top.color;
+    }
+
+    final idleBorderColor = renderedFontBorderColor();
+    final fontFocus = tester
+        .widget<EditableText>(
+          find.descendant(of: fontControl, matching: find.byType(EditableText)),
+        )
+        .focusNode;
+    fontFocus.requestFocus();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 75));
+    final focusedBorderColor =
+        ((tester.widget<AnimatedContainer>(fontSurface).decoration!
+                        as BoxDecoration)
+                    .border!
+                as Border)
+            .top
+            .color;
+    expect(renderedFontBorderColor(), isNot(idleBorderColor));
+    expect(renderedFontBorderColor(), isNot(focusedBorderColor));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(renderedFontBorderColor(), focusedBorderColor);
+    fontFocus.unfocus();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 75));
+    expect(renderedFontBorderColor(), isNot(idleBorderColor));
+    expect(renderedFontBorderColor(), isNot(focusedBorderColor));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(renderedFontBorderColor(), idleBorderColor);
     final terminalFontRect = tester.getRect(
       find.byKey(const ValueKey('terminal-font-family')),
     );
