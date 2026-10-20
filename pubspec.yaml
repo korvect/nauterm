@@ -45,7 +45,7 @@ dependencies:
   flutter_markdown_plus: ^1.0.7
   file_selector: ^1.1.0
   mime: ^2.1.0
-  lucide_icons_flutter: ^3.1.14+2
+  lucide_icons_flutter: ^4.0.0
   flutter_svg: ^2.3.0
   http: ^1.2.0
   openai_dart: ^11.0.1
