@@ -29,7 +29,7 @@ void main() {
     expect(find.text('Intermediate host *'), findsOneWidget);
     expect(find.text('Destination address *'), findsOneWidget);
     expect(find.text('Destination port number *'), findsOneWidget);
-    _expectSearchableSelect(tester, 'Intermediate host *');
+    _expectFilterableSelect(tester, 'Intermediate host *');
     _expectFieldsStacked(tester, 'Bind Address', 'Local port number *');
     _expectFieldsStacked(
       tester,
@@ -75,7 +75,7 @@ void main() {
     expect(find.text('Remote host *'), findsOneWidget);
     expect(find.text('Destination address *'), findsOneWidget);
     expect(find.text('Destination port number *'), findsOneWidget);
-    _expectSearchableSelect(tester, 'Remote host *');
+    _expectFilterableSelect(tester, 'Remote host *');
     _expectFieldsStacked(tester, 'Bind Address', 'Remote port number *');
     _expectFieldsStacked(
       tester,
@@ -109,7 +109,7 @@ void main() {
     expect(find.text('Intermediate host *'), findsOneWidget);
     expect(find.text('Destination address *'), findsNothing);
     expect(find.text('Destination port number *'), findsNothing);
-    _expectSearchableSelect(tester, 'Intermediate host *');
+    _expectFilterableSelect(tester, 'Intermediate host *');
     _expectFieldsStacked(tester, 'Bind Address', 'Local port number *');
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -219,7 +219,7 @@ void _expectFieldsStacked(WidgetTester tester, String first, String second) {
   );
 }
 
-void _expectSearchableSelect(WidgetTester tester, String label) {
+void _expectFilterableSelect(WidgetTester tester, String label) {
   expect(
     find.descendant(
       of: _decoratorForLabel(label),

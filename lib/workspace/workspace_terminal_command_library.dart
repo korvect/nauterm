@@ -359,7 +359,7 @@ class _TerminalSnippetEditorState extends State<_TerminalSnippetEditor> {
                         value: _packageId,
                         size: _WorkspaceControlSize.medium,
                         editable: true,
-                        searchable: true,
+                        filterable: true,
                         clearable: true,
                         colors: colors,
                         createLabel: widget.onCreatePackage == null

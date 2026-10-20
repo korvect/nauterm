@@ -10,7 +10,7 @@ class _TerminalToolDropdown<T> extends StatefulWidget {
     required this.fontWeight,
     required this.onChanged,
     this.outlined = false,
-    this.searchable = false,
+    this.filterable = false,
     this.customValueBuilder,
   });
 
@@ -21,7 +21,7 @@ class _TerminalToolDropdown<T> extends StatefulWidget {
   final FontWeight fontWeight;
   final ValueChanged<T> onChanged;
   final bool outlined;
-  final bool searchable;
+  final bool filterable;
   final T Function(String query)? customValueBuilder;
 
   @override
@@ -82,7 +82,7 @@ class _TerminalToolDropdownState<T> extends State<_TerminalToolDropdown<T>> {
     final anchor =
         fieldBox.localToGlobal(Offset.zero, ancestor: overlayBox) &
         fieldBox.size;
-    if (widget.searchable) {
+    if (widget.filterable) {
       _inputController.selection = TextSelection(
         baseOffset: 0,
         extentOffset: _inputController.text.length,
@@ -98,7 +98,7 @@ class _TerminalToolDropdownState<T> extends State<_TerminalToolDropdown<T>> {
       fontSize: widget.fontSize,
       fontWeight: widget.fontWeight,
       selectedLabel: _committedLabel,
-      searchable: widget.searchable,
+      filterable: widget.filterable,
       customValueBuilder: widget.customValueBuilder,
       searchController: _inputController,
       onOpened: (dismiss) => _dismissMenu = dismiss,
@@ -193,7 +193,7 @@ class _TerminalToolDropdownState<T> extends State<_TerminalToolDropdown<T>> {
             hoverColor: Colors.transparent,
             splashColor: colors.accent.withValues(alpha: 0.16),
             highlightColor: colors.accent.withValues(alpha: 0.08),
-            onTap: widget.searchable ? null : _showMenu,
+            onTap: widget.filterable ? null : _showMenu,
             child: Padding(
               padding: EdgeInsets.symmetric(
                 horizontal: widget.outlined ? 10 : 7,
@@ -201,7 +201,7 @@ class _TerminalToolDropdownState<T> extends State<_TerminalToolDropdown<T>> {
               child: Row(
                 children: [
                   Expanded(
-                    child: widget.searchable
+                    child: widget.filterable
                         ? TextField(
                             key: const ValueKey('terminal-tool-dropdown-input'),
                             controller: _inputController,
@@ -254,7 +254,7 @@ class _TerminalToolDropdownState<T> extends State<_TerminalToolDropdown<T>> {
       onFocusChange: (focused) => setState(() => _focused = focused),
       child: content,
     );
-    if (!widget.searchable) {
+    if (!widget.filterable) {
       return focusableContent;
     }
     return Listener(
@@ -278,7 +278,7 @@ Future<T?> _showTerminalToolDropdownMenu<T>({
   required double fontSize,
   required FontWeight fontWeight,
   required String selectedLabel,
-  bool searchable = false,
+  bool filterable = false,
   T Function(String query)? customValueBuilder,
   TextEditingController? searchController,
   ValueChanged<VoidCallback>? onOpened,
@@ -311,7 +311,7 @@ Future<T?> _showTerminalToolDropdownMenu<T>({
       fontSize: fontSize,
       fontWeight: fontWeight,
       selectedLabel: selectedLabel,
-      searchable: searchable,
+      filterable: filterable,
       customValueBuilder: customValueBuilder,
       searchController: searchController,
       onSelected: complete,
@@ -331,7 +331,7 @@ class _TerminalToolDropdownMenuOverlay<T> extends StatefulWidget {
     required this.fontSize,
     required this.fontWeight,
     required this.selectedLabel,
-    required this.searchable,
+    required this.filterable,
     required this.customValueBuilder,
     required this.searchController,
     required this.onSelected,
@@ -345,7 +345,7 @@ class _TerminalToolDropdownMenuOverlay<T> extends StatefulWidget {
   final double fontSize;
   final FontWeight fontWeight;
   final String selectedLabel;
-  final bool searchable;
+  final bool filterable;
   final T Function(String query)? customValueBuilder;
   final TextEditingController? searchController;
   final ValueChanged<T> onSelected;
@@ -363,13 +363,13 @@ class _TerminalToolDropdownMenuOverlayState<T>
   _AiAssistantColors get colors => widget.colors;
   double get fontSize => widget.fontSize;
   FontWeight get fontWeight => widget.fontWeight;
-  bool get searchable => widget.searchable;
+  bool get filterable => widget.filterable;
   ValueChanged<T> get onSelected => widget.onSelected;
   VoidCallback get onDismissed => widget.onDismissed;
 
   List<NautermContextMenuAction<T>> get options {
     final query = widget.searchController?.text.trim() ?? '';
-    if (!searchable || query.isEmpty) {
+    if (!filterable || query.isEmpty) {
       return widget.options;
     }
     final normalized = query.toLowerCase();
@@ -489,7 +489,7 @@ class _TerminalToolDropdownMenuOverlayState<T>
     }
 
     return Focus(
-      autofocus: !searchable,
+      autofocus: !filterable,
       onKeyEvent: (_, event) {
         if (event is KeyDownEvent &&
             event.logicalKey == LogicalKeyboardKey.escape) {

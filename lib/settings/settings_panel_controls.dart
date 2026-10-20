@@ -947,7 +947,7 @@ class _SettingsSelect extends StatefulWidget {
     this.semanticsLabel,
     this.showLabel = true,
     this.localizeOptions = true,
-    this.searchable = false,
+    this.filterable = false,
     this.allowCustomValue = false,
   });
 
@@ -961,7 +961,7 @@ class _SettingsSelect extends StatefulWidget {
   final String? semanticsLabel;
   final bool showLabel;
   final bool localizeOptions;
-  final bool searchable;
+  final bool filterable;
   final bool allowCustomValue;
 
   @override
@@ -982,7 +982,7 @@ class _SettingsSelectState extends State<_SettingsSelect> {
   bool get _open => _overlayEntry != null;
 
   List<String> get _visibleValues {
-    if (!widget.searchable) {
+    if (!widget.filterable) {
       return widget.values;
     }
     final query = _inputController.text.trim();
@@ -1186,7 +1186,7 @@ class _SettingsSelectState extends State<_SettingsSelect> {
     overlay.insert(_overlayEntry!);
     setState(() {});
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_open && !widget.searchable) {
+      if (_open && !widget.filterable) {
         _menuFocusNode.requestFocus();
       }
     });
@@ -1199,7 +1199,7 @@ class _SettingsSelectState extends State<_SettingsSelect> {
     _removeMenuOverlay();
     if (mounted) {
       setState(() {});
-      if (widget.searchable && restoreInput) {
+      if (widget.filterable && restoreInput) {
         _inputController.text = widget.value;
       }
       _fieldFocusNode.requestFocus();
@@ -1228,7 +1228,7 @@ class _SettingsSelectState extends State<_SettingsSelect> {
     if (event is! KeyDownEvent) {
       return KeyEventResult.ignored;
     }
-    if (widget.searchable) {
+    if (widget.filterable) {
       if (event.logicalKey == LogicalKeyboardKey.escape && _open) {
         _closeMenu();
         return KeyEventResult.handled;
@@ -1336,8 +1336,8 @@ class _SettingsSelectState extends State<_SettingsSelect> {
             container: true,
             explicitChildNodes: false,
             child: Focus(
-              focusNode: widget.searchable ? null : _fieldFocusNode,
-              onKeyEvent: widget.searchable ? null : _handleFieldKeyEvent,
+              focusNode: widget.filterable ? null : _fieldFocusNode,
+              onKeyEvent: widget.filterable ? null : _handleFieldKeyEvent,
               child: CompositedTransformTarget(
                 link: _fieldLayerLink,
                 child: AnimatedContainer(
@@ -1354,7 +1354,7 @@ class _SettingsSelectState extends State<_SettingsSelect> {
                     borderRadius: BorderRadius.circular(7),
                     clipBehavior: Clip.antiAlias,
                     child: InkWell(
-                      onTap: widget.searchable
+                      onTap: widget.filterable
                           ? null
                           : () {
                               _fieldFocusNode.requestFocus();
@@ -1372,7 +1372,7 @@ class _SettingsSelectState extends State<_SettingsSelect> {
                         child: Row(
                           children: [
                             Expanded(
-                              child: widget.searchable
+                              child: widget.filterable
                                   ? TextField(
                                       key: const ValueKey(
                                         'settings-select-input',
@@ -1443,7 +1443,7 @@ class _SettingsSelectState extends State<_SettingsSelect> {
         ),
       ],
     );
-    if (!widget.searchable) {
+    if (!widget.filterable) {
       return content;
     }
     return Listener(

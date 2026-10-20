@@ -113,7 +113,7 @@ class _TerminalThemeGalleryState extends State<_TerminalThemeGallery> {
                               ],
                               colors: colors,
                               outlined: true,
-                              searchable: true,
+                              filterable: true,
                               customValueBuilder: (query) => query,
                               fontSize: 11.5,
                               fontWeight: NautermFontWeights.medium,

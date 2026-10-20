@@ -925,7 +925,7 @@ class _WorkspaceSelect<T> extends StatefulWidget {
     this.isRequired = false,
     this.floatingLabel = true,
     this.editable = false,
-    this.searchable = false,
+    this.filterable = false,
     this.clearable = false,
     this.obscureText = false,
     this.inputController,
@@ -938,9 +938,9 @@ class _WorkspaceSelect<T> extends StatefulWidget {
     this.colors,
     this.errorText,
     this.activationToken = 0,
-  }) : assert((!searchable && !clearable) || editable),
+  }) : assert((!filterable && !clearable) || editable),
        assert((createLabel == null) == (onCreate == null)),
-       assert(createLabel == null || searchable);
+       assert(createLabel == null || filterable);
 
   final String label;
   final T value;
@@ -950,7 +950,7 @@ class _WorkspaceSelect<T> extends StatefulWidget {
   final bool isRequired;
   final bool floatingLabel;
   final bool editable;
-  final bool searchable;
+  final bool filterable;
   final bool clearable;
   final bool obscureText;
   final TextEditingController? inputController;
@@ -1008,7 +1008,7 @@ class _WorkspaceSelectState<T> extends State<_WorkspaceSelect<T>> {
         .where((item) => item.value == oldWidget.value)
         .firstOrNull;
     final oldSelectedText = _plainTextFor(oldSelectedItem?.child) ?? '';
-    if (widget.searchable &&
+    if (widget.filterable &&
         widget.inputController == null &&
         (oldWidget.value != widget.value ||
             oldSelectedText != _selectedText ||
@@ -1104,7 +1104,7 @@ class _WorkspaceSelectState<T> extends State<_WorkspaceSelect<T>> {
   void _handleInputFocusChanged() {
     _scheduleRebuild();
     if (!_inputFocusNode.hasFocus) {
-      if (widget.searchable) {
+      if (widget.filterable) {
         _restoreSelectedText();
       }
       _closeMenu();
@@ -1113,7 +1113,7 @@ class _WorkspaceSelectState<T> extends State<_WorkspaceSelect<T>> {
 
   void _handleInputTextChanged() {
     _scheduleRebuild();
-    if (!widget.searchable) {
+    if (!widget.filterable) {
       return;
     }
     if (_open) {
@@ -1223,7 +1223,7 @@ class _WorkspaceSelectState<T> extends State<_WorkspaceSelect<T>> {
   }
 
   List<DropdownMenuItem<T>> get _visibleItems {
-    if (!widget.searchable) {
+    if (!widget.filterable) {
       return widget.items;
     }
     final query = _inputController.text.trim().toLowerCase();
@@ -1258,13 +1258,13 @@ class _WorkspaceSelectState<T> extends State<_WorkspaceSelect<T>> {
   String get _createOptionLabel =>
       '${widget.createLabel!} ${_inputController.text.trim()}';
 
-  // Whether the dropdown panel should be shown. For a searchable field the
+  // Whether the dropdown panel should be shown. For a filterable field the
   // panel is pointless while the input is empty and there are no candidate
   // items to present, so focusing such a field must not pop an empty panel.
   // It reappears as soon as the user types a value (which yields matches or a
   // create option) or when candidates already exist.
   bool get _shouldOpenPanel {
-    if (!widget.searchable) {
+    if (!widget.filterable) {
       return true;
     }
     final hasQuery = _inputController.text.trim().isNotEmpty;

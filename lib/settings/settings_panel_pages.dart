@@ -425,7 +425,7 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
                       semanticsLabel: 'Terminal Font select',
                       value: state._fontFamily,
                       values: fontOptions,
-                      searchable: true,
+                      filterable: true,
                       allowCustomValue: true,
                       localizeOptions: false,
                       optionPreviewBuilder: (value) =>
