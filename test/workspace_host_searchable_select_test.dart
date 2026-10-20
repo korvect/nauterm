@@ -173,7 +173,7 @@ void main() {
 
     expect(tester.widget<TextField>(nameField).controller!.text, isEmpty);
     expect(tester.widget<TextField>(nameField).focusNode?.hasFocus, isTrue);
-    expect(find.byTooltip('Clear Name'), findsNothing);
+    expect(find.byTooltip('Clear Name').hitTestable(), findsNothing);
     await tester.enterText(nameField, 'host-draft');
     await tester.pump();
 
@@ -195,7 +195,7 @@ void main() {
       tester.widget<TextField>(parentGroupField).focusNode?.hasFocus,
       isTrue,
     );
-    expect(find.byTooltip('Clear Parent group'), findsNothing);
+    expect(find.byTooltip('Clear Parent group').hitTestable(), findsNothing);
     await tester.enterText(parentGroupField, 'does-not-match');
     await tester.pump();
     await tester.pump();
@@ -243,7 +243,7 @@ void main() {
       tester.widget<TextField>(parentGroupField).controller!.text,
       isEmpty,
     );
-    expect(find.byTooltip('Clear Parent group'), findsNothing);
+    expect(find.byTooltip('Clear Parent group').hitTestable(), findsNothing);
     expect(find.text('Create group does-not-match'), findsNothing);
 
     await tester.enterText(parentGroupField, 'new-group');
@@ -1050,7 +1050,7 @@ Future<void> _expectCreateAndClear(
 
   expect(tester.widget<TextField>(field).controller!.text, isEmpty);
   expect(find.text('$createLabel $query'), findsNothing);
-  expect(find.byTooltip('Clear $label'), findsNothing);
+  expect(find.byTooltip('Clear $label').hitTestable(), findsNothing);
 
   FocusManager.instance.primaryFocus?.unfocus();
   await tester.pump();

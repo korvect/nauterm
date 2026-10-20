@@ -777,7 +777,7 @@ class _WorkspaceInputFieldState extends State<_WorkspaceInputField> {
                     ),
                   ),
                 ),
-                if (showClearAffix && showClear)
+                if (showClearAffix)
                   Positioned(
                     top: clearTop,
                     right: clearRight,
@@ -785,12 +785,15 @@ class _WorkspaceInputFieldState extends State<_WorkspaceInputField> {
                       key: ValueKey('workspace-input-clear:${widget.label}'),
                       width: _workspaceFieldAffixWidth,
                       height: _workspaceFieldAffixWidth,
-                      child: _WorkspaceClearButton(
-                        tooltip: tr('Clear ${widget.label}'),
-                        onPressed: () {
-                          _focusNode.requestFocus();
-                          widget.controller.clear();
-                        },
+                      child: _WorkspaceAffixVisibility(
+                        visible: showClear,
+                        child: _WorkspaceClearButton(
+                          tooltip: tr('Clear ${widget.label}'),
+                          onPressed: () {
+                            _focusNode.requestFocus();
+                            widget.controller.clear();
+                          },
+                        ),
                       ),
                     ),
                   ),
@@ -807,15 +810,16 @@ class _WorkspaceInputFieldState extends State<_WorkspaceInputField> {
                   key: ValueKey('workspace-input-clear:${widget.label}'),
                   width: _workspaceFieldAffixWidth,
                   height: _workspaceFieldAffixWidth,
-                  child: showClear
-                      ? _WorkspaceClearButton(
-                          tooltip: tr('Clear ${widget.label}'),
-                          onPressed: () {
-                            _focusNode.requestFocus();
-                            widget.controller.clear();
-                          },
-                        )
-                      : null,
+                  child: _WorkspaceAffixVisibility(
+                    visible: showClear,
+                    child: _WorkspaceClearButton(
+                      tooltip: tr('Clear ${widget.label}'),
+                      onPressed: () {
+                        _focusNode.requestFocus();
+                        widget.controller.clear();
+                      },
+                    ),
+                  ),
                 ),
               ],
             ],
@@ -1583,12 +1587,12 @@ class _WorkspaceSelectState<T> extends State<_WorkspaceSelect<T>> {
                       key: ValueKey('workspace-select-suffix:${widget.label}'),
                       width: _workspaceFieldAffixWidth,
                       height: _workspaceFieldAffixWidth,
-                      child: showClear
-                          ? _WorkspaceClearButton(
-                              tooltip: tr('Clear ${widget.label}'),
-                              onPressed: _clearInput,
-                            )
-                          : _WorkspaceSelectSuffixButton(
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          _WorkspaceAffixVisibility(
+                            visible: !showClear,
+                            child: _WorkspaceSelectSuffixButton(
                               icon: _open
                                   ? Icons.keyboard_arrow_up_rounded
                                   : Icons.keyboard_arrow_down_rounded,
@@ -1598,6 +1602,17 @@ class _WorkspaceSelectState<T> extends State<_WorkspaceSelect<T>> {
                                   : _toggleMenu,
                               colors: colors,
                             ),
+                          ),
+                          if (widget.clearable)
+                            _WorkspaceAffixVisibility(
+                              visible: showClear,
+                              child: _WorkspaceClearButton(
+                                tooltip: tr('Clear ${widget.label}'),
+                                onPressed: _clearInput,
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                   ],
                 ],
@@ -1662,6 +1677,31 @@ class _WorkspaceSelectSuffixButton extends StatelessWidget {
       );
     }
     return TextFieldTapRegion(child: button);
+  }
+}
+
+class _WorkspaceAffixVisibility extends StatelessWidget {
+  const _WorkspaceAffixVisibility({required this.visible, required this.child});
+
+  final bool visible;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      ignoring: !visible,
+      child: ExcludeSemantics(
+        excluding: !visible,
+        child: AnimatedOpacity(
+          opacity: visible ? 1 : 0,
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 150),
+          curve: Curves.easeInOut,
+          child: child,
+        ),
+      ),
+    );
   }
 }
 

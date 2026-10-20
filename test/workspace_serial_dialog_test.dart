@@ -189,8 +189,8 @@ void main() {
       of: _suffixForLabel('Serial Port'),
       matching: find.byIcon(Icons.keyboard_arrow_down_rounded),
     );
-    expect(find.byTooltip('Clear Serial Port'), findsNothing);
-    expect(find.byTooltip('Clear Baud Rate'), findsNothing);
+    expect(find.byTooltip('Clear Serial Port').hitTestable(), findsNothing);
+    expect(find.byTooltip('Clear Baud Rate').hitTestable(), findsNothing);
     expect(serialPortArrow, findsOneWidget);
     final serialPortArrowCenter = tester.getCenter(serialPortArrow);
     expect(tester.getSize(find.byTooltip('Refresh serial devices')).height, 40);
@@ -212,17 +212,19 @@ void main() {
 
     expect(find.byTooltip('Clear Serial Port'), findsOneWidget);
     expect(
-      find.descendant(
-        of: _suffixForLabel('Serial Port'),
-        matching: find.byIcon(Icons.keyboard_arrow_down_rounded),
-      ),
+      find
+          .descendant(
+            of: _suffixForLabel('Serial Port'),
+            matching: find.byIcon(Icons.keyboard_arrow_down_rounded),
+          )
+          .hitTestable(),
       findsNothing,
     );
 
     await mouse.moveTo(Offset.zero);
     await tester.pump();
 
-    expect(find.byTooltip('Clear Serial Port'), findsNothing);
+    expect(find.byTooltip('Clear Serial Port').hitTestable(), findsNothing);
     expect(serialPortArrow, findsOneWidget);
 
     final serialPortRect = tester.getRect(serialPortDecorator);
@@ -236,12 +238,12 @@ void main() {
       isTrue,
     );
     expect(find.byTooltip('Clear Serial Port'), findsOneWidget);
-    expect(find.byTooltip('Clear Baud Rate'), findsNothing);
+    expect(find.byTooltip('Clear Baud Rate').hitTestable(), findsNothing);
     expect(
       find.descendant(
         of: _suffixForLabel('Serial Port'),
         matching: find.byIcon(Icons.keyboard_arrow_down_rounded),
-      ),
+      ).hitTestable(),
       findsNothing,
     );
 
@@ -280,8 +282,8 @@ void main() {
     );
     expect(serialPortField.controller!.text, isEmpty);
     expect(serialPortField.focusNode?.hasFocus, isTrue);
-    expect(find.byTooltip('Clear Serial Port'), findsNothing);
-    expect(find.byTooltip('Clear Baud Rate'), findsNothing);
+    expect(find.byTooltip('Clear Serial Port').hitTestable(), findsNothing);
+    expect(find.byTooltip('Clear Baud Rate').hitTestable(), findsNothing);
     expect(
       find.descendant(
         of: _suffixForLabel('Serial Port'),
