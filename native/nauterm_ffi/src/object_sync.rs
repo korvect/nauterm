@@ -379,6 +379,18 @@ mod path_tests {
     }
 
     #[test]
+    fn service_conflicts_do_not_retry_the_entire_sync() {
+        for error in [
+            opendal::Error::new(ErrorKind::Conflict, "service conflict"),
+            opendal::Error::new(ErrorKind::Conflict, "temporary service conflict").set_temporary(),
+        ] {
+            assert!(!OpenDalSyncTransport::is_conflict(
+                &ObjectSyncError::from_opendal(error)
+            ));
+        }
+    }
+
+    #[test]
     fn transport_falls_back_to_content_tokens_without_etags() {
         let operator = Operator::new(opendal::services::Memory::default()).unwrap();
         let transport = OpenDalSyncTransport::new(operator, "vault.enc".to_string()).unwrap();
