@@ -1593,9 +1593,8 @@ class _WorkspaceSelectState<T> extends State<_WorkspaceSelect<T>> {
                           _WorkspaceAffixVisibility(
                             visible: !showClear,
                             child: _WorkspaceSelectSuffixButton(
-                              icon: _open
-                                  ? Icons.keyboard_arrow_up_rounded
-                                  : Icons.keyboard_arrow_down_rounded,
+                              icon: Icons.keyboard_arrow_down_rounded,
+                              expanded: _open,
                               width: _workspaceFieldAffixWidth,
                               onPressed: widget.editable
                                   ? _toggleEditableMenu
@@ -1641,6 +1640,7 @@ class _WorkspaceSelectSuffixButton extends StatelessWidget {
     required this.icon,
     required this.width,
     required this.onPressed,
+    this.expanded = false,
     this.tooltip,
     this.colors,
   });
@@ -1648,6 +1648,7 @@ class _WorkspaceSelectSuffixButton extends StatelessWidget {
   final IconData icon;
   final double width;
   final VoidCallback? onPressed;
+  final bool expanded;
   final String? tooltip;
   final _AiAssistantColors? colors;
 
@@ -1661,10 +1662,16 @@ class _WorkspaceSelectSuffixButton extends StatelessWidget {
         child: SizedBox(
           width: width,
           height: double.infinity,
-          child: Icon(
-            icon,
-            size: _workspaceFieldAffixWidth,
-            color: colors?.muted ?? _mutedText,
+          child: AnimatedRotation(
+            turns: expanded ? 0.5 : 0,
+            duration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : const Duration(milliseconds: 120),
+            child: Icon(
+              icon,
+              size: _workspaceFieldAffixWidth,
+              color: colors?.muted ?? _mutedText,
+            ),
           ),
         ),
       ),

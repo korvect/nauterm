@@ -1488,15 +1488,27 @@ void main() {
     final terminalFontRect = tester.getRect(
       find.byKey(const ValueKey('terminal-font-family')),
     );
+    final fontArrow = find.descendant(
+      of: fontControl,
+      matching: find.byType(RotationTransition),
+    );
+    double fontArrowTurns() =>
+        tester.widget<RotationTransition>(fontArrow).turns.value;
+    expect(fontArrowTurns(), 0);
     for (final x in [terminalFontRect.right - 17, terminalFontRect.right - 2]) {
       await tester.tapAt(Offset(x, terminalFontRect.center.dy));
-      await tester.pump(const Duration(milliseconds: 150));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 60));
+      expect(fontArrowTurns(), allOf(greaterThan(0), lessThan(0.5)));
+      await tester.pump(const Duration(milliseconds: 70));
+      expect(fontArrowTurns(), 0.5);
       expect(
         find.byKey(const ValueKey('terminal-tool-dropdown-menu')),
         findsOneWidget,
       );
       await tester.tapAt(const Offset(4, 4));
       await tester.pumpAndSettle();
+      expect(fontArrowTurns(), 0);
       expect(
         find.byKey(const ValueKey('terminal-tool-dropdown-menu')),
         findsNothing,

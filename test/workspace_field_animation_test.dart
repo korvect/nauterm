@@ -3,6 +3,78 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nauterm/app/nauterm_app.dart';
 
 void main() {
+  testWidgets('select arrow rotates when opening and closing its menu', (
+    tester,
+  ) async {
+    await _openHostEditor(tester);
+    final suffix = find.byKey(const ValueKey('workspace-select-suffix:Type'));
+    final initialRect = tester.getRect(suffix);
+    final rotation = find.descendant(
+      of: suffix,
+      matching: find.byType(RotationTransition),
+    );
+    double turns() => tester.widget<RotationTransition>(rotation).turns.value;
+    expect(turns(), 0);
+    expect(
+      tester
+          .widget<AnimatedRotation>(
+            find.descendant(
+              of: suffix,
+              matching: find.byType(AnimatedRotation),
+            ),
+          )
+          .duration,
+      const Duration(milliseconds: 120),
+    );
+
+    await tester.tap(suffix);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 60));
+    expect(turns(), allOf(greaterThan(0), lessThan(0.5)));
+    await tester.pump(const Duration(milliseconds: 70));
+    expect(turns(), 0.5);
+    expect(tester.getRect(suffix), initialRect);
+    expect(
+      find.byKey(const ValueKey('workspace-select-menu:Type')),
+      findsOneWidget,
+    );
+
+    await tester.tap(suffix);
+    await tester.pump();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 60));
+    expect(turns(), allOf(greaterThan(0), lessThan(0.5)));
+    await tester.pump(const Duration(milliseconds: 70));
+    expect(turns(), 0);
+    expect(tester.getRect(suffix), initialRect);
+    expect(
+      find.byKey(const ValueKey('workspace-select-menu:Type')),
+      findsNothing,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('select arrow respects reduced motion', (tester) async {
+    tester.platformDispatcher.accessibilityFeaturesTestValue =
+        FakeAccessibilityFeatures(disableAnimations: true);
+    addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+    await _openHostEditor(tester);
+    final suffix = find.byKey(const ValueKey('workspace-select-suffix:Type'));
+    final rotation = find.descendant(
+      of: suffix,
+      matching: find.byType(RotationTransition),
+    );
+
+    await tester.tap(suffix);
+    await tester.pump();
+    expect(tester.widget<RotationTransition>(rotation).turns.value, 0.5);
+    await tester.tap(suffix);
+    await tester.pump();
+    await tester.pump();
+    expect(tester.widget<RotationTransition>(rotation).turns.value, 0);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('input clear button fades without changing the text layout', (
     tester,
   ) async {

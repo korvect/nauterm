@@ -289,9 +289,20 @@ void main() {
     expect(
       find.descendant(
         of: _suffixForLabel('Serial Port'),
-        matching: find.byIcon(Icons.keyboard_arrow_up_rounded),
+        matching: find.byIcon(Icons.keyboard_arrow_down_rounded),
       ),
       findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<AnimatedRotation>(
+            find.descendant(
+              of: _suffixForLabel('Serial Port'),
+              matching: find.byType(AnimatedRotation),
+            ),
+          )
+          .turns,
+      0.5,
     );
 
     await tester.pumpWidget(const SizedBox.shrink());

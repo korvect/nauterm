@@ -237,10 +237,16 @@ class _TerminalToolDropdownState<T> extends State<_TerminalToolDropdown<T>> {
                           ),
                   ),
                   SizedBox(width: 5),
-                  Icon(
-                    _open ? LucideIcons.chevronUp : LucideIcons.chevronDown,
-                    size: widget.outlined ? 15 : 16,
-                    color: colors.muted,
+                  AnimatedRotation(
+                    turns: _open ? 0.5 : 0,
+                    duration: MediaQuery.disableAnimationsOf(context)
+                        ? Duration.zero
+                        : const Duration(milliseconds: 120),
+                    child: Icon(
+                      LucideIcons.chevronDown,
+                      size: widget.outlined ? 15 : 16,
+                      color: colors.muted,
+                    ),
                   ),
                 ],
               ),
