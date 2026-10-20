@@ -757,6 +757,14 @@ mod tests {
         let salt = params.salt_bytes_for_test();
         let a = derive_wrapping_key("correct horse battery staple", &salt, &params).unwrap();
         let b = derive_wrapping_key("correct horse battery staple", &salt, &params).unwrap();
+        // Preserve the key derived by Argon2 0.5.3 for existing encrypted data.
+        assert_eq!(
+            a.as_slice(),
+            &[
+                139, 36, 105, 42, 175, 183, 13, 104, 82, 45, 140, 54, 109, 238, 163, 142, 85, 119,
+                36, 48, 4, 16, 130, 56, 15, 99, 188, 189, 154, 214, 114, 96,
+            ]
+        );
         assert_eq!(a.as_slice(), b.as_slice());
         let c = derive_wrapping_key("different", &salt, &params).unwrap();
         assert_ne!(a.as_slice(), c.as_slice());
