@@ -5,6 +5,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/src/widgets/_window.dart';
+import 'package:nativeapi_flutter/nativeapi_flutter.dart' show DisplayManager;
+import 'package:nativeapi_flutter/windowing.dart';
 
 import '../app/nauterm_theme.dart';
 import '../app/window_config.dart';
@@ -99,15 +101,26 @@ RegularWindowController createSettingsWindowController({
   required VoidCallback onCloseRequested,
   required VoidCallback onDestroyed,
 }) {
-  return RegularWindowController(
+  final controller = RegularWindowController(
     size: settingsWindowSize,
-    constraints: const BoxConstraints(minWidth: 950, minHeight: 620),
+    constraints: BoxConstraints(
+      minWidth: settingsWindowMinSize.width,
+      minHeight: settingsWindowMinSize.height,
+    ),
     title: settingsWindowTitle,
     delegate: _SettingsWindowDelegate(
       onCloseRequested: onCloseRequested,
       onDestroyed: onDestroyed,
     ),
   );
+  final nativeWindow = controller.nativeWindow;
+  if (nativeWindow != null) {
+    initializeSettingsNativeWindow(
+      nativeWindow,
+      DisplayManager.instance.getPrimary(),
+    );
+  }
+  return controller;
 }
 
 class _SettingsWindowDelegate with RegularWindowControllerDelegate {

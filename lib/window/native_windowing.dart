@@ -128,33 +128,42 @@ void configureNativeWindowing() {
 
   WindowManager.instance.setWillShowHook((windowId) {
     final window = WindowManager.instance.get(windowId);
-    if (window != null && primaryDisplay != null) {
+    if (window != null) {
       switch (window.title) {
         case mainWindowTitle:
-          _mainWindowId = windowId;
-          _applyMainWindowChrome(window);
-          if (_positionedWindowIds.add(windowId)) {
-            _restoreMainWindowGeometry(window, primaryDisplay);
-          } else {
-            window.minimumSize = mainWindowMinSize.toNative();
-          }
+          initializeMainNativeWindow(window, primaryDisplay);
           break;
         case settingsWindowTitle:
-          if (_positionedWindowIds.add(windowId)) {
-            _positionWindow(
-              window,
-              primaryDisplay,
-              size: settingsWindowSize,
-              minSize: settingsWindowMinSize,
-            );
-          } else {
-            window.minimumSize = settingsWindowMinSize.toNative();
-          }
+          initializeSettingsNativeWindow(window, primaryDisplay);
           if (!_settingsWindowRequested) return;
       }
     }
     WindowManager.instance.callOriginalShow(windowId);
   });
+}
+
+// Flutter can show a new native window before assigning its title. Call these
+// after controller creation as well as from the show hook, which only recognizes
+// titled windows. Restore geometry once, but reapply constraints on every show.
+void initializeMainNativeWindow(Window window, Display? primaryDisplay) {
+  _mainWindowId = window.id;
+  _applyMainWindowChrome(window);
+  window.minimumSize = mainWindowMinSize.toNative();
+  if (primaryDisplay != null && _positionedWindowIds.add(window.id)) {
+    _restoreMainWindowGeometry(window, primaryDisplay);
+  }
+}
+
+void initializeSettingsNativeWindow(Window window, Display? primaryDisplay) {
+  window.minimumSize = settingsWindowMinSize.toNative();
+  if (primaryDisplay != null && _positionedWindowIds.add(window.id)) {
+    _positionWindow(
+      window,
+      primaryDisplay,
+      size: settingsWindowSize,
+      minSize: settingsWindowMinSize,
+    );
+  }
 }
 
 Future<Object?> _handleAppMenuMethodCall(MethodCall call) async {
@@ -473,7 +482,6 @@ void _restoreMainWindowGeometry(Window window, Display primaryDisplay) {
       : _displayForSavedGeometry(savedPosition, savedSize) ?? primaryDisplay;
   final size = _clampMainWindowSize(savedSize, targetDisplay.workArea.toRect());
 
-  window.minimumSize = mainWindowMinSize.toNative();
   window.setSize(size.toNative(), false);
   if (savedPosition != null &&
       _windowPositionIsVisible(
@@ -590,7 +598,6 @@ void _positionWindow(
   final workArea = display.workArea.toRect();
   final clampedSize = _clampWindowSize(size, minSize, workArea);
 
-  window.minimumSize = minSize.toNative();
   window.setSize(clampedSize.toNative(), false);
   _centerWindow(window, display, clampedSize);
 }

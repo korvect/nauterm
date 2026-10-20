@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/src/widgets/_window.dart';
 import 'package:flutter/src/widgets/_window_linux.dart';
+import 'package:nativeapi_flutter/nativeapi_flutter.dart' show DisplayManager;
 import 'package:nativeapi_flutter/windowing.dart';
 
 import '../app/nauterm_app.dart';
@@ -50,7 +51,10 @@ class _MainWindowState extends State<MainWindow> with WidgetsBindingObserver {
   late final RegularWindowController _windowController =
       RegularWindowController(
         size: _resolvedWindowSize,
-        constraints: const BoxConstraints(minWidth: 750, minHeight: 440),
+        constraints: BoxConstraints(
+          minWidth: mainWindowMinSize.width,
+          minHeight: mainWindowMinSize.height,
+        ),
         title: mainWindowTitle,
         delegate: _MainWindowDelegate(
           onCloseRequested: widget.onWindowCloseRequested,
@@ -64,9 +68,14 @@ class _MainWindowState extends State<MainWindow> with WidgetsBindingObserver {
     if (_windowController case final WindowControllerLinux controller) {
       configureLinuxWindowChrome(controller.windowHandle);
     }
-    NautermFileDropChannel.instance.attachWindow(
-      _windowController.nativeWindow,
-    );
+    final nativeWindow = _windowController.nativeWindow;
+    if (nativeWindow != null) {
+      initializeMainNativeWindow(
+        nativeWindow,
+        DisplayManager.instance.getPrimary(),
+      );
+    }
+    NautermFileDropChannel.instance.attachWindow(nativeWindow);
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       hideMainWindowTitleBar();
