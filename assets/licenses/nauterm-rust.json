@@ -35,7 +35,7 @@
         {"name": "multiversion_no_op", "version": "1.0.0", "source": "registry+https://github.com/rust-lang/crates.io-index"},
         {"name": "tinyvec", "version": "1.11.0", "source": "registry+https://github.com/rust-lang/crates.io-index"},
         {"name": "utf8_iter", "version": "1.0.4", "source": "registry+https://github.com/rust-lang/crates.io-index"},
-        {"name": "zeroize", "version": "1.9.0", "source": "registry+https://github.com/rust-lang/crates.io-index"}
+        {"name": "zeroize", "version": "1.9.1", "source": "registry+https://github.com/rust-lang/crates.io-index"}
       ]
     },
     {
