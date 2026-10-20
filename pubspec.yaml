@@ -51,7 +51,7 @@ dependencies:
   openai_dart: ^11.0.1
   anthropic_sdk_dart: ^9.0.0
   googleai_dart: ^13.0.0
-  ollama_dart: ^2.5.0
+  ollama_dart: ^4.0.0
   package_info_plus: ^10.2.0
   path_provider: ^2.1.5
 
