@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nauterm/app/nauterm_app.dart';
 
 void main() {
-  testWidgets('snippet description and script use the shared vertical gap', (
+  testWidgets('snippet fields keep their gap and use the shared line height', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1440, 900);
@@ -24,6 +24,19 @@ void main() {
     final script = _decoratorForLabel('Script *');
 
     expect(tester.getRect(script).top - tester.getRect(description).bottom, 10);
+    for (final decorator in [description, script]) {
+      final field = tester.widget<TextField>(
+        find.descendant(of: decorator, matching: find.byType(TextField)).first,
+      );
+      expect(field.style?.fontSize, 14);
+      expect(field.style?.height, 1.5);
+      expect(field.cursorHeight, isNull);
+    }
+    expect(tester.getSize(description).height, 40);
+    expect(
+      tester.getSize(script).height,
+      closeTo(10 * 14 * 1.5 + 14 + 2, 0.01),
+    );
 
     await tester.pumpWidget(const SizedBox.shrink());
   });

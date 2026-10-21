@@ -34,7 +34,7 @@ void main() {
     final privateKeyDecorator = _keyFieldDecorator('Private key *');
     final publicKeyDecorator = _keyFieldDecorator('Public key');
     final initialHeight = tester.getSize(privateKeyDecorator).height;
-    expect(initialHeight, 104);
+    expect(initialHeight, 4 * 14 * 1.5 + 14 + 2);
     expect(initialHeight, tester.getSize(publicKeyDecorator).height);
     expect(
       find.ancestor(

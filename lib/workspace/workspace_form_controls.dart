@@ -37,7 +37,7 @@ enum _WorkspaceControlSize {
     small || medium || large => _workspaceBaseControlFontSize,
   };
 
-  double get inputLineHeight => (inputFontSize + 8) / inputFontSize;
+  double get inputLineHeight => 1.5;
 
   double get inputHorizontalPadding => switch (this) {
     // InputDecorator adds another 4 logical pixels around its child.
