@@ -1893,7 +1893,6 @@ class _SettingsTextFieldState extends State<_SettingsTextField> {
                           forceStrutHeight: true,
                         ),
                         cursorColor: _primary,
-                        cursorHeight: 18,
                         cursorWidth: 1.4,
                         maxLines: 1,
                         obscureText: _obscured,

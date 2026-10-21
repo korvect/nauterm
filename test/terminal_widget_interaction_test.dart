@@ -1709,7 +1709,7 @@ void main() {
       final field = tester.widget<EditableText>(searchField);
       expect(field.style.color, foreground);
       expect(field.cursorColor, nysaDarkTerminalTheme.primary.accent);
-      expect(field.cursorHeight, 13);
+      expect(field.cursorHeight, isNull);
       final placeholder = tester.widget<Text>(hint);
       expect(placeholder.style?.color, foreground.withValues(alpha: 0.48));
       expect(

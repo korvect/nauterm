@@ -545,6 +545,8 @@ void main() {
       matching: find.byType(EditableText),
     );
     final rect = tester.getRect(editable);
+    final input = tester.widget<EditableText>(editable);
+    expect(input.cursorHeight, isNull);
     final gesture = await tester.startGesture(
       Offset(rect.right - 4, rect.center.dy),
       kind: PointerDeviceKind.mouse,
@@ -664,6 +666,10 @@ void main() {
     final fontInputRect = tester.getRect(
       find.byKey(const ValueKey('settings-select-input')),
     );
+    final fontInput = tester.widget<TextField>(
+      find.byKey(const ValueKey('settings-select-input')),
+    );
+    expect(fontInput.cursorHeight, isNull);
     for (final x in [fontSelectRect.right - 19, fontSelectRect.right - 3]) {
       await tester.tapAt(Offset(x, fontInputRect.center.dy));
       await tester.pump();

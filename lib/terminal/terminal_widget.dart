@@ -1812,7 +1812,6 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
                                           .withValues(alpha: 0.28),
                                       selectionColor: theme.primary.accent
                                           .withValues(alpha: 0.28),
-                                      cursorHeight: 13,
                                       style: TextStyle(
                                         color: foreground,
                                         fontSize: 13,
