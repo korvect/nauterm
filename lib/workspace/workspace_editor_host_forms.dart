@@ -950,6 +950,22 @@ class _HostEditorContent extends StatefulWidget {
   State<_HostEditorContent> createState() => _HostEditorContentState();
 }
 
+@visibleForTesting
+Widget buildHostTagSelectForTesting({
+  required List<TagEntry> tags,
+  required Set<String> selectedUuids,
+  required ValueChanged<Set<String>> onChanged,
+  required TagEntry? Function(String name) onCreate,
+}) => _WorkspaceControlSizeScope(
+  size: _WorkspaceControlSize.large,
+  child: _HostTagSelect(
+    tags: tags,
+    selectedUuids: selectedUuids,
+    onChanged: onChanged,
+    onCreate: onCreate,
+  ),
+);
+
 class _HostTagSelect extends StatefulWidget {
   const _HostTagSelect({
     required this.tags,
@@ -991,6 +1007,7 @@ class _HostTagSelectState extends State<_HostTagSelect> {
       value: null,
       editable: true,
       filterable: true,
+      clearable: true,
       createConflictLabels: widget.tags.map((tag) => tag.name),
       inputController: _controller,
       createLabel: 'Create tag',
@@ -1014,10 +1031,9 @@ class _HostTagSelectState extends State<_HostTagSelect> {
           DropdownMenuItem<String?>(value: tag.uuid, child: Text(tag.name)),
       ],
       onChanged: (uuid) {
-        if (uuid == null) {
-          return;
-        }
-        widget.onChanged({...widget.selectedUuids, uuid});
+        widget.onChanged(
+          uuid == null ? <String>{} : {...widget.selectedUuids, uuid},
+        );
         _controller.clear();
       },
     );

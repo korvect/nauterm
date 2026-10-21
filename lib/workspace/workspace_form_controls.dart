@@ -1188,7 +1188,7 @@ class _WorkspaceSelectState<T> extends State<_WorkspaceSelect<T>> {
   }
 
   void _clearInput() {
-    if (_inputController.text.isEmpty) {
+    if (_inputController.text.isEmpty && widget.leading == null) {
       return;
     }
     _inputController.clear();
