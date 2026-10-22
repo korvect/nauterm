@@ -1,5 +1,31 @@
 part of 'nauterm_workspace.dart';
 
+@visibleForTesting
+Widget buildSftpConnectionPageForTesting({required bool needsHostKey}) =>
+    _SftpConnectionPage(
+      state: _SftpConnectionState(
+        host: _mapHost(
+          const HostEntry(
+            name: 'Test server',
+            host: 'example.test',
+            type: NautermHostType.remote,
+          ),
+          const [],
+          const {},
+        ),
+        phase: needsHostKey
+            ? _SftpConnectionPhase.hostKey
+            : _SftpConnectionPhase.failed,
+        fingerprint: 'SHA256:test-fingerprint',
+        message: 'SFTP connection failed.',
+      ),
+      onRetry: () {},
+      onTrustOnceAndRetry: () {},
+      onTrustAndRetry: () {},
+      onChangeHost: () {},
+      onClose: () {},
+    );
+
 class _SftpConnectionPage extends StatefulWidget {
   const _SftpConnectionPage({
     required this.state,
@@ -52,35 +78,41 @@ class _SftpConnectionPageState extends State<_SftpConnectionPage> {
       _interventions.add(_ConnectionIntervention.hostKey);
     }
     final target = _sftpConnectionTarget(state.host);
-    return ColoredBox(
-      color: _surface,
-      child: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-          child: _ConnectionPagePanel(
-            title: state.host.name,
-            subtitle: 'SFTP $target',
-            actionLabel: widget.onSshSelected == null ? null : 'SSH',
-            onAction: widget.onSshSelected,
-            progress: _ConnectionProgress.forConnection(
-              mode: mode,
-              interventions: _interventions,
-              protocolIcon: LucideIcons.cloud,
-              destinationIcon: LucideIcons.folderOpen,
+    return _ConnectionPageViewport(
+      child: _ConnectionPagePanel(
+        title: state.host.name,
+        subtitle: 'SFTP $target',
+        actionLabel: widget.onSshSelected == null ? null : 'SSH',
+        onAction: widget.onSshSelected,
+        progress: _ConnectionProgress.forConnection(
+          mode: mode,
+          interventions: _interventions,
+          protocolIcon: LucideIcons.cloud,
+          destinationIcon: LucideIcons.folderOpen,
+        ),
+        body: SingleChildScrollView(
+          key: const ValueKey('connection-mode-scrollable'),
+          child: switch (mode) {
+            _ConnectionPageMode.hostKey => _HostKeyPrompt(
+              key: const ValueKey('host-key'),
+              target: target,
+              fingerprint: state.fingerprint,
             ),
-            body: switch (mode) {
-              _ConnectionPageMode.hostKey => _HostKeyPrompt(
-                key: const ValueKey('host-key'),
-                target: target,
-                fingerprint: state.fingerprint,
-              ),
-              _ConnectionPageMode.failed => _ConnectionFailureBody(
-                key: const ValueKey('failed'),
-                message: state.message ?? 'SFTP connection failed.',
-              ),
-              _ => const SizedBox(key: ValueKey('connecting'), height: 1),
-            },
-            footer: Row(
+            _ConnectionPageMode.failed => _ConnectionFailureBody(
+              key: const ValueKey('failed'),
+              message: state.message ?? 'SFTP connection failed.',
+            ),
+            _ => const SizedBox(key: ValueKey('connecting'), height: 1),
+          },
+        ),
+        footer: OverflowBar(
+          alignment: MainAxisAlignment.spaceBetween,
+          spacing: 8,
+          overflowSpacing: 8,
+          overflowAlignment: OverflowBarAlignment.end,
+          children: [
+            Wrap(
+              runSpacing: 8,
               children: [
                 if (widget.onClose != null)
                   _ConnectionButton(label: 'Close', onPressed: widget.onClose),
@@ -91,27 +123,34 @@ class _SftpConnectionPageState extends State<_SftpConnectionPage> {
                     onPressed: widget.onChangeHost,
                   ),
                 ],
-                const Spacer(),
-                if (mode == _ConnectionPageMode.hostKey) ...[
-                  _ConnectionButton(
-                    label: 'Continue',
-                    onPressed: widget.onTrustOnceAndRetry,
-                  ),
-                  SizedBox(width: 10),
-                  _ConnectionButton(
-                    label: 'Add and continue',
-                    primary: true,
-                    onPressed: widget.onTrustAndRetry,
-                  ),
-                ] else if (mode == _ConnectionPageMode.failed)
-                  _ConnectionButton(
-                    label: 'Start over',
-                    primary: true,
-                    onPressed: widget.onRetry,
-                  ),
               ],
             ),
-          ),
+            if (mode == _ConnectionPageMode.hostKey ||
+                mode == _ConnectionPageMode.failed)
+              Wrap(
+                alignment: WrapAlignment.end,
+                runSpacing: 8,
+                children: [
+                  if (mode == _ConnectionPageMode.hostKey) ...[
+                    _ConnectionButton(
+                      label: 'Continue',
+                      onPressed: widget.onTrustOnceAndRetry,
+                    ),
+                    SizedBox(width: 10),
+                    _ConnectionButton(
+                      label: 'Add and continue',
+                      primary: true,
+                      onPressed: widget.onTrustAndRetry,
+                    ),
+                  ] else if (mode == _ConnectionPageMode.failed)
+                    _ConnectionButton(
+                      label: 'Start over',
+                      primary: true,
+                      onPressed: widget.onRetry,
+                    ),
+                ],
+              ),
+          ],
         ),
       ),
     );

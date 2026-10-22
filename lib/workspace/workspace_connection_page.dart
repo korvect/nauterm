@@ -96,13 +96,28 @@ SshConnectionProfile refreshSavedHostSshProfile({
 }
 
 @visibleForTesting
-Widget buildTerminalConnectionPageForTesting(TerminalController controller) {
+Widget buildTerminalConnectionPageForTesting(
+  TerminalController controller, {
+  bool inDrawer = false,
+}) {
   return _TerminalConnectionPage(
     controller: controller,
+    inDrawer: inDrawer,
     keys: const [],
     identities: const [],
   );
 }
+
+@visibleForTesting
+Widget buildPendingHostConnectionPageForTesting(HostEntry host) =>
+    _PendingHostConnectionPage(
+      pending: _PendingHostConnection(
+        host: host,
+        item: _mapHost(host, const [], const {}),
+      ),
+      onConnect: (_) {},
+      onCloseRequested: () {},
+    );
 
 class _PendingHostConnectionPage extends StatefulWidget {
   const _PendingHostConnectionPage({
@@ -450,14 +465,9 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
         final serialProfile = widget.controller.serialProfile;
         _syncControllers(profile, status.phase);
 
-        return _WorkspaceControlSizeScope(
-          size: widget.inDrawer
-              ? _WorkspaceControlSize.tiny
-              : _WorkspaceControlSize.small,
-          child: _ConnectionPageViewport(
-            horizontalPadding: widget.inDrawer ? 16 : 24,
-            child: _buildPage(status, profile, serialProfile),
-          ),
+        return _ConnectionPageViewport(
+          inDrawer: widget.inDrawer,
+          child: _buildPage(status, profile, serialProfile),
         );
       },
     );
@@ -487,7 +497,6 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
     );
 
     return _ConnectionPagePanel(
-      horizontalPadding: widget.inDrawer ? 0 : 22,
       title: profile == null
           ? serialProfile?.label ??
                 serialProfile?.serialPort ??
@@ -897,20 +906,19 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
         ),
       ],
     ];
-    if (!widget.inDrawer) {
-      return Row(
-        children: [...secondaryActions, const Spacer(), ...primaryActions],
-      );
-    }
     return OverflowBar(
       alignment: MainAxisAlignment.spaceBetween,
       spacing: 8,
       overflowSpacing: 8,
       overflowAlignment: OverflowBarAlignment.end,
       children: [
-        Row(mainAxisSize: MainAxisSize.min, children: secondaryActions),
+        Wrap(runSpacing: 8, children: secondaryActions),
         if (primaryActions.isNotEmpty)
-          Row(mainAxisSize: MainAxisSize.min, children: primaryActions),
+          Wrap(
+            alignment: WrapAlignment.end,
+            runSpacing: 8,
+            children: primaryActions,
+          ),
       ],
     );
   }
@@ -1167,27 +1175,54 @@ class _ConnectionPageHeader extends StatelessWidget {
 }
 
 class _ConnectionPageViewport extends StatelessWidget {
-  const _ConnectionPageViewport({
-    required this.child,
-    this.horizontalPadding = 24,
-  });
+  const _ConnectionPageViewport({required this.child, this.inDrawer = false});
 
   final Widget child;
-  final double horizontalPadding;
+  final bool inDrawer;
 
   @override
   Widget build(BuildContext context) {
-    return ColoredBox(
-      color: _surface,
-      child: Padding(
-        padding: EdgeInsets.symmetric(
-          horizontal: horizontalPadding,
-          vertical: 32,
-        ),
-        child: Center(child: child),
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final short = constraints.maxHeight < 480;
+        final compact = inDrawer || short;
+        return _ConnectionPageLayoutScope(
+          short: short,
+          child: _WorkspaceControlSizeScope(
+            size: compact
+                ? _WorkspaceControlSize.tiny
+                : _WorkspaceControlSize.small,
+            child: ColoredBox(
+              color: _surface,
+              child: Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: compact ? 16 : 24,
+                  vertical: compact ? 16 : 32,
+                ),
+                child: Center(child: child),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
+}
+
+class _ConnectionPageLayoutScope extends InheritedWidget {
+  const _ConnectionPageLayoutScope({required this.short, required super.child});
+
+  final bool short;
+
+  static bool isShort(BuildContext context) =>
+      context
+          .dependOnInheritedWidgetOfExactType<_ConnectionPageLayoutScope>()
+          ?.short ??
+      false;
+
+  @override
+  bool updateShouldNotify(_ConnectionPageLayoutScope oldWidget) =>
+      short != oldWidget.short;
 }
 
 class _ConnectionPagePanel extends StatelessWidget {
@@ -1197,7 +1232,6 @@ class _ConnectionPagePanel extends StatelessWidget {
     required this.progress,
     required this.body,
     required this.footer,
-    this.horizontalPadding = 22,
     this.actionLabel,
     this.onAction,
     this.hostOs,
@@ -1205,7 +1239,6 @@ class _ConnectionPagePanel extends StatelessWidget {
   });
 
   final String title;
-  final double horizontalPadding;
   final String subtitle;
   final Widget progress;
   final Widget body;
@@ -1217,12 +1250,16 @@ class _ConnectionPagePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final short = _ConnectionPageLayoutScope.isShort(context);
+    final compact =
+        _WorkspaceControlSizeScope.maybeOf(context) ==
+        _WorkspaceControlSize.tiny;
     return Material(
       color: Colors.transparent,
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 510),
         child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+          padding: EdgeInsets.symmetric(horizontal: compact ? 0 : 22),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1238,12 +1275,12 @@ class _ConnectionPagePanel extends StatelessWidget {
                   hostDistro: hostDistro,
                 ),
               ),
-              SizedBox(height: 22),
+              SizedBox(height: short ? 12 : 22),
               KeyedSubtree(
                 key: const ValueKey('connection-page-progress'),
                 child: progress,
               ),
-              SizedBox(height: 28),
+              SizedBox(height: short ? 12 : 28),
               Flexible(
                 fit: FlexFit.loose,
                 child: AnimatedSwitcher(
@@ -1253,7 +1290,7 @@ class _ConnectionPagePanel extends StatelessWidget {
                   child: body,
                 ),
               ),
-              SizedBox(height: 26),
+              SizedBox(height: short ? 12 : 26),
               KeyedSubtree(
                 key: const ValueKey('connection-page-footer'),
                 child: footer,
@@ -1628,6 +1665,8 @@ class _ConnectionFailureDetails extends StatelessWidget {
             'workspace.label.connectionFailedWithConnectionLog',
             fallback: 'Connection failed with connection log:',
           ),
+          maxLines: _ConnectionPageLayoutScope.isShort(context) ? 1 : null,
+          overflow: TextOverflow.ellipsis,
           style: TextStyle(
             color: const Color(0xffef4444),
             fontSize: 14,
@@ -1672,12 +1711,11 @@ class _ConnectionLogsCopyButton extends StatelessWidget {
         iconSize: small ? 16 : 18,
         splashRadius: 20,
         padding: EdgeInsets.zero,
-        style: _workspaceDark
-            ? IconButton.styleFrom(
-                hoverColor: _blue.withValues(alpha: 0.12),
-                highlightColor: _blue.withValues(alpha: 0.16),
-              )
-            : null,
+        style: IconButton.styleFrom(
+          tapTargetSize: small ? MaterialTapTargetSize.shrinkWrap : null,
+          hoverColor: _workspaceDark ? _blue.withValues(alpha: 0.12) : null,
+          highlightColor: _workspaceDark ? _blue.withValues(alpha: 0.16) : null,
+        ),
         constraints: BoxConstraints.tightFor(
           width: small ? 24 : 34,
           height: small ? 24 : 34,
@@ -1701,9 +1739,15 @@ class _ConnectionLogsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final compact =
+        _WorkspaceControlSizeScope.maybeOf(context) ==
+        _WorkspaceControlSize.tiny;
     return Container(
-      constraints: const BoxConstraints(minHeight: 180, maxHeight: 280),
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+      key: const ValueKey('connection-logs-card'),
+      constraints: const BoxConstraints(maxHeight: 280),
+      padding: compact
+          ? const EdgeInsets.all(12)
+          : const EdgeInsets.fromLTRB(18, 16, 18, 16),
       decoration: BoxDecoration(
         color: _card.withValues(alpha: _workspaceDark ? 0.86 : 0.92),
         borderRadius: BorderRadius.circular(8),
@@ -1718,6 +1762,8 @@ class _ConnectionLogsCard extends StatelessWidget {
                     'workspace.label.connectionDiagnostics',
                     fallback: 'Connection diagnostics',
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: _text,
                     fontSize: 13,
