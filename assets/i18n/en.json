@@ -596,6 +596,8 @@
   "settings.update.status.installerLaunched": "The installer is open. Follow its instructions to finish updating.",
   "settings.update.status.installing": "Installing the update...",
   "settings.update.status.readyToRestart": "Update ready. Restart Nauterm to finish applying it.",
+  "sftp.action.copyAbsolutePath": "Copy Absolute Path",
+  "sftp.action.copyName": "Copy Name",
   "sftp.action.copyTo": "Copy to...",
   "sftp.action.download": "Download",
   "sftp.action.followSshDirectory": "Follow SSH current directory",

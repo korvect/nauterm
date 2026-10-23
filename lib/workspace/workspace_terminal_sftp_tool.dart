@@ -308,8 +308,13 @@ class _TerminalSftpBrowserState extends State<_TerminalSftpBrowser> {
       style: _terminalSftpMenuStyle(widget.colors),
       entries: _sftpContextMenuEntries(
         _sftpActionMenuEntries(
-          hasSelection:
-              widget.selectedPath != null || widget.selectedPaths.isNotEmpty,
+          hasSelection: widget.entries.any(
+            (entry) =>
+                !entry.isParent &&
+                (widget.selectedPaths.isEmpty
+                    ? widget.selectedPath == entry.path
+                    : widget.selectedPaths.contains(entry.path)),
+          ),
           selectionIsFile: selectionIsFile,
           selectionCanOpenWithSystemDefault:
               selectedEntry == null ||

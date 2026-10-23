@@ -217,6 +217,8 @@ enum _SftpAction {
   openWithSshEditor,
   openWithExternalEditor,
   openWithOtherApplication,
+  copyName,
+  copyAbsolutePath,
   copyToTarget,
   uploadFiles,
   rename,
@@ -257,6 +259,27 @@ class _SftpMenuEntry {
   final List<_SftpMenuEntry> children;
 }
 
+/// Copies selectable entries supplied in display order, without quoting paths.
+Future<void> copySftpEntryText(
+  Iterable<({String name, String path})> entries, {
+  required bool absolutePath,
+}) async {
+  final text = entries
+      .map((entry) => absolutePath ? entry.path : entry.name)
+      .join('\n');
+  if (text.isEmpty) return;
+  await Clipboard.setData(ClipboardData(text: text));
+}
+
+List<_SftpMenuEntry> _sftpClipboardMenuEntries({required bool enabled}) => [
+  _sftpMenuItem(_SftpAction.copyName, 'sftp.action.copyName', enabled: enabled),
+  _sftpMenuItem(
+    _SftpAction.copyAbsolutePath,
+    'sftp.action.copyAbsolutePath',
+    enabled: enabled,
+  ),
+];
+
 List<_SftpMenuEntry> _sftpActionMenuEntries({
   required bool hasSelection,
   required bool showHiddenFiles,
@@ -276,6 +299,7 @@ List<_SftpMenuEntry> _sftpActionMenuEntries({
           'Open with SSH Editor',
           enabled: hasSelection,
         ),
+      ..._sftpClipboardMenuEntries(enabled: hasSelection),
       _sftpMenuItem(
         _SftpAction.copyToTarget,
         'sftp.action.download',
@@ -353,6 +377,7 @@ List<_SftpMenuEntry> _sftpActionMenuEntries({
   return [
     if (!selectionIsFile || selectionCanOpenWithSystemDefault)
       _sftpMenuItem(_SftpAction.open, 'Open', enabled: hasSelection),
+    ..._sftpClipboardMenuEntries(enabled: hasSelection),
     _sftpMenuItem(_SftpAction.refresh, 'Refresh'),
     _sftpMenuItem(_SftpAction.newFolder, 'sftp.action.newFolder'),
     _sftpMenuItem(
@@ -388,6 +413,7 @@ List<_SftpMenuEntry> _sftpRowMenuEntries(
           'Open with SSH Editor',
           enabled: canOpenFile,
         ),
+      ..._sftpClipboardMenuEntries(enabled: !entry.isParent),
       _sftpMenuItem(
         _SftpAction.copyToTarget,
         'sftp.action.download',
@@ -443,6 +469,7 @@ List<_SftpMenuEntry> _sftpRowMenuEntries(
     if (!canOpenFile || canOpenWithSystemDefault)
       _sftpMenuItem(_SftpAction.open, 'Open', enabled: !entry.isParent),
     _sftpMenuItem(_SftpAction.openWith, 'Open With', enabled: canOpenFile),
+    ..._sftpClipboardMenuEntries(enabled: !entry.isParent),
     _sftpMenuItem(_SftpAction.refresh, 'Refresh'),
     _sftpMenuItem(_SftpAction.newFolder, 'sftp.action.newFolder'),
   ];

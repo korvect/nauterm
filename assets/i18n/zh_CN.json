@@ -596,6 +596,8 @@
   "settings.update.status.installerLaunched": "安装程序已打开，请按照提示完成更新。",
   "settings.update.status.installing": "正在安装更新…",
   "settings.update.status.readyToRestart": "更新已就绪。重启 Nauterm 以完成更新。",
+  "sftp.action.copyAbsolutePath": "复制绝对路径",
+  "sftp.action.copyName": "复制名称",
   "sftp.action.copyTo": "复制到…",
   "sftp.action.download": "下载",
   "sftp.action.followSshDirectory": "跟随 SSH 当前目录",

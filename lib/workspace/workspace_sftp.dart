@@ -4267,6 +4267,18 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
   }) {
     final selected = _selectedEntry(session);
     switch (action) {
+      case _SftpAction.copyName:
+      case _SftpAction.copyAbsolutePath:
+        unawaited(
+          copySftpEntryText(
+            _sortSftpEntries(
+              _selectedEntries(session),
+              session.sortColumn,
+              ascending: session.sortAscending,
+            ).map((entry) => (name: entry.name, path: entry.path)),
+            absolutePath: action == _SftpAction.copyAbsolutePath,
+          ),
+        );
       case _SftpAction.open:
         if (selected != null) {
           _openEntry(session, selected, openFile: true);
@@ -4329,6 +4341,18 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     final auth = connection?.auth;
     final selected = _selectedRemoteEntry(session);
     switch (action) {
+      case _SftpAction.copyName:
+      case _SftpAction.copyAbsolutePath:
+        unawaited(
+          copySftpEntryText(
+            _sortSftpEntries(
+              _selectedRemoteEntries(session),
+              session.sortColumn,
+              ascending: session.sortAscending,
+            ).map((entry) => (name: entry.name, path: entry.path)),
+            absolutePath: action == _SftpAction.copyAbsolutePath,
+          ),
+        );
       case _SftpAction.open:
         if (selected != null) {
           _openRemoteEntry(
