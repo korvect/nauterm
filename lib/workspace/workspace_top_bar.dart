@@ -8,9 +8,13 @@ const _topBarTabSizeTransitionDuration = Duration(milliseconds: 280);
 const _topBarTabSizeTransitionCurve = Curves.easeOutExpo;
 const double _topBarWorkspaceTabMaxWidth = 160;
 const double _topBarWorkspaceTabChromeWidth = 39;
+const double _topBarCollapsibleTabChromeWidth = 8 * 2 + 14 + 7;
 const double _topBarIconButtonWidth = 34;
 const double _topBarControlGap = 10;
 const double _topBarOverlayFadeWidth = 24;
+
+Duration _topBarMotionDuration(BuildContext context, Duration duration) =>
+    MediaQuery.disableAnimationsOf(context) ? Duration.zero : duration;
 
 class _TopBar extends StatelessWidget {
   const _TopBar({
@@ -101,7 +105,7 @@ class _TopBar extends StatelessWidget {
     final rightOverlayFadeStop = rightOverlayFadeWidth / rightOverlayWidth;
 
     return AnimatedContainer(
-      duration: _topBarColorTransitionDuration,
+      duration: _topBarMotionDuration(context, _topBarColorTransitionDuration),
       curve: _topBarColorTransitionCurve,
       height: _topBarHeight,
       decoration: BoxDecoration(color: background),
@@ -126,6 +130,7 @@ class _TopBar extends StatelessWidget {
                         : 14,
                   ),
                   _WorkspaceTabButton(
+                    key: const ValueKey('workspace-top-tab:vaults'),
                     label: _WorkspaceTab.vaults.label,
                     icon: _WorkspaceTab.vaults.icon,
                     selected: selectedTab == _WorkspaceTab.vaults,
@@ -139,6 +144,7 @@ class _TopBar extends StatelessWidget {
                   if (sftpTabEnabled) ...[
                     SizedBox(width: 6),
                     _WorkspaceTabButton(
+                      key: const ValueKey('workspace-top-tab:sftp'),
                       label: _WorkspaceTab.sftp.label,
                       icon: _WorkspaceTab.sftp.icon,
                       selected: selectedTab == _WorkspaceTab.sftp,
@@ -155,6 +161,7 @@ class _TopBar extends StatelessWidget {
                     SizedBox(
                       width: workspaceTabWidth,
                       child: _WorkspaceTabButton(
+                        key: const ValueKey('workspace-top-tab:workspace'),
                         label: currentWorkspace.name,
                         icon: currentWorkspace.icon,
                         selected:
@@ -216,7 +223,10 @@ class _TopBar extends StatelessWidget {
             bottom: 0,
             width: rightOverlayWidth,
             child: AnimatedContainer(
-              duration: _topBarColorTransitionDuration,
+              duration: _topBarMotionDuration(
+                context,
+                _topBarColorTransitionDuration,
+              ),
               curve: _topBarColorTransitionCurve,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
@@ -292,7 +302,11 @@ class _TopBar extends StatelessWidget {
   }
 }
 
-double _topBarWorkspaceTabNaturalWidth(BuildContext context, String label) {
+double _topBarWorkspaceTabNaturalWidth(
+  BuildContext context,
+  String label, {
+  double chromeWidth = _topBarWorkspaceTabChromeWidth,
+}) {
   final textPainter = TextPainter(
     text: TextSpan(
       text: label,
@@ -306,7 +320,9 @@ double _topBarWorkspaceTabNaturalWidth(BuildContext context, String label) {
     textDirection: Directionality.of(context),
     textScaler: MediaQuery.textScalerOf(context),
   )..layout();
-  return _topBarWorkspaceTabChromeWidth + textPainter.width;
+  final width = chromeWidth + textPainter.width;
+  textPainter.dispose();
+  return width;
 }
 
 class _LinuxWindowControls extends StatelessWidget {
@@ -448,7 +464,10 @@ class _LinuxWindowControlButtonState extends State<_LinuxWindowControlButton> {
           onTap: widget.onPressed,
           child: Center(
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 120),
+              duration: _topBarMotionDuration(
+                context,
+                const Duration(milliseconds: 120),
+              ),
               width: 26,
               height: 26,
               decoration: BoxDecoration(
@@ -592,7 +611,10 @@ class _TopBarIconButton extends StatelessWidget {
             ),
             icon: TweenAnimationBuilder<Color?>(
               tween: ColorTween(end: color),
-              duration: _topBarColorTransitionDuration,
+              duration: _topBarMotionDuration(
+                context,
+                _topBarColorTransitionDuration,
+              ),
               curve: _topBarColorTransitionCurve,
               builder: (context, animatedColor, child) {
                 return Icon(icon, size: 18, color: animatedColor ?? color);
@@ -665,21 +687,30 @@ class _WorkspaceTabButtonState extends State<_WorkspaceTabButton> {
               : const Color(0xff40465b).withValues(alpha: 0.72));
 
     final collapsed = widget.collapseToIconWhenInactive && !widget.selected;
-    final width = collapsed
-        ? 30.0
-        : widget.constrainWidth
+    final expandedWidth = widget.constrainWidth
         ? widget.selected
               ? 220.0
               : 142.0
-        : null;
-    final contentPadding = EdgeInsets.symmetric(horizontal: collapsed ? 0 : 8);
+        : _topBarWorkspaceTabNaturalWidth(
+            context,
+            widget.label,
+            chromeWidth: widget.collapseToIconWhenInactive
+                ? _topBarCollapsibleTabChromeWidth
+                : _topBarWorkspaceTabChromeWidth,
+          );
+    final width = collapsed ? 30.0 : expandedWidth;
+    final colorDuration = _topBarMotionDuration(
+      context,
+      _topBarColorTransitionDuration,
+    );
     final overlayAmount = _pressed ? 0.16 : (_hovered ? 0.08 : 0.0);
     final background = overlayAmount == 0
         ? baseBackground
         : _blend(baseBackground, color, overlayAmount);
 
     final button = AnimatedContainer(
-      duration: _topBarColorTransitionDuration,
+      key: const ValueKey('top-tab-chrome'),
+      duration: colorDuration,
       curve: _topBarColorTransitionCurve,
       decoration: BoxDecoration(
         color: background,
@@ -700,64 +731,64 @@ class _WorkspaceTabButtonState extends State<_WorkspaceTabButton> {
           onTap: widget.onTap,
           child: TweenAnimationBuilder<Color?>(
             tween: ColorTween(end: color),
-            duration: _topBarColorTransitionDuration,
+            duration: colorDuration,
             curve: _topBarColorTransitionCurve,
             builder: (context, animatedColor, child) {
               final foreground = animatedColor ?? color;
-              return Align(
-                alignment: collapsed ? Alignment.center : Alignment.centerLeft,
-                child: Padding(
-                  padding: contentPadding,
-                  child: IconTheme(
-                    data: IconThemeData(color: foreground),
-                    child: DefaultTextStyle(
-                      style: TextStyle(
-                        color: foreground,
-                        fontSize: NautermFontSizes.labelLarge,
-                        leadingDistribution: TextLeadingDistribution.even,
-                        fontWeight: NautermFontWeights.medium,
-                        letterSpacing: 0,
-                      ),
-                      child: Row(
-                        mainAxisSize: widget.constrainWidth
-                            ? MainAxisSize.max
-                            : MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Icon(widget.icon, size: 14),
-                          if (!collapsed) ...[
-                            SizedBox(width: 7),
-                            Flexible(
-                              fit: widget.constrainWidth
-                                  ? FlexFit.tight
-                                  : FlexFit.loose,
-                              child: Text(
-                                widget.label,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            if (widget.showBellIndicator) ...[
-                              SizedBox(width: 5),
-                              Icon(
-                                LucideIcons.bell,
-                                key: const ValueKey(
-                                  'terminal-tab-bell-indicator',
-                                ),
-                                size: 12,
-                              ),
-                            ],
-                            if (widget.onClose != null) ...[
-                              SizedBox(width: 5),
-                              _TopBarTabCloseButton(
-                                color: foreground,
-                                onPressed: widget.onClose!,
-                              ),
-                            ],
-                          ],
-                        ],
-                      ),
+              final content = Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Icon(widget.icon, size: 14),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Text(
+                      widget.label,
+                      maxLines: 1,
+                      softWrap: false,
+                      overflow: widget.collapseToIconWhenInactive
+                          ? TextOverflow.visible
+                          : TextOverflow.ellipsis,
                     ),
+                  ),
+                  if (widget.showBellIndicator) ...[
+                    const SizedBox(width: 5),
+                    const Icon(
+                      LucideIcons.bell,
+                      key: ValueKey('terminal-tab-bell-indicator'),
+                      size: 12,
+                    ),
+                  ],
+                  if (widget.onClose != null) ...[
+                    const SizedBox(width: 5),
+                    _TopBarTabCloseButton(
+                      color: foreground,
+                      onPressed: widget.onClose!,
+                    ),
+                  ],
+                ],
+              );
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: IconTheme(
+                  data: IconThemeData(color: foreground),
+                  child: DefaultTextStyle(
+                    style: TextStyle(
+                      color: foreground,
+                      fontSize: NautermFontSizes.labelLarge,
+                      leadingDistribution: TextLeadingDistribution.even,
+                      fontWeight: NautermFontWeights.medium,
+                      letterSpacing: 0,
+                    ),
+                    child: widget.collapseToIconWhenInactive
+                        ? ClipRect(
+                            child: OverflowBox(
+                              alignment: Alignment.centerLeft,
+                              minWidth: expandedWidth - 16,
+                              maxWidth: expandedWidth - 16,
+                              child: content,
+                            ),
+                          )
+                        : content,
                   ),
                 ),
               );
@@ -767,23 +798,17 @@ class _WorkspaceTabButtonState extends State<_WorkspaceTabButton> {
       ),
     );
 
-    final Widget sizedButton;
-    if (widget.collapseToIconWhenInactive && !widget.constrainWidth) {
-      sizedButton = AnimatedSize(
-        duration: _topBarTabSizeTransitionDuration,
-        curve: _topBarTabSizeTransitionCurve,
-        alignment: Alignment.centerLeft,
-        child: SizedBox(width: width, height: 30, child: button),
-      );
-    } else {
-      sizedButton = AnimatedContainer(
-        duration: _topBarTabSizeTransitionDuration,
-        curve: _topBarTabSizeTransitionCurve,
-        width: width,
-        height: 30,
-        child: button,
-      );
-    }
+    final sizedButton = TweenAnimationBuilder<double>(
+      tween: Tween<double>(end: width),
+      duration: _topBarMotionDuration(
+        context,
+        _topBarTabSizeTransitionDuration,
+      ),
+      curve: _topBarTabSizeTransitionCurve,
+      child: button,
+      builder: (context, animatedWidth, child) =>
+          SizedBox(width: animatedWidth, height: 30, child: child),
+    );
 
     return _TopBarInteractiveRegion(
       child: SizedBox(
@@ -817,7 +842,10 @@ class _TopBarTabCloseButtonState extends State<_TopBarTabCloseButton> {
         behavior: HitTestBehavior.opaque,
         onTap: widget.onPressed,
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 110),
+          duration: _topBarMotionDuration(
+            context,
+            const Duration(milliseconds: 110),
+          ),
           curve: Curves.easeOutCubic,
           width: 18,
           height: 18,
