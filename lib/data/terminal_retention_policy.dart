@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../app/nauterm_log.dart';
 import 'nauterm_data_store.dart';
 import 'terminal_recording_store.dart';
 import '../terminal/terminal_recording_config.dart';
@@ -54,37 +55,85 @@ Future<TerminalRetentionApplication> applyTerminalRetentionPolicy({
   );
   final deletedIds = plan.deletedLogIds;
   final updatedLogs = <TerminalLogEntry>[];
-  for (final log in logs) {
-    if (deletedIds.contains(log.id)) continue;
-    if (!plan.oversizedLogIds.contains(log.id) || log.captureFile.isEmpty) {
+
+  for (final candidate in logs) {
+    if (deletedIds.contains(candidate.id) ||
+        !plan.oversizedLogIds.contains(candidate.id) ||
+        candidate.captureFile.isEmpty) {
       continue;
     }
-    final capture = await captureStore.retainTail(
-      logId: log.id,
-      captureFile: log.captureFile,
-      maxBytes: config.maxSessionBytes,
-    );
-    final updated = log.copyWith(
-      captureFile: capture.fileName,
-      captureBytes: capture.bytes,
-      captureSha256: capture.sha256,
-    );
-    dataStore.saveTerminalLog(
-      updated,
-      events: dataStore.listTerminalLogEvents(log.id),
-    );
-    updatedLogs.add(updated);
-  }
-  for (final id in deletedIds) {
-    final captureFile = dataStore.deleteTerminalLog(id);
-    if (captureFile != null && captureFile.isNotEmpty) {
-      await captureStore.deleteCapture(captureFile);
+    final lease = captureStore.tryAcquireLease(candidate.id);
+    if (lease == null) continue;
+    try {
+      final log = dataStore.getTerminalLog(candidate.id);
+      if (log == null ||
+          log.endedAt == null ||
+          log.captureSha256 == null ||
+          log.captureFile != candidate.captureFile ||
+          log.captureSha256 != candidate.captureSha256) {
+        continue;
+      }
+      final capture = await captureStore.retainTail(
+        logId: log.id,
+        captureFile: log.captureFile,
+        maxBytes: config.maxSessionBytes,
+        expectedSha256: log.captureSha256!,
+      );
+      final updated = log.copyWith(
+        captureFile: capture.fileName,
+        captureBytes: capture.bytes,
+        captureSha256: capture.sha256,
+      );
+      dataStore.saveTerminalLog(
+        updated,
+        events: dataStore.listTerminalLogEvents(log.id),
+      );
+      updatedLogs.add(updated);
+      if (capture.fileName != log.captureFile) {
+        try {
+          await captureStore.deleteCapture(log.captureFile);
+        } on Object catch (error, stackTrace) {
+          NautermLog.warning(
+            'recording',
+            'Unable to remove replaced terminal capture.',
+            error: error,
+            stackTrace: stackTrace,
+          );
+        }
+      }
+    } finally {
+      lease.close();
     }
-    onLogDeleted?.call(id);
+  }
+  final removedIds = <String>{};
+  for (final id in deletedIds) {
+    final lease = captureStore.tryAcquireLease(id);
+    if (lease == null) continue;
+    try {
+      final log = dataStore.getTerminalLog(id);
+      if (log == null) continue;
+      final expected = logs
+          .where((candidate) => candidate.id == id)
+          .firstOrNull;
+      if (log.endedAt == null ||
+          expected == null ||
+          log.captureFile != expected.captureFile ||
+          log.captureSha256 != expected.captureSha256) {
+        continue;
+      }
+      final captureFile = dataStore.deleteTerminalLog(id);
+      if (captureFile != null && captureFile.isNotEmpty) {
+        await captureStore.deleteCapture(captureFile);
+      }
+      removedIds.add(id);
+      onLogDeleted?.call(id);
+    } finally {
+      lease.close();
+    }
   }
   return TerminalRetentionApplication(
     updatedLogs: updatedLogs,
-    deletedLogIds: deletedIds,
+    deletedLogIds: removedIds,
   );
 }
 

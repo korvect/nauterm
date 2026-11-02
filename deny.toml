@@ -5,6 +5,7 @@ version = 2
 version = 2
 confidence-threshold = 0.8
 allow = [
+    "0BSD",
     "Apache-2.0",
     "BSD-2-Clause",
     "BSD-3-Clause",
@@ -17,6 +18,16 @@ allow = [
     "Unlicense",
     "Zlib",
 ]
+
+[[licenses.exceptions]]
+name = "dwrote"
+version = "=0.11.5"
+allow = ["MPL-2.0"]
+
+[[licenses.exceptions]]
+name = "option-ext"
+version = "=0.2.0"
+allow = ["MPL-2.0"]
 
 [licenses.private]
 ignore = true

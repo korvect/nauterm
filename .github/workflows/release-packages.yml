@@ -161,7 +161,7 @@ jobs:
     needs: select-builds
     if: needs.select-builds.outputs.macos_enabled == 'true'
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 60
+    timeout-minutes: 90
     strategy:
       fail-fast: true
       matrix: ${{ fromJSON(needs.select-builds.outputs.macos_matrix) }}
@@ -194,11 +194,11 @@ jobs:
 
       - name: Run native integration tests
         if: matrix.arch == 'arm64'
-        run: cargo test --manifest-path native/nauterm_ffi/Cargo.toml --locked --features integration-tests,test-credential-store -- --test-threads=1
+        run: cargo test --manifest-path native/nauterm_core/Cargo.toml --locked --features integration-tests,test-credential-store -- --test-threads=1
 
       - name: Build the native test library
         if: matrix.arch == 'arm64'
-        run: cargo build --manifest-path native/nauterm_ffi/Cargo.toml --locked --features test-credential-store
+        run: cargo build --manifest-path native/nauterm_core/Cargo.toml --locked --features test-credential-store
 
       - name: Run Flutter integration tests
         if: matrix.arch == 'arm64'
@@ -213,11 +213,33 @@ jobs:
           SPARKLE_PUBLIC_ED_KEY: ${{ vars.SPARKLE_PUBLIC_ED_KEY }}
         run: make package-macos-${{ matrix.arch }}
 
+      - name: Configure RS macOS signing
+        env:
+          NAUTERM_RS_SIGN_CERTIFICATE: ${{ secrets.NAUTERM_RS_SIGN_CERTIFICATE }}
+          NAUTERM_RS_SIGN_PASSWORD: ${{ secrets.NAUTERM_RS_SIGN_PASSWORD }}
+          NAUTERM_RS_SIGN_IDENTITY: ${{ vars.NAUTERM_RS_SIGN_IDENTITY }}
+          NAUTERM_RS_NOTARY_KEY_BASE64: ${{ secrets.NAUTERM_RS_NOTARY_KEY_BASE64 }}
+          NAUTERM_RS_NOTARY_KEY_ID: ${{ secrets.NAUTERM_RS_NOTARY_KEY_ID }}
+          NAUTERM_RS_NOTARY_ISSUER: ${{ secrets.NAUTERM_RS_NOTARY_ISSUER }}
+        run: bash scripts/ci/setup_rs_macos_signing.sh
+
+      - name: Build macOS RS package
+        env:
+          NAUTERM_GOOGLE_CLIENT_SECRET: ${{ secrets.NAUTERM_GOOGLE_CLIENT_SECRET }}
+          SPARKLE_PUBLIC_ED_KEY: ${{ vars.SPARKLE_PUBLIC_ED_KEY }}
+        run: make package-rs-macos
+
+      - name: Clean up RS signing credentials
+        if: always()
+        run: bash scripts/ci/setup_rs_macos_signing.sh cleanup
+
       - name: Generate signed Sparkle appcast
         if: startsWith(github.ref, 'refs/tags/')
         env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
-        run: bash scripts/ci/generate_sparkle_appcast.sh ${{ matrix.arch }}
+        run: |
+          bash scripts/ci/generate_sparkle_appcast.sh ${{ matrix.arch }}
+          bash scripts/ci/generate_sparkle_appcast.sh ${{ matrix.arch }} rs
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -226,6 +248,8 @@ jobs:
             dist/Nauterm-${{ steps.version.outputs.value }}-macos-${{ matrix.arch }}.app.zip
             dist/Nauterm-${{ steps.version.outputs.value }}-macos-${{ matrix.arch }}.dmg
             dist/appcast-${{ matrix.arch }}.xml
+            dist/Nauterm-RS-${{ steps.version.outputs.value }}-macos-${{ matrix.arch }}.app.zip
+            dist/appcast-rs-${{ matrix.arch }}.xml
           if-no-files-found: error
           retention-days: ${{ github.event_name == 'push' && 1 || 7 }}
 
@@ -234,7 +258,7 @@ jobs:
     needs: select-builds
     if: needs.select-builds.outputs.linux_enabled == 'true'
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 60
+    timeout-minutes: 90
     strategy:
       fail-fast: true
       matrix: ${{ fromJSON(needs.select-builds.outputs.linux_matrix) }}
@@ -278,6 +302,10 @@ jobs:
             file \
             fish \
             build-essential \
+            libasound2-dev libclang-dev libdbus-1-dev libfontconfig1-dev \
+            libfreetype6-dev libpipewire-0.3-dev libssl-dev libvulkan-dev \
+            libwayland-dev libxcb1-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev \
             libayatana-appindicator3-dev \
             libblkid-dev \
             libgtk-3-dev \
@@ -305,10 +333,10 @@ jobs:
         run: flutter pub get
 
       - name: Run native integration tests
-        run: cargo test --manifest-path native/nauterm_ffi/Cargo.toml --locked --features integration-tests,test-credential-store -- --test-threads=1
+        run: cargo test --manifest-path native/nauterm_core/Cargo.toml --locked --features integration-tests,test-credential-store -- --test-threads=1
 
       - name: Build the native test library
-        run: cargo build --manifest-path native/nauterm_ffi/Cargo.toml --locked --features test-credential-store
+        run: cargo build --manifest-path native/nauterm_core/Cargo.toml --locked --features test-credential-store
 
       - name: Run Flutter integration tests
         run: flutter test --no-pub test_integration
@@ -320,6 +348,13 @@ jobs:
           NAUTERM_POSTHOG_API_KEY: ${{ vars.NAUTERM_POSTHOG_API_KEY }}
           NAUTERM_POSTHOG_HOST: ${{ vars.NAUTERM_POSTHOG_HOST }}
         run: make package-linux-${{ matrix.arch }}
+
+      - name: Build Linux RS packages
+        env:
+          CLEAN_DIST: "0"
+          NAUTERM_GOOGLE_CLIENT_SECRET: ${{ secrets.NAUTERM_GOOGLE_CLIENT_SECRET }}
+        run: make package-rs-linux-${{ matrix.arch }}
+
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -336,44 +371,16 @@ jobs:
     needs: select-builds
     if: needs.select-builds.outputs.windows_enabled == 'true'
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 60
+    timeout-minutes: 90
     strategy:
       fail-fast: true
       matrix: ${{ fromJSON(needs.select-builds.outputs.windows_matrix) }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      # Use the upstream DLLs so Windows ARM64 does not run Zig's build runner.
       - name: Install prebuilt libghostty-vt
         shell: pwsh
-        run: |
-          # Keep in sync with GHOSTTY_LIB_VERSION in native/nauterm_ffi/build.rs.
-          $version = "1.0.1"
-          if ("${{ matrix.arch }}" -eq "arm64") {
-            $target = "aarch64"
-            $expectedSha256 = "cc61da5f968ea0b08639bdf019c6b7da46bad1d985774fd8a2de57af32862892"
-          } else {
-            $target = "x86_64"
-            $expectedSha256 = "8e2eb9e1822e85d786b456c8beb86f49d09c318c91f0c2913f91e7ffa12cda29"
-          }
-          $package = "ghostty-vt-$version-$target-windows-gnu"
-          $archive = Join-Path $env:RUNNER_TEMP "$package.zip"
-          $url = "https://release.files.ghostty.org/libghostty-vt/$version/$package.zip"
-          Invoke-WebRequest -Uri $url -OutFile $archive -UseBasicParsing
-
-          $actualSha256 = (Get-FileHash -Path $archive -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($actualSha256 -ne $expectedSha256) {
-            throw "libghostty-vt archive checksum mismatch: expected $expectedSha256, got $actualSha256"
-          }
-
-          Expand-Archive -Path $archive -DestinationPath $env:RUNNER_TEMP -Force
-          $packageDir = Join-Path $env:RUNNER_TEMP $package
-          $dllPath = Join-Path $packageDir "bin\ghostty-vt.dll"
-          if (-not (Test-Path $dllPath -PathType Leaf)) {
-            throw "libghostty-vt DLL not found: $dllPath"
-          }
-          $libDir = Join-Path $packageDir "lib"
-          Add-Content -Path $env:GITHUB_ENV -Value "NAUTERM_GHOSTTY_VT_LIB_DIR=$libDir"
+        run: ./scripts/ci/install_ghostty_windows.ps1 -Arch '${{ matrix.arch }}'
 
       - uses: ilammy/msvc-dev-cmd@7defe9254715b088f12dddd9942945a3d75cdad5 # v1.9.0
         with:
@@ -421,10 +428,10 @@ jobs:
         run: flutter pub get
 
       - name: Run native integration tests
-        run: cargo test --manifest-path native/nauterm_ffi/Cargo.toml --locked --features integration-tests,test-credential-store -- --test-threads=1
+        run: cargo test --manifest-path native/nauterm_core/Cargo.toml --locked --features integration-tests,test-credential-store -- --test-threads=1
 
       - name: Build the native test library
-        run: cargo build --manifest-path native/nauterm_ffi/Cargo.toml --locked --features test-credential-store
+        run: cargo build --manifest-path native/nauterm_core/Cargo.toml --locked --features test-credential-store
 
       - name: Run Flutter integration tests
         run: flutter test --no-pub test_integration
@@ -441,6 +448,14 @@ jobs:
           NAUTERM_POSTHOG_API_KEY: ${{ vars.NAUTERM_POSTHOG_API_KEY }}
           NAUTERM_POSTHOG_HOST: ${{ vars.NAUTERM_POSTHOG_HOST }}
         run: ./scripts/ci/package_windows.ps1 -Arch '${{ matrix.arch }}'
+
+      - name: Build Windows RS packages
+        shell: pwsh
+        env:
+          CLEAN_DIST: "0"
+          NAUTERM_GOOGLE_CLIENT_SECRET: ${{ secrets.NAUTERM_GOOGLE_CLIENT_SECRET }}
+        run: ./scripts/ci/package_windows.ps1 -Arch '${{ matrix.arch }}' -Client rs
+
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -472,7 +487,10 @@ jobs:
           merge-multiple: true
 
       - name: Verify release versions
-        run: bash scripts/ci/verify_versions.sh release-artifacts
+        run: |
+          bash scripts/ci/verify_versions.sh release-artifacts
+          version="$(awk '/^version: / { split($2, parts, "+"); print parts[1]; exit }' pubspec.yaml)"
+          python3 scripts/ci/verify_rs_packages.py release-artifacts "$version"
 
       - name: Publish release assets
         env:

@@ -1511,7 +1511,8 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
       throw StateError('Nauterm is shutting down.');
     }
     final recordingConfig = terminalRecordingConfig;
-    if (!recordingConfig.enabled) {
+    final captureStore = _terminalLogCaptureStore;
+    if (!recordingConfig.enabled || captureStore == null) {
       return null;
     }
     late final TerminalSessionRecorder recorder;
@@ -1528,26 +1529,37 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
           : null,
       onShellHistoryEntry: _appendShellHistoryEntry,
     );
-    _recordingService.register(
-      recorder,
-      pending: awaitConnection,
-      context: TerminalLogContext(
-        hostId:
-            hostId ??
-            (sourceHostUuid == null
-                ? null
-                : _hostEntries
-                      .where((host) => host.uuid == sourceHostUuid)
-                      .firstOrNull
-                      ?.id),
-        host: _emptyToNull(host),
-        port: port,
-        username: _emptyToNull(username),
-        shellPath: _emptyToNull(shellPath),
-        workDir: _emptyToNull(workDir),
-        cwdResolver: cwdResolver,
-      ),
-    );
+    try {
+      _recordingService.register(
+        recorder,
+        pending: awaitConnection,
+        captureStore: captureStore,
+        context: TerminalLogContext(
+          hostId:
+              hostId ??
+              (sourceHostUuid == null
+                  ? null
+                  : _hostEntries
+                        .where((host) => host.uuid == sourceHostUuid)
+                        .firstOrNull
+                        ?.id),
+          host: _emptyToNull(host),
+          port: port,
+          username: _emptyToNull(username),
+          shellPath: _emptyToNull(shellPath),
+          workDir: _emptyToNull(workDir),
+          cwdResolver: cwdResolver,
+        ),
+      );
+    } on Object catch (error, stackTrace) {
+      NautermLog.warning(
+        'recording',
+        'Unable to acquire session recording lease.',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      return null;
+    }
     if (!awaitConnection) {
       _selectedLogId ??= recorder.id;
     }
@@ -1713,6 +1725,7 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
       if (!terminalRecordingConfig.enabled) {
         await _recordingService.closeAllCaptures();
         _recordingService.ignoreAllRecorders();
+        _recordingService.releaseAllLeases();
         return;
       }
       if (!terminalRecordingConfig.captureEnabled) {
@@ -1730,6 +1743,7 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
         _recordingService.removePending(logId);
         _recordingService.removeCaptureReference(logId);
         _recordingService.ignore(logId);
+        _recordingService.releaseLease(logId);
         if (_selectedLogId == logId) _selectedLogId = null;
       }
       final activeRecordingIds = {
@@ -1744,6 +1758,7 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
       final savedLogs = <TerminalLogEntry>[];
       for (final recorder in recorders) {
         if (_recordingService.isIgnored(recorder.id) ||
+            _recordingService.isFinalized(recorder.id) ||
             _recordingService.isPending(recorder.id)) {
           continue;
         }
@@ -1773,6 +1788,7 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
           ],
         );
         savedLogs.add(savedLog);
+        if (!recording.isActive) _recordingService.markFinalized(recording.id);
       }
       final retention = await _applyTerminalRetentionPolicy(
         dataStore: dataStore,
@@ -1832,6 +1848,7 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
     final captureStore = _terminalLogCaptureStore;
     for (final recorder in _terminalSessionRecorders) {
       if (_recordingService.isIgnored(recorder.id) ||
+          _recordingService.isFinalized(recorder.id) ||
           _recordingService.isPending(recorder.id)) {
         continue;
       }

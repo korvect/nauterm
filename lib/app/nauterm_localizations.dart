@@ -60,11 +60,12 @@ class NautermLocalizationPattern {
   String? translate(String source) {
     final match = expression.firstMatch(source);
     if (match == null) return null;
-    var result = replacement;
-    for (var index = 1; index <= match.groupCount; index++) {
-      result = result.replaceAll('{$index}', match[index] ?? '');
-    }
-    return result;
+    return replacement.replaceAllMapped(RegExp(r'\{([0-9]+)\}'), (placeholder) {
+      final index = int.tryParse(placeholder[1]!);
+      return index != null && index > 0 && index <= match.groupCount
+          ? match[index] ?? ''
+          : placeholder[0]!;
+    });
   }
 }
 
@@ -111,7 +112,9 @@ class NautermLocalizations {
     Map<String, Object?> args = const {},
   }) {
     if (locale.languageCode == 'en' && fallback != null) {
-      return _interpolateLocalizationArgs(fallback, args);
+      // Catalog copy wins so wording fixes in en.json reach the UI; inline
+      // fallbacks only cover keys that are not in the catalog yet.
+      return _interpolateLocalizationArgs(messages[key] ?? fallback, args);
     }
     final resolvedKey = messages.containsKey(key)
         ? key
@@ -136,6 +139,11 @@ class NautermLocalizations {
       if (asset != 'assets/i18n/en.json')
         rootBundle.loadString('assets/i18n/en.json'),
     ]);
+    if (loaded.length > 1 && cached(const Locale('en')) == null) {
+      // The global tr() falls back to English when the user picks English
+      // while a Chinese instance is still current.
+      parse(const Locale('en'), loaded.last);
+    }
     return parse(
       locale,
       loaded.first,
@@ -201,6 +209,10 @@ String tr(
 }) {
   if (appLanguage == AppLanguage.english &&
       NautermLocalizations.current.locale.languageCode != 'en') {
+    final english = NautermLocalizations.cached(const Locale('en'));
+    if (english != null) {
+      return english.tr(key, fallback: fallback, args: args);
+    }
     return _interpolateLocalizationArgs(fallback ?? key, args);
   }
   return NautermLocalizations.current.tr(key, fallback: fallback, args: args);
