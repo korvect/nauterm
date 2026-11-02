@@ -66,8 +66,16 @@ Future<NautermWorkspaceData> loadNautermWorkspaceData(
     try {
       final captures = TerminalLogCaptureStore(Directory(capturesPath));
       await captures.prepare();
-      for (final log in store.listIncompleteTerminalCaptures()) {
+      for (final candidate in store.listIncompleteTerminalCaptures()) {
+        final lease = captures.tryAcquireLease(candidate.id);
+        if (lease == null) continue;
         try {
+          final log = store.getTerminalLog(candidate.id);
+          if (log == null ||
+              log.captureFile.isEmpty ||
+              log.captureSha256 != null) {
+            continue;
+          }
           if (!await captures.captureExists(log.captureFile)) {
             store.clearMissingTerminalCapture(log.id);
             continue;
@@ -89,15 +97,16 @@ Future<NautermWorkspaceData> loadNautermWorkspaceData(
             error: error,
             stackTrace: stackTrace,
           );
+        } finally {
+          lease.close();
         }
       }
-      await captures.cleanupOrphans(
-        store.listTerminalCaptureFiles().toSet(),
-        referencedStateFiles: store
-            .listIncompleteTerminalCaptures()
-            .map((log) => log.captureFile)
-            .toSet(),
-      );
+      await captures.cleanupOrphans((id) {
+        final log = store.getTerminalLog(id);
+        return log == null
+            ? null
+            : (file: log.captureFile, unfinished: log.captureSha256 == null);
+      });
       final retention = await applyTerminalRetentionPolicy(
         dataStore: store,
         captureStore: captures,

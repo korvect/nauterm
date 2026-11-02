@@ -2596,6 +2596,11 @@ class NautermDataStore {
     }).map(TerminalLogEntry.fromJson).toList();
   }
 
+  TerminalLogEntry? getTerminalLog(String logId) {
+    final value = _call('get_terminal_log', {'log_id': logId});
+    return value == null ? null : TerminalLogEntry.fromJson(value);
+  }
+
   List<TerminalLogEvent> listTerminalLogEvents(String logId) {
     return _callList('list_terminal_log_events', {
       'log_id': logId,
@@ -2606,6 +2611,11 @@ class NautermDataStore {
     final value = _call('delete_terminal_log', {'log_id': logId});
     return value as String?;
   }
+
+  List<String> deleteTerminalLogs(Iterable<String> logIds) => _callList(
+    'delete_terminal_logs',
+    {'log_ids': logIds.toList(growable: false)},
+  ).cast<String>();
 
   List<String> clearTerminalLogs() {
     return _callList('clear_terminal_logs').cast<String>();
@@ -2800,7 +2810,7 @@ class _NautermDataBindings {
     );
 
     throw NautermDataException(
-      'Unable to load nauterm_ffi native library.\n${errors.join('\n')}',
+      'Unable to load nauterm_core native library.\n${errors.join('\n')}',
     );
   }
 
@@ -2942,8 +2952,8 @@ List<String> _libraryCandidates() {
   final root = Directory.current.path;
   final executableDirectory = File(Platform.resolvedExecutable).parent.path;
   final candidates = <String>[
-    [root, 'native', 'nauterm_ffi', 'target', 'debug', name].join(separator),
-    [root, 'native', 'nauterm_ffi', 'target', 'release', name].join(separator),
+    [root, 'target', 'debug', name].join(separator),
+    [root, 'target', 'release', name].join(separator),
     '$executableDirectory$separator$name',
     [executableDirectory, 'lib', name].join(separator),
     if (Platform.isMacOS)
@@ -2956,10 +2966,10 @@ List<String> _libraryCandidates() {
 
 String _libraryName() {
   if (Platform.isMacOS) {
-    return 'libnauterm_ffi.dylib';
+    return 'libnauterm_core.dylib';
   }
   if (Platform.isWindows) {
-    return 'nauterm_ffi.dll';
+    return 'nauterm_core.dll';
   }
-  return 'libnauterm_ffi.so';
+  return 'libnauterm_core.so';
 }

@@ -39,6 +39,35 @@ void main() {
     );
   });
 
+  test('English copy comes from the catalog before inline fallbacks', () async {
+    final previousLanguage = appLanguage;
+    final previousCurrent = NautermLocalizations.current;
+    addTearDown(() {
+      setAppLanguage(previousLanguage);
+      NautermLocalizations.current = previousCurrent;
+    });
+
+    final english = await NautermLocalizations.load(const Locale('en'));
+    expect(
+      english.tr(
+        'settings.terminal.cursorShape.description',
+        fallback: 'Outdated inline copy.',
+      ),
+      'Default shape of the terminal cursor.',
+    );
+    expect(
+      english.tr('missing.namespaced.key', fallback: 'Readable fallback'),
+      'Readable fallback',
+    );
+
+    NautermLocalizations.current = await NautermLocalizations.load(
+      const Locale('zh', 'CN'),
+    );
+    setAppLanguage(AppLanguage.english);
+    expect(tr('settings.label.syncKey'), 'Sync Key');
+    expect(tr('settings.pages.sftp.title', fallback: 'Outdated'), 'SFTP');
+  });
+
   test(
     'translates known strings and falls back to English source text',
     () async {
@@ -62,11 +91,11 @@ void main() {
       );
       expect(
         chinese.tr('settings.terminal.fontWeight.light', fallback: 'Light'),
-        'Light',
+        '细体',
       );
       expect(
         chinese.messages.containsKey('settings.terminal.fontWeight.light'),
-        isFalse,
+        isTrue,
       );
       expect(
         chinese.tr(
@@ -265,10 +294,7 @@ void main() {
             'VS Code',
             'https://s3.example.com',
             'github_pat_...',
-            'Extra Bold',
             'sel',
-            'Normal',
-            'Bright',
           }.contains(entry.value),
         ),
         isEmpty,
@@ -277,6 +303,50 @@ void main() {
       expect(englishKeys, sortedKeys);
       if (chinese.containsKey('_patterns')) {
         expect(chinese.keys.last, '_patterns');
+      }
+    },
+  );
+
+  test(
+    'dynamic translations preserve literal braces in paths and names',
+    () async {
+      final pattern = NautermLocalizationPattern(
+        RegExp(r'^Could not open (.*): (.*)$'),
+        '无法打开 {1}：{2}',
+      );
+      expect(
+        pattern.translate('Could not open /tmp/{2}: permission denied'),
+        '无法打开 /tmp/{2}：permission denied',
+      );
+      final chinese = await NautermLocalizations.load(const Locale('zh', 'CN'));
+      expect(
+        chinese.tr(
+          'Key export stopped after creating /tmp/{2}. The remaining files were not published.',
+        ),
+        '创建 /tmp/{2} 后密钥导出已停止，其余文件未发布。',
+      );
+      expect(chinese.tr('settings.terminal.fontWeight.light'), '细体');
+      expect(chinese.tr('settings.general.applicationTheme.light'), '浅色');
+    },
+  );
+
+  test(
+    'catalog translations retain the same named and positional placeholders',
+    () async {
+      final english = await NautermLocalizations.load(const Locale('en'));
+      final chinese = await NautermLocalizations.load(const Locale('zh', 'CN'));
+      final placeholder = RegExp(
+        r'\{(?:[A-Za-z_][A-Za-z0-9_]*|[0-9]+)?(?::[^{}]*)?\}',
+      );
+      List<String> placeholders(String message) =>
+          placeholder.allMatches(message).map((match) => match[0]!).toList()
+            ..sort();
+      for (final entry in english.messages.entries) {
+        expect(
+          placeholders(chinese.messages[entry.key]!),
+          placeholders(entry.value),
+          reason: entry.key,
+        );
       }
     },
   );

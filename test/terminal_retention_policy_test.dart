@@ -1,6 +1,4 @@
-import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nauterm/data/nauterm_data_store.dart';
@@ -64,15 +62,6 @@ void main() {
     },
   );
 
-  test('tail compaction keeps the newest bytes', () {
-    final retained = retainTerminalCaptureTailChunks([
-      Uint8List.fromList([1, 2, 3, 4, 5]),
-      Uint8List.fromList([6, 7, 8, 9, 10]),
-    ], 29 + 85 + 29 + 7);
-
-    expect(retained.expand((chunk) => chunk), [4, 5, 6, 7, 8, 9, 10]);
-  });
-
   test('capacity cleanup never selects an active session', () {
     final now = DateTime.utc(2026, 7, 26);
     final plan = planTerminalRetention(
@@ -88,35 +77,78 @@ void main() {
     expect(plan.oversizedLogIds, isEmpty);
   });
 
-  test('encrypted capture compaction rewrites a valid tail', () async {
-    final directory = await Directory.systemTemp.createTemp(
-      'nauterm-retention-',
-    );
-    try {
-      final store = TerminalLogCaptureStore(directory);
-      final writer = await store.openWriter('tail-capture');
-      writer.add(Uint8List.fromList(utf8.encode('first-')));
-      writer.add(Uint8List.fromList(utf8.encode('latest')));
-      await writer.close();
-
-      final compacted = await store.retainTail(
-        logId: 'tail-capture',
-        captureFile: store.captureFileName('tail-capture'),
-        maxBytes: 29 + 85 + 29 + 6,
+  test(
+    'tail compaction preserves its source until metadata publication',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'nauterm-retention-',
       );
-      final decoded = <int>[];
-      await for (final chunk in store.readDecryptedChunks(
-        logId: 'tail-capture',
-        captureFile: compacted.fileName,
-      )) {
-        decoded.addAll(chunk);
-      }
+      addTearDown(() => directory.delete(recursive: true));
+      const logId = '12345678-1234-1234-1234-123456789abc';
+      final source = File('${directory.path}/$logId.ntrcap');
+      final originalBytes = List<int>.filled(200, 42);
+      await source.writeAsBytes(originalBytes);
+      final store = TerminalLogCaptureStore(
+        directory,
+        tailWriter:
+            ({
+              required source,
+              required destination,
+              required logId,
+              required maxBytes,
+              required expectedSha256,
+            }) async {
+              expect(source, endsWith('$logId.ntrcap'));
+              expect(expectedSha256, 'original-hash');
+              expect(maxBytes, 150);
+              await File(destination).writeAsBytes([1, 2, 3]);
+              return const TerminalCaptureFinalized(
+                chunkCount: 1,
+                plaintextBytes: 7,
+                ciphertextBytes: 150,
+                chainHash: 'chain',
+                fileSha256: 'new-hash',
+              );
+            },
+      );
+      final compacted = await store.retainTail(
+        logId: logId,
+        captureFile: '$logId.ntrcap',
+        maxBytes: 150,
+        expectedSha256: 'original-hash',
+      );
+      expect(compacted.fileName, isNot('$logId.ntrcap'));
+      expect(recordingIdForCaptureFile(compacted.fileName), logId);
+      expect(compacted.sha256, 'new-hash');
+      expect(await source.readAsBytes(), originalBytes);
+      expect(
+        await File('${directory.path}/${compacted.fileName}').readAsBytes(),
+        [1, 2, 3],
+      );
 
-      expect(utf8.decode(decoded), 'latest');
-      expect(compacted.bytes, lessThanOrEqualTo(29 + 85 + 29 + 6));
-      expect(compacted.sha256, isNotEmpty);
-    } finally {
-      await directory.delete(recursive: true);
-    }
-  });
+      final failing = TerminalLogCaptureStore(
+        directory,
+        tailWriter:
+            ({
+              required source,
+              required destination,
+              required logId,
+              required maxBytes,
+              required expectedSha256,
+            }) async {
+              throw const FileSystemException('Synthetic compaction failure');
+            },
+      );
+      await expectLater(
+        failing.retainTail(
+          logId: logId,
+          captureFile: '$logId.ntrcap',
+          maxBytes: 150,
+          expectedSha256: 'original-hash',
+        ),
+        throwsA(isA<FileSystemException>()),
+      );
+      expect(await source.readAsBytes(), originalBytes);
+    },
+  );
 }
