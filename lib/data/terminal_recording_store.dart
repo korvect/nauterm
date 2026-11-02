@@ -1,18 +1,60 @@
 import 'dart:async';
-import 'dart:collection';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
-import 'package:flutter/foundation.dart';
 
 import '../terminal/terminal_ffi.dart';
 
+typedef TerminalRecordingLeaseFactory = TerminalRecordingLease? Function(
+  String directory,
+  String recordingId,
+);
+typedef TerminalCaptureTailWriter = Future<TerminalCaptureFinalized> Function({
+  required String source,
+  required String destination,
+  required String logId,
+  required int maxBytes,
+  required String expectedSha256,
+});
+
+typedef TerminalCaptureReference = ({String file, bool unfinished});
+
 class TerminalLogCaptureStore {
-  TerminalLogCaptureStore(this.directory);
+  TerminalLogCaptureStore(
+    this.directory, {
+    TerminalRecordingLeaseFactory? leaseFactory,
+    TerminalCaptureTailWriter? tailWriter,
+  }) : _tailWriter = tailWriter ?? _writeCaptureTail,
+       _leaseFactory =
+           leaseFactory ??
+           ((directory, id) => FfiTerminalRecordingLease.tryAcquire(
+             directory: directory,
+             recordingId: id,
+           )),
+       _existingLeaseFactory =
+           leaseFactory ??
+           ((directory, id) => FfiTerminalRecordingLease.tryAcquire(
+             directory: directory,
+             recordingId: id,
+             existingOnly: true,
+           ));
+
+  final TerminalCaptureTailWriter _tailWriter;
+  final TerminalRecordingLeaseFactory _leaseFactory;
+  final TerminalRecordingLeaseFactory _existingLeaseFactory;
 
   final Directory directory;
   final Map<String, TerminalCaptureFinalized> _finalized = {};
+
+  TerminalRecordingLease? tryAcquireLease(
+    String logId, {
+    bool existingOnly = false,
+  }) => (existingOnly ? _existingLeaseFactory : _leaseFactory)(
+    directory.path,
+    logId,
+  );
 
   String captureFileName(String logId) => '${_safeFileName(logId)}.ntrcap';
 
@@ -87,75 +129,48 @@ class TerminalLogCaptureStore {
     );
   }
 
+  /// The caller holds the recording lease through the database update. This
+  /// creates an immutable revision; delete the source only after that commits.
   Future<TerminalLogCaptureInfo> retainTail({
     required String logId,
     required String captureFile,
     required int maxBytes,
+    required String expectedSha256,
   }) async {
     final fileName = _safeFileName(captureFile);
+    if (recordingIdForCaptureFile(fileName) != logId) {
+      throw const FormatException('Invalid recording capture reference.');
+    }
     final original = File(_join(directory.path, fileName));
-    if (!await original.exists()) {
-      return TerminalLogCaptureInfo(fileName: fileName);
-    }
     if (await original.length() <= maxBytes) {
-      return captureInfo(logId, captureFile: fileName, includeHash: true);
+      final info = await captureInfo(
+        logId,
+        captureFile: fileName,
+        includeHash: true,
+      );
+      if (info.sha256 != expectedSha256) {
+        throw const FileSystemException('Recording changed before compaction.');
+      }
+      return info;
     }
-
-    final retained = ListQueue<Uint8List>();
-    await for (final chunk in readDecryptedChunks(
+    final random = Random.secure();
+    final token = List.generate(
+      16,
+      (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0'),
+    ).join();
+    final revision = '$logId.$token.ntrcap';
+    final finalized = await _tailWriter(
+      source: original.path,
+      destination: _join(directory.path, revision),
       logId: logId,
-      captureFile: fileName,
-    )) {
-      retained.add(Uint8List.fromList(chunk));
-      _trimCaptureChunksToSize(retained, maxBytes);
-    }
-
-    final token = DateTime.now().microsecondsSinceEpoch;
-    final temporaryName = '$fileName.compact.$token.tmp';
-    final backupName = '$fileName.compact.$token.bak';
-    final temporary = File(_join(directory.path, temporaryName));
-    final backup = File(_join(directory.path, backupName));
-    FfiTerminalCaptureWriter? writer;
-    try {
-      writer = FfiTerminalCaptureWriter.open(
-        path: temporary.path,
-        recordingId: logId,
-      );
-      for (final chunk in _coalescedCaptureChunks(retained)) {
-        writer.add(chunk);
-      }
-      final finalized = await writer.closeAsync();
-      writer = null;
-
-      await original.rename(backup.path);
-      try {
-        await temporary.rename(original.path);
-      } on Object {
-        await backup.rename(original.path);
-        rethrow;
-      }
-      if (await backup.exists()) await backup.delete();
-      final state = File(_join(directory.path, '$fileName.state'));
-      if (await state.exists()) await state.delete();
-      _finalized[logId] = TerminalCaptureFinalized(
-        chunkCount: finalized.chunkCount,
-        plaintextBytes: finalized.plaintextBytes,
-        ciphertextBytes: finalized.ciphertextBytes,
-        chainHash: finalized.chainHash,
-        fileSha256: finalized.fileSha256,
-      );
-      return TerminalLogCaptureInfo(
-        fileName: fileName,
-        bytes: finalized.ciphertextBytes,
-        sha256: finalized.fileSha256,
-      );
-    } finally {
-      writer?.abort();
-      if (await temporary.exists()) await temporary.delete();
-      if (await backup.exists() && !await original.exists()) {
-        await backup.rename(original.path);
-      }
-    }
+      maxBytes: maxBytes,
+      expectedSha256: expectedSha256,
+    );
+    return TerminalLogCaptureInfo(
+      fileName: revision,
+      bytes: finalized.ciphertextBytes,
+      sha256: finalized.fileSha256,
+    );
   }
 
   Stream<Uint8List> readDecryptedChunks({
@@ -198,13 +213,9 @@ class TerminalLogCaptureStore {
     }
   }
 
-  Future<void> clear() async {
-    _finalized.clear();
-    if (!await directory.exists()) return;
-    await for (final entity in directory.list()) {
-      if (entity is File) await entity.delete();
-    }
-  }
+  /// Remove managed captures that are not held by a live client. Database
+  /// deletion is coordinated by the caller; lease files are never removed.
+  Future<void> clear() => cleanupOrphans((_) => null);
 
   Future<int> diskUsage() async {
     if (!await directory.exists()) return 0;
@@ -215,93 +226,72 @@ class TerminalLogCaptureStore {
     return bytes;
   }
 
+  /// Refresh the exact DB reference after acquiring each lease. A directory
+  /// or catalog snapshot taken before the lease can miss a new publication.
   Future<void> cleanupOrphans(
-    Set<String> referencedFiles, {
-    Set<String> referencedStateFiles = const {},
-  }) async {
+    TerminalCaptureReference? Function(String id) lookup,
+  ) async {
     if (!await directory.exists()) return;
-    final safeReferences = referencedFiles.map(_safeFileName).toSet();
-    final safeStateReferences = referencedStateFiles.map(_safeFileName).toSet();
-    await for (final entity in directory.list()) {
+    await for (final entity in directory.list(followLinks: false)) {
       if (entity is! File) continue;
       final name = entity.uri.pathSegments.last;
-      final referencedCapture =
-          name.endsWith('.ntrcap') && safeReferences.contains(name);
-      final referencedState =
-          name.endsWith('.ntrcap.state') &&
-          safeStateReferences.contains(
-            name.substring(0, name.length - '.state'.length),
-          );
-      if (!referencedCapture && !referencedState) {
-        await entity.delete();
+      final id = recordingIdForCaptureFile(name);
+      if (id == null) continue;
+      final initial = lookup(id);
+      final lease = tryAcquireLease(
+        id,
+        existingOnly: initial?.unfinished == true,
+      );
+      if (lease == null) continue;
+      try {
+        final reference = lookup(id);
+        final captureEnd = name.indexOf('.ntrcap') + '.ntrcap'.length;
+        final capture = name.substring(0, captureEnd);
+        final tail = name.substring(captureEnd);
+        final keep =
+            reference?.file == capture &&
+            (tail.isEmpty ||
+                tail.startsWith('.state') && reference!.unfinished);
+        if (!keep && await entity.exists()) await entity.delete();
+      } finally {
+        lease.close();
       }
     }
   }
 }
 
-const int _captureHeaderBytes = 29;
-const int _captureRecordOverheadBytes = 29;
-const int _captureFooterBytes = 85;
-const int _maximumCaptureChunkBytes = 16 * 1024 * 1024;
-
-@visibleForTesting
-List<Uint8List> retainTerminalCaptureTailChunks(
-  Iterable<Uint8List> chunks,
-  int maxBytes,
-) {
-  final retained = ListQueue<Uint8List>.from(chunks.map(Uint8List.fromList));
-  _trimCaptureChunksToSize(retained, maxBytes);
-  return retained.toList(growable: false);
+/// Shared UUID/revision capture names, checkpoint files and compaction files.
+/// Unknown files (including stable lease files) are never cleanup candidates.
+String? recordingIdForCaptureFile(String name) {
+  final match = _managedCaptureName.firstMatch(name);
+  return match?.group(1);
 }
 
-void _trimCaptureChunksToSize(ListQueue<Uint8List> chunks, int maxBytes) {
-  final maximumPlaintext = _maximumRetainedPlaintextBytes(maxBytes);
-  var plaintextBytes = chunks.fold<int>(
-    0,
-    (total, chunk) => total + chunk.length,
+final _managedCaptureName = RegExp(
+  r'^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\.(?:[0-9a-fA-F]{32}\.)?ntrcap(?:\.state(?:\.[0-9a-fA-F]{16}\.tmp)?|\.compact\.[0-9]+\.(?:tmp|bak))?$',
+);
+
+Future<TerminalCaptureFinalized> _writeCaptureTail({
+  required String source,
+  required String destination,
+  required String logId,
+  required int maxBytes,
+  required String expectedSha256,
+}) async {
+  final value = await writeNativeTerminalCaptureTail(
+    source: source,
+    destination: destination,
+    recordingId: logId,
+    maxBytes: maxBytes,
+    expectedSha256: expectedSha256,
   );
-  while (plaintextBytes > maximumPlaintext && chunks.isNotEmpty) {
-    final first = chunks.removeFirst();
-    plaintextBytes -= first.length;
-    final needed = maximumPlaintext - plaintextBytes;
-    if (needed > 0) {
-      final keptLength = needed.clamp(0, first.length);
-      final tail = Uint8List.fromList(first.sublist(first.length - keptLength));
-      chunks.addFirst(tail);
-      plaintextBytes += tail.length;
-    }
-  }
-}
-
-int _maximumRetainedPlaintextBytes(int maxBytes) {
-  final payloadBudget = maxBytes - _captureHeaderBytes - _captureFooterBytes;
-  if (payloadBudget <= _captureRecordOverheadBytes) return 0;
-  var plaintext = payloadBudget - _captureRecordOverheadBytes;
-  while (true) {
-    final chunkCount =
-        (plaintext + _maximumCaptureChunkBytes - 1) ~/
-        _maximumCaptureChunkBytes;
-    final next = payloadBudget - chunkCount * _captureRecordOverheadBytes;
-    if (next >= plaintext) return plaintext;
-    plaintext = next.clamp(0, payloadBudget);
-  }
-}
-
-Iterable<Uint8List> _coalescedCaptureChunks(Iterable<Uint8List> chunks) sync* {
-  final builder = BytesBuilder(copy: false);
-  for (final chunk in chunks) {
-    var offset = 0;
-    while (offset < chunk.length) {
-      final available = _maximumCaptureChunkBytes - builder.length;
-      final length = (chunk.length - offset).clamp(0, available);
-      builder.add(Uint8List.sublistView(chunk, offset, offset + length));
-      offset += length;
-      if (builder.length == _maximumCaptureChunkBytes) {
-        yield builder.takeBytes();
-      }
-    }
-  }
-  if (builder.isNotEmpty) yield builder.takeBytes();
+  return TerminalCaptureFinalized(
+    chunkCount: value.chunkCount,
+    plaintextBytes: value.plaintextBytes,
+    ciphertextBytes: value.ciphertextBytes,
+    chainHash: value.chainHash,
+    fileSha256: value.fileSha256,
+  );
 }
 
 abstract interface class TerminalCaptureWriteHandle {

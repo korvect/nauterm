@@ -5,7 +5,7 @@
 <h1 align="center">Nauterm</h1>
 
 <p align="center">
-  A modern, cross-platform terminal and remote access workspace built with Flutter and Rust.
+  A cross-platform terminal and SSH client with SFTP file transfer.
 </p>
 
 <p align="center">
@@ -21,15 +21,12 @@
 
 Nauterm brings local terminals, remote connections, file transfer, port
 forwarding, reusable commands, and encrypted synchronization into one desktop
-application. Its interface is written in Flutter, while latency-sensitive
-terminal, transport, database, and cryptographic operations run in a native
-Rust layer.
+app. It ships as two clients that differ in tech stack: one built with Flutter
+(backed by Rust services) and one built natively with Rust and GPUI;
 
-Nauterm is inspired by the polished remote-access experience of Termius, with
-the goal of building something better for developers who value transparent
-local storage, stronger control over their data and sync providers, a native
-high-performance core, and source access. Nauterm is an independent project
-and is not affiliated with or endorsed by Termius.
+Nauterm is an independent project for developers who want control over their
+connections, local data, and sync providers, with a clear view of how their
+data is stored and used.
 
 > [!IMPORTANT]
 > Nauterm is under active development. The `0.x` series may introduce breaking
@@ -298,6 +295,13 @@ make generate-icons
 make verify-icons
 ```
 
+The [Nauterm RS client](nauterm-rs/README.md) shares the Rust Cargo workspace and
+core with Flutter. Run `make run-rs`, `make build-rs`, or `make check-rs` from this
+repository root. Its README covers development, packaging and data directories.
+The clients keep their local databases, configuration, OS credentials and
+workspace state independent. They use the same sync format and default remote
+filename, allowing resources to synchronize through a shared remote target.
+
 Native compilation is integrated into the macOS Xcode, Linux CMake, and Windows
 packaging pipelines. The explicit native targets are mainly useful while
 working directly on the Rust layer.
@@ -311,18 +315,19 @@ dart format --output=none --set-exit-if-changed lib test test_integration
 flutter analyze
 flutter test
 
-cargo fmt --manifest-path native/nauterm_ffi/Cargo.toml --all -- --check
+cargo fmt --all -- --check
 cargo clippy \
-  --manifest-path native/nauterm_ffi/Cargo.toml \
-  --all-targets --locked -- -D warnings
+  -p nauterm_core -p nauterm-rs --all-targets --locked -- -D warnings
 cargo test \
-  --manifest-path native/nauterm_ffi/Cargo.toml \
+  --manifest-path native/nauterm_core/Cargo.toml \
   --locked --features test-credential-store
 ```
 
 The **Quality Gates** workflow can also be started manually from GitHub
 Actions. Its standard run checks Flutter, Rust, release metadata, generated
-assets, licenses, and the Mosh ABI on Linux. The optional integration run adds
+assets, licenses, and the Mosh ABI on Linux. GPUI compilation and model/file
+checks run separately on Linux, macOS and Windows; the macOS job also assembles
+the app bundle without launching it. UI verification remains manual. The optional integration run adds
 desktop integration tests on Linux, macOS, and Windows.
 
 Normal pushes to `main` do not automatically consume CI minutes. Tags matching
@@ -334,7 +339,9 @@ a GitHub release.
 | Path | Responsibility |
 | --- | --- |
 | `lib/` | Flutter application, settings, workspace, terminal UI, and FFI bindings |
-| `native/nauterm_ffi/` | Rust database, cryptography, terminal, SSH, serial, sync, and transport implementation |
+| `nauterm-rs/` | GPUI desktop client, sharing the native core through its Rust API |
+| `Cargo.toml`, `Cargo.lock` | Shared Rust workspace, release version and dependency lockfile |
+| `native/nauterm_core/` | Rust database, cryptography, terminal, SSH, serial, sync, and transport implementation |
 | `assets/` | Localization, themes, icons, presets, and third-party notices |
 | `macos/`, `linux/`, `windows/` | Desktop runners and platform build integration |
 | `scripts/` | Local development, asset generation, packaging, and CI utilities |

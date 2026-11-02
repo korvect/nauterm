@@ -351,7 +351,7 @@ class AppDelegate: FlutterAppDelegate {
     guard let frameworksPath = Bundle.main.privateFrameworksPath else {
       return
     }
-    let libraryPath = "\(frameworksPath)/libnauterm_ffi.dylib"
+    let libraryPath = "\(frameworksPath)/libnauterm_core.dylib"
     guard let handle = dlopen(libraryPath, RTLD_NOW | RTLD_LOCAL) else {
       return
     }

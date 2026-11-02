@@ -9,6 +9,7 @@ import 'package:nauterm/terminal/terminal_controller.dart';
 import 'package:nauterm/terminal/terminal_models.dart';
 import 'package:nauterm/terminal/terminal_recording.dart';
 import 'package:nauterm/terminal/terminal_theme.dart';
+import 'package:nauterm/terminal/terminal_ffi.dart' show TerminalRecordingLease;
 
 void main() {
   test('terminal recorder uses a uuid v7 recording id', () {
@@ -322,39 +323,45 @@ void main() {
     expect(frames.single.snapshot.title, 'frame-19');
   });
 
-  test('terminal log capture store removes orphan files', () async {
+  test('terminal log cleanup preserves live leases, checkpoints and unrelated files', () async {
     final directory = await Directory.systemTemp.createTemp(
       'nauterm-recording-',
     );
-    try {
-      final store = TerminalLogCaptureStore(directory);
-      await File('${directory.path}/orphan.bin').writeAsBytes(utf8.encode('x'));
-      await File('${directory.path}/kept.ntrcap').writeAsBytes([1, 2]);
-      await File('${directory.path}/kept.ntrcap.state').writeAsBytes([6]);
-      await File('${directory.path}/kept.ntrcap.state.deadbeef.tmp')
-          .writeAsBytes([7]);
-      await File('${directory.path}/orphan.ntrcap').writeAsBytes([3, 4, 5]);
-
-      await store.cleanupOrphans(
-        {'kept.ntrcap'},
-        referencedStateFiles: {'kept.ntrcap'},
-      );
-
-      expect(await File('${directory.path}/orphan.bin').exists(), isFalse);
-      expect(await File('${directory.path}/orphan.ntrcap').exists(), isFalse);
-      expect(await File('${directory.path}/kept.ntrcap').exists(), isTrue);
-      expect(
-        await File('${directory.path}/kept.ntrcap.state').exists(),
-        isTrue,
-      );
-      expect(
-        await File('${directory.path}/kept.ntrcap.state.deadbeef.tmp').exists(),
-        isFalse,
-      );
-      expect(await store.diskUsage(), 3);
-    } finally {
-      await directory.delete(recursive: true);
+    addTearDown(() => directory.delete(recursive: true));
+    const keptId = '12345678-1234-1234-1234-123456789abc';
+    const orphanId = '12345678-1234-1234-1234-123456789def';
+    const busyId = '12345678-1234-1234-1234-123456789aaa';
+    final store = TerminalLogCaptureStore(
+      directory,
+      leaseFactory: (_, id) => id == busyId ? null : _MemoryRecordingLease(id),
+    );
+    final files = {
+      'notes.bin': [9],
+      '$keptId.ntrcap': [1, 2],
+      '$keptId.ntrcap.state': [6],
+      '$keptId.ntrcap.state.0123456789abcdef.tmp': [7],
+      '$orphanId.ntrcap': [3, 4, 5],
+      '$busyId.ntrcap': [8],
+      '.nauterm-recording.$busyId.lock': <int>[],
+    };
+    for (final entry in files.entries) {
+      await File('${directory.path}/${entry.key}').writeAsBytes(entry.value);
     }
+    await store.cleanupOrphans(
+      (id) => id == keptId ? (file: '$keptId.ntrcap', unfinished: true) : null,
+    );
+    for (final name in files.keys) {
+      expect(
+        await File('${directory.path}/$name').exists(),
+        name != '$orphanId.ntrcap',
+      );
+    }
+    expect(await store.diskUsage(), 6);
+    expect(recordingIdForCaptureFile('../$orphanId.ntrcap'), isNull);
+    expect(
+      recordingIdForCaptureFile('.nauterm-recording.$busyId.lock'),
+      isNull,
+    );
   });
 }
 
@@ -380,4 +387,12 @@ class _EchoStateDriver extends MemoryTerminalDriver {
       bellCount: current.bellCount,
     );
   }
+}
+
+class _MemoryRecordingLease implements TerminalRecordingLease {
+  _MemoryRecordingLease(this.recordingId);
+  @override
+  final String recordingId;
+  @override
+  void close() {}
 }

@@ -29,7 +29,7 @@ permissions:
 
 env:
   FLUTTER_VERSION: 3.47.0
-  RUST_TOOLCHAIN: 1.97.0
+  RUST_TOOLCHAIN: 1.99.1
   ZIG_VERSION: 0.16.0
   NAUTERM_BUILD_NUMBER: ${{ github.run_number }}
   NAUTERM_UPDATE_REPOSITORY: ${{ vars.NAUTERM_UPDATE_REPOSITORY || github.repository }}
@@ -163,7 +163,7 @@ jobs:
     needs: select-builds
     if: needs.select-builds.outputs.macos_enabled == 'true'
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 60
+    timeout-minutes: 90
     strategy:
       fail-fast: true
       matrix: ${{ fromJSON(needs.select-builds.outputs.macos_matrix) }}
@@ -197,11 +197,11 @@ jobs:
 
       - name: Run native integration tests
         if: matrix.arch == 'arm64'
-        run: cargo test --manifest-path native/nauterm_ffi/Cargo.toml --locked --features integration-tests,test-credential-store -- --test-threads=1
+        run: cargo test --manifest-path native/nauterm_core/Cargo.toml --locked --features integration-tests,test-credential-store -- --test-threads=1
 
       - name: Build the native test library
         if: matrix.arch == 'arm64'
-        run: cargo build --manifest-path native/nauterm_ffi/Cargo.toml --locked --features test-credential-store
+        run: cargo build --manifest-path native/nauterm_core/Cargo.toml --locked --features test-credential-store
 
       - name: Run Flutter integration tests
         if: matrix.arch == 'arm64'
@@ -216,11 +216,33 @@ jobs:
           SPARKLE_PUBLIC_ED_KEY: ${{ vars.SPARKLE_PUBLIC_ED_KEY }}
         run: make package-macos-${{ matrix.arch }}
 
+      - name: Configure RS macOS signing
+        env:
+          NAUTERM_RS_SIGN_CERTIFICATE: ${{ secrets.NAUTERM_RS_SIGN_CERTIFICATE }}
+          NAUTERM_RS_SIGN_PASSWORD: ${{ secrets.NAUTERM_RS_SIGN_PASSWORD }}
+          NAUTERM_RS_SIGN_IDENTITY: ${{ vars.NAUTERM_RS_SIGN_IDENTITY }}
+          NAUTERM_RS_NOTARY_KEY_BASE64: ${{ secrets.NAUTERM_RS_NOTARY_KEY_BASE64 }}
+          NAUTERM_RS_NOTARY_KEY_ID: ${{ secrets.NAUTERM_RS_NOTARY_KEY_ID }}
+          NAUTERM_RS_NOTARY_ISSUER: ${{ secrets.NAUTERM_RS_NOTARY_ISSUER }}
+        run: bash scripts/ci/setup_rs_macos_signing.sh
+
+      - name: Build macOS RS package
+        env:
+          NAUTERM_GOOGLE_CLIENT_SECRET: ${{ secrets.NAUTERM_GOOGLE_CLIENT_SECRET }}
+          SPARKLE_PUBLIC_ED_KEY: ${{ vars.SPARKLE_PUBLIC_ED_KEY }}
+        run: make package-rs-macos
+
+      - name: Clean up RS signing credentials
+        if: always()
+        run: bash scripts/ci/setup_rs_macos_signing.sh cleanup
+
       - name: Generate signed Sparkle appcast
         if: startsWith(github.ref, 'refs/tags/')
         env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
-        run: bash scripts/ci/generate_sparkle_appcast.sh ${{ matrix.arch }}
+        run: |
+          bash scripts/ci/generate_sparkle_appcast.sh ${{ matrix.arch }}
+          bash scripts/ci/generate_sparkle_appcast.sh ${{ matrix.arch }} rs
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -229,6 +251,8 @@ jobs:
             dist/Nauterm-${{ steps.version.outputs.value }}-macos-${{ matrix.arch }}.app.zip
             dist/Nauterm-${{ steps.version.outputs.value }}-macos-${{ matrix.arch }}.dmg
             dist/appcast-${{ matrix.arch }}.xml
+            dist/Nauterm-RS-${{ steps.version.outputs.value }}-macos-${{ matrix.arch }}.app.zip
+            dist/appcast-rs-${{ matrix.arch }}.xml
           if-no-files-found: error
           retention-days: ${{ github.event_name == 'push' && 1 || 7 }}
 
@@ -237,7 +261,7 @@ jobs:
     needs: select-builds
     if: needs.select-builds.outputs.linux_enabled == 'true'
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 60
+    timeout-minutes: 90
     strategy:
       fail-fast: true
       matrix: ${{ fromJSON(needs.select-builds.outputs.linux_matrix) }}
@@ -280,6 +304,10 @@ jobs:
             file \
             fish \
             build-essential \
+            libasound2-dev libclang-dev libdbus-1-dev libfontconfig1-dev \
+            libfreetype6-dev libpipewire-0.3-dev libssl-dev libvulkan-dev \
+            libwayland-dev libxcb1-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev \
             libayatana-appindicator3-dev \
             libblkid-dev \
             libgtk-3-dev \
@@ -302,10 +330,10 @@ jobs:
         run: flutter pub get
 
       - name: Run native integration tests
-        run: cargo test --manifest-path native/nauterm_ffi/Cargo.toml --locked --features integration-tests,test-credential-store -- --test-threads=1
+        run: cargo test --manifest-path native/nauterm_core/Cargo.toml --locked --features integration-tests,test-credential-store -- --test-threads=1
 
       - name: Build the native test library
-        run: cargo build --manifest-path native/nauterm_ffi/Cargo.toml --locked --features test-credential-store
+        run: cargo build --manifest-path native/nauterm_core/Cargo.toml --locked --features test-credential-store
 
       - name: Run Flutter integration tests
         run: flutter test --no-pub test_integration
@@ -317,6 +345,13 @@ jobs:
           NAUTERM_POSTHOG_API_KEY: ${{ vars.NAUTERM_POSTHOG_API_KEY }}
           NAUTERM_POSTHOG_HOST: ${{ vars.NAUTERM_POSTHOG_HOST }}
         run: make package-linux-${{ matrix.arch }}
+
+      - name: Build Linux RS packages
+        env:
+          CLEAN_DIST: "0"
+          NAUTERM_GOOGLE_CLIENT_SECRET: ${{ secrets.NAUTERM_GOOGLE_CLIENT_SECRET }}
+        run: make package-rs-linux-${{ matrix.arch }}
+
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -333,7 +368,7 @@ jobs:
     needs: select-builds
     if: needs.select-builds.outputs.windows_enabled == 'true'
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 60
+    timeout-minutes: 90
     strategy:
       fail-fast: true
       matrix: ${{ fromJSON(needs.select-builds.outputs.windows_matrix) }}
@@ -345,56 +380,10 @@ jobs:
         with:
           version: ${{ env.ZIG_VERSION }}
 
-      # Zig 0.16.0's native Windows ARM64 compiler exits with 0xc0000005 while
-      # compiling Ghostty. Run the pinned x86_64 host compiler through Windows
-      # ARM emulation; build.rs still targets aarch64-windows-msvc explicitly.
       - name: Install x86_64 Zig host compiler (arm64)
         if: matrix.arch == 'arm64'
         shell: pwsh
-        run: |
-          $version = "${{ env.ZIG_VERSION }}"
-          if ($version -ne "0.16.0") {
-            throw "Update the pinned x86_64 Zig checksum for version $version"
-          }
-          $package = "zig-x86_64-windows-$version"
-          $archive = Join-Path $env:RUNNER_TEMP "$package.zip"
-          $url = "https://ziglang.org/download/$version/$package.zip"
-          Invoke-WebRequest -Uri $url -OutFile $archive -UseBasicParsing
-
-          $expectedSha256 = "68659eb5f1e4eb1437a722f1dd889c5a322c9954607f5edcf337bc3684a75a7e"
-          $actualSha256 = (Get-FileHash -Path $archive -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($actualSha256 -ne $expectedSha256) {
-            throw "Zig archive checksum mismatch: expected $expectedSha256, got $actualSha256"
-          }
-
-          Expand-Archive -Path $archive -DestinationPath $env:RUNNER_TEMP -Force
-          $zigDir = Join-Path $env:RUNNER_TEMP $package
-          $zigExe = Join-Path $zigDir "zig.exe"
-          if (-not (Test-Path $zigExe)) {
-            throw "Zig executable not found: $zigExe"
-          }
-
-          # Zig 0.16.0's Windows SelfInfo code casts an opaque procedure
-          # pointer to an ARM64 function pointer without asserting its higher
-          # alignment. Apply the compiler diagnostic's required @alignCast to
-          # this pinned, checksum-verified standard library.
-          $selfInfo = Join-Path $zigDir "lib\std\debug\SelfInfo\Windows.zig"
-          $source = [IO.File]::ReadAllText($selfInfo)
-          $before = '@ptrCast(try si.loadNtdllProc(@tagName(proc)))'
-          $after = '@ptrCast(@alignCast(try si.loadNtdllProc(@tagName(proc))))'
-          $matches = ([regex]::Matches($source, [regex]::Escape($before))).Count
-          if ($matches -ne 1) {
-            throw "Expected one Zig SelfInfo alignment patch target, found $matches"
-          }
-          [IO.File]::WriteAllText(
-            $selfInfo,
-            $source.Replace($before, $after),
-            [Text.UTF8Encoding]::new($false)
-          )
-
-          Add-Content -Path $env:GITHUB_PATH -Value $zigDir
-          Add-Content -Path $env:GITHUB_ENV -Value "NAUTERM_ZIG=$zigExe"
-          & $zigExe version
+        run: ./scripts/ci/setup_zig_windows_arm64.ps1
 
       - uses: ilammy/msvc-dev-cmd@7defe9254715b088f12dddd9942945a3d75cdad5 # v1.9.0
         with:
@@ -444,10 +433,10 @@ jobs:
         run: flutter pub get
 
       - name: Run native integration tests
-        run: cargo test --manifest-path native/nauterm_ffi/Cargo.toml --locked --features integration-tests,test-credential-store -- --test-threads=1
+        run: cargo test --manifest-path native/nauterm_core/Cargo.toml --locked --features integration-tests,test-credential-store -- --test-threads=1
 
       - name: Build the native test library
-        run: cargo build --manifest-path native/nauterm_ffi/Cargo.toml --locked --features test-credential-store
+        run: cargo build --manifest-path native/nauterm_core/Cargo.toml --locked --features test-credential-store
 
       - name: Run Flutter integration tests
         run: flutter test --no-pub test_integration
@@ -464,6 +453,14 @@ jobs:
           NAUTERM_POSTHOG_API_KEY: ${{ vars.NAUTERM_POSTHOG_API_KEY }}
           NAUTERM_POSTHOG_HOST: ${{ vars.NAUTERM_POSTHOG_HOST }}
         run: ./scripts/ci/package_windows.ps1 -Arch '${{ matrix.arch }}'
+
+      - name: Build Windows RS packages
+        shell: pwsh
+        env:
+          CLEAN_DIST: "0"
+          NAUTERM_GOOGLE_CLIENT_SECRET: ${{ secrets.NAUTERM_GOOGLE_CLIENT_SECRET }}
+        run: ./scripts/ci/package_windows.ps1 -Arch '${{ matrix.arch }}' -Client rs
+
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -495,7 +492,10 @@ jobs:
           merge-multiple: true
 
       - name: Verify release versions
-        run: bash scripts/ci/verify_versions.sh release-artifacts
+        run: |
+          bash scripts/ci/verify_versions.sh release-artifacts
+          version="$(awk '/^version: / { split($2, parts, "+"); print parts[1]; exit }' pubspec.yaml)"
+          python3 scripts/ci/verify_rs_packages.py release-artifacts "$version"
 
       - name: Publish release assets
         env:

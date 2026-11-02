@@ -219,6 +219,85 @@ void main() {
     expect(chunks.whereType<AiToolCall>().single.terminalCommand, 'pwd');
   });
 
+  test(
+    'Gemini signed text metadata streams and replays without tools',
+    () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      const parts = [
+        {
+          'text': 'hidden',
+          'thought': true,
+          'thoughtSignature': 'c2lnbmVkLXRoaW5raW5n',
+        },
+        {'text': 'Hello', 'thoughtSignature': 'c2lnbmVkLXRleHQ='},
+        {'thoughtSignature': 'c2lnbmVkLXRhaWw='},
+      ];
+      var count = 0;
+      final handled = server.take(2).asyncMap((request) async {
+        final body = jsonDecode(await utf8.decoder.bind(request).join()) as Map;
+        expect(body['tools'], isNull);
+        if (count++ == 1) {
+          expect((body['contents'] as List).first, {
+            'role': 'model',
+            'parts': parts,
+          });
+        }
+        request.response.headers.contentType = ContentType(
+          'text',
+          'event-stream',
+        );
+        request.response.write(
+          'data: ${jsonEncode({
+            'candidates': [
+              {
+                'content': {'role': 'model', 'parts': parts},
+                'finishReason': 'STOP',
+              },
+            ],
+          })}\n\n',
+        );
+        await request.response.close();
+      }).drain<void>();
+      final config = AiAssistantConfig(
+        protocol: AiApiProtocol.google,
+        baseUrl: 'http://${server.address.host}:${server.port}',
+        model: 'gemini-test',
+        apiKey: 'mock',
+      );
+      final events = await AiProtocolClient()
+          .streamCompletion(
+            config: config,
+            messages: const [
+              AiChatMessage(role: AiChatRole.user, content: 'Hello'),
+            ],
+            enableTerminalTool: false,
+          )
+          .toList();
+      expect(
+        events.whereType<AiTextDelta>().map((event) => event.text).join(),
+        'Hello',
+      );
+      final metadata = events.whereType<AiProviderMetadata>().single.metadata;
+      expect(metadata['google_parts'], parts);
+      await AiProtocolClient()
+          .streamCompletion(
+            config: config,
+            messages: [
+              AiChatMessage(
+                role: AiChatRole.assistant,
+                content: 'Hello',
+                providerMetadata: metadata,
+              ),
+              const AiChatMessage(role: AiChatRole.user, content: 'Next'),
+            ],
+            enableTerminalTool: false,
+          )
+          .drain<void>();
+      await handled;
+    },
+  );
+
   test('Ollama protocol supports local auth-free streaming', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => server.close(force: true));

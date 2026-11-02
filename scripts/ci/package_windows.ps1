@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
-  [string]$Arch = "x86_64"
+  [ValidateSet("x86_64", "arm64")] [string]$Arch = "x86_64",
+  [ValidateSet("flutter", "rs")] [string]$Client = "flutter"
 )
 
 $ErrorActionPreference = "Stop"
@@ -8,6 +9,14 @@ $PSNativeCommandUseErrorActionPreference = $true
 
 $AppName = "Nauterm"
 $BinaryName = "nauterm"
+$PackageName = "Nauterm"
+$AppGuid = "7A63A445-7F28-4336-B582-A10697D4CA53"
+if ($Client -eq "rs") {
+  $AppName = "Nauterm RS"
+  $PackageName = "Nauterm-RS"
+  $BinaryName = "nauterm-rs"
+  $AppGuid = "B1C17652-9DBB-45D5-A7BC-21C550E33241"
+}
 $DistDir = if ($env:DIST_DIR) { $env:DIST_DIR } else { "dist" }
 $CleanDist = if ($env:CLEAN_DIST) { $env:CLEAN_DIST } else { "1" }
 
@@ -65,7 +74,7 @@ bash scripts/prepare_app_icons.sh
 
 function Get-CargoTargetDir {
   try {
-    $metadata = cargo metadata --manifest-path native\nauterm_ffi\Cargo.toml --format-version 1 --no-deps | ConvertFrom-Json
+    $metadata = cargo metadata --manifest-path native\nauterm_core\Cargo.toml --format-version 1 --no-deps | ConvertFrom-Json
     return $metadata.target_directory
   } catch {
     Write-Host "Unable to read cargo target directory from metadata: $_"
@@ -172,45 +181,69 @@ if ($CleanDist -ne "0" -and (Test-Path $DistDir)) {
 }
 New-Item -ItemType Directory -Force -Path $DistDir | Out-Null
 
-flutter config --enable-windows-desktop
-
-if ($env:NAUTERM_SKIP_PUB_GET -ne "1") {
-  flutter pub get
-}
 $CargoTargetDir = Get-CargoTargetDir
-cargo build --manifest-path native\nauterm_ffi\Cargo.toml --release
-if (-not $MoshLibDir -and -not (Test-Path $MoshFfiManifest)) {
-  throw "Missing nauterm-mosh workspace. Set NAUTERM_MOSH_REPO_DIR to a checkout containing nauterm_mosh_ffi."
-}
-if (-not $MoshLibDir) {
-  cargo build --manifest-path $MoshFfiManifest --release
-} elseif (-not (Test-Path (Join-Path $MoshLibDir "nauterm_mosh_ffi.dll"))) {
-  throw "Missing prebuilt nauterm_mosh_ffi.dll in NAUTERM_MOSH_LIB_DIR=$MoshLibDir"
-}
-$DartDefineArgs = @()
-foreach ($Name in @(
-  "NAUTERM_UPDATE_REPOSITORY",
-  "NAUTERM_POSTHOG_API_KEY",
-  "NAUTERM_POSTHOG_HOST",
-  "NAUTERM_GITHUB_CLIENT_ID",
-  "NAUTERM_GOOGLE_CLIENT_ID",
-  "NAUTERM_GOOGLE_CLIENT_SECRET",
-  "NAUTERM_ONEDRIVE_CLIENT_ID",
-  "NAUTERM_DROPBOX_CLIENT_ID"
-)) {
-  $Value = [Environment]::GetEnvironmentVariable($Name)
-  if (-not [string]::IsNullOrWhiteSpace($Value)) {
-    $DartDefineArgs += "--dart-define=$Name=$Value"
+if ($Client -eq "flutter") {
+  flutter config --enable-windows-desktop
+
+  if ($env:NAUTERM_SKIP_PUB_GET -ne "1") {
+    flutter pub get
+  }
+  cargo build --manifest-path native\nauterm_core\Cargo.toml --release
+  if (-not $MoshLibDir -and -not (Test-Path $MoshFfiManifest)) {
+    throw "Missing nauterm-mosh workspace. Set NAUTERM_MOSH_REPO_DIR to a checkout containing nauterm_mosh_ffi."
+  }
+  if (-not $MoshLibDir) {
+    cargo build --manifest-path $MoshFfiManifest --release
+  } elseif (-not (Test-Path (Join-Path $MoshLibDir "nauterm_mosh_ffi.dll"))) {
+    throw "Missing prebuilt nauterm_mosh_ffi.dll in NAUTERM_MOSH_LIB_DIR=$MoshLibDir"
+  }
+  $DartDefineArgs = @()
+  foreach ($Name in @(
+    "NAUTERM_UPDATE_REPOSITORY",
+    "NAUTERM_POSTHOG_API_KEY",
+    "NAUTERM_POSTHOG_HOST",
+    "NAUTERM_GITHUB_CLIENT_ID",
+    "NAUTERM_GOOGLE_CLIENT_ID",
+    "NAUTERM_GOOGLE_CLIENT_SECRET",
+    "NAUTERM_ONEDRIVE_CLIENT_ID",
+    "NAUTERM_DROPBOX_CLIENT_ID"
+  )) {
+    $Value = [Environment]::GetEnvironmentVariable($Name)
+    if (-not [string]::IsNullOrWhiteSpace($Value)) {
+      $DartDefineArgs += "--dart-define=$Name=$Value"
+    }
+  }
+  $FlutterBuildArgs = @(
+    "windows",
+    "--release",
+    "--no-pub",
+    "--build-name=$Version",
+    "--build-number=$BuildNumber"
+  ) + $DartDefineArgs
+  flutter build @FlutterBuildArgs
+} else {
+  $env:NAUTERM_BUILD_NUMBER = $BuildNumber
+  $BuildLog = Join-Path $DistDir "rs-build-$Arch.jsonl"
+  try {
+    cargo build --manifest-path Cargo.toml -p nauterm-rs --release --target $CargoTriple --locked --message-format=json-render-diagnostics |
+      Set-Content -Path $BuildLog -Encoding utf8
+    if ($LASTEXITCODE -ne 0) { throw "Nauterm RS Cargo build failed: $LASTEXITCODE" }
+    $Executables = @(Get-Content $BuildLog | ForEach-Object { $_ | ConvertFrom-Json } |
+      Where-Object { $_.reason -eq "compiler-artifact" -and $_.target.name -eq "nauterm-rs" -and $_.executable } |
+      Select-Object -ExpandProperty executable)
+    if ($Executables.Count -ne 1) { throw "Cargo did not report exactly one Nauterm RS executable." }
+    $ReleaseDir = Join-Path $DistDir "rs-bundle-$Arch"
+    if (Test-Path $ReleaseDir) { Remove-Item $ReleaseDir -Recurse -Force }
+    New-Item -ItemType Directory -Path $ReleaseDir | Out-Null
+    Copy-Item $Executables[0] (Join-Path $ReleaseDir "$BinaryName.exe")
+    python scripts/stage_rs_mosh.py --project . --executable $Executables[0] --destination $ReleaseDir
+    python scripts/package_rs_notices.py --project . --build-log $BuildLog --destination (Join-Path $ReleaseDir "licenses")
+    Copy-Item LICENSE (Join-Path $ReleaseDir "LICENSE")
+  } finally {
+    Remove-Item $BuildLog -Force -ErrorAction SilentlyContinue
   }
 }
-$FlutterBuildArgs = @(
-  "windows",
-  "--release",
-  "--no-pub",
-  "--build-name=$Version",
-  "--build-number=$BuildNumber"
-) + $DartDefineArgs
-flutter build @FlutterBuildArgs
+
 
 if (-not (Test-Path $ReleaseDir)) {
   throw "Expected Windows release bundle not found: $ReleaseDir"
@@ -276,20 +309,23 @@ if ($null -eq $VcCrtDir) {
   }
 }
 
-$NativeDll = Find-NativeDll -CargoTargetDir $CargoTargetDir -DllName "nauterm_ffi.dll" -CrateDir "nauterm_ffi" -ExtraRoot ""
-if ($null -eq $NativeDll) {
-  Write-NativeDllDiagnostics -CargoTargetDir $CargoTargetDir -DllName "nauterm_ffi.dll" -CrateDir "nauterm_ffi" -ExtraRoot ""
-  throw "Expected native DLL not found: nauterm_ffi.dll"
+if ($Client -eq "flutter") {
+  $NativeDll = Find-NativeDll -CargoTargetDir $CargoTargetDir -DllName "nauterm_core.dll" -CrateDir "nauterm_core" -ExtraRoot ""
+  if ($null -eq $NativeDll) {
+    Write-NativeDllDiagnostics -CargoTargetDir $CargoTargetDir -DllName "nauterm_core.dll" -CrateDir "nauterm_core" -ExtraRoot ""
+    throw "Expected native DLL not found: nauterm_core.dll"
+  }
+
+  $BundledDll = Join-Path $ReleaseDir "nauterm_core.dll"
+  if ((Resolve-Path $NativeDll).Path -ne (Resolve-Path $BundledDll -ErrorAction SilentlyContinue).Path) {
+    Copy-Item $NativeDll $BundledDll -Force
+  }
+
 }
 
-$BundledDll = Join-Path $ReleaseDir "nauterm_ffi.dll"
-if ((Resolve-Path $NativeDll).Path -ne (Resolve-Path $BundledDll -ErrorAction SilentlyContinue).Path) {
-  Copy-Item $NativeDll $BundledDll -Force
-}
-
-$GhosttyDll = Find-NativeDll -CargoTargetDir $CargoTargetDir -DllName "ghostty-vt.dll" -CrateDir "nauterm_ffi" -ExtraRoot ""
+$GhosttyDll = Find-NativeDll -CargoTargetDir $CargoTargetDir -DllName "ghostty-vt.dll" -CrateDir "nauterm_core" -ExtraRoot ""
 if ($null -eq $GhosttyDll) {
-  Write-NativeDllDiagnostics -CargoTargetDir $CargoTargetDir -DllName "ghostty-vt.dll" -CrateDir "nauterm_ffi" -ExtraRoot ""
+  Write-NativeDllDiagnostics -CargoTargetDir $CargoTargetDir -DllName "ghostty-vt.dll" -CrateDir "nauterm_core" -ExtraRoot ""
   throw "Expected Ghostty runtime DLL not found: ghostty-vt.dll"
 }
 
@@ -310,16 +346,16 @@ if ((Resolve-Path $MoshDll).Path -ne (Resolve-Path $BundledMoshDll -ErrorAction 
   Copy-Item $MoshDll $BundledMoshDll -Force
 }
 
-$ArchivePath = Join-Path $DistDir "$AppName-$Version-windows-$Arch.zip"
+$ArchivePath = Join-Path $DistDir "$PackageName-$Version-windows-$Arch.zip"
 Compress-Archive -Path (Join-Path $ReleaseDir "*") -DestinationPath $ArchivePath -Force
 
-$InnoScript = Join-Path $env:TEMP "nauterm-installer.iss"
+$InnoScript = Join-Path $env:TEMP "nauterm-$Client-$Arch-installer.iss"
 $ResolvedReleaseDir = (Resolve-Path $ReleaseDir).Path
 $ResolvedDistDir = (Resolve-Path $DistDir).Path
 $ResolvedIconPath = (Resolve-Path "windows\runner\resources\app_icon.ico").Path
 @"
 [Setup]
-AppId={{7A63A445-7F28-4336-B582-A10697D4CA53}
+AppId={{$AppGuid}
 AppName=$AppName
 AppVersion=$Version
 AppVerName=$AppName $Version
@@ -335,7 +371,7 @@ SolidCompression=yes
 CloseApplications=yes
 RestartApplications=no
 OutputDir=$ResolvedDistDir
-OutputBaseFilename=$AppName-$Version-windows-$Arch-setup
+OutputBaseFilename=$PackageName-$Version-windows-$Arch-setup
 SetupIconFile=$ResolvedIconPath
 UninstallDisplayIcon={app}\$BinaryName.exe
 
@@ -357,4 +393,10 @@ $Iscc = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
 if (-not (Test-Path $Iscc)) {
   throw "Inno Setup compiler not found: $Iscc"
 }
-& $Iscc $InnoScript
+try {
+  & $Iscc $InnoScript
+  if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed: $LASTEXITCODE" }
+} finally {
+  Remove-Item $InnoScript -Force -ErrorAction SilentlyContinue
+  if ($Client -eq "rs") { Remove-Item $ReleaseDir -Recurse -Force }
+}

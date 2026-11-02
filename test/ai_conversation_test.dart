@@ -14,6 +14,132 @@ import 'package:nauterm/terminal/terminal_driver.dart';
 void main() {
   const config = AiAssistantConfig(model: 'test-model', apiKey: 'test-key');
 
+  test(
+    'signed text metadata survives streaming, saving and follow-up',
+    () async {
+      const metadata = {
+        'google_parts': [
+          {
+            'text': 'private thought',
+            'thought': true,
+            'thoughtSignature': 'signed-thought',
+          },
+          {'text': 'Hello', 'thoughtSignature': 'signed-text'},
+          {'thoughtSignature': 'signed-tail'},
+        ],
+      };
+      final requests = <List<AiChatMessage>>[];
+      final controller = AiConversationController(
+        client: _FakeAiProtocolClient((messages) {
+          requests.add(messages);
+          return Stream.fromIterable(const [
+            AiTextDelta('Hello'),
+            AiProviderMetadata(metadata),
+          ]);
+        }),
+      );
+      addTearDown(controller.dispose);
+      await controller.send('Question', config: config);
+      final saved = controller.toEntry(scope: 'terminal');
+      expect(saved.messages.last.providerMetadata, metadata);
+      final decoded = AiMessageEntry.fromJson(saved.messages.last.toJson());
+      expect(decoded.providerMetadata, metadata);
+      final restored = AiConversationController(
+        initialConversation: saved,
+        client: _FakeAiProtocolClient((messages) {
+          requests.add(messages);
+          return Stream.value(const AiTextDelta('Follow-up'));
+        }),
+      );
+      addTearDown(restored.dispose);
+      await restored.send('Next', config: config);
+      final previous = requests.last.firstWhere(
+        (m) => m.role == AiChatRole.assistant,
+      );
+      expect(previous.providerMetadata, metadata);
+      expect(previous.copyWith(content: 'Edited').providerMetadata, isEmpty);
+    },
+  );
+
+  test(
+    'shared tool metadata survives Flutter history rewrites and Skip',
+    () async {
+      const call = {
+        'id': 'rs-internal-call',
+        'name': 'run_terminal_command',
+        'arguments': {'command': 'pwd', 'explanation': 'Read directory.'},
+        'omit_provider_id': true,
+        'thought_signature': 'opaque-signature',
+        'future_provider_field': {'retained': true},
+        'google_parts': [
+          {'text': 'Review the command.', 'thoughtSignature': 'signed-text'},
+          {
+            'functionCall': {
+              'name': 'run_terminal_command',
+              'args': {'command': 'pwd', 'explanation': 'Read directory.'},
+            },
+          },
+          {'thoughtSignature': 'signed-tail'},
+        ],
+      };
+      final requests = <List<AiChatMessage>>[];
+      final controller = AiConversationController(
+        initialConversation: const AiConversationEntry(
+          title: 'Shared conversation',
+          scope: 'terminal',
+          messages: [
+            AiMessageEntry(
+              role: 'assistant',
+              content: 'Review.',
+              sequence: 0,
+              toolCalls: [call],
+            ),
+          ],
+          commandBlocks: [
+            AiCommandBlockEntry(
+              toolCallId: 'rs-internal-call',
+              command: 'pwd',
+              explanation: 'Read directory.',
+              status: 'pending',
+              sequence: 1,
+            ),
+          ],
+        ),
+        client: _FakeAiProtocolClient((messages) {
+          requests.add(messages);
+          return Stream.value(const AiTextDelta('Skipped.'));
+        }),
+      );
+      addTearDown(controller.dispose);
+      expect(
+        controller.toEntry(scope: 'terminal').messages.first.toolCalls.single,
+        call,
+      );
+      await controller.skipTerminalCommand('rs-internal-call', config: config);
+      final messages = controller.toEntry(scope: 'terminal').messages;
+      expect(messages.first.toolCalls.single, call);
+      expect(
+        messages
+            .firstWhere((message) => message.role == 'tool')
+            .toolResult?['omit_provider_id'],
+        true,
+      );
+      expect(
+        requests.single.first.toolCalls.single.metadata['google_parts'],
+        call['google_parts'],
+      );
+      final result = {
+        'tool_call_id': 'rs-internal-call',
+        'name': 'run_terminal_command',
+        'content': 'skipped',
+        'is_error': true,
+        'omit_provider_id': true,
+        'future_result_field': {'retained': true},
+      };
+      expect(AiToolResult.fromJson(result).toJson(), result);
+    },
+  );
+
   test('conversation appends streamed assistant text', () async {
     final controller = AiConversationController(
       client: _FakeAiProtocolClient(

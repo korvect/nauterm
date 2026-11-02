@@ -24,8 +24,16 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
       pendingDataStore = dataStore;
       final captureStore = TerminalLogCaptureStore(paths.terminalLogsDirectory);
       await captureStore.prepare();
-      for (final log in dataStore.listIncompleteTerminalCaptures()) {
+      for (final candidate in dataStore.listIncompleteTerminalCaptures()) {
+        final lease = captureStore.tryAcquireLease(candidate.id);
+        if (lease == null) continue;
         try {
+          final log = dataStore.getTerminalLog(candidate.id);
+          if (log == null ||
+              log.captureFile.isEmpty ||
+              log.captureSha256 != null) {
+            continue;
+          }
           if (!await captureStore.captureExists(log.captureFile)) {
             dataStore.clearMissingTerminalCapture(log.id);
             continue;
@@ -47,15 +55,16 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
             error: error,
             stackTrace: stackTrace,
           );
+        } finally {
+          lease.close();
         }
       }
-      await captureStore.cleanupOrphans(
-        dataStore.listTerminalCaptureFiles().toSet(),
-        referencedStateFiles: dataStore
-            .listIncompleteTerminalCaptures()
-            .map((log) => log.captureFile)
-            .toSet(),
-      );
+      await captureStore.cleanupOrphans((id) {
+        final log = dataStore.getTerminalLog(id);
+        return log == null
+            ? null
+            : (file: log.captureFile, unfinished: log.captureSha256 == null);
+      });
       await _applyTerminalRetentionPolicy(
         dataStore: dataStore,
         captureStore: captureStore,
@@ -1348,7 +1357,8 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
       throw StateError('Nauterm is shutting down.');
     }
     final recordingConfig = terminalRecordingConfig;
-    if (!recordingConfig.enabled) {
+    final captureStore = _terminalLogCaptureStore;
+    if (!recordingConfig.enabled || captureStore == null) {
       return null;
     }
     late final TerminalSessionRecorder recorder;
@@ -1366,19 +1376,30 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
           : null,
       onShellHistoryEntry: _appendShellHistoryEntry,
     );
-    _recordingService.register(
-      recorder,
-      pending: awaitConnection,
-      context: TerminalLogContext(
-        hostId: hostId,
-        host: _emptyToNull(host),
-        port: port,
-        username: _emptyToNull(username),
-        shellPath: _emptyToNull(shellPath),
-        workDir: _emptyToNull(workDir),
-        cwdResolver: cwdResolver,
-      ),
-    );
+    try {
+      _recordingService.register(
+        recorder,
+        pending: awaitConnection,
+        captureStore: captureStore,
+        context: TerminalLogContext(
+          hostId: hostId,
+          host: _emptyToNull(host),
+          port: port,
+          username: _emptyToNull(username),
+          shellPath: _emptyToNull(shellPath),
+          workDir: _emptyToNull(workDir),
+          cwdResolver: cwdResolver,
+        ),
+      );
+    } on Object catch (error, stackTrace) {
+      NautermLog.warning(
+        'recording',
+        'Unable to acquire session recording lease.',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      return null;
+    }
     if (!awaitConnection) {
       _selectedLogId ??= recorder.id;
     }
@@ -1544,6 +1565,7 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
       if (!terminalRecordingConfig.enabled) {
         await _recordingService.closeAllCaptures();
         _recordingService.ignoreAllRecorders();
+        _recordingService.releaseAllLeases();
         return;
       }
       if (!terminalRecordingConfig.captureEnabled) {
@@ -1561,6 +1583,7 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
         _recordingService.removePending(logId);
         _recordingService.removeCaptureReference(logId);
         _recordingService.ignore(logId);
+        _recordingService.releaseLease(logId);
         if (_selectedLogId == logId) _selectedLogId = null;
       }
       final activeRecordingIds = {
@@ -1575,6 +1598,7 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
       final savedLogs = <TerminalLogEntry>[];
       for (final recorder in recorders) {
         if (_recordingService.isIgnored(recorder.id) ||
+            _recordingService.isFinalized(recorder.id) ||
             _recordingService.isPending(recorder.id)) {
           continue;
         }
@@ -1604,6 +1628,7 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
           ],
         );
         savedLogs.add(savedLog);
+        if (!recording.isActive) _recordingService.markFinalized(recording.id);
       }
       final retention = await _applyTerminalRetentionPolicy(
         dataStore: dataStore,
@@ -1665,40 +1690,87 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
     final deletedIds = plan.deletedLogIds;
     final updatedLogs = <TerminalLogEntry>[];
 
-    for (final log in logs) {
-      if (deletedIds.contains(log.id)) continue;
-      if (!plan.oversizedLogIds.contains(log.id) || log.captureFile.isEmpty) {
+    for (final candidate in logs) {
+      if (deletedIds.contains(candidate.id) ||
+          !plan.oversizedLogIds.contains(candidate.id) ||
+          candidate.captureFile.isEmpty) {
         continue;
       }
-      final capture = await captureStore.retainTail(
-        logId: log.id,
-        captureFile: log.captureFile,
-        maxBytes: config.maxSessionBytes,
-      );
-      final updated = log.copyWith(
-        captureFile: capture.fileName,
-        captureBytes: capture.bytes,
-        captureSha256: capture.sha256,
-      );
-      dataStore.saveTerminalLog(
-        updated,
-        events: dataStore.listTerminalLogEvents(log.id),
-      );
-      updatedLogs.add(updated);
-    }
-
-    for (final id in deletedIds) {
-      final captureFile = dataStore.deleteTerminalLog(id);
-      if (captureFile != null && captureFile.isNotEmpty) {
-        await captureStore.deleteCapture(captureFile);
+      final lease = captureStore.tryAcquireLease(candidate.id);
+      if (lease == null) continue;
+      try {
+        final log = dataStore.getTerminalLog(candidate.id);
+        if (log == null ||
+            log.endedAt == null ||
+            log.captureSha256 == null ||
+            log.captureFile != candidate.captureFile ||
+            log.captureSha256 != candidate.captureSha256) {
+          continue;
+        }
+        final capture = await captureStore.retainTail(
+          logId: log.id,
+          captureFile: log.captureFile,
+          maxBytes: config.maxSessionBytes,
+          expectedSha256: log.captureSha256!,
+        );
+        final updated = log.copyWith(
+          captureFile: capture.fileName,
+          captureBytes: capture.bytes,
+          captureSha256: capture.sha256,
+        );
+        dataStore.saveTerminalLog(
+          updated,
+          events: dataStore.listTerminalLogEvents(log.id),
+        );
+        updatedLogs.add(updated);
+        if (capture.fileName != log.captureFile) {
+          try {
+            await captureStore.deleteCapture(log.captureFile);
+          } on Object catch (error, stackTrace) {
+            NautermLog.warning(
+              'recording',
+              'Unable to remove replaced terminal capture.',
+              error: error,
+              stackTrace: stackTrace,
+            );
+          }
+        }
+      } finally {
+        lease.close();
       }
-      if (activeLogIds.contains(id)) continue;
-      _recordingService.ignore(id);
-      _recordingService.removeRecording(id);
+    }
+    final removedIds = <String>{};
+    for (final id in deletedIds) {
+      final lease = captureStore.tryAcquireLease(id);
+      if (lease == null) continue;
+      try {
+        final log = dataStore.getTerminalLog(id);
+        if (log == null) continue;
+        final expected = logs
+            .where((candidate) => candidate.id == id)
+            .firstOrNull;
+        if (log.endedAt == null ||
+            expected == null ||
+            log.captureFile != expected.captureFile ||
+            log.captureSha256 != expected.captureSha256) {
+          continue;
+        }
+        final captureFile = dataStore.deleteTerminalLog(id);
+        if (captureFile != null && captureFile.isNotEmpty) {
+          await captureStore.deleteCapture(captureFile);
+        }
+        removedIds.add(id);
+        if (!activeLogIds.contains(id)) {
+          _recordingService.ignore(id);
+          _recordingService.removeRecording(id);
+        }
+      } finally {
+        lease.close();
+      }
     }
     return _TerminalRetentionApplication(
       updatedLogs: updatedLogs,
-      deletedLogIds: deletedIds,
+      deletedLogIds: removedIds,
     );
   }
 
@@ -1707,6 +1779,7 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
     final captureStore = _terminalLogCaptureStore;
     for (final recorder in _terminalSessionRecorders) {
       if (_recordingService.isIgnored(recorder.id) ||
+          _recordingService.isFinalized(recorder.id) ||
           _recordingService.isPending(recorder.id)) {
         continue;
       }

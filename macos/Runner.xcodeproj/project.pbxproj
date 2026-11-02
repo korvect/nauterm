@@ -354,20 +354,23 @@
 			inputFileListPaths = (
 			);
 			inputPaths = (
-				"$(PROJECT_DIR)/../native/nauterm_ffi/Cargo.toml",
-				"$(PROJECT_DIR)/../native/nauterm_ffi/Cargo.lock",
-				"$(PROJECT_DIR)/../native/nauterm_ffi/src",
+				"$(PROJECT_DIR)/../Cargo.toml",
+				"$(PROJECT_DIR)/../Cargo.lock",
+				"$(PROJECT_DIR)/../native/nauterm_core/Cargo.toml",
+				"$(PROJECT_DIR)/../native/nauterm_core/build.rs",
+				"$(PROJECT_DIR)/../native/nauterm_core/src",
+				"$(PROJECT_DIR)/../scripts/build_native.sh",
 			);
 			name = "Build Native FFI";
 			outputFileListPaths = (
 			);
 			outputPaths = (
-				"$(TARGET_BUILD_DIR)/$(FRAMEWORKS_FOLDER_PATH)/libnauterm_ffi.dylib",
+				"$(TARGET_BUILD_DIR)/$(FRAMEWORKS_FOLDER_PATH)/libnauterm_core.dylib",
 				"$(TARGET_BUILD_DIR)/$(FRAMEWORKS_FOLDER_PATH)/libnauterm_mosh_ffi.dylib",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-				shellScript = "set -eu\nPROJECT_ROOT=\"$PROJECT_DIR/..\"\nMODE=debug\nNATIVE_PROFILE=debug\nif [ \"$CONFIGURATION\" = \"Release\" ]; then\n  MODE=release\n  NATIVE_PROFILE=release\nfi\n\"$PROJECT_ROOT/scripts/build_native.sh\" \"$MODE\"\nmkdir -p \"$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH\"\nSIGN_IDENTITY=\"${EXPANDED_CODE_SIGN_IDENTITY:--}\"\nif [ -z \"$SIGN_IDENTITY\" ]; then\n  SIGN_IDENTITY=\"-\"\nfi\nMOSH_LIB_DIR=\"${NAUTERM_MOSH_LIB_DIR:-}\"\nMOSH_REPO_DIR=\"${NAUTERM_MOSH_REPO_DIR:-$PROJECT_ROOT/../nauterm-mosh}\"\nfor LIBRARY in libnauterm_ffi.dylib libnauterm_mosh_ffi.dylib; do\n  if [ \"$LIBRARY\" = \"libnauterm_ffi.dylib\" ]; then\n    SOURCE_DIR=\"$PROJECT_ROOT/native/nauterm_ffi/target/$NATIVE_PROFILE\"\n  elif [ -n \"$MOSH_LIB_DIR\" ]; then\n    SOURCE_DIR=\"$MOSH_LIB_DIR\"\n  else\n    SOURCE_DIR=\"$MOSH_REPO_DIR/target/$NATIVE_PROFILE\"\n  fi\n  TARGET_DYLIB=\"$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH/$LIBRARY\"\n  cp \"$SOURCE_DIR/$LIBRARY\" \"$TARGET_DYLIB\"\n  codesign --force --sign \"$SIGN_IDENTITY\" --timestamp=none \"$TARGET_DYLIB\"\ndone\n";
+				shellScript = "set -eu\nPROJECT_ROOT=\"$PROJECT_DIR/..\"\nMODE=debug\nNATIVE_PROFILE=debug\nif [ \"$CONFIGURATION\" = \"Release\" ]; then\n  MODE=release\n  NATIVE_PROFILE=release\nfi\n\"$PROJECT_ROOT/scripts/build_native.sh\" \"$MODE\"\nmkdir -p \"$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH\"\nSIGN_IDENTITY=\"${EXPANDED_CODE_SIGN_IDENTITY:--}\"\nif [ -z \"$SIGN_IDENTITY\" ]; then\n  SIGN_IDENTITY=\"-\"\nfi\nMOSH_LIB_DIR=\"${NAUTERM_MOSH_LIB_DIR:-}\"\nMOSH_REPO_DIR=\"${NAUTERM_MOSH_REPO_DIR:-$PROJECT_ROOT/../nauterm-mosh}\"\nfor LIBRARY in libnauterm_core.dylib libnauterm_mosh_ffi.dylib; do\n  if [ \"$LIBRARY\" = \"libnauterm_core.dylib\" ]; then\n    SOURCE_DIR=\"$PROJECT_ROOT/target/$NATIVE_PROFILE\"\n  elif [ -n \"$MOSH_LIB_DIR\" ]; then\n    SOURCE_DIR=\"$MOSH_LIB_DIR\"\n  else\n    SOURCE_DIR=\"$MOSH_REPO_DIR/target/$NATIVE_PROFILE\"\n  fi\n  TARGET_DYLIB=\"$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH/$LIBRARY\"\n  cp \"$SOURCE_DIR/$LIBRARY\" \"$TARGET_DYLIB\"\n  codesign --force --sign \"$SIGN_IDENTITY\" --timestamp=none \"$TARGET_DYLIB\"\ndone\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

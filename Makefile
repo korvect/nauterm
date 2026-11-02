@@ -30,9 +30,18 @@ help:
 	@printf '%s\n' '  make test-native-database    Run Rust database tests'
 	@printf '%s\n' '  make verify-icons            Verify generated platform app icons'
 	@printf '%s\n' '  make generate-rust-licenses Regenerate bundled Rust license notices'
+	@printf '%s\n' '  make generate-rs-licenses    Regenerate GPUI Rust license notices'
 	@printf '%s\n' ''
 	@printf '%s\n' 'Development:'
 	@printf '%s\n' '  make run                     Prepare icons, then run Flutter'
+	@printf '%s\n' '  make run-rs                  Run the GPUI client'
+	@printf '%s\n' '  make build-rs                Build the GPUI client'
+	@printf '%s\n' '  make check-rs                Check Rust client and shared core'
+	@printf '%s\n' '  make bundle-rs-macos         Build a local GPUI .app bundle'
+	@printf '%s\n' '  make package-rs-macos        Build a release GPUI .app bundle'
+	@printf '%s\n' '  make package-rs-linux-ARCH   Build GPUI AppImage, DEB and RPM'
+	@printf '%s\n' '  make package-rs-windows-ARCH Build GPUI ZIP and installer'
+	@printf '%s\n' '  make appcast-rs-macos        Sign the RS Sparkle update feed'
 	@printf '%s\n' '  make prepare-icons           Copy generated icons into platform projects'
 	@printf '%s\n' ''
 	@printf '%s\n' 'Native library:'
@@ -83,7 +92,7 @@ test-data:
 
 .PHONY: test-native-database
 test-native-database:
-	cargo test --manifest-path native/nauterm_ffi/Cargo.toml --features test-credential-store database::tests
+	cargo test --manifest-path native/nauterm_core/Cargo.toml --features test-credential-store database::tests
 
 .PHONY: native-debug
 native-debug:
@@ -105,9 +114,12 @@ prepare-icons:
 verify-icons:
 	bash scripts/ci/verify_app_icons.sh
 
-.PHONY: generate-rust-licenses
+.PHONY: generate-rust-licenses generate-rs-licenses
 generate-rust-licenses:
 	bash scripts/generate_rust_licenses.sh
+
+generate-rs-licenses:
+	bash scripts/generate_rust_licenses.sh rs
 
 .PHONY: package-current
 package-current:
@@ -176,3 +188,35 @@ package-windows-x86_64:
 
 package-windows-arm64:
 	DIST_DIR="$(DIST_DIR)" CLEAN_DIST="$(CLEAN_DIST)" pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/package_windows.ps1 -Arch arm64
+
+.PHONY: run-rs build-rs check-rs bundle-rs-macos package-rs-macos appcast-rs-macos
+run-rs:
+	bash nauterm-rs/scripts/run.sh
+
+build-rs:
+	bash nauterm-rs/scripts/build.sh
+
+check-rs:
+	cargo check -p nauterm-rs --all-targets --locked
+
+bundle-rs-macos:
+	bash nauterm-rs/scripts/bundle-macos.sh debug
+
+package-rs-macos:
+	DIST_DIR="$(DIST_DIR)" bash nauterm-rs/scripts/bundle-macos.sh release
+
+appcast-rs-macos:
+	DIST_DIR="$(DIST_DIR)" bash scripts/ci/generate_sparkle_appcast.sh "$$(uname -m)" rs
+
+.PHONY: package-rs-linux-x86_64 package-rs-linux-arm64 package-rs-windows-x86_64 package-rs-windows-arm64
+package-rs-linux-x86_64:
+	DIST_DIR="$(DIST_DIR)" CLEAN_DIST="$(CLEAN_DIST)" bash scripts/ci/package_linux.sh x86_64 amd64 x86_64 x86_64 rs
+
+package-rs-linux-arm64:
+	DIST_DIR="$(DIST_DIR)" CLEAN_DIST="$(CLEAN_DIST)" bash scripts/ci/package_linux.sh arm64 arm64 aarch64 aarch64 rs
+
+package-rs-windows-x86_64:
+	DIST_DIR="$(DIST_DIR)" CLEAN_DIST="$(CLEAN_DIST)" pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/package_windows.ps1 -Arch x86_64 -Client rs
+
+package-rs-windows-arm64:
+	DIST_DIR="$(DIST_DIR)" CLEAN_DIST="$(CLEAN_DIST)" pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/package_windows.ps1 -Arch arm64 -Client rs

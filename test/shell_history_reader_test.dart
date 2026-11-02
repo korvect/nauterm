@@ -220,4 +220,31 @@ void main() {
 
     expect(await store.read(), isEmpty);
   });
+  test(
+    'aggregate history serializes stores and observes external clears',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'nauterm-history-',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final file = File('${directory.path}/history');
+      final first = ShellHistoryFileStore(file);
+      final second = ShellHistoryFileStore(file);
+      await Future.wait([
+        first.append(ShellHistoryEntry(command: 'first', createdAt: readAt)),
+        second.append(ShellHistoryEntry(command: 'second', createdAt: readAt)),
+      ]);
+      expect((await first.read()).map((entry) => entry.command).toSet(), {
+        'first',
+        'second',
+      });
+      await second.clear();
+      await first.append(
+        ShellHistoryEntry(command: 'after clear', createdAt: readAt),
+      );
+      expect((await second.read()).map((entry) => entry.command), [
+        'after clear',
+      ]);
+    },
+  );
 }

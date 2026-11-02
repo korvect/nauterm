@@ -1487,6 +1487,7 @@ class AiMessageEntry {
     this.toolCalls = const [],
     this.toolResult,
     this.attachments = const [],
+    this.providerMetadata,
     this.createdAt,
     this.updatedAt,
     this.version,
@@ -1501,6 +1502,7 @@ class AiMessageEntry {
   final List<Map<String, Object?>> toolCalls;
   final Map<String, Object?>? toolResult;
   final List<Map<String, Object?>> attachments;
+  final Map<String, Object?>? providerMetadata;
   final DateTime? createdAt;
   final DateTime? updatedAt;
   final int? version;
@@ -1515,6 +1517,7 @@ class AiMessageEntry {
     'tool_calls': toolCalls,
     'tool_result': toolResult,
     'attachments': attachments,
+    'provider_metadata': providerMetadata,
     'created_at': _dateTimeToJson(createdAt),
     'updated_at': _dateTimeToJson(updatedAt),
     'version': version,
@@ -1538,6 +1541,9 @@ class AiMessageEntry {
       attachments: _jsonList(map['attachments'])
           .map(_jsonMap)
           .toList(growable: false),
+      providerMetadata: map['provider_metadata'] == null
+          ? null
+          : _jsonMap(map['provider_metadata']),
       createdAt: _dateTimeOrNull(map['created_at']),
       updatedAt: _dateTimeOrNull(map['updated_at']),
       version: _intOrNull(map['version']),
@@ -2502,6 +2508,11 @@ class NautermDataStore {
     }).map(TerminalLogEntry.fromJson).toList();
   }
 
+  TerminalLogEntry? getTerminalLog(String logId) {
+    final value = _call('get_terminal_log', {'log_id': logId});
+    return value == null ? null : TerminalLogEntry.fromJson(value);
+  }
+
   List<TerminalLogEvent> listTerminalLogEvents(String logId) {
     return _callList('list_terminal_log_events', {
       'log_id': logId,
@@ -2512,6 +2523,11 @@ class NautermDataStore {
     final value = _call('delete_terminal_log', {'log_id': logId});
     return value as String?;
   }
+
+  List<String> deleteTerminalLogs(Iterable<String> logIds) => _callList(
+    'delete_terminal_logs',
+    {'log_ids': logIds.toList(growable: false)},
+  ).cast<String>();
 
   List<String> clearTerminalLogs() {
     return _callList('clear_terminal_logs').cast<String>();
@@ -2706,7 +2722,7 @@ class _NautermDataBindings {
     );
 
     throw NautermDataException(
-      'Unable to load nauterm_ffi native library.\n${errors.join('\n')}',
+      'Unable to load nauterm_core native library.\n${errors.join('\n')}',
     );
   }
 
@@ -2848,8 +2864,8 @@ List<String> _libraryCandidates() {
   final root = Directory.current.path;
   final executableDirectory = File(Platform.resolvedExecutable).parent.path;
   final candidates = <String>[
-    [root, 'native', 'nauterm_ffi', 'target', 'debug', name].join(separator),
-    [root, 'native', 'nauterm_ffi', 'target', 'release', name].join(separator),
+    [root, 'target', 'debug', name].join(separator),
+    [root, 'target', 'release', name].join(separator),
     '$executableDirectory$separator$name',
     [executableDirectory, 'lib', name].join(separator),
     if (Platform.isMacOS)
@@ -2862,10 +2878,10 @@ List<String> _libraryCandidates() {
 
 String _libraryName() {
   if (Platform.isMacOS) {
-    return 'libnauterm_ffi.dylib';
+    return 'libnauterm_core.dylib';
   }
   if (Platform.isWindows) {
-    return 'nauterm_ffi.dll';
+    return 'nauterm_core.dll';
   }
-  return 'libnauterm_ffi.so';
+  return 'libnauterm_core.so';
 }

@@ -82,7 +82,7 @@ Add-Content -Path $env:GITHUB_ENV -Value "OPENSSL_INCLUDE_DIR=$(Join-Path $opens
 Add-Content -Path $env:GITHUB_ENV -Value "OPENSSL_LIB_DIR=$opensslLibDir"
 Add-Content -Path $env:GITHUB_ENV -Value "LIB=$opensslLibDir;$env:LIB"
 
-# nauterm_ffi links OpenSSL through rusqlite's bundled SQLCipher, so native
+# nauterm_core links OpenSSL through rusqlite's bundled SQLCipher, so native
 # tests and the packaged app need the matching runtime DLL on PATH.
 $opensslBinDir = Join-Path $opensslDir "bin"
 $runtimeArchitecture = if ($Arch -eq "arm64") { "arm64" } else { "x64" }

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../terminal/terminal_recording.dart';
+import '../terminal/terminal_ffi.dart' show TerminalRecordingLease;
 import 'terminal_recording_store.dart';
 
 typedef TerminalCaptureWriterFactory =
@@ -50,9 +51,11 @@ class RecordingService {
   final List<TerminalSessionRecorder> recorders = [];
   final Map<String, _TerminalCaptureSink> _captureSinks = {};
   final Set<String> _ignoredIds = {};
+  final Set<String> _finalizedIds = {};
   final Set<String> _pendingIds = {};
   final Set<String> _captureReferences = {};
   final Map<String, TerminalLogContext> _contexts = {};
+  final Map<String, TerminalRecordingLease> _leases = {};
   Timer? _saveTimer;
   Future<void> _saveQueue = Future<void>.value();
 
@@ -60,7 +63,13 @@ class RecordingService {
     TerminalSessionRecorder recorder, {
     required TerminalLogContext context,
     required bool pending,
+    TerminalLogCaptureStore? captureStore,
   }) {
+    if (captureStore != null) {
+      final lease = captureStore.tryAcquireLease(recorder.id);
+      if (lease == null) throw StateError('This recording is already in use.');
+      _leases[recorder.id] = lease;
+    }
     recorders.add(recorder);
     _contexts[recorder.id] = context;
     if (pending) _pendingIds.add(recorder.id);
@@ -138,6 +147,8 @@ class RecordingService {
   }
 
   void removeRecording(String recordingId) {
+    releaseLease(recordingId);
+    _finalizedIds.remove(recordingId);
     recorders.removeWhere((entry) => entry.id == recordingId);
     _contexts.remove(recordingId);
     _pendingIds.remove(recordingId);
@@ -151,6 +162,8 @@ class RecordingService {
   }
 
   void clearRecordings() {
+    releaseAllLeases();
+    _finalizedIds.clear();
     recorders.clear();
     _contexts.clear();
   }
@@ -159,13 +172,38 @@ class RecordingService {
     _ignoredIds.addAll(recorders.map((entry) => entry.id));
   }
 
+  bool isFinalized(String id) => _finalizedIds.contains(id);
+
+  /// The final metadata is committed. Keep in-memory replay frames, but later
+  /// save batches must not recreate a log another client deleted/compacted.
+  void markFinalized(String id) {
+    _finalizedIds.add(id);
+    releaseLease(id);
+  }
+
+  TerminalRecordingLease? leaseFor(String id) => _leases[id];
+
+  void releaseLease(String id) => _leases.remove(id)?.close();
+
+  void releaseAllLeases() {
+    for (final lease in _leases.values) {
+      lease.close();
+    }
+    _leases.clear();
+  }
+
   void scheduleSave(Future<void> Function() save) {
     _saveTimer ??= Timer(_saveDebounce, () => unawaited(save()));
   }
 
   Future<void> enqueueSave(Future<void> Function() save) {
     final queued = _saveQueue.then((_) => save());
-    _saveQueue = queued;
+    // Report this operation's error to its caller without poisoning later
+    // saves/deletions queued by the same recording service.
+    _saveQueue = queued.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
     return queued;
   }
 
@@ -180,9 +218,11 @@ class RecordingService {
       sink.abort();
     }
     _captureSinks.clear();
+    releaseAllLeases();
     _pendingIds.clear();
     _captureReferences.clear();
     _contexts.clear();
+    _finalizedIds.clear();
     recorders.clear();
   }
 }

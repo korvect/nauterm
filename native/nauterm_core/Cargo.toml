@@ -1,0 +1,74 @@
+[package]
+name = "nauterm_core"
+version.workspace = true
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = ["ffi", "terminal-ghostty"]
+ffi = []
+integration-tests = []
+test-credential-store = []
+terminal-ghostty = []
+
+[dependencies]
+aes-gcm = "0.11"
+alacritty_terminal = { version = "0.26.0", default-features = false }
+argon2 = "0.6"
+base64.workspace = true
+ctap-hid-fido2 = "3.6.0"
+hkdf = "0.13"
+keyring = "4"
+libc.workspace = true
+libloading = "0.9"
+polling = "3"
+png = "0.18"
+opendal = { workspace = true, features = [
+    "executors-tokio",
+    "layers-retry",
+    "layers-timeout",
+    "http-transport-reqwest-rustls",
+    "services-s3",
+    "services-webdav",
+    "services-azblob",
+    "services-gcs",
+    "services-gdrive",
+    "services-onedrive",
+    "services-dropbox",
+] }
+p256 = { version = "0.14", features = ["ecdsa"] }
+getrandom = "0.4"
+reqwest = { workspace = true, features = [
+    "blocking",
+    "form",
+    "json",
+    "query",
+    "rustls",
+] }
+socket2 = "0.6.3"
+encoding_rs = "0.8.35"
+futures-util.workspace = true
+rusqlite = { version = "0.40", features = ["bundled-sqlcipher", "backup"] }
+russh.workspace = true
+russh-sftp = "3.0.1"
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tokio = { workspace = true, features = ["io-util", "net", "rt-multi-thread", "sync", "time"] }
+unicode-normalization = "0.1"
+url.workspace = true
+percent-encoding = "2"
+zeroize.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"] }
+
+[dev-dependencies]
+tempfile.workspace = true
+opendal = { workspace = true, features = [
+    "executors-tokio",
+    "services-memory",
+] }

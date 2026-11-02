@@ -69,6 +69,22 @@ class _TerminalBindings {
             _CapturePrepareDirectoryNative,
             _CapturePrepareDirectoryDart
           >('nauterm_capture_prepare_directory'),
+      recordingLeaseTryAcquire = library
+          .lookupFunction<_CaptureRecoverNative, _CaptureRecoverDart>(
+            'nauterm_recording_lease_try_acquire',
+          ),
+      recordingLeaseTryAcquireExisting = library
+          .lookupFunction<_CaptureRecoverNative, _CaptureRecoverDart>(
+            'nauterm_recording_lease_try_acquire_existing',
+          ),
+      recordingLeaseRelease = library
+          .lookupFunction<_CaptureHandleBoolNative, _CaptureHandleBoolDart>(
+            'nauterm_recording_lease_release',
+          ),
+      captureWriteTail = library
+          .lookupFunction<_CaptureTailNative, _CaptureTailDart>(
+            'nauterm_capture_write_tail',
+          ),
       captureWriterOpen = library
           .lookupFunction<_CaptureOpenNative, _CaptureOpenDart>(
             'nauterm_capture_writer_open',
@@ -375,7 +391,7 @@ class _TerminalBindings {
             )();
         if (abiVersion != _expectedAbiVersion) {
           throw StateError(
-            'nauterm_ffi ABI version mismatch: expected '
+            'nauterm_core ABI version mismatch: expected '
             '$_expectedAbiVersion, got $abiVersion',
           );
         }
@@ -401,7 +417,7 @@ class _TerminalBindings {
     );
 
     throw FfiTerminalLoadException(
-      'Unable to load nauterm_ffi native library.\n${errors.join('\n')}',
+      'Unable to load nauterm_core native library.\n${errors.join('\n')}',
     );
   }
 
@@ -421,6 +437,10 @@ class _TerminalBindings {
   final _RuntimeLifecycleDart prepareRuntimeShutdown;
   final _WriteShellIntegrationResourcesDart writeShellIntegrationResources;
   final _CapturePrepareDirectoryDart capturePrepareDirectory;
+  final _CaptureRecoverDart recordingLeaseTryAcquire;
+  final _CaptureRecoverDart recordingLeaseTryAcquireExisting;
+  final _CaptureHandleBoolDart recordingLeaseRelease;
+  final _CaptureTailDart captureWriteTail;
   final _CaptureOpenDart captureWriterOpen;
   final _CaptureAppendDart captureWriterAppend;
   final _CaptureHandleBoolDart captureWriterFlush;
@@ -940,8 +960,8 @@ List<String> _libraryCandidates() {
   final root = Directory.current.path;
   final executableDirectory = File(Platform.resolvedExecutable).parent.path;
   final candidates = <String>[
-    [root, 'native', 'nauterm_ffi', 'target', 'debug', name].join(separator),
-    [root, 'native', 'nauterm_ffi', 'target', 'release', name].join(separator),
+    [root, 'target', 'debug', name].join(separator),
+    [root, 'target', 'release', name].join(separator),
     '$executableDirectory$separator$name',
     [executableDirectory, 'lib', name].join(separator),
     if (Platform.isMacOS)
@@ -954,10 +974,10 @@ List<String> _libraryCandidates() {
 
 String _libraryName() {
   if (Platform.isMacOS) {
-    return 'libnauterm_ffi.dylib';
+    return 'libnauterm_core.dylib';
   }
   if (Platform.isWindows) {
-    return 'nauterm_ffi.dll';
+    return 'nauterm_core.dll';
   }
-  return 'libnauterm_ffi.so';
+  return 'libnauterm_core.so';
 }

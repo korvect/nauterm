@@ -24,7 +24,7 @@ permissions:
 
 env:
   FLUTTER_VERSION: 3.47.0
-  RUST_TOOLCHAIN: 1.97.0
+  RUST_TOOLCHAIN: 1.99.1
   ZIG_VERSION: 0.16.0
   CARGO_TERM_COLOR: always
 
@@ -84,26 +84,25 @@ jobs:
         run: flutter analyze --no-pub
 
       - name: Build native library for Flutter tests
-        run: cargo build --manifest-path native/nauterm_ffi/Cargo.toml --locked --features test-credential-store
+        run: cargo build --manifest-path native/nauterm_core/Cargo.toml --locked --features test-credential-store
 
       - name: Run Flutter unit tests
         run: flutter test --no-pub
 
       - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
         with:
-          manifest-path: native/nauterm_ffi/Cargo.toml
+          manifest-path: native/nauterm_core/Cargo.toml
           command: check licenses
           arguments: --all-features
 
-      - name: Check native Rust formatting
-        continue-on-error: true
-        run: cargo fmt --manifest-path native/nauterm_ffi/Cargo.toml --all -- --check
+      - name: Check Rust workspace formatting
+        run: cargo fmt --all -- --check
 
       - name: Run native Rust Clippy
-        run: cargo clippy --manifest-path native/nauterm_ffi/Cargo.toml --all-targets --locked -- -D warnings
+        run: cargo clippy -p nauterm_core --all-targets --locked -- -D warnings
 
       - name: Run native Rust unit tests
-        run: cargo test --manifest-path native/nauterm_ffi/Cargo.toml --locked --features test-credential-store
+        run: cargo test -p nauterm_core --locked --features test-credential-store
 
       - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
         with:
@@ -131,6 +130,86 @@ jobs:
       - run: bash scripts/ci/check_mosh_abi.sh nauterm-mosh
 
       - run: bash scripts/ci/verify_mosh_artifacts.sh nauterm-mosh
+
+  gpui:
+    name: GPUI (${{ matrix.os }}, ${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      CARGO_BUILD_TARGET: ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04, arch: x86_64, target: x86_64-unknown-linux-gnu }
+          - { os: ubuntu-24.04-arm, arch: arm64, target: aarch64-unknown-linux-gnu }
+          - { os: macos-26, arch: arm64, target: aarch64-apple-darwin }
+          - { os: macos-26-intel, arch: x86_64, target: x86_64-apple-darwin }
+          - { os: windows-2025, arch: x86_64, target: x86_64-pc-windows-msvc }
+          - { os: windows-11-arm, arch: arm64, target: aarch64-pc-windows-msvc }
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+        if: runner.os != 'Windows' || matrix.arch != 'arm64'
+        with:
+          version: ${{ env.ZIG_VERSION }}
+
+      - name: Install x86_64 Zig host compiler (Windows arm64)
+        if: runner.os == 'Windows' && matrix.arch == 'arm64'
+        shell: pwsh
+        run: ./scripts/ci/setup_zig_windows_arm64.ps1
+
+      - uses: ilammy/msvc-dev-cmd@7defe9254715b088f12dddd9942945a3d75cdad5 # v1.9.0
+        if: runner.os == 'Windows'
+        with:
+          arch: ${{ matrix.arch == 'arm64' && 'arm64' || 'amd64' }}
+
+      - name: Install GPUI Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake libasound2-dev libclang-dev \
+            libdbus-1-dev libfontconfig1-dev libfreetype6-dev libgtk-3-dev \
+            libpipewire-0.3-dev libssl-dev libudev-dev libvulkan-dev \
+            libwayland-dev libxcb1-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev pkg-config
+
+      - name: Install and configure Windows OpenSSL
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/ci/setup_windows_openssl.ps1 -Arch "${{ matrix.arch }}"
+
+      - name: Install pinned Rust toolchain
+        shell: bash
+        run: |
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --component clippy
+          rustup default "$RUST_TOOLCHAIN"
+          rustup target add "$CARGO_BUILD_TARGET"
+
+      - name: Check the GPUI client and shared Rust core
+        run: cargo clippy -p nauterm-rs --all-targets --locked -- -D warnings
+
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
+        if: runner.os == 'Linux' && matrix.arch == 'x86_64'
+        with:
+          manifest-path: nauterm-rs/Cargo.toml
+          command: check licenses
+          arguments: --all-features
+
+      - name: Verify GPUI license notice inventory for every supported target
+        if: runner.os == 'Linux' && matrix.arch == 'x86_64'
+        run: python3 scripts/ci/verify_rs_licenses.py
+
+      - name: Run GPUI model and isolated-file unit tests
+        run: cargo test -p nauterm-rs --locked
+
+      - name: Build the GPUI executable
+        run: cargo build -p nauterm-rs --locked
+
+      - name: Assemble the macOS GPUI bundle
+        if: runner.os == 'macOS'
+        run: bash nauterm-rs/scripts/bundle-macos.sh debug
 
   integration:
     name: Integration (${{ matrix.os }})
@@ -183,10 +262,10 @@ jobs:
         run: flutter pub get
 
       - name: Run native integration tests
-        run: cargo test --manifest-path native/nauterm_ffi/Cargo.toml --locked --features integration-tests,test-credential-store -- --test-threads=1
+        run: cargo test --manifest-path native/nauterm_core/Cargo.toml --locked --features integration-tests,test-credential-store -- --test-threads=1
 
       - name: Build the native test library
-        run: cargo build --manifest-path native/nauterm_ffi/Cargo.toml --locked --features test-credential-store
+        run: cargo build --manifest-path native/nauterm_core/Cargo.toml --locked --features test-credential-store
 
       - name: Run Flutter integration tests
         run: flutter test --no-pub test_integration

@@ -462,7 +462,17 @@ class AiConversationController extends ChangeNotifier {
           role: AiChatRole.tool,
           content: '',
           sequence: _nextSequence++,
-          toolResult: _terminalCommandToolResult(command),
+          toolResult: _terminalCommandToolResult(
+            command,
+            metadata: {
+              if (assistant.toolCalls.any(
+                (call) =>
+                    call.id == command.id &&
+                    call.metadata['omit_provider_id'] == true,
+              ))
+                'omit_provider_id': true,
+            },
+          ),
           createdAt: DateTime.now(),
         ),
       );
@@ -560,6 +570,11 @@ class AiConversationController extends ChangeNotifier {
                   content: '${message.content}$text',
                 );
                 notifyListeners();
+              case AiProviderMetadata(:final metadata):
+                _messages[assistantIndex] = _messages[assistantIndex].copyWith(
+                  providerMetadata: metadata,
+                );
+                notifyListeners();
               case AiToolCall():
                 final id = event.id.isEmpty
                     ? 'terminal-command-${_terminalCommands.length + 1}'
@@ -568,6 +583,7 @@ class AiConversationController extends ChangeNotifier {
                   id: id,
                   name: event.name,
                   arguments: event.arguments,
+                  metadata: event.metadata,
                 );
                 final message = _messages[assistantIndex];
                 final explanation = toolCall.terminalCommandExplanation?.trim();
@@ -870,12 +886,16 @@ bool _terminalCommandResolved(AiTerminalCommandStatus status) {
   };
 }
 
-AiToolResult _terminalCommandToolResult(AiTerminalCommand command) {
+AiToolResult _terminalCommandToolResult(
+  AiTerminalCommand command, {
+  Map<String, Object?> metadata = const {},
+}) {
   final skipped = command.status == AiTerminalCommandStatus.skipped;
   final cancelled = command.status == AiTerminalCommandStatus.cancelled;
   final submitted = command.status == AiTerminalCommandStatus.submitted;
   final succeeded = command.status == AiTerminalCommandStatus.succeeded;
   return AiToolResult(
+    metadata: metadata,
     toolCallId: command.id,
     name: 'run_terminal_command',
     content: jsonEncode(<String, Object?>{
@@ -924,17 +944,9 @@ AiMessageEntry _messageToEntry(AiChatMessage message) {
     content: message.content,
     context: message.context,
     sequence: message.sequence,
-    toolCalls: [
-      for (final call in message.toolCalls)
-        {'id': call.id, 'name': call.name, 'arguments': call.arguments},
-    ],
+    toolCalls: [for (final call in message.toolCalls) call.toJson()],
     toolResult: switch (message.toolResult) {
-      final result? => {
-        'tool_call_id': result.toolCallId,
-        'name': result.name,
-        'content': result.content,
-        'is_error': result.isError,
-      },
+      final result? => result.toJson(),
       null => null,
     },
     attachments: [
@@ -950,6 +962,9 @@ AiMessageEntry _messageToEntry(AiChatMessage message) {
           'redacted': attachment.redacted,
         },
     ],
+    providerMetadata: message.providerMetadata.isEmpty
+        ? null
+        : message.providerMetadata,
     createdAt: message.createdAt,
     updatedAt: message.updatedAt,
   );
@@ -958,30 +973,14 @@ AiMessageEntry _messageToEntry(AiChatMessage message) {
 AiChatMessage _messageFromEntry(AiMessageEntry entry) {
   return AiChatMessage(
     persistenceId: entry.uuid,
+    providerMetadata: entry.providerMetadata ?? const {},
     role: AiChatRole.values.byName(entry.role),
     content: entry.content,
     context: entry.context,
     sequence: entry.sequence,
-    toolCalls: [
-      for (final call in entry.toolCalls)
-        AiToolCall(
-          id: call['id'] as String? ?? '',
-          name: call['name'] as String? ?? '',
-          arguments: switch (call['arguments']) {
-            final Map value => value.map(
-              (key, value) => MapEntry(key.toString(), value),
-            ),
-            _ => const {},
-          },
-        ),
-    ],
+    toolCalls: [for (final call in entry.toolCalls) AiToolCall.fromJson(call)],
     toolResult: switch (entry.toolResult) {
-      final result? => AiToolResult(
-        toolCallId: result['tool_call_id'] as String? ?? '',
-        name: result['name'] as String? ?? '',
-        content: result['content'] as String? ?? '',
-        isError: result['is_error'] as bool? ?? false,
-      ),
+      final result? => AiToolResult.fromJson(result),
       null => null,
     },
     attachments: [

@@ -2310,25 +2310,41 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
     );
     if (!confirmed) return;
 
-    _recordingService.ignore(log.id);
-    await _recordingService.closeCapture(log.id);
-    _recordingService.removePending(log.id);
-    _recordingService.removeCaptureReference(log.id);
     final store = _terminalLogCaptureStore;
     final dataStore = _dataStore;
+    if (store == null || dataStore == null) return;
+    final owned = _recordingService.leaseFor(log.id);
+    TerminalRecordingLease? acquired;
     try {
-      if (store != null && log.captureFile.isNotEmpty) {
-        await store.deleteCapture(log.captureFile);
+      acquired = owned == null
+          ? store.tryAcquireLease(log.id, existingOnly: log.endedAt == null)
+          : null;
+      if (owned == null && acquired == null) {
+        throw StateError('This recording is in use in another window.');
       }
-      dataStore?.deleteTerminalLog(log.id);
-      final usage = await store?.diskUsage() ?? 0;
+      _recordingService.ignore(log.id);
+      await _recordingService.enqueueSave(() async {
+        await _recordingService.closeCapture(log.id);
+        final current = dataStore.getTerminalLog(log.id);
+        if (current != null) {
+          if (current.captureFile != log.captureFile ||
+              current.captureSha256 != log.captureSha256) {
+            throw StateError('The recording changed. Refresh and try again.');
+          }
+          dataStore.deleteTerminalLog(log.id);
+          if (current.captureFile.isNotEmpty) {
+            await store.deleteCapture(current.captureFile);
+          }
+        }
+        _recordingService.removeRecording(log.id);
+      });
+      final usage = await store.diskUsage();
       if (!mounted) return;
       _setWorkspaceState(() {
         _terminalLogs = [
           for (final entry in _terminalLogs)
             if (entry.id != log.id) entry,
         ];
-        _recordingService.removeRecording(log.id);
         _terminalCaptureDiskUsage = usage;
         if (_selectedLogId == log.id) _selectedLogId = null;
       });
@@ -2336,36 +2352,81 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       if (mounted) {
         _showWorkspaceMessage('Failed to delete terminal log: $error');
       }
+    } finally {
+      acquired?.close();
+      if (owned != null && _recordingService.isIgnored(log.id)) {
+        _recordingService.releaseLease(log.id);
+      }
     }
   }
 
   Future<void> _clearTerminalLogs() async {
     final confirmed = await _confirmDelete(
       title: 'Clear all terminal history?',
-      message:
-          'This permanently deletes all session metadata and encrypted capture '
-          'files. Active sessions will stop being recorded.',
+      message: 'This permanently deletes session metadata and encrypted captures. Active sessions in this window will stop being recorded; recordings in use in other windows are preserved.',
       confirmLabel: 'Clear all',
     );
     if (!confirmed) return;
-
+    final store = _terminalLogCaptureStore;
+    final dataStore = _dataStore;
+    if (store == null || dataStore == null) return;
+    _recordingService.stopAllRecordings();
+    final acquired = <TerminalRecordingLease>[];
     try {
-      _recordingService.stopAllRecordings();
-      await _recordingService.closeAllCaptures();
-      await _terminalLogCaptureStore?.clear();
-      _dataStore?.clearTerminalLogs();
+      await _recordingService.enqueueSave(() async {
+        await _recordingService.closeAllCaptures();
+        final logs = <TerminalLogEntry>[];
+        var offset = 0;
+        while (true) {
+          final page = dataStore.listTerminalLogs(limit: 500, offset: offset);
+          logs.addAll(page);
+          if (page.length < 500) break;
+          offset += page.length;
+        }
+        final selected = <TerminalLogEntry>[];
+        for (final log in logs) {
+          if (_recordingService.leaseFor(log.id) == null) {
+            final lease = store.tryAcquireLease(
+              log.id,
+              existingOnly: log.endedAt == null,
+            );
+            if (lease == null) continue;
+            acquired.add(lease);
+          }
+          final current = dataStore.getTerminalLog(log.id);
+          if (current != null) selected.add(current);
+        }
+        dataStore.deleteTerminalLogs(selected.map((entry) => entry.id));
+        for (final log in selected) {
+          if (log.captureFile.isNotEmpty) {
+            await store.deleteCapture(log.captureFile);
+          }
+        }
+        _recordingService.clearRecordings();
+      });
+      final remaining = dataStore.listTerminalLogs(
+        limit: _NautermWorkspaceSessionActions._terminalLogPageSize,
+      );
+      final usage = await store.diskUsage();
       if (!mounted) return;
       _setWorkspaceState(() {
-        _terminalLogs = const [];
-        _recordingService.clearRecordings();
+        _terminalLogs = remaining;
         _selectedLogId = null;
-        _terminalLogsHasMore = false;
-        _terminalCaptureDiskUsage = 0;
+        _terminalLogsHasMore =
+            remaining.length ==
+            _NautermWorkspaceSessionActions._terminalLogPageSize;
+        _terminalCaptureDiskUsage = usage;
       });
     } on Object catch (error) {
       if (mounted) {
         _showWorkspaceMessage('Failed to clear terminal logs: $error');
       }
+    } finally {
+      for (final lease in acquired) {
+        lease.close();
+      }
+      // Logging was stopped and its sinks closed even if publication failed.
+      _recordingService.releaseAllLeases();
     }
   }
 

@@ -1,4 +1,5 @@
 accepted = [
+  "0BSD",
   "Apache-2.0",
   "BSD-2-Clause",
   "BSD-3-Clause",
@@ -15,7 +16,9 @@ targets = [
   "aarch64-apple-darwin",
   "x86_64-apple-darwin",
   "x86_64-pc-windows-msvc",
+  "aarch64-pc-windows-msvc",
   "x86_64-unknown-linux-gnu",
+  "aarch64-unknown-linux-gnu",
 ]
 ignore-build-dependencies = true
 ignore-dev-dependencies = true
@@ -23,3 +26,11 @@ workarounds = ["ring"]
 
 [private]
 ignore = true
+
+# These GPUI platform dependencies remain MPL-covered. Packaging copies the
+# compiled dependency sources and their licenses alongside the Rust notices.
+[dwrote]
+accepted = ["MPL-2.0"]
+
+[option-ext]
+accepted = ["MPL-2.0"]

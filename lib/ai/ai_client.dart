@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show mapEquals;
 import 'package:anthropic_sdk_dart/anthropic_sdk_dart.dart' as anthropic;
 import 'package:googleai_dart/googleai_dart.dart' as google;
 import 'package:http/io_client.dart';
@@ -23,16 +24,41 @@ class AiTextDelta extends AiStreamEvent {
   final String text;
 }
 
+class AiProviderMetadata extends AiStreamEvent {
+  const AiProviderMetadata(this.metadata);
+  final Map<String, Object?> metadata;
+}
+
 class AiToolCall extends AiStreamEvent {
   const AiToolCall({
     required this.id,
     required this.name,
     required this.arguments,
+    this.metadata = const {},
   });
+
+  factory AiToolCall.fromJson(Map<String, Object?> json) {
+    return AiToolCall(
+      id: json['id'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      arguments: _nestedMap(json['arguments']) ?? const {},
+      metadata: _toolMetadata(json, const {'id', 'name', 'arguments'}),
+    );
+  }
 
   final String id;
   final String name;
   final Map<String, Object?> arguments;
+
+  /// Provider replay fields remain opaque when another frontend saves history.
+  final Map<String, Object?> metadata;
+
+  Map<String, Object?> toJson() => {
+    ...metadata,
+    'id': id,
+    'name': name,
+    'arguments': arguments,
+  };
 
   String? get terminalCommand {
     if (name != 'run_terminal_command') {
@@ -59,6 +85,7 @@ class AiChatMessage {
     this.toolCalls = const [],
     this.toolResult,
     this.attachments = const [],
+    this.providerMetadata = const {},
     this.createdAt,
     this.updatedAt,
   });
@@ -71,6 +98,7 @@ class AiChatMessage {
   final List<AiToolCall> toolCalls;
   final AiToolResult? toolResult;
   final List<AiAttachment> attachments;
+  final Map<String, Object?> providerMetadata;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -87,6 +115,7 @@ class AiChatMessage {
     List<AiToolCall>? toolCalls,
     AiToolResult? toolResult,
     List<AiAttachment>? attachments,
+    Map<String, Object?>? providerMetadata,
     DateTime? updatedAt,
   }) {
     return AiChatMessage(
@@ -98,6 +127,11 @@ class AiChatMessage {
       toolCalls: toolCalls ?? this.toolCalls,
       toolResult: toolResult ?? this.toolResult,
       attachments: attachments ?? this.attachments,
+      providerMetadata:
+          providerMetadata ??
+          (content != null && content != this.content
+              ? const {}
+              : this.providerMetadata),
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -110,13 +144,46 @@ class AiToolResult {
     required this.name,
     required this.content,
     this.isError = false,
+    this.metadata = const {},
   });
+
+  factory AiToolResult.fromJson(Map<String, Object?> json) {
+    return AiToolResult(
+      toolCallId: json['tool_call_id'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      content: json['content'] as String? ?? '',
+      isError: json['is_error'] as bool? ?? false,
+      metadata: _toolMetadata(json, const {
+        'tool_call_id',
+        'name',
+        'content',
+        'is_error',
+      }),
+    );
+  }
 
   final String toolCallId;
   final String name;
   final String content;
   final bool isError;
+  final Map<String, Object?> metadata;
+
+  Map<String, Object?> toJson() => {
+    ...metadata,
+    'tool_call_id': toolCallId,
+    'name': name,
+    'content': content,
+    'is_error': isError,
+  };
 }
+
+Map<String, Object?> _toolMetadata(
+  Map<String, Object?> json,
+  Set<String> known,
+) => Map.unmodifiable({
+  for (final entry in json.entries)
+    if (!known.contains(entry.key)) entry.key: entry.value,
+});
 
 class AiProtocolException implements Exception {
   const AiProtocolException(this.message, {this.statusCode});
@@ -325,26 +392,46 @@ class AiProtocolClient {
         _googleRequest(messages, config, enableTerminalTool),
       );
       var toolIndex = 0;
+      final responseParts = <Map<String, Object?>>[];
+      var metadataBytes = 0;
+      var completed = false;
       await for (final event in sdk.models.streamGenerateContent(
         model: config.model.trim(),
         request: request,
       )) {
         for (final candidate in event.candidates ?? const []) {
+          completed = candidate.toJson()['finishReason'] == 'STOP' || completed;
           for (final part in candidate.content?.parts ?? const []) {
             final json = part.toJson();
-            final text = _nonEmptyString(json['text']);
-            if (text != null) yield AiTextDelta(text);
+            metadataBytes += utf8.encode(jsonEncode(json)).length + 1;
+            if (responseParts.length >= 65536 ||
+                metadataBytes > 16 * 1024 * 1024) {
+              throw const AiProtocolException(
+                'Gemini response metadata exceeds the size limit.',
+              );
+            }
+            responseParts.add(Map<String, Object?>.from(json));
+            final text = json['text'];
+            if (text is String && json['thought'] != true) {
+              yield AiTextDelta(text);
+            }
             final call = _nestedMap(json['functionCall']);
             final name = _nonEmptyString(call?['name']);
             if (name != null) {
               yield AiToolCall(
-                id: 'google-${toolIndex++}',
+                id: _nonEmptyString(call?['id']) ?? 'google-${toolIndex++}',
                 name: name,
                 arguments: (_nestedMap(call?['args']) ?? const {}),
+                metadata: {
+                  'omit_provider_id': _nonEmptyString(call?['id']) == null,
+                },
               );
             }
           }
         }
+      }
+      if (completed && responseParts.isNotEmpty) {
+        yield AiProviderMetadata({'google_parts': responseParts});
       }
     } on google.ApiException catch (error) {
       throw AiProtocolException(error.message, statusCode: error.statusCode);
@@ -429,10 +516,7 @@ Map<String, dynamic> _googleRequest(
       .where((content) => content.trim().isNotEmpty)
       .join('\n\n');
   return <String, dynamic>{
-    'contents': [
-      for (final message in messages)
-        if (message.role != AiChatRole.system) _googleMessage(message),
-    ],
+    'contents': _googleMessages(messages),
     if (system.isNotEmpty)
       'systemInstruction': <String, dynamic>{
         'parts': [
@@ -455,6 +539,23 @@ Map<String, dynamic> _googleRequest(
   };
 }
 
+List<Map<String, dynamic>> _googleMessages(List<AiChatMessage> messages) {
+  final encoded = <Map<String, dynamic>>[];
+  var previousResult = false;
+  for (final message in messages) {
+    if (message.role == AiChatRole.system) continue;
+    final value = _googleMessage(message);
+    final result = message.toolResult != null;
+    if (result && previousResult) {
+      (encoded.last['parts'] as List).addAll(value['parts'] as List);
+    } else {
+      encoded.add(value);
+    }
+    previousResult = result;
+  }
+  return encoded;
+}
+
 Map<String, dynamic> _googleMessage(AiChatMessage message) {
   final result = message.toolResult;
   if (result != null) {
@@ -463,7 +564,8 @@ Map<String, dynamic> _googleMessage(AiChatMessage message) {
       'parts': [
         <String, dynamic>{
           'functionResponse': <String, dynamic>{
-            'id': result.toolCallId,
+            if (result.metadata['omit_provider_id'] != true)
+              'id': result.toolCallId,
             'name': result.name,
             'response': <String, dynamic>{
               'content': result.content,
@@ -473,6 +575,71 @@ Map<String, dynamic> _googleMessage(AiChatMessage message) {
         },
       ],
     };
+  }
+  final replay =
+      message.providerMetadata['google_parts'] ??
+      message.toolCalls.firstOrNull?.metadata['google_parts'];
+  if (replay != null) {
+    if (replay is! List ||
+        replay.length > 65536 ||
+        utf8.encode(jsonEncode(replay)).length > 16 * 1024 * 1024 ||
+        message.toolCalls
+            .skip(1)
+            .any((call) => call.metadata.containsKey('google_parts'))) {
+      throw const AiProtocolException('Invalid Gemini response metadata.');
+    }
+    final functions = <Map<String, Object?>>[
+      for (final part in replay)
+        if (_nestedMap(part)?['functionCall'] case final Map function)
+          function.map((key, value) => MapEntry(key.toString(), value)),
+    ];
+    if (functions.length != message.toolCalls.length) {
+      throw const AiProtocolException('Gemini response tools no longer match.');
+    }
+    final visibleText = StringBuffer();
+    for (final raw in replay) {
+      final part = _nestedMap(raw);
+      if (part == null ||
+          (part['text'] != null && part['text'] is! String) ||
+          (part['thought'] != null && part['thought'] is! bool) ||
+          (part['thoughtSignature'] != null &&
+              part['thoughtSignature'] is! String) ||
+          (message.toolCalls.isEmpty &&
+              part.keys.any(
+                (key) => !const {
+                  'text',
+                  'thought',
+                  'thoughtSignature',
+                }.contains(key),
+              ))) {
+        throw const AiProtocolException('Invalid Gemini response part.');
+      }
+      if (part['thought'] != true) {
+        visibleText.write(part['text'] ?? '');
+      }
+    }
+    if (message.role != AiChatRole.assistant ||
+        (message.toolCalls.isEmpty &&
+            visibleText.toString() != message.content)) {
+      throw const AiProtocolException(
+        'Gemini response content no longer matches.',
+      );
+    }
+    for (var index = 0; index < functions.length; index++) {
+      final function = functions[index];
+      final call = message.toolCalls[index];
+      final id = _nonEmptyString(function['id']);
+      if (function['name'] != call.name ||
+          !mapEquals(_nestedMap(function['args']), call.arguments) ||
+          (call.metadata['omit_provider_id'] == true
+              ? id != null
+              : id != call.id)) {
+        throw const AiProtocolException(
+          'A Gemini command changed since it was proposed.',
+        );
+      }
+    }
+    return {'role': 'model', 'parts': List.of(replay)};
   }
   return <String, dynamic>{
     'role': message.role == AiChatRole.assistant ? 'model' : 'user',
@@ -491,7 +658,12 @@ Map<String, dynamic> _googleMessage(AiChatMessage message) {
           },
       for (final call in message.toolCalls)
         <String, dynamic>{
+          if (call.metadata['thought_signature'] case final String signature)
+            'thoughtSignature': signature,
           'functionCall': <String, dynamic>{
+            if (call.metadata['thought_signature'] != null &&
+                call.metadata['omit_provider_id'] != true)
+              'id': call.id,
             'name': call.name,
             'args': call.arguments,
           },
