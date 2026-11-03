@@ -112,6 +112,10 @@ pub struct OpenDalSyncTransport {
 
 impl OpenDalSyncTransport {
     pub fn new(operator: Operator, object_path: String) -> Result<Self, ObjectSyncError> {
+        // OpenDAL's default features are disabled, so its lazy HTTP transport
+        // must be installed explicitly before any provider sends a request.
+        opendal::install_default();
+
         let capability = operator.info().capability();
         if !capability.read || !capability.stat || !capability.write {
             return Err(ObjectSyncError::new(
@@ -411,5 +415,119 @@ mod path_tests {
             .write(b"stale overwrite", Some(&fetched.etag))
             .unwrap_err();
         assert!(OpenDalSyncTransport::is_conflict(&conflict));
+    }
+}
+
+#[cfg(test)]
+mod http_tests {
+    use std::collections::BTreeMap;
+    use std::time::Duration;
+
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    use crate::cloud_sync::{CloudProviderConfig, CloudProviderCredentials};
+    use crate::s3_sync::{S3Config, S3Credentials};
+
+    #[test]
+    fn http_providers_fetch_without_application_initialization() {
+        let server_runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(1)
+            .enable_all()
+            .build()
+            .unwrap();
+
+        for scheme in ["s3", "webdav"] {
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            listener.set_nonblocking(true).unwrap();
+            let endpoint = format!("http://{}", listener.local_addr().unwrap());
+            let server = server_runtime.spawn(async move {
+                tokio::time::timeout(Duration::from_secs(5), async move {
+                    let listener = tokio::net::TcpListener::from_std(listener).unwrap();
+                    let (mut stream, _) = listener.accept().await.unwrap();
+                    let mut request = Vec::new();
+                    let mut buffer = [0; 4096];
+                    loop {
+                        let count = stream.read(&mut buffer).await.unwrap();
+                        assert_ne!(count, 0, "HTTP request ended before its headers");
+                        request.extend_from_slice(&buffer[..count]);
+                        assert!(request.len() < 16 * 1024, "HTTP request is too large");
+                        if let Some(header_end) =
+                            request.windows(4).position(|part| part == b"\r\n\r\n")
+                        {
+                            let headers = String::from_utf8_lossy(&request[..header_end]);
+                            let content_length = headers
+                                .lines()
+                                .find_map(|line| {
+                                    let (name, value) = line.split_once(':')?;
+                                    name.eq_ignore_ascii_case("content-length")
+                                        .then(|| value.trim().parse::<usize>().unwrap())
+                                })
+                                .unwrap_or(0);
+                            if request.len() >= header_end + 4 + content_length {
+                                break;
+                            }
+                        }
+                    }
+                    stream.write_all(
+                        b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                    ).await.unwrap();
+                    String::from_utf8(request).unwrap()
+                })
+                .await
+                .expect("sync provider did not complete its HTTP request")
+            });
+
+            let transport = if scheme == "s3" {
+                crate::s3_sync::build_transport(
+                    S3Config {
+                        endpoint,
+                        region: "us-east-1".to_string(),
+                        bucket: "vault".to_string(),
+                        prefix: "nauterm".to_string(),
+                        filename: "nauterm-sync.enc".to_string(),
+                    },
+                    S3Credentials {
+                        access_key_id: "test-access-key".to_string(),
+                        secret_access_key: "test-secret-key".to_string(),
+                    },
+                )
+                .unwrap()
+            } else {
+                crate::cloud_sync::build_transport(
+                    &CloudProviderConfig {
+                        id: "test-webdav".to_string(),
+                        scheme: scheme.to_string(),
+                        vendor: "webdav".to_string(),
+                        name: "Test WebDAV".to_string(),
+                        config: BTreeMap::from([
+                            ("endpoint".to_string(), endpoint),
+                            ("prefix".to_string(), "nauterm".to_string()),
+                            ("filename".to_string(), "nauterm-sync.enc".to_string()),
+                        ]),
+                    },
+                    CloudProviderCredentials {
+                        values: BTreeMap::from([
+                            ("username".to_string(), "test-user".to_string()),
+                            ("password".to_string(), "test-password".to_string()),
+                        ]),
+                    },
+                )
+                .unwrap()
+            };
+
+            assert_eq!(transport.fetch_current().unwrap(), None, "{scheme}");
+            let request = server_runtime.block_on(server).unwrap();
+            if scheme == "s3" {
+                assert!(request.starts_with("HEAD /vault/nauterm/nauterm-sync.enc HTTP/1.1\r\n"));
+                assert!(request
+                    .to_ascii_lowercase()
+                    .contains("authorization: aws4-hmac-sha256 "));
+            } else {
+                assert!(request.starts_with("PROPFIND /nauterm/nauterm-sync.enc HTTP/1.1\r\n"));
+                assert!(request
+                    .to_ascii_lowercase()
+                    .contains("authorization: basic "));
+            }
+        }
     }
 }
