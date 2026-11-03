@@ -38,6 +38,20 @@ Map<String, Object?>? _cachedGithubSyncSettings;
 String? _cachedGithubSyncDatabasePath;
 
 @visibleForTesting
+Future<Map<String, dynamic>> Function(String databasePath)?
+settingsRemoteSyncStatusLoaderOverride;
+
+@visibleForTesting
+Future<Map<String, dynamic>> Function(
+  String providerId,
+  String databasePath,
+  String? masterKey,
+  String strategy,
+  int backupCount,
+)?
+settingsSyncRunnerOverride;
+
+@visibleForTesting
 void cacheGithubSyncSettingsForTesting(
   String databasePath,
   Map<String, Object?> settings,
@@ -125,6 +139,8 @@ Future<Map<String, dynamic>> _loadSyncStatusInBackground(String databasePath) {
 Future<Map<String, dynamic>> _refreshRemoteSyncStatusInBackground(
   String databasePath,
 ) {
+  final loader = settingsRemoteSyncStatusLoaderOverride;
+  if (loader != null) return loader(databasePath);
   return Isolate.run(() {
     final store = NautermDataStore.openPath(databasePath);
     try {
@@ -298,10 +314,25 @@ Future<void> _saveGithubGistConfigInBackground({
 
 Future<Map<String, dynamic>> _runGithubGistSyncInBackground(
   String databasePath,
+  String gistId,
   String? masterKey,
   String strategy,
   int backupCount,
-) {
+) async {
+  final runner = settingsSyncRunnerOverride;
+  if (runner != null) {
+    return runner(
+      'github_gist',
+      databasePath,
+      masterKey,
+      strategy,
+      backupCount,
+    );
+  }
+  await _saveGithubGistConfigInBackground(
+    databasePath: databasePath,
+    gistId: gistId,
+  );
   return Isolate.run(() {
     final store = NautermDataStore.openPath(databasePath);
     try {
@@ -393,6 +424,16 @@ Future<Map<String, dynamic>> _runGithubSyncInBackground(
   String strategy,
   int backupCount,
 ) {
+  final runner = settingsSyncRunnerOverride;
+  if (runner != null) {
+    return runner(
+      'github_repository',
+      databasePath,
+      masterKey,
+      strategy,
+      backupCount,
+    );
+  }
   return Isolate.run(() {
     final store = NautermDataStore.openPath(databasePath);
     try {
@@ -487,6 +528,10 @@ Future<Map<String, dynamic>> _runS3SyncInBackground(
   String strategy,
   int backupCount,
 ) {
+  final runner = settingsSyncRunnerOverride;
+  if (runner != null) {
+    return runner('s3', databasePath, masterKey, strategy, backupCount);
+  }
   return Isolate.run(() {
     final store = NautermDataStore.openPath(databasePath);
     try {
@@ -1976,7 +2021,9 @@ extension _SettingsSyncActions on _SettingsPanelState {
       _remoteSyncRevision = preferences['remote_revision'] as int?;
       _remoteSyncSnapshotId = preferences['remote_snapshot_id'] as String?;
       _hasLocalSyncKey = result['hasLocalSyncKey'] as bool? ?? false;
-      _syncManagementUnlocked = _hasLocalSyncKey;
+      _syncManagementUnlocked =
+          _hasLocalSyncKey ||
+          (_syncManagementUnlocked && _syncMasterKeyController.text.isNotEmpty);
       if (cfg != null) {
         _githubRepositoryUrlController.text =
             (cfg['repository_url'] as String?) ?? '';
@@ -2215,6 +2262,8 @@ extension _SettingsSyncActions on _SettingsPanelState {
     try {
       await _forgetSyncKeyInBackground(_githubSyncDatabasePath);
       if (!mounted) return;
+      _syncMasterKeyController.clear();
+      _syncMasterKeyConfirmController.clear();
       _mutate(() {
         _hasLocalSyncKey = false;
         _syncManagementUnlocked = false;
@@ -2627,11 +2676,7 @@ extension _SettingsSyncActions on _SettingsPanelState {
       if (!mounted) return;
       _setGithubSyncError(error.toString());
     } finally {
-      _syncMasterKeyController.clear();
-      _syncMasterKeyConfirmController.clear();
-      if (mounted) {
-        _mutate(() => _githubSyncRunning = false);
-      }
+      _finishSyncAttempt();
     }
   }
 
@@ -2668,12 +2713,9 @@ extension _SettingsSyncActions on _SettingsPanelState {
       _githubSyncStatusIsError = false;
     });
     try {
-      await _saveGithubGistConfigInBackground(
-        databasePath: _githubSyncDatabasePath,
-        gistId: _githubGistIdController.text.trim(),
-      );
       final result = await _runGithubGistSyncInBackground(
         _githubSyncDatabasePath,
+        _githubGistIdController.text.trim(),
         enteringMasterKey ? masterKey : null,
         _syncStrategy.storageValue,
         _syncBackupCount,
@@ -2718,11 +2760,7 @@ extension _SettingsSyncActions on _SettingsPanelState {
         _setGithubSyncError(error.toString());
       }
     } finally {
-      _syncMasterKeyController.clear();
-      _syncMasterKeyConfirmController.clear();
-      if (mounted) {
-        _mutate(() => _githubSyncRunning = false);
-      }
+      _finishSyncAttempt();
     }
   }
 
@@ -2791,12 +2829,17 @@ extension _SettingsSyncActions on _SettingsPanelState {
         _setGithubSyncError(error.toString());
       }
     } finally {
+      _finishSyncAttempt();
+    }
+  }
+
+  void _finishSyncAttempt() {
+    if (!mounted) return;
+    if (_hasLocalSyncKey) {
       _syncMasterKeyController.clear();
       _syncMasterKeyConfirmController.clear();
-      if (mounted) {
-        _mutate(() => _githubSyncRunning = false);
-      }
     }
+    _mutate(() => _githubSyncRunning = false);
   }
 
   void _showProviderConnectionRequirement(String provider) {
@@ -3793,7 +3836,7 @@ class _SyncKeyDetailsDialog extends StatelessWidget {
                   'settings.label.forgetMasterKey',
                   fallback: 'Forget Master Key',
                 ),
-                onTap: hasLocalSyncKey ? onForgetMasterKey : null,
+                onTap: onForgetMasterKey,
               ),
               _SettingsOutlineButton(
                 label: tr(

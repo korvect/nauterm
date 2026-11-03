@@ -202,6 +202,16 @@ Future<Map<String, dynamic>> _runCloudProviderSyncInBackground(
   String strategy,
   int backupCount,
 ) {
+  final runner = settingsSyncRunnerOverride;
+  if (runner != null) {
+    return runner(
+      'cloud:$providerId',
+      databasePath,
+      masterKey,
+      strategy,
+      backupCount,
+    );
+  }
   return Isolate.run(() {
     final store = NautermDataStore.openPath(databasePath);
     try {
@@ -462,9 +472,7 @@ extension _CloudSyncActions on _SettingsPanelState {
     } on Object catch (error) {
       if (mounted) _setGithubSyncError(error.toString());
     } finally {
-      _syncMasterKeyController.clear();
-      _syncMasterKeyConfirmController.clear();
-      if (mounted) _mutate(() => _githubSyncRunning = false);
+      _finishSyncAttempt();
     }
   }
 
