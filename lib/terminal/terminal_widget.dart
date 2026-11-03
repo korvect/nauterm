@@ -2158,20 +2158,24 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
     }
     if (event.logicalKey == LogicalKeyboardKey.pageUp) {
       widget.controller.scrollPageUp();
+      _syncTerminalScrollPosition();
       return true;
     }
     if (event.logicalKey == LogicalKeyboardKey.pageDown) {
       widget.controller.scrollPageDown();
+      _syncTerminalScrollPosition();
       return true;
     }
     if (event.logicalKey == LogicalKeyboardKey.home) {
       widget.controller.scrollLines(
         snapshot.historyLines - snapshot.displayOffset,
       );
+      _syncTerminalScrollPosition();
       return true;
     }
     if (event.logicalKey == LogicalKeyboardKey.end) {
       widget.controller.scrollToBottom();
+      _syncTerminalScrollPosition();
       return true;
     }
     return false;
@@ -2858,6 +2862,7 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
 
     final beforeOffset = widget.controller.snapshot.displayOffset;
     widget.controller.scrollLines(lines);
+    _syncTerminalScrollPosition();
     final snapshot = widget.controller.snapshot;
     final scrolledLines = snapshot.displayOffset - beforeOffset;
     if (scrolledLines == 0) {
@@ -3195,6 +3200,9 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
   ) {
     final beforeOffset = widget.controller.snapshot.displayOffset;
     widget.controller.scrollLines(lines);
+    // Publish scroll notifications before layout silently corrects the offset,
+    // so Flutter's scrollbar can show and fade for terminal-driven scrolling.
+    _syncTerminalScrollPosition();
     final snapshot = widget.controller.snapshot;
     final scrolledLines = snapshot.displayOffset - beforeOffset;
     final anchor = _dragAnchorOffset;

@@ -346,6 +346,62 @@ void main() {
     expect(scrollbar, findsNothing);
   });
 
+  testWidgets('scrollbar appears on wheel scroll and hover, then fades', (
+    tester,
+  ) async {
+    final driver = _SnapshotDriver(
+      TerminalSnapshot.blank(
+        columns: 80,
+        rows: 8,
+        historyLines: 92,
+        displayOffset: 40,
+      ),
+    );
+    final controller = TerminalController(driver: driver);
+    addTearDown(controller.dispose);
+    await _pumpTerminal(tester, controller);
+
+    final scrollbar = find.byKey(const ValueKey('terminal-scrollbar'));
+    final painter = tester
+        .widgetList<CustomPaint>(
+          find.descendant(of: scrollbar, matching: find.byType(CustomPaint)),
+        )
+        .map((widget) => widget.foregroundPainter)
+        .whereType<ScrollbarPainter>()
+        .single;
+    final opacity = painter.fadeoutOpacityAnimation;
+    expect(opacity.value, 0);
+
+    // Scroll in the middle, without hovering over the scrollbar hit area.
+    await tester.sendEventToBinding(
+      PointerScrollEvent(
+        position: tester.getCenter(scrollbar),
+        scrollDelta: const Offset(0, -60),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(driver.snapshot.displayOffset, greaterThan(40));
+    expect(opacity.value, 1);
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(opacity.value, 0);
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    addTearDown(mouse.removePointer);
+    await mouse.moveTo(tester.getTopRight(scrollbar) + const Offset(-4, 40));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(opacity.value, 1);
+    await tester.pump(const Duration(seconds: 2));
+    expect(opacity.value, 1);
+    await mouse.moveTo(Offset.zero);
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(opacity.value, 0);
+  });
+
   testWidgets('scrollbar preserves the full history while output grows', (
     tester,
   ) async {
