@@ -90,7 +90,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('connection page stays centered and scrolls only log rows', (
+  testWidgets('connection page stays top aligned and scrolls only log rows', (
     WidgetTester tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(700, 700));
@@ -121,7 +121,7 @@ void main() {
     final topMargin = tester.getTopLeft(header).dy;
     final bottomMargin = 700 - tester.getBottomRight(footer).dy;
     expect(topMargin, greaterThan(32));
-    expect((topMargin - bottomMargin).abs(), lessThan(0.01));
+    expect(topMargin, lessThan(bottomMargin));
 
     await tester.binding.setSurfaceSize(const Size(750, 440));
     await tester.pump();
