@@ -193,6 +193,12 @@ make run
 
 参与 Mosh 本身开发时，可以将 `nauterm-mosh` 工作空间放在本仓库同级目录，或显式设置 `NAUTERM_MOSH_REPO_DIR`。
 
+需要隔离的测试环境时，可以设置 `NAUTERM_DATA_DIR`。数据库、配置、工作区状态、日志等应用文件都会使用该目录：
+
+```sh
+NAUTERM_DATA_DIR=/tmp/nauterm-test make run
+```
+
 ### 本地构建配置
 
 可选的编译时配置可以写入已被 Git 忽略的 `.env.build.local` 文件。每行使用不带引号的 `NAME=value` 格式：

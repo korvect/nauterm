@@ -246,6 +246,13 @@ make run
 Developers working on Mosh itself can instead place the `nauterm-mosh`
 workspace next to this repository or set `NAUTERM_MOSH_REPO_DIR` explicitly.
 
+For an isolated test profile, set `NAUTERM_DATA_DIR`. The database, configuration,
+workspace state, logs, and other application files use that directory:
+
+```sh
+NAUTERM_DATA_DIR=/tmp/nauterm-test make run
+```
+
 ### Local build configuration
 
 Optional compile-time configuration can be placed in the ignored

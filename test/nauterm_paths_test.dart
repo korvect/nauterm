@@ -4,6 +4,52 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nauterm/data/nauterm_paths.dart';
 
 void main() {
+  test('isolates configuration and data in the override directory', () {
+    final directory = [
+      Directory.systemTemp.path,
+      'nauterm isolated profile',
+    ].join(Platform.pathSeparator);
+    final paths = NautermPaths.resolve(
+      environment: _TestEnvironment({'NAUTERM_DATA_DIR': directory}),
+    );
+
+    expect(paths.configDirectory.path, directory);
+    expect(paths.dataDirectory.path, directory);
+    expect(paths.additionalThemeDirectories, isEmpty);
+    for (final file in [
+      paths.configFile,
+      paths.databaseFile,
+      paths.workspaceStateFile,
+      paths.knownHostsFile,
+      paths.shellHistoryFile,
+    ]) {
+      expect(file.parent.path, directory);
+    }
+    for (final child in [
+      paths.themesDirectory,
+      paths.terminalLogsDirectory,
+      paths.runtimeLogsDirectory,
+      paths.shellIntegrationDirectory,
+    ]) {
+      expect(child.parent.path, directory);
+    }
+  });
+
+  test('an empty override keeps the platform defaults', () {
+    final original = NautermPaths.resolve(
+      environment: const _TestEnvironment({'HOME': '/home/tester'}),
+    );
+    final paths = NautermPaths.resolve(
+      environment: const _TestEnvironment({
+        'HOME': '/home/tester',
+        'NAUTERM_DATA_DIR': '',
+      }),
+    );
+
+    expect(paths.dataDirectory.path, original.dataDirectory.path);
+    expect(paths.configDirectory.path, original.configDirectory.path);
+  });
+
   test('uses a product name for user data directories', () {
     const environment = _TestEnvironment({
       'HOME': '/home/tester',

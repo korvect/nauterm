@@ -53,6 +53,14 @@ class NautermPaths {
   static NautermPaths resolve({
     PlatformEnvironment environment = const PlatformEnvironment(),
   }) {
+    final dataDirectory = environment.value('NAUTERM_DATA_DIR');
+    if (dataDirectory != null && dataDirectory.isNotEmpty) {
+      return NautermPaths(
+        configDirectory: Directory(dataDirectory),
+        dataDirectory: Directory(dataDirectory),
+      );
+    }
+
     if (Platform.isMacOS) {
       final base = _homeRelative(
         environment,

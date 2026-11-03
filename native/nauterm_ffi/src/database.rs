@@ -2210,6 +2210,10 @@ impl NautermDatabase {
 }
 
 pub fn default_database_path() -> PathBuf {
+    if let Some(directory) = env::var_os("NAUTERM_DATA_DIR").filter(|value| !value.is_empty()) {
+        return PathBuf::from(directory).join("nauterm.sqlite");
+    }
+
     if cfg!(target_os = "macos") {
         if let Some(home) = env::var_os("HOME") {
             return PathBuf::from(home)
