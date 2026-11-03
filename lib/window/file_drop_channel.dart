@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
@@ -58,6 +59,9 @@ class NautermFileDropChannel {
   }
 
   void _syncTarget() {
+    // Prune the macOS-only FFI callbacks before AOT optimization on other OSes.
+    // A UI platform override must not retain their native struct signatures.
+    if (!Platform.isMacOS) return;
     if (!_enabled ||
         _window == null ||
         defaultTargetPlatform != TargetPlatform.macOS) {
