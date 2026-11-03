@@ -205,7 +205,7 @@ not send these events.
 
 ### Prerequisites
 
-- Flutter `3.47.0`
+- Flutter `3.47.9`
 - Rust `1.97.0` with `rustfmt` and `clippy`
 - Zig `0.16.0` for the pinned `libghostty-vt` build
 - Git, CMake, and the native desktop toolchain for the target platform
