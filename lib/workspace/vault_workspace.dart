@@ -4,6 +4,7 @@ class _VaultWorkspace extends StatelessWidget {
   const _VaultWorkspace({
     required this.hostsSearchController,
     required this.selectedSection,
+    required this.onSidebarCollapsedChanged,
     required this.groups,
     required this.hosts,
     required this.tags,
@@ -71,10 +72,13 @@ class _VaultWorkspace extends StatelessWidget {
     required this.onOpenLocalTerminal,
     required this.onOpenSerialTerminal,
     required this.currentWorkspaceName,
+    this.sidebarCollapsed,
     this.dataStore,
   });
 
   final _SidebarSection selectedSection;
+  final bool? sidebarCollapsed;
+  final ValueChanged<bool> onSidebarCollapsedChanged;
   final TextEditingController hostsSearchController;
   final NautermDataStore? dataStore;
   final List<_GroupItem> groups;
@@ -151,7 +155,15 @@ class _VaultWorkspace extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final collapsed = constraints.maxWidth < _sidebarCollapseBreakpoint;
+        final collapsed =
+            sidebarCollapsed ??
+            constraints.maxWidth < _sidebarCollapseBreakpoint;
+        final duration = MediaQuery.disableAnimationsOf(context)
+            ? Duration.zero
+            : _sidebarAnimationDuration;
+        final togglePalette = _workspaceDark
+            ? NautermPalette.dark
+            : NautermPalette.light;
         final content = switch (selectedSection) {
           _SidebarSection.hosts => _HostsPane(
             searchController: hostsSearchController,
@@ -236,22 +248,82 @@ class _VaultWorkspace extends StatelessWidget {
           ),
         };
 
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        return Stack(
+          fit: StackFit.expand,
           children: [
-            ExcludeFocus(
-              key: const ValueKey('workspace-sidebar-tab-exclusion'),
-              child: _Sidebar(
-                selectedSection: selectedSection,
-                collapsed: collapsed,
-                onSectionSelected: onSectionSelected,
-                onOpenSettings: onOpenSettings,
-              ),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ExcludeFocus(
+                  key: const ValueKey('workspace-sidebar-tab-exclusion'),
+                  child: _Sidebar(
+                    selectedSection: selectedSection,
+                    collapsed: collapsed,
+                    onSectionSelected: onSectionSelected,
+                    onOpenSettings: onOpenSettings,
+                  ),
+                ),
+                Expanded(
+                  child: _WorkspacePageTransition(
+                    pageKey: 'vault-section:${selectedSection.name}',
+                    child: content,
+                  ),
+                ),
+              ],
             ),
-            Expanded(
-              child: _WorkspacePageTransition(
-                pageKey: 'vault-section:${selectedSection.name}',
-                child: content,
+            AnimatedPositioned(
+              duration: duration,
+              curve: Curves.easeOutCubic,
+              top: 0,
+              bottom: 0,
+              left:
+                  (collapsed ? _sidebarCollapsedWidth : _sidebarExpandedWidth) -
+                  12,
+              width: 24,
+              child: Center(
+                child: SizedBox(
+                  key: const ValueKey('workspace-sidebar-toggle'),
+                  width: 24,
+                  height: 24,
+                  child: DecoratedBox(
+                    decoration: ShapeDecoration(
+                      color: togglePalette.surface,
+                      shape: CircleBorder(
+                        side: BorderSide(
+                          color: togglePalette.outline.withValues(alpha: 0.7),
+                        ),
+                      ),
+                    ),
+                    child: _WorkspaceButton(
+                      tooltip: context.tr(
+                        collapsed
+                            ? 'workspace.sidebar.expand.label'
+                            : 'workspace.sidebar.collapse.label',
+                        fallback: collapsed
+                            ? 'Expand sidebar'
+                            : 'Collapse sidebar',
+                      ),
+                      size: _WorkspaceControlSize.tiny,
+                      variant: _WorkspaceButtonVariant.text,
+                      shape: const CircleBorder(),
+                      width: 24,
+                      height: 24,
+                      horizontalPadding: 0,
+                      onPressed: () => onSidebarCollapsedChanged(!collapsed),
+                      child: AnimatedRotation(
+                        key: const ValueKey('workspace-sidebar-toggle-arrow'),
+                        turns: collapsed ? 0.5 : 0,
+                        duration: duration,
+                        curve: Curves.easeOutCubic,
+                        child: Icon(
+                          LucideIcons.chevronLeft,
+                          size: 14,
+                          color: togglePalette.mutedText,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ),
           ],
@@ -277,7 +349,10 @@ class _Sidebar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 160),
+      key: const ValueKey('workspace-sidebar'),
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : _sidebarAnimationDuration,
       curve: Curves.easeOutCubic,
       width: collapsed ? _sidebarCollapsedWidth : _sidebarExpandedWidth,
       decoration: BoxDecoration(

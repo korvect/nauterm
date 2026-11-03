@@ -933,6 +933,8 @@
   "workspace.restore.unexpectedExit.description": "Restore your previous workspace? Terminals will reconnect and active port forwards will restart.",
   "workspace.search.hosts.placeholder": "Search host:, group:, username:, tag:, or user@host",
   "workspace.search.quickConnect.placeholder": "Search host:, group:, tag:, or user@host",
+  "workspace.sidebar.collapse.label": "Collapse sidebar",
+  "workspace.sidebar.expand.label": "Expand sidebar",
   "workspace.sidebar.hosts.label": "Hosts",
   "workspace.sidebar.keychain.label": "Keychain",
   "workspace.sidebar.knownHosts.label": "Known Hosts",

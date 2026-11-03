@@ -56,6 +56,7 @@ const double _sidebarExpandedWidth = 190;
 const double _sidebarCollapsedWidth =
     _sidebarHorizontalInset * 2 + _sidebarIconSlotSize;
 const double _sidebarCollapseBreakpoint = 760;
+const Duration _sidebarAnimationDuration = Duration(milliseconds: 160);
 const double _sidebarItemHeight = 40;
 const double _workspaceToolbarHeight = 48;
 const double _workspaceDrawerHeaderHeight = _workspaceToolbarHeight;

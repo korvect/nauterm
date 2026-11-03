@@ -225,6 +225,7 @@ final _nautermWorkspaceModelProvider = ChangeNotifierProvider.autoDispose
 class _NautermWorkspaceModel extends ChangeNotifier {
   _WorkspaceTab tab = _WorkspaceTab.vaults;
   _SidebarSection section = _SidebarSection.hosts;
+  bool? sidebarCollapsed;
   List<HostGroup> groupEntries = const [];
   List<HostEntry> hostEntries = const [];
   List<KeyEntry> keyEntries = const [];

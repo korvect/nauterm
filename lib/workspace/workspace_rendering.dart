@@ -126,6 +126,9 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
       child: _VaultWorkspace(
         hostsSearchController: _hostsSearchController,
         selectedSection: _section,
+        sidebarCollapsed: _workspaceModel.sidebarCollapsed,
+        onSidebarCollapsedChanged: (value) =>
+            _setWorkspaceState(() => _workspaceModel.sidebarCollapsed = value),
         groups: _groups,
         hosts: _hosts,
         tags: _tagEntries,
