@@ -99,12 +99,13 @@ SshConnectionProfile refreshSavedHostSshProfile({
 Widget buildTerminalConnectionPageForTesting(
   TerminalController controller, {
   bool inDrawer = false,
+  List<TerminalConnectionKeyOption> keys = const [],
   SshConnectionProfile? Function()? reloadProfile,
 }) {
   return _TerminalConnectionPage(
     controller: controller,
     inDrawer: inDrawer,
-    keys: const [],
+    keys: keys,
     identities: const [],
     onReloadConnection: reloadProfile == null
         ? null
@@ -588,16 +589,7 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
               diagnostics: diagnostics,
               onCopyDiagnostics: _copyDiagnostics,
             )
-          : SingleChildScrollView(
-              key: const ValueKey('connection-mode-scrollable'),
-              child: _buildModeBody(
-                mode,
-                status,
-                profile,
-                serialProfile,
-                events,
-              ),
-            ),
+          : _buildModeBody(mode, status, profile, serialProfile, events),
       footer: _buildFooter(mode, status),
     );
   }
@@ -672,7 +664,7 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
     SerialConnectionProfile? serialProfile,
     List<TerminalConnectionEvent> events,
   ) {
-    return switch (mode) {
+    final body = switch (mode) {
       _ConnectionPageMode.username => _buildUsernameBody(),
       _ConnectionPageMode.hostKey => _HostKeyPrompt(
         key: const ValueKey('host-key'),
@@ -708,6 +700,13 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
         height: 1,
       ),
     };
+    if (mode == _ConnectionPageMode.authentication && !_requiresFido2Pin) {
+      return body;
+    }
+    return SingleChildScrollView(
+      key: const ValueKey('connection-mode-scrollable'),
+      child: body,
+    );
   }
 
   Widget _buildAuthenticationBody() {
@@ -783,57 +782,60 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
           onChanged: (tab) => setState(() => _authTab = tab),
         ),
         SizedBox(height: 20),
-        if (_authTab == _ConnectionAuthTab.password)
-          _WorkspaceInput(
-            controller: _passwordController,
-            label: 'Password',
-            size: _WorkspaceControlSize.large,
-            obscureText: _obscurePassword,
-            trailing: _WorkspaceButton(
-              icon: _obscurePassword
-                  ? Icons.visibility_off_rounded
-                  : Icons.visibility_rounded,
-              size: widget.inDrawer
-                  ? _WorkspaceControlSize.tiny
-                  : _WorkspaceControlSize.medium,
-              variant: _WorkspaceButtonVariant.text,
-              height: widget.inDrawer
-                  ? 24
-                  : _WorkspaceControlSize.medium.inputHeight,
-              minWidth: widget.inDrawer
-                  ? 24
-                  : _WorkspaceControlSize.medium.inputHeight,
-              tooltip: _obscurePassword ? 'Show password' : 'Hide password',
-              onPressed: () {
-                setState(() => _obscurePassword = !_obscurePassword);
-              },
-            ),
-          )
-        else if (availableKeys.isEmpty)
-          const _EmptyKeyState()
-        else
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 220),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (
-                    var index = 0;
-                    index < availableKeys.length;
-                    index++
-                  ) ...[
-                    _ConnectionKeyCard(
-                      keyOption: availableKeys[index],
-                      selected: index == selectedIndex,
-                      onTap: () => setState(() => _selectedKeyIndex = index),
+        Flexible(
+          child: SingleChildScrollView(
+            key: const ValueKey('connection-auth-scrollable'),
+            child: _authTab == _ConnectionAuthTab.password
+                ? _WorkspaceInput(
+                    controller: _passwordController,
+                    label: 'Password',
+                    size: _WorkspaceControlSize.large,
+                    obscureText: _obscurePassword,
+                    trailing: _WorkspaceButton(
+                      icon: _obscurePassword
+                          ? Icons.visibility_off_rounded
+                          : Icons.visibility_rounded,
+                      size: widget.inDrawer
+                          ? _WorkspaceControlSize.tiny
+                          : _WorkspaceControlSize.medium,
+                      variant: _WorkspaceButtonVariant.text,
+                      height: widget.inDrawer
+                          ? 24
+                          : _WorkspaceControlSize.medium.inputHeight,
+                      minWidth: widget.inDrawer
+                          ? 24
+                          : _WorkspaceControlSize.medium.inputHeight,
+                      tooltip: _obscurePassword
+                          ? 'Show password'
+                          : 'Hide password',
+                      onPressed: () {
+                        setState(() => _obscurePassword = !_obscurePassword);
+                      },
                     ),
-                    if (index != availableKeys.length - 1) SizedBox(height: 14),
-                  ],
-                ],
-              ),
-            ),
+                  )
+                : availableKeys.isEmpty
+                ? const _EmptyKeyState()
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (
+                        var index = 0;
+                        index < availableKeys.length;
+                        index++
+                      ) ...[
+                        _ConnectionKeyCard(
+                          keyOption: availableKeys[index],
+                          selected: index == selectedIndex,
+                          onTap: () =>
+                              setState(() => _selectedKeyIndex = index),
+                        ),
+                        if (index != availableKeys.length - 1)
+                          SizedBox(height: 14),
+                      ],
+                    ],
+                  ),
           ),
+        ),
       ],
     );
   }
@@ -1380,8 +1382,15 @@ class _ConnectionPageViewport extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final short = constraints.maxHeight < 480;
+        const compactHeight = 420.0;
+        final short = constraints.maxHeight < compactHeight;
         final compact = inDrawer || short;
+        final topPadding = short
+            ? 16.0
+            : math.min(
+                inDrawer ? 72.0 : 80.0,
+                24.0 + constraints.maxHeight - compactHeight,
+              );
         return _ConnectionPageLayoutScope(
           short: short,
           child: _WorkspaceControlSizeScope(
@@ -1391,11 +1400,13 @@ class _ConnectionPageViewport extends StatelessWidget {
             child: ColoredBox(
               color: _surface,
               child: Padding(
-                padding: EdgeInsets.symmetric(
-                  horizontal: compact ? 16 : 24,
-                  vertical: compact ? 16 : 32,
+                padding: EdgeInsets.fromLTRB(
+                  compact ? 16 : 24,
+                  topPadding,
+                  compact ? 16 : 24,
+                  compact ? 16 : 24,
                 ),
-                child: Center(child: child),
+                child: Align(alignment: Alignment.topCenter, child: child),
               ),
             ),
           ),
