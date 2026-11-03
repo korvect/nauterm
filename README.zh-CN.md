@@ -161,10 +161,10 @@ Nauterm 的设计目标是避免以明文保存凭据和同步数据：
 - Git、CMake 以及目标平台的原生桌面工具链
 - Flutter 桌面开发所需的平台依赖
 
-Linux 开发还需要 `pkg-config` 和 D-Bus 开发头文件：
+Linux 开发还需要 `pkg-config` 以及 D-Bus、GTK 3、udev、X11 和 Xi 开发头文件（运行 Flutter 测试也需要）：
 
 ```sh
-sudo apt install pkg-config libdbus-1-dev
+sudo apt install pkg-config libdbus-1-dev libgtk-3-dev libudev-dev libx11-dev libxi-dev
 ```
 
 克隆仓库并解析 Flutter 依赖：

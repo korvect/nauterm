@@ -211,11 +211,11 @@ not send these events.
 - Git, CMake, and the native desktop toolchain for the target platform
 - Platform dependencies required by Flutter desktop
 
-Linux development additionally requires `pkg-config` and the D-Bus development
-headers:
+Linux development additionally requires `pkg-config` and the D-Bus, GTK 3,
+udev, X11, and Xi development headers (also required for Flutter tests):
 
 ```sh
-sudo apt install pkg-config libdbus-1-dev
+sudo apt install pkg-config libdbus-1-dev libgtk-3-dev libudev-dev libx11-dev libxi-dev
 ```
 
 Clone the repository and resolve Flutter dependencies:
