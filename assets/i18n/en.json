@@ -804,6 +804,8 @@
   "workspace.label.editSnippet": "Edit Snippet",
   "workspace.label.enableMosh": "Enable Mosh",
   "workspace.label.enableTelnet": "Enable Telnet",
+  "workspace.label.enterKeyPassphrase": "Please Enter passphrase for key",
+  "workspace.label.enterUsername": "Please enter username",
   "workspace.label.environmentVariables": "Environment variables",
   "workspace.label.exportKey": "Export Key",
   "workspace.label.exportTerminalCapture": "Export terminal capture",

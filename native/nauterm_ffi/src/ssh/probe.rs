@@ -70,7 +70,9 @@ mod key_export_tests {
                 .unwrap();
                 session.await.unwrap();
             });
+            let host_key_verification = HostKeyVerification::default();
             let handler = SshClientHandler {
+                host_key_verification: host_key_verification.clone(),
                 host: address.ip().to_string(),
                 port: address.port(),
                 known_hosts_path: Some(std::env::temp_dir().join(format!(
@@ -136,7 +138,9 @@ pub(super) async fn detect_host_os(
     let events = Arc::new(Mutex::new(Vec::<SessionEvent>::new()));
     let output = Arc::new(Mutex::new(Vec::new()));
     let wakeup = Arc::new(Mutex::new(None));
+    let host_key_verification = HostKeyVerification::default();
     let handler = SshClientHandler {
+        host_key_verification: host_key_verification.clone(),
         host: host.to_owned(),
         port,
         known_hosts_path: known_hosts_path.map(PathBuf::from),
@@ -146,6 +150,7 @@ pub(super) async fn detect_host_os(
         wakeup: wakeup.clone(),
     };
     let result = async {
+        let private_key = prepare_private_key(private_key, &events, &wakeup)?;
         let mut handle = connect_ssh_with_timeout(config, host, port, proxy, handler).await?;
         authenticate(
             &mut handle,
@@ -156,6 +161,7 @@ pub(super) async fn detect_host_os(
             password,
             &events,
             &wakeup,
+            &host_key_verification,
         )
         .await
         .map_err(|error| format!("authentication failed: {error}"))?;
@@ -311,7 +317,9 @@ pub(super) async fn collect_host_system_info(
     let events = Arc::new(Mutex::new(Vec::<SessionEvent>::new()));
     let output = Arc::new(Mutex::new(Vec::new()));
     let wakeup = Arc::new(Mutex::new(None));
+    let host_key_verification = HostKeyVerification::default();
     let handler = SshClientHandler {
+        host_key_verification: host_key_verification.clone(),
         host: host.to_owned(),
         port,
         known_hosts_path: known_hosts_path.map(PathBuf::from),
@@ -321,6 +329,7 @@ pub(super) async fn collect_host_system_info(
         wakeup: wakeup.clone(),
     };
     let result = async {
+        let private_key = prepare_private_key(private_key, &events, &wakeup)?;
         let mut handle = connect_ssh_with_timeout(config, host, port, proxy, handler).await?;
         authenticate(
             &mut handle,
@@ -331,6 +340,7 @@ pub(super) async fn collect_host_system_info(
             password,
             &events,
             &wakeup,
+            &host_key_verification,
         )
         .await
         .map_err(|error| format!("authentication failed: {error}"))?;
@@ -470,7 +480,9 @@ pub(super) async fn export_public_key(
         let config = ssh_client_config();
         let output = Arc::new(Mutex::new(Vec::new()));
         let wakeup = Arc::new(Mutex::new(None));
+        let host_key_verification = HostKeyVerification::default();
         let handler = SshClientHandler {
+            host_key_verification: host_key_verification.clone(),
             host: host.to_owned(),
             port,
             known_hosts_path: known_hosts_path.map(PathBuf::from),
@@ -479,6 +491,7 @@ pub(super) async fn export_public_key(
             events: events.clone(),
             wakeup: wakeup.clone(),
         };
+        let private_key = prepare_private_key(private_key, &events, &wakeup)?;
         let mut handle = connect_ssh_with_timeout(config, host, port, proxy, handler).await?;
         authenticate(
             &mut handle,
@@ -489,6 +502,7 @@ pub(super) async fn export_public_key(
             password,
             &events,
             &wakeup,
+            &host_key_verification,
         )
         .await
         .map_err(|error| format!("authentication failed: {error}"))?;

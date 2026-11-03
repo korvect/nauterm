@@ -191,7 +191,24 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
     }
   }
 
-  void _detectHostOsAfterConnect(HostEntry host, _PortForwardSshAuth auth) {
+  void _detectHostOsAfterConnect(
+    HostEntry host,
+    _PortForwardSshAuth auth, {
+    SshConnectionProfile? profile,
+  }) {
+    if (profile != null) {
+      auth = _PortForwardSshAuth(
+        host: profile.host,
+        port: profile.port,
+        username: profile.username,
+        password: profile.password,
+        privateKey: profile.privateKey,
+        certificate: profile.certificate,
+        passphrase: profile.passphrase,
+        proxy: profile.proxy,
+      );
+    }
+    if (auth.username.trim().isEmpty) return;
     final hostId = host.id;
     if (hostId == null || host.type != NautermHostType.remote) {
       return;
@@ -960,7 +977,11 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
           recorder: recorder,
           config: currentTerminalConfig(),
           onInputSent: (data) => _trackSshPaneInput(id, data),
-          onConnected: () => _detectHostOsAfterConnect(host, auth),
+          onConnected: () => _detectHostOsAfterConnect(
+            host,
+            auth,
+            profile: controller.sshProfile,
+          ),
           onExit: handleExit,
         );
       } else {
@@ -985,7 +1006,11 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
           recorder: recorder,
           config: currentTerminalConfig(),
           onInputSent: (data) => _trackSshPaneInput(id, data),
-          onConnected: () => _detectHostOsAfterConnect(host, auth),
+          onConnected: () => _detectHostOsAfterConnect(
+            host,
+            auth,
+            profile: controller.sshProfile,
+          ),
           onExit: handleExit,
         );
       }
@@ -1208,7 +1233,11 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
         ),
         config: currentTerminalConfig(),
         onInputSent: (data) => _trackSshPaneInput(id, data),
-        onConnected: () => _detectHostOsAfterConnect(host, auth),
+        onConnected: () => _detectHostOsAfterConnect(
+          host,
+          auth,
+          profile: controller.sshProfile,
+        ),
         onExit: () {
           if (controller.shouldCloseOnExit) {
             _closeTerminalViewTab(id, id, id);

@@ -1042,7 +1042,8 @@ class TerminalController extends ChangeNotifier {
           '${_remoteTransport == _RemoteTerminalTransport.mosh ? ' over Mosh' : ''}...',
     );
     final driver = _driver;
-    final reconnectedInPlace = driver is NativeTerminalDriver
+    final reconnectedInPlace =
+        nextProfile.username.trim().isNotEmpty && driver is NativeTerminalDriver
         ? _remoteTransport == _RemoteTerminalTransport.mosh
               ? driver.reconnectMosh(
                   host: nextProfile.host,
@@ -2605,6 +2606,9 @@ TerminalDriver _createSshDriver({
   String encoding = 'UTF-8',
   TerminalTheme theme = defaultTerminalTheme,
 }) {
+  if (username.trim().isEmpty) {
+    return MemoryTerminalDriver(columns: columns, rows: rows, config: config);
+  }
   try {
     return NativeTerminalDriver.createSsh(
       columns: columns,
@@ -2659,6 +2663,13 @@ TerminalDriver _createMoshDriver({
   // scrollback semantics. Keeping native scrollback enabled causes full-screen
   // apps to leak transient frames into shell history.
   final moshConfig = config.copyWith(scrollbackLines: 0);
+  if (username.trim().isEmpty) {
+    return MemoryTerminalDriver(
+      columns: columns,
+      rows: rows,
+      config: moshConfig,
+    );
+  }
   try {
     return NativeTerminalDriver.createMosh(
       columns: columns,

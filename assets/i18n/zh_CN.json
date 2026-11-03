@@ -804,6 +804,8 @@
   "workspace.label.editSnippet": "编辑代码片段",
   "workspace.label.enableMosh": "启用 Mosh",
   "workspace.label.enableTelnet": "启用 Telnet",
+  "workspace.label.enterKeyPassphrase": "请输入密钥口令",
+  "workspace.label.enterUsername": "请输入用户名",
   "workspace.label.environmentVariables": "环境变量",
   "workspace.label.exportKey": "导出密钥",
   "workspace.label.exportTerminalCapture": "导出终端捕获记录",

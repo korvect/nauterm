@@ -580,7 +580,11 @@ extension _NautermWorkspaceRestore on _NautermWorkspaceState {
             _closeTerminalViewTab(terminalTabId, pane.id, session.id);
           }
         }
-        void handleConnected() => _detectHostOsAfterConnect(host, auth);
+        void handleConnected() => _detectHostOsAfterConnect(
+          host,
+          auth,
+          profile: controller.sshProfile,
+        );
         if (target.protocol == WorkspaceTerminalProtocol.mosh) {
           controller = TerminalController.mosh(
             host: auth.host,

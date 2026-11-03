@@ -1738,8 +1738,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
     final identity = host.identityId == null
         ? null
         : _dataStore?.getIdentity(host.identityId!);
-    final username =
-        _firstNonEmpty([identity?.username, host.username]) ?? 'user';
+    final username = _firstNonEmpty([identity?.username, host.username]) ?? '';
     final keyId = identity?.keyId ?? host.keyId;
     final key = keyId == null ? null : _dataStore?.getKey(keyId);
     final privateKey = _emptyToNull(key?.privateKey);

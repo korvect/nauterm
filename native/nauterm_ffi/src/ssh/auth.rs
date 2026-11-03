@@ -1,5 +1,6 @@
 use super::*;
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
+use russh::keys::ssh_key::{PrivateKey, PublicKey};
 use std::sync::Arc;
 
 use crate::fido2::{self, Fido2SshAlgorithm};
@@ -67,6 +68,143 @@ fn authentication_secrets(passphrase: Option<&str>) -> AuthenticationSecrets {
     }
 }
 
+// Unknown hosts may receive unsigned public-key probes. All authentication
+// paths must pass this gate before signing, sending a password, or opening a
+// session, including servers which accept "none" authentication.
+#[derive(Clone, Default)]
+pub(crate) struct HostKeyVerification {
+    pending: Arc<Mutex<Option<SessionEvent>>>,
+    host_key_seen: Arc<AtomicBool>,
+}
+
+impl HostKeyVerification {
+    pub(super) fn begin_host_key_check(&self) -> bool {
+        !self.host_key_seen.swap(true, Ordering::AcqRel)
+    }
+    pub(super) fn defer(&self, event: SessionEvent) {
+        *self.pending.lock().unwrap() = Some(event);
+    }
+
+    fn require_trusted(
+        &self,
+        events: &Arc<Mutex<Vec<SessionEvent>>>,
+        wakeup: &Arc<Mutex<Option<WakeupCallback>>>,
+    ) -> Result<(), String> {
+        let pending = self.pending.lock().unwrap().as_ref().cloned();
+        if let Some(event) = pending {
+            push_event(events, wakeup, event);
+            return Err("host key confirmation is required".to_owned());
+        }
+        Ok(())
+    }
+}
+
+pub(crate) struct PreparedPrivateKey<'a> {
+    encoded: &'a str,
+    public_key: Option<PublicKey>,
+}
+
+pub(crate) fn prepare_private_key<'a>(
+    encoded: Option<&'a str>,
+    events: &Arc<Mutex<Vec<SessionEvent>>>,
+    wakeup: &Arc<Mutex<Option<WakeupCallback>>>,
+) -> Result<Option<PreparedPrivateKey<'a>>, String> {
+    let Some(encoded) = encoded else {
+        return Ok(None);
+    };
+    // OpenSSH retains the public key outside the encrypted private section.
+    // Reading it must not perform a KDF or require a passphrase.
+    if let Ok(key) = PrivateKey::from_openssh(encoded) {
+        return Ok(Some(PreparedPrivateKey {
+            encoded,
+            public_key: Some(key.public_key().clone()),
+        }));
+    }
+    match decode_secret_key(encoded, None) {
+        Ok(key) => Ok(Some(PreparedPrivateKey {
+            encoded,
+            public_key: Some(key.public_key().clone()),
+        })),
+        Err(error) if encrypted_key(encoded, &error) => {
+            let public_key = if encoded.trim_start().starts_with("PuTTY-User-Key-File-") {
+                let mut lines = encoded.lines();
+                let count = lines.find_map(|line| {
+                    line.strip_prefix("Public-Lines: ")?
+                        .trim()
+                        .parse::<usize>()
+                        .ok()
+                });
+                count.and_then(|count| {
+                    let body = lines.by_ref().take(count).collect::<String>();
+                    let bytes = BASE64_STANDARD.decode(body).ok()?;
+                    PublicKey::from_bytes(&bytes).ok()
+                })
+            } else {
+                None // Encrypted PKCS#8/PKCS#5 does not expose the public key.
+            };
+            Ok(Some(PreparedPrivateKey {
+                encoded,
+                public_key,
+            }))
+        }
+        Err(error) => {
+            push_auth_event(
+                events,
+                wakeup,
+                "auth_key_failed",
+                "public_key",
+                format!("Failed to decode configured private key: {error}"),
+            );
+            Err(format!("failed to decode private key: {error}"))
+        }
+    }
+}
+
+fn encrypted_key(encoded: &str, error: &KeyError) -> bool {
+    matches!(error, KeyError::KeyIsEncrypted)
+        || encoded.lines().any(|line| {
+            line == "-----BEGIN ENCRYPTED PRIVATE KEY-----" || line == "Encryption: aes256-cbc"
+        })
+}
+
+fn unlock_private_key(
+    encoded: &str,
+    passphrase: Option<&str>,
+    events: &Arc<Mutex<Vec<SessionEvent>>>,
+    wakeup: &Arc<Mutex<Option<WakeupCallback>>>,
+) -> Result<PrivateKey, String> {
+    let error = match decode_secret_key(encoded, None) {
+        Ok(key) => return Ok(key),
+        Err(error) => error,
+    };
+    if encrypted_key(encoded, &error) {
+        let message = if let Some(passphrase) = passphrase {
+            if let Ok(key) = decode_secret_key(encoded, Some(passphrase)) {
+                return Ok(key);
+            }
+            "Unable to unlock the configured private key. Check its passphrase and try again."
+        } else {
+            "Configured private key requires a passphrase."
+        };
+        push_auth_event(
+            events,
+            wakeup,
+            "auth_passphrase_required",
+            "public_key",
+            message,
+        );
+        return Err(message.to_owned());
+    }
+    push_auth_event(
+        events,
+        wakeup,
+        "auth_key_failed",
+        "public_key",
+        format!("Failed to decode configured private key: {error}"),
+    );
+    Err(format!("failed to decode private key: {error}"))
+}
+
 #[derive(Debug)]
 struct Fido2SignerError(String);
 
@@ -124,6 +262,148 @@ impl russh::Signer for Fido2Signer {
             to_sign.extend_from_slice(&signature);
             Ok(to_sign)
         }
+    }
+}
+
+#[derive(Debug)]
+enum KeySignError {
+    Intervention(String),
+    Failed(String),
+}
+
+impl std::fmt::Display for KeySignError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Intervention(message) | Self::Failed(message) => formatter.write_str(message),
+        }
+    }
+}
+
+impl std::error::Error for KeySignError {}
+
+impl From<russh::SendError> for KeySignError {
+    fn from(_: russh::SendError) -> Self {
+        Self::Failed("SSH signing request was cancelled.".to_owned())
+    }
+}
+
+struct ConfiguredKeySigner<'a> {
+    key: PreparedPrivateKey<'a>,
+    public_key: PublicKey,
+    unlocked: Option<PrivateKey>,
+    secrets: AuthenticationSecrets,
+    events: &'a Arc<Mutex<Vec<SessionEvent>>>,
+    wakeup: &'a Arc<Mutex<Option<WakeupCallback>>>,
+    host_key_verification: &'a HostKeyVerification,
+}
+
+impl russh::Signer for ConfiguredKeySigner<'_> {
+    type Error = KeySignError;
+
+    async fn auth_sign(
+        &mut self,
+        identity: &russh::keys::agent::AgentIdentity,
+        hash_alg: Option<HashAlg>,
+        mut to_sign: Vec<u8>,
+    ) -> Result<Vec<u8>, Self::Error> {
+        use russh::keys::{signature::Signer as _, ssh_encoding::Encode as _};
+
+        // russh calls this only after USERAUTH_PK_OK. A rejected public key
+        // never prompts for its passphrase or accesses a security key.
+        let key = match self.unlocked.take() {
+            Some(key) => key,
+            None => unlock_private_key(
+                self.key.encoded,
+                self.secrets.key_passphrase.as_deref(),
+                self.events,
+                self.wakeup,
+            )
+            .map_err(KeySignError::Intervention)?,
+        };
+        if key.public_key().key_data() != self.public_key.key_data() {
+            return Err(KeySignError::Failed(
+                "Private key does not match the offered public key.".to_owned(),
+            ));
+        }
+        self.host_key_verification
+            .require_trusted(self.events, self.wakeup)
+            .map_err(KeySignError::Intervention)?;
+
+        let descriptor = key
+            .key_data()
+            .sk_ecdsa_p256()
+            .map(|key| {
+                (
+                    key.public().application().to_owned(),
+                    key.key_handle().to_vec(),
+                    key.flags(),
+                    Fido2SshAlgorithm::Ecdsa,
+                )
+            })
+            .or_else(|| {
+                key.key_data().sk_ed25519().map(|key| {
+                    (
+                        key.public().application().to_owned(),
+                        key.key_handle().to_vec(),
+                        key.flags(),
+                        Fido2SshAlgorithm::Ed25519,
+                    )
+                })
+            });
+        if let Some((application, key_handle, flags, algorithm)) = descriptor {
+            let pin = if self.secrets.packed {
+                self.secrets.fido2_pin.as_deref()
+            } else {
+                self.secrets.key_passphrase.as_deref()
+            };
+            if flags & SSH_SK_USER_VERIFICATION_REQUIRED != 0 && pin.is_none() {
+                let message = "FIDO2 security key requires its PIN.";
+                push_auth_event(
+                    self.events,
+                    self.wakeup,
+                    "auth_passphrase_required",
+                    "fido2",
+                    message,
+                );
+                return Err(KeySignError::Intervention(message.to_owned()));
+            }
+            let require_user_presence = flags & SSH_SK_USER_PRESENCE_REQUIRED != 0;
+            push_auth_event(
+                self.events,
+                self.wakeup,
+                "auth_fido2_start",
+                "fido2",
+                if require_user_presence {
+                    "Touch or confirm the FIDO2 security key."
+                } else {
+                    "Signing with the FIDO2 security key."
+                },
+            );
+            let mut signer = Fido2Signer {
+                application,
+                key_handle,
+                algorithm,
+                pin: pin.map(str::to_owned),
+                require_user_presence,
+            };
+            return russh::Signer::auth_sign(&mut signer, identity, hash_alg, to_sign)
+                .await
+                .map_err(|error| KeySignError::Failed(error.to_string()));
+        }
+
+        let signature: russh::keys::ssh_key::Signature = match key.key_data().rsa() {
+            Some(rsa) => (rsa, hash_alg).try_sign(&to_sign),
+            None => key.try_sign(&to_sign),
+        }
+        .map_err(|error| KeySignError::Failed(error.to_string()))?;
+        let mut encoded = Vec::new();
+        signature
+            .encode(&mut encoded)
+            .map_err(|error| KeySignError::Failed(error.to_string()))?;
+        encoded
+            .encode(&mut to_sign)
+            .map_err(|error| KeySignError::Failed(error.to_string()))?;
+        Ok(to_sign)
     }
 }
 
@@ -219,10 +499,10 @@ pub(crate) fn openssh_certificate_type(encoded: &str) -> Option<String> {
 
 fn decode_openssh_certificate_for_key(
     encoded: &str,
-    private_key: &russh::keys::ssh_key::PrivateKey,
+    public_key: &PublicKey,
 ) -> Result<russh::keys::ssh_key::Certificate, String> {
     let certificate = decode_openssh_certificate(encoded)?;
-    if certificate.public_key() != private_key.public_key().key_data() {
+    if certificate.public_key() != public_key.key_data() {
         return Err("OpenSSH certificate does not match the configured private key".to_owned());
     }
     Ok(certificate)
@@ -257,12 +537,13 @@ async fn connect_agent_client() -> Result<DynamicAgentClient, String> {
 pub(crate) async fn authenticate<H: client::Handler>(
     handle: &mut client::Handle<H>,
     username: &str,
-    private_key: Option<&str>,
+    private_key: Option<PreparedPrivateKey<'_>>,
     certificate: Option<&str>,
     passphrase: Option<&str>,
     password: Option<&str>,
     events: &Arc<Mutex<Vec<SessionEvent>>>,
     wakeup: &Arc<Mutex<Option<WakeupCallback>>>,
+    host_key_verification: &HostKeyVerification,
 ) -> Result<(), String> {
     let secrets = authentication_secrets(passphrase);
     push_auth_event(
@@ -274,6 +555,7 @@ pub(crate) async fn authenticate<H: client::Handler>(
     );
     match handle.authenticate_none(username.to_owned()).await {
         Ok(result) if result.success() => {
+            host_key_verification.require_trusted(events, wakeup)?;
             push_auth_event(
                 events,
                 wakeup,
@@ -303,6 +585,7 @@ pub(crate) async fn authenticate<H: client::Handler>(
             return Err(error.to_string());
         }
         Ok(AuthResult::Success) => {
+            host_key_verification.require_trusted(events, wakeup)?;
             push_auth_event(
                 events,
                 wakeup,
@@ -314,203 +597,131 @@ pub(crate) async fn authenticate<H: client::Handler>(
         }
     }
 
+    let has_private_key = private_key.is_some();
     if let Some(private_key) = private_key {
         let auth_method = if certificate.is_some() {
-            push_auth_event(
-                events,
-                wakeup,
-                "auth_certificate_start",
-                "certificate",
-                "Trying configured OpenSSH certificate authentication.",
-            );
             "certificate"
         } else {
-            push_auth_event(
-                events,
-                wakeup,
-                "auth_key_start",
-                "public_key",
-                "Trying configured private key authentication.",
-            );
             "public_key"
         };
-        let private_key = match decode_secret_key(private_key, secrets.key_passphrase.as_deref()) {
-            Ok(private_key) => private_key,
-            Err(KeyError::KeyIsEncrypted) if secrets.key_passphrase.is_none() => {
+        let certificate_value = certificate
+            .map(decode_openssh_certificate)
+            .transpose()
+            .inspect_err(|error| {
                 push_auth_event(
                     events,
                     wakeup,
-                    "auth_passphrase_required",
-                    "public_key",
-                    "Configured private key requires a passphrase.",
+                    "auth_certificate_failed",
+                    "certificate",
+                    error.clone(),
                 );
-                return Err("configured private key requires a passphrase".to_owned());
-            }
-            Err(error) => {
-                push_auth_event(
+            })?;
+        let mut unlocked = None;
+        let public_key = match private_key.public_key.clone().or_else(|| {
+            certificate_value
+                .as_ref()
+                .map(|certificate| PublicKey::new(certificate.public_key().clone(), ""))
+        }) {
+            Some(key) => key,
+            None => {
+                // Legacy encrypted PEM formats hide the public key as well.
+                let key = unlock_private_key(
+                    private_key.encoded,
+                    secrets.key_passphrase.as_deref(),
                     events,
                     wakeup,
-                    "auth_key_failed",
-                    "public_key",
-                    format!("Failed to decode configured private key: {error}"),
-                );
-                return Err(format!("failed to decode private key: {error}"));
+                )?;
+                let public_key = key.public_key().clone();
+                unlocked = Some(key);
+                public_key
             }
         };
-        let fido2_descriptor = private_key
-            .key_data()
-            .sk_ecdsa_p256()
-            .map(|key| {
-                (
-                    key.public().application().to_owned(),
-                    key.key_handle().to_vec(),
-                    key.flags(),
-                    Fido2SshAlgorithm::Ecdsa,
-                )
-            })
-            .or_else(|| {
-                private_key.key_data().sk_ed25519().map(|key| {
-                    (
-                        key.public().application().to_owned(),
-                        key.key_handle().to_vec(),
-                        key.flags(),
-                        Fido2SshAlgorithm::Ed25519,
-                    )
-                })
-            });
-        if let Some((application, key_handle, flags, algorithm)) = fido2_descriptor {
-            let require_user_presence = flags & SSH_SK_USER_PRESENCE_REQUIRED != 0;
-            let fido2_pin = if secrets.packed {
-                secrets.fido2_pin.as_deref()
-            } else {
-                secrets.key_passphrase.as_deref()
-            };
-            if flags & SSH_SK_USER_VERIFICATION_REQUIRED != 0 && fido2_pin.is_none() {
+        if let Some(encoded) = certificate {
+            decode_openssh_certificate_for_key(encoded, &public_key).inspect_err(|error| {
                 push_auth_event(
                     events,
                     wakeup,
-                    "auth_passphrase_required",
-                    "fido2",
-                    "FIDO2 security key requires its PIN.",
+                    "auth_certificate_failed",
+                    "certificate",
+                    error.clone(),
                 );
-                return Err("FIDO2 security key requires its PIN".to_owned());
-            }
-            push_auth_event(
-                events,
-                wakeup,
-                "auth_fido2_start",
-                "fido2",
-                if require_user_presence {
-                    "Touch or confirm the FIDO2 security key."
-                } else {
-                    "Signing with the FIDO2 security key."
-                },
-            );
-            let mut signer = Fido2Signer {
-                application,
-                key_handle,
-                algorithm,
-                pin: fido2_pin.map(str::to_owned),
-                require_user_presence,
-            };
-            let public_key = private_key.public_key().clone();
-            let result = if let Some(certificate) = certificate {
-                let certificate = decode_openssh_certificate_for_key(certificate, &private_key)?;
-                handle
-                    .authenticate_certificate_with(
-                        username.to_owned(),
-                        certificate,
-                        None,
-                        &mut signer,
-                    )
-                    .await
-            } else {
-                handle
-                    .authenticate_publickey_with(username.to_owned(), public_key, None, &mut signer)
-                    .await
-            };
-            match result {
-                Ok(result) if result.success() => {
-                    push_auth_event(
-                        events,
-                        wakeup,
-                        "auth_success",
-                        "fido2",
-                        "FIDO2 security key authentication succeeded.",
-                    );
-                    return Ok(());
-                }
-                Ok(AuthResult::Failure { .. }) => {
-                    push_auth_event(
-                        events,
-                        wakeup,
-                        "auth_key_rejected",
-                        "fido2",
-                        "FIDO2 security key authentication was rejected.",
-                    );
-                    return Err("FIDO2 security key authentication was rejected".to_owned());
-                }
-                Ok(AuthResult::Success) => return Ok(()),
-                Err(error) => {
-                    let error = error.to_string();
-                    push_auth_event(
-                        events,
-                        wakeup,
-                        "auth_key_failed",
-                        "fido2",
-                        format!("FIDO2 security key authentication failed: {error}"),
-                    );
-                    return Err(error);
-                }
-            }
+            })?;
         }
-        let private_key = Arc::new(private_key);
-        let result = if let Some(certificate) = certificate {
-            let certificate = decode_openssh_certificate_for_key(certificate, &private_key);
-            match certificate {
-                Ok(certificate) => {
-                    handle
-                        .authenticate_openssh_cert(username.to_owned(), private_key, certificate)
-                        .await
-                }
-                Err(error) => {
-                    push_auth_event(
-                        events,
-                        wakeup,
-                        "auth_certificate_failed",
-                        "certificate",
-                        error.clone(),
-                    );
-                    return Err(error);
-                }
-            }
-        } else {
-            let hash_alg = handle
+        push_auth_event(
+            events,
+            wakeup,
+            if certificate.is_some() {
+                "auth_certificate_start"
+            } else {
+                "auth_key_start"
+            },
+            auth_method,
+            "Checking whether the server accepts the configured public key.",
+        );
+        let hash_alg = if public_key.algorithm().is_rsa() {
+            handle
                 .best_supported_rsa_hash()
                 .await
                 .map_err(|error| error.to_string())?
-                .flatten();
+                .flatten()
+        } else {
+            None
+        };
+        let hardware_key = matches!(
+            public_key.algorithm(),
+            russh::keys::ssh_key::Algorithm::SkEcdsaSha2NistP256
+                | russh::keys::ssh_key::Algorithm::SkEd25519
+        );
+        let mut signer = ConfiguredKeySigner {
+            key: private_key,
+            public_key: public_key.clone(),
+            unlocked,
+            secrets,
+            events,
+            wakeup,
+            host_key_verification,
+        };
+        let result = if let Some(certificate) = certificate_value {
             handle
-                .authenticate_publickey(
+                .authenticate_certificate_with(
                     username.to_owned(),
-                    PrivateKeyWithHashAlg::new(private_key, hash_alg),
+                    certificate,
+                    hash_alg,
+                    &mut signer,
                 )
+                .await
+        } else {
+            handle
+                .authenticate_publickey_with(username.to_owned(), public_key, hash_alg, &mut signer)
                 .await
         };
         match result {
-            Ok(result) if result.success() => {
+            Ok(AuthResult::Success) => {
+                // Also gate a server that replies SUCCESS to an unsigned probe.
+                host_key_verification.require_trusted(events, wakeup)?;
                 push_auth_event(
                     events,
                     wakeup,
                     "auth_success",
-                    auth_method,
-                    if certificate.is_some() {
-                        "OpenSSH certificate authentication succeeded."
-                    } else {
-                        "Configured private key authentication succeeded."
-                    },
+                    if hardware_key { "fido2" } else { auth_method },
+                    "Configured key authentication succeeded.",
                 );
                 return Ok(());
+            }
+            Err(KeySignError::Intervention(message)) => return Err(message),
+            Err(error) => {
+                push_auth_event(
+                    events,
+                    wakeup,
+                    if certificate.is_some() {
+                        "auth_certificate_failed"
+                    } else {
+                        "auth_key_failed"
+                    },
+                    auth_method,
+                    format!("Configured key authentication failed: {error}"),
+                );
+                return Err(error.to_string());
             }
             Ok(AuthResult::Failure { .. }) => {
                 push_auth_event(
@@ -522,66 +733,19 @@ pub(crate) async fn authenticate<H: client::Handler>(
                         "auth_key_rejected"
                     },
                     auth_method,
-                    if certificate.is_some() {
-                        "OpenSSH certificate authentication was rejected."
-                    } else {
-                        "Configured private key authentication was rejected."
-                    },
+                    "Server rejected the configured public key.",
                 );
-            }
-            Err(error) => {
-                push_auth_event(
-                    events,
-                    wakeup,
-                    if certificate.is_some() {
-                        "auth_certificate_failed"
-                    } else {
-                        "auth_key_failed"
-                    },
-                    auth_method,
-                    if certificate.is_some() {
-                        format!("OpenSSH certificate authentication failed: {error}")
-                    } else {
-                        format!("Configured private key authentication failed: {error}")
-                    },
-                );
-                return Err(error.to_string());
-            }
-            Ok(AuthResult::Success) => {
-                push_auth_event(
-                    events,
-                    wakeup,
-                    "auth_success",
-                    auth_method,
-                    if certificate.is_some() {
-                        "OpenSSH certificate authentication succeeded."
-                    } else {
-                        "Configured private key authentication succeeded."
-                    },
-                );
-                return Ok(());
             }
         }
-
-        push_auth_event(
-            events,
-            wakeup,
-            "auth_failed",
-            auth_method,
-            if certificate.is_some() {
-                "Server rejected configured OpenSSH certificate authentication."
-            } else {
-                "Server rejected configured private key authentication."
-            },
-        );
-        return Err(if certificate.is_some() {
-            "server rejected configured OpenSSH certificate authentication".to_owned()
-        } else {
-            "server rejected configured private key authentication".to_owned()
-        });
+        host_key_verification.require_trusted(events, wakeup)?;
+        if password.is_none() {
+            let message = "Server rejected configured key authentication.";
+            push_auth_event(events, wakeup, "auth_failed", auth_method, message);
+            return Err(message.to_owned());
+        }
     }
 
-    if certificate.is_some() {
+    if certificate.is_some() && !has_private_key {
         let error = "OpenSSH certificate authentication requires a private key".to_owned();
         push_auth_event(
             events,
@@ -592,6 +756,8 @@ pub(crate) async fn authenticate<H: client::Handler>(
         );
         return Err(error);
     }
+
+    host_key_verification.require_trusted(events, wakeup)?;
 
     if let Some(password) = password {
         push_auth_event(
@@ -737,10 +903,19 @@ pub(crate) async fn authenticate<H: client::Handler>(
 }
 
 #[cfg(test)]
+#[path = "auth_probe_tests.rs"]
+mod probe_tests;
+
+#[cfg(test)]
 mod tests {
-    use super::{decode_openssh_certificate_for_key, openssh_certificate_type};
+    use super::{
+        decode_openssh_certificate_for_key, openssh_certificate_type, prepare_private_key,
+        unlock_private_key,
+    };
     use russh::client;
-    use russh::keys::ssh_key::{certificate::Builder, private::Ed25519Keypair, PrivateKey};
+    use russh::keys::ssh_key::{
+        certificate::Builder, private::Ed25519Keypair, PrivateKey, PublicKey,
+    };
     use std::sync::{
         atomic::{AtomicBool, Ordering},
         Arc, Mutex,
@@ -748,6 +923,94 @@ mod tests {
 
     fn private_key(seed: u8) -> PrivateKey {
         Ed25519Keypair::from_seed(&[seed; 32]).into()
+    }
+
+    fn encrypted_private_key(key: &PrivateKey) -> String {
+        use russh::keys::ssh_key::{Cipher, Kdf, LineEnding};
+
+        key.encrypt_with(
+            Cipher::Aes256Ctr,
+            Kdf::Bcrypt {
+                salt: vec![7; 16],
+                rounds: 1,
+            },
+            123,
+            "test-passphrase",
+        )
+        .unwrap()
+        .to_openssh(LineEnding::LF)
+        .unwrap()
+        .to_string()
+    }
+
+    #[test]
+    fn encrypted_private_key_requests_missing_or_incorrect_passphrase() {
+        let encoded = encrypted_private_key(&private_key(1));
+        for passphrase in [None, Some("wrong-passphrase")] {
+            let events = Arc::new(Mutex::new(Vec::new()));
+            let wakeup = Arc::new(Mutex::new(None));
+            assert!(unlock_private_key(&encoded, passphrase, &events, &wakeup).is_err());
+            let events = events.lock().unwrap();
+            assert_eq!(events.len(), 1);
+            assert_eq!(events[0].kind, "auth_passphrase_required");
+            assert_eq!(events[0].method.as_deref(), Some("public_key"));
+            assert!(!events[0].message.contains("wrong-passphrase"));
+        }
+    }
+
+    #[test]
+    fn encrypted_private_key_accepts_plain_and_packed_passphrases() {
+        let key = private_key(1);
+        let encoded = encrypted_private_key(&key);
+        for passphrase in [
+            "test-passphrase",
+            r#"nauterm-auth-secrets:v1:{"keyPassphrase":"test-passphrase","fido2Pin":"1234"}"#,
+        ] {
+            let events = Arc::new(Mutex::new(Vec::new()));
+            let wakeup = Arc::new(Mutex::new(None));
+            let prepared = prepare_private_key(Some(&encoded), &events, &wakeup)
+                .unwrap()
+                .unwrap();
+            assert_eq!(prepared.public_key.as_ref().unwrap(), key.public_key());
+            assert!(events.lock().unwrap().is_empty());
+            let secrets = super::authentication_secrets(Some(passphrase));
+            let unlocked = unlock_private_key(
+                &encoded,
+                secrets.key_passphrase.as_deref(),
+                &events,
+                &wakeup,
+            )
+            .unwrap();
+            assert_eq!(unlocked.public_key(), key.public_key());
+            assert!(!unlocked.is_encrypted());
+            assert!(events.lock().unwrap().is_empty());
+        }
+    }
+
+    #[test]
+    fn encrypted_pkcs8_private_key_can_be_unlocked() {
+        let key = private_key(1);
+        let mut encoded = Vec::new();
+        russh::keys::encode_pkcs8_pem_encrypted(&key, b"test-passphrase", 1, &mut encoded).unwrap();
+        let encoded = String::from_utf8(encoded).unwrap();
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let wakeup = Arc::new(Mutex::new(None));
+        assert!(unlock_private_key(&encoded, None, &events, &wakeup).is_err());
+        assert_eq!(events.lock().unwrap()[0].kind, "auth_passphrase_required");
+        let unlocked =
+            unlock_private_key(&encoded, Some("test-passphrase"), &events, &wakeup).unwrap();
+        assert_eq!(unlocked.public_key(), key.public_key());
+    }
+
+    #[test]
+    fn malformed_private_key_is_not_a_passphrase_request() {
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let wakeup = Arc::new(Mutex::new(None));
+        assert!(prepare_private_key(Some("invalid key"), &events, &wakeup).is_err());
+        assert_eq!(events.lock().unwrap()[0].kind, "auth_key_failed");
+        assert!(prepare_private_key(None, &events, &wakeup)
+            .unwrap()
+            .is_none());
     }
 
     fn certificate_for(subject: &PrivateKey) -> String {
@@ -769,7 +1032,7 @@ mod tests {
         let subject = private_key(1);
         let encoded = certificate_for(&subject);
 
-        let decoded = decode_openssh_certificate_for_key(&encoded, &subject).unwrap();
+        let decoded = decode_openssh_certificate_for_key(&encoded, subject.public_key()).unwrap();
 
         assert_eq!(decoded.public_key(), subject.public_key().key_data());
     }
@@ -788,7 +1051,7 @@ mod tests {
             &base64_data[midpoint..]
         );
 
-        let decoded = decode_openssh_certificate_for_key(&wrapped, &subject).unwrap();
+        let decoded = decode_openssh_certificate_for_key(&wrapped, subject.public_key()).unwrap();
 
         assert_eq!(decoded.public_key(), subject.public_key().key_data());
     }
@@ -805,7 +1068,7 @@ mod tests {
             &base64_data[midpoint..]
         );
 
-        let decoded = decode_openssh_certificate_for_key(&wrapped, &subject).unwrap();
+        let decoded = decode_openssh_certificate_for_key(&wrapped, subject.public_key()).unwrap();
 
         assert_eq!(decoded.public_key(), subject.public_key().key_data());
     }
@@ -825,7 +1088,7 @@ mod tests {
         let other = private_key(2);
         let encoded = certificate_for(&subject);
 
-        let error = decode_openssh_certificate_for_key(&encoded, &other).unwrap_err();
+        let error = decode_openssh_certificate_for_key(&encoded, other.public_key()).unwrap_err();
 
         assert!(error.contains("does not match"));
     }
@@ -835,13 +1098,14 @@ mod tests {
         let subject = private_key(1);
 
         let error =
-            decode_openssh_certificate_for_key("ssh-ed25519-cert invalid", &subject).unwrap_err();
+            decode_openssh_certificate_for_key("ssh-ed25519-cert invalid", subject.public_key())
+                .unwrap_err();
 
         assert!(error.contains("failed to decode OpenSSH certificate"));
     }
 
     #[test]
-    fn certificate_is_used_in_a_real_ssh_auth_exchange() {
+    fn encrypted_key_is_used_in_real_key_and_certificate_auth_exchanges() {
         struct TestClient;
 
         impl client::Handler for TestClient {
@@ -857,6 +1121,7 @@ mod tests {
 
         struct TestServer {
             certificate_seen: Arc<AtomicBool>,
+            expected_key: PublicKey,
         }
 
         impl russh::server::Handler for TestServer {
@@ -870,13 +1135,25 @@ mod tests {
                 Ok(russh::server::Auth::Accept)
             }
 
+            async fn auth_publickey(
+                &mut self,
+                user: &str,
+                public_key: &russh::keys::ssh_key::PublicKey,
+            ) -> Result<russh::server::Auth, Self::Error> {
+                assert_eq!(user, "testuser");
+                assert_eq!(public_key, &self.expected_key);
+                Ok(russh::server::Auth::Accept)
+            }
+
             async fn auth_openssh_certificate(
                 &mut self,
                 _user: &str,
                 certificate: &russh::keys::ssh_key::Certificate,
             ) -> Result<russh::server::Auth, Self::Error> {
                 self.certificate_seen.store(true, Ordering::SeqCst);
-                if certificate.key_id() == "nauterm-auth-test" {
+                if certificate.key_id() == "nauterm-auth-test"
+                    && certificate.public_key() == self.expected_key.key_data()
+                {
                     Ok(russh::server::Auth::Accept)
                 } else {
                     Ok(russh::server::Auth::Reject {
@@ -893,64 +1170,89 @@ mod tests {
             .build()
             .unwrap();
         runtime.block_on(async {
-            let user_key = private_key(1);
-            let user_key_text = user_key
-                .to_openssh(russh::keys::ssh_key::LineEnding::LF)
-                .unwrap();
-            let certificate_text = certificate_for(&user_key);
-            let certificate_seen = Arc::new(AtomicBool::new(false));
-
-            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-            let address = listener.local_addr().unwrap();
-            let server_config = Arc::new(russh::server::Config {
-                auth_rejection_time: std::time::Duration::ZERO,
-                keys: vec![private_key(3)],
-                ..Default::default()
-            });
-            let server_certificate_seen = certificate_seen.clone();
-            let server_task = tokio::spawn(async move {
-                let (stream, _) = listener.accept().await.unwrap();
-                russh::server::run_stream(
-                    server_config,
-                    stream,
-                    TestServer {
-                        certificate_seen: server_certificate_seen,
+            use russh::keys::ssh_key::{Algorithm, EcdsaCurve};
+            let mut rng = russh::keys::key::safe_rng();
+            let keys = [
+                private_key(1),
+                PrivateKey::random(
+                    &mut rng,
+                    Algorithm::Ecdsa {
+                        curve: EcdsaCurve::NistP256,
                     },
+                )
+                .unwrap(),
+                PrivateKey::random(&mut rng, Algorithm::Rsa { hash: None }).unwrap(),
+            ];
+            for (user_key, use_certificate) in keys
+                .into_iter()
+                .flat_map(|key| [(key.clone(), false), (key, true)])
+            {
+                let user_key_text = encrypted_private_key(&user_key);
+                let certificate_text = certificate_for(&user_key);
+                let certificate_seen = Arc::new(AtomicBool::new(false));
+
+                let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+                let address = listener.local_addr().unwrap();
+                let server_config = Arc::new(russh::server::Config {
+                    auth_rejection_time: std::time::Duration::ZERO,
+                    keys: vec![private_key(3)],
+                    ..Default::default()
+                });
+                let server_certificate_seen = certificate_seen.clone();
+                let expected_key = user_key.public_key().clone();
+                let server_task = tokio::spawn(async move {
+                    let (stream, _) = listener.accept().await.unwrap();
+                    russh::server::run_stream(
+                        server_config,
+                        stream,
+                        TestServer {
+                            certificate_seen: server_certificate_seen,
+                            expected_key,
+                        },
+                    )
+                    .await
+                    .unwrap();
+                });
+
+                let events = Arc::new(Mutex::new(Vec::new()));
+                let wakeup = Arc::new(Mutex::new(None));
+                let prepared_key =
+                    prepare_private_key(Some(&user_key_text), &events, &wakeup).unwrap();
+                let mut handle =
+                    client::connect(Arc::new(client::Config::default()), address, TestClient)
+                        .await
+                        .unwrap();
+
+                super::authenticate(
+                    &mut handle,
+                    "testuser",
+                    prepared_key,
+                    use_certificate.then_some(certificate_text.as_str()),
+                    Some("test-passphrase"),
+                    None,
+                    &events,
+                    &wakeup,
+                    &super::HostKeyVerification::default(),
                 )
                 .await
                 .unwrap();
-            });
 
-            let mut handle =
-                client::connect(Arc::new(client::Config::default()), address, TestClient)
+                assert_eq!(certificate_seen.load(Ordering::SeqCst), use_certificate);
+                let method = if use_certificate {
+                    "certificate"
+                } else {
+                    "public_key"
+                };
+                assert!(events.lock().unwrap().iter().any(|event| {
+                    event.kind == "auth_success" && event.method.as_deref() == Some(method)
+                }));
+
+                handle
+                    .disconnect(russh::Disconnect::ByApplication, "", "")
                     .await
                     .unwrap();
-            let events = Arc::new(Mutex::new(Vec::new()));
-            let wakeup = Arc::new(Mutex::new(None));
-
-            super::authenticate(
-                &mut handle,
-                "testuser",
-                Some(user_key_text.as_str()),
-                Some(&certificate_text),
-                None,
-                None,
-                &events,
-                &wakeup,
-            )
-            .await
-            .unwrap();
-
-            assert!(certificate_seen.load(Ordering::SeqCst));
-            assert!(events.lock().unwrap().iter().any(|event| {
-                event.kind == "auth_success" && event.method.as_deref() == Some("certificate")
-            }));
-
-            handle
-                .disconnect(russh::Disconnect::ByApplication, "", "")
-                .await
-                .unwrap();
-            server_task.abort();
+                server_task.abort();
+            }
         });
     }
 }

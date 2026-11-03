@@ -13,7 +13,9 @@ use tokio::net::{TcpListener, TcpStream};
 
 use crate::pty::WakeupCallback;
 use crate::session::SessionEvent;
-use crate::ssh::{authenticate, connect_ssh_tcp_stream, SshProxyConfig};
+use crate::ssh::{
+    authenticate, connect_ssh_tcp_stream, prepare_private_key, HostKeyVerification, SshProxyConfig,
+};
 
 const FORWARD_POLL_INTERVAL: Duration = Duration::from_millis(80);
 const FORWARD_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
@@ -219,6 +221,8 @@ async fn connect_forward_ssh(
 ) -> Result<client::Handle<ForwardClientHandler>, String> {
     let events = Arc::new(Mutex::new(Vec::<SessionEvent>::new()));
     let wakeup = Arc::new(Mutex::new(None::<WakeupCallback>));
+    let host_key_verification = HostKeyVerification::default();
+    let private_key = prepare_private_key(config.private_key.as_deref(), &events, &wakeup)?;
     let handler = ForwardClientHandler {
         host: config.ssh_host.clone(),
         port: config.ssh_port,
@@ -252,12 +256,13 @@ async fn connect_forward_ssh(
     authenticate(
         &mut handle,
         &config.username,
-        config.private_key.as_deref(),
+        private_key,
         config.certificate.as_deref(),
         config.passphrase.as_deref(),
         config.password.as_deref(),
         &events,
         &wakeup,
+        &host_key_verification,
     )
     .await?;
     Ok(handle)

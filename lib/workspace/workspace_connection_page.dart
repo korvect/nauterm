@@ -99,12 +99,21 @@ SshConnectionProfile refreshSavedHostSshProfile({
 Widget buildTerminalConnectionPageForTesting(
   TerminalController controller, {
   bool inDrawer = false,
+  SshConnectionProfile? Function()? reloadProfile,
 }) {
   return _TerminalConnectionPage(
     controller: controller,
     inDrawer: inDrawer,
     keys: const [],
     identities: const [],
+    onReloadConnection: reloadProfile == null
+        ? null
+        : () {
+            final profile = reloadProfile();
+            return profile == null
+                ? null
+                : _ReloadedTerminalConnection(profile: profile);
+          },
   );
 }
 
@@ -357,16 +366,18 @@ class _TerminalConnectionPage extends StatefulWidget {
 }
 
 enum _ConnectionPageMode {
+  username,
   connecting,
   completing,
   hostKey,
+  passphrase,
   authentication,
   connected,
   failed,
   exited,
 }
 
-enum _ConnectionIntervention { hostKey, authentication }
+enum _ConnectionIntervention { username, hostKey, passphrase, authentication }
 
 enum _ConnectionAuthTab { password, publicKey }
 
@@ -393,11 +404,15 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
   final TextEditingController _portController = TextEditingController();
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _passphraseController = TextEditingController();
   final TextEditingController _fido2PinController = TextEditingController();
   TerminalConnectionPhase? _lastPhase;
   SshConnectionProfile? _lastProfile;
   bool _showLogs = false;
   bool _obscurePassword = true;
+  bool _obscurePassphrase = true;
+  ({String privateKey, String passphrase})? _sessionKeyUnlock;
+  ({String host, int port, int? identityId, String value})? _sessionUsername;
   bool _obscureFido2Pin = true;
   _ConnectionAuthTab _authTab = _ConnectionAuthTab.password;
   int? _selectedKeyIndex;
@@ -422,19 +437,24 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
   @override
   void initState() {
     super.initState();
+    _usernameController.addListener(_handleUsernameChanged);
     _passwordController.addListener(_handlePasswordChanged);
+    _passphraseController.addListener(_handlePassphraseChanged);
     _fido2PinController.addListener(_handleFido2PinChanged);
   }
 
   @override
   void dispose() {
     _connectedRevealTimer?.cancel();
+    _usernameController.removeListener(_handleUsernameChanged);
     _passwordController.removeListener(_handlePasswordChanged);
+    _passphraseController.removeListener(_handlePassphraseChanged);
     _fido2PinController.removeListener(_handleFido2PinChanged);
     _hostController.dispose();
     _portController.dispose();
     _usernameController.dispose();
     _passwordController.dispose();
+    _passphraseController.dispose();
     _fido2PinController.dispose();
     super.dispose();
   }
@@ -446,8 +466,26 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
     }
   }
 
+  bool get _requiresUsername =>
+      widget.controller.sshProfile?.username.trim().isEmpty == true;
+
+  void _handleUsernameChanged() {
+    if (!_syncingControllers && mounted && _requiresUsername) {
+      setState(() {});
+    }
+  }
+
   void _handleFido2PinChanged() {
     if (mounted && _requiresFido2Pin) {
+      setState(() {});
+    }
+  }
+
+  void _handlePassphraseChanged() {
+    if (mounted &&
+        _hasLatestPrivateKeyPassphraseRequest(
+          widget.controller.connectionEvents,
+        )) {
       setState(() {});
     }
   }
@@ -480,10 +518,16 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
   ) {
     final events = widget.controller.connectionEvents;
     final telnetProfile = widget.controller.telnetProfile;
-    final actualMode = _connectionMode(status, events);
+    final actualMode = _requiresUsername
+        ? _ConnectionPageMode.username
+        : _connectionMode(status, events);
     final mode = _displayMode(actualMode);
-    if (actualMode == _ConnectionPageMode.hostKey) {
+    if (actualMode == _ConnectionPageMode.username) {
+      _rememberIntervention(_ConnectionIntervention.username);
+    } else if (actualMode == _ConnectionPageMode.hostKey) {
       _rememberIntervention(_ConnectionIntervention.hostKey);
+    } else if (actualMode == _ConnectionPageMode.passphrase) {
+      _rememberIntervention(_ConnectionIntervention.passphrase);
     } else if (actualMode == _ConnectionPageMode.authentication) {
       _rememberIntervention(_ConnectionIntervention.authentication);
     }
@@ -629,12 +673,14 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
     List<TerminalConnectionEvent> events,
   ) {
     return switch (mode) {
+      _ConnectionPageMode.username => _buildUsernameBody(),
       _ConnectionPageMode.hostKey => _HostKeyPrompt(
         key: const ValueKey('host-key'),
         profile: profile,
         fingerprint: _latestFingerprint(events),
       ),
       _ConnectionPageMode.authentication => _buildAuthenticationBody(),
+      _ConnectionPageMode.passphrase => _buildPassphraseBody(),
       _ConnectionPageMode.failed => _ConnectionFailureBody(
         key: const ValueKey('failed'),
         message: status.message ?? 'Connection failed.',
@@ -792,6 +838,84 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
     );
   }
 
+  Widget _buildUsernameBody() {
+    return Column(
+      key: const ValueKey('connection-username'),
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          tr(
+            'workspace.label.enterUsername',
+            fallback: 'Please enter username',
+          ),
+          style: _connectionBodyStyle.copyWith(fontWeight: FontWeight.w500),
+        ),
+        const SizedBox(height: 20),
+        _WorkspaceInput(
+          controller: _usernameController,
+          label: tr('common.label.username', fallback: 'Username'),
+          size: _WorkspaceControlSize.large,
+          autofocus: true,
+          textInputAction: TextInputAction.go,
+          onSubmitted: (_) => _continueWithUsername(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPassphraseBody() {
+    return Column(
+      key: const ValueKey('private-key-passphrase'),
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          tr(
+            'workspace.label.enterKeyPassphrase',
+            fallback: 'Please Enter passphrase for key',
+          ),
+          style: _connectionBodyStyle.copyWith(fontWeight: FontWeight.w500),
+        ),
+        const SizedBox(height: 20),
+        _WorkspaceInput(
+          controller: _passphraseController,
+          label: tr('common.label.passphrase', fallback: 'Passphrase'),
+          size: _WorkspaceControlSize.large,
+          autofocus: true,
+          obscureText: _obscurePassphrase,
+          onSubmitted: (_) => _continuePrivateKeyAuthentication(),
+          trailing: _WorkspaceButton(
+            icon: _obscurePassphrase
+                ? Icons.visibility_off_rounded
+                : Icons.visibility_rounded,
+            size: widget.inDrawer
+                ? _WorkspaceControlSize.tiny
+                : _WorkspaceControlSize.medium,
+            variant: _WorkspaceButtonVariant.text,
+            height: widget.inDrawer
+                ? 24
+                : _WorkspaceControlSize.medium.inputHeight,
+            minWidth: widget.inDrawer
+                ? 24
+                : _WorkspaceControlSize.medium.inputHeight,
+            tooltip: _obscurePassphrase
+                ? tr(
+                    'workspace.keys.action.showPassphrase',
+                    fallback: 'Show passphrase',
+                  )
+                : tr(
+                    'workspace.keys.action.hidePassphrase',
+                    fallback: 'Hide passphrase',
+                  ),
+            onPressed: () =>
+                setState(() => _obscurePassphrase = !_obscurePassphrase),
+          ),
+        ),
+      ],
+    );
+  }
+
   TerminalConnectionIdentityOption? get _selectedIdentity {
     final selectedIdentityId = _selectedIdentityId;
     if (selectedIdentityId == null) {
@@ -818,7 +942,11 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
         selectedKeyIndex < widget.keys.length;
     final hasSshProfile = widget.controller.sshProfile != null;
     final requiresFido2Pin = _requiresFido2Pin;
-    final canContinue = mode == _ConnectionPageMode.authentication
+    final canContinue = mode == _ConnectionPageMode.username
+        ? _usernameController.text.trim().isNotEmpty
+        : mode == _ConnectionPageMode.passphrase
+        ? _passphraseController.text.isNotEmpty
+        : mode == _ConnectionPageMode.authentication
         ? requiresFido2Pin
               ? _fido2PinController.text.isNotEmpty
               : (_authTab == _ConnectionAuthTab.password
@@ -850,7 +978,13 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
       ],
     ];
     final primaryActions = <Widget>[
-      if (mode == _ConnectionPageMode.hostKey) ...[
+      if (mode == _ConnectionPageMode.username) ...[
+        _ConnectionButton(
+          label: tr('common.action.continue', fallback: 'Continue'),
+          primary: true,
+          onPressed: canContinue ? _continueWithUsername : null,
+        ),
+      ] else if (mode == _ConnectionPageMode.hostKey) ...[
         _ConnectionButton(
           label: tr('common.action.continue', fallback: 'Continue'),
           onPressed: _trustHostKeyForSession,
@@ -869,6 +1003,12 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
           label: tr('workspace.label.startOver', fallback: 'Start over'),
           primary: true,
           onPressed: _reconnect,
+        ),
+      ] else if (mode == _ConnectionPageMode.passphrase) ...[
+        _ConnectionButton(
+          label: tr('common.action.continue', fallback: 'Continue'),
+          primary: true,
+          onPressed: canContinue ? _continuePrivateKeyAuthentication : null,
         ),
       ] else if (mode == _ConnectionPageMode.authentication &&
           requiresFido2Pin) ...[
@@ -995,7 +1135,7 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
       _reconnect(
         privateKey: privateKey,
         certificate: certificate,
-        passphrase: null,
+        passphrase: keyDetail?.passphrase,
         password: null,
       );
       return;
@@ -1026,7 +1166,35 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
     _fido2PinController.clear();
   }
 
+  void _continueWithUsername() {
+    final profile = widget.controller.sshProfile;
+    final username = _usernameController.text.trim();
+    if (profile == null || username.isEmpty) return;
+    _sessionUsername = (
+      host: profile.host,
+      port: profile.port,
+      identityId: profile.identityId,
+      value: username,
+    );
+    _reconnect(username: username);
+  }
+
+  void _continuePrivateKeyAuthentication() {
+    final profile = widget.controller.sshProfile;
+    final passphrase = _passphraseController.text;
+    final privateKey = profile?.privateKey;
+    if (profile == null || privateKey == null || passphrase.isEmpty) return;
+    _sessionKeyUnlock = (privateKey: privateKey, passphrase: passphrase);
+    _reconnect(
+      privateKey: privateKey,
+      certificate: profile.certificate,
+      passphrase: passphrase,
+    );
+    _passphraseController.clear();
+  }
+
   void _reconnect({
+    String? username,
     Object? password = _preserveReconnectValue,
     Object? privateKey = _preserveReconnectValue,
     Object? certificate = _preserveReconnectValue,
@@ -1039,11 +1207,24 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
     if (reloader != null && reloaded == null) {
       return;
     }
-    final profile = reloaded?.profile ?? widget.controller.sshProfile;
+    var profile = reloaded?.profile ?? widget.controller.sshProfile;
     if (profile == null) {
       return;
     }
+    final sessionUsername = _sessionUsername;
+    if (sessionUsername != null) {
+      if (profile.host == sessionUsername.host &&
+          profile.port == sessionUsername.port &&
+          profile.identityId == sessionUsername.identityId) {
+        if (profile.username.trim().isEmpty) {
+          profile = profile.copyWith(username: sessionUsername.value);
+        }
+      } else {
+        _sessionUsername = null;
+      }
+    }
     _syncControllers(profile, widget.controller.connectionStatus.phase);
+    if (username != null) _usernameController.text = username;
     final port = int.tryParse(_portController.text.trim());
     if (port == null || port < 1 || port > 65535) {
       return;
@@ -1086,6 +1267,21 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
         nextCertificate = null;
         nextPassphrase = null;
         nextFido2Pin = null;
+      }
+    }
+
+    final effectivePrivateKey =
+        identical(nextPrivateKey, _preserveReconnectValue)
+        ? profile.privateKey
+        : nextPrivateKey;
+    final sessionKeyUnlock = _sessionKeyUnlock;
+    if (sessionKeyUnlock != null) {
+      if (effectivePrivateKey == sessionKeyUnlock.privateKey) {
+        if (identical(passphrase, _preserveReconnectValue)) {
+          nextPassphrase = sessionKeyUnlock.passphrase;
+        }
+      } else {
+        _sessionKeyUnlock = null;
       }
     }
 
@@ -1323,7 +1519,9 @@ class _ConnectionProgress extends StatelessWidget {
       protocolIcon,
       for (final intervention in interventions)
         switch (intervention) {
+          _ConnectionIntervention.username => Icons.person_outline_rounded,
           _ConnectionIntervention.hostKey => Icons.fingerprint_rounded,
+          _ConnectionIntervention.passphrase => Icons.lock_open_rounded,
           _ConnectionIntervention.authentication => Icons.key_rounded,
         },
       destinationIcon,
@@ -1331,8 +1529,12 @@ class _ConnectionProgress extends StatelessWidget {
     final last = icons.length - 1;
     final lastInterventionStep = interventions.length;
     final activeInterventionStep = switch (mode) {
+      _ConnectionPageMode.username =>
+        interventions.indexOf(_ConnectionIntervention.username) + 1,
       _ConnectionPageMode.hostKey =>
         interventions.indexOf(_ConnectionIntervention.hostKey) + 1,
+      _ConnectionPageMode.passphrase =>
+        interventions.indexOf(_ConnectionIntervention.passphrase) + 1,
       _ConnectionPageMode.authentication =>
         interventions.indexOf(_ConnectionIntervention.authentication) + 1,
       _ => null,
@@ -1349,7 +1551,9 @@ class _ConnectionProgress extends StatelessWidget {
         movingLine: lastInterventionStep,
         travelingStep: last,
       ),
+      _ConnectionPageMode.username ||
       _ConnectionPageMode.hostKey ||
+      _ConnectionPageMode.passphrase ||
       _ConnectionPageMode.authentication => _ConnectionProgress(
         icons: icons,
         reachedStep: activeInterventionStep! - 1,
@@ -2343,6 +2547,9 @@ _ConnectionPageMode _connectionMode(
     return _ConnectionPageMode.hostKey;
   }
   if (_hasLatestActionableAuth(events)) {
+    if (_hasLatestPrivateKeyPassphraseRequest(events)) {
+      return _ConnectionPageMode.passphrase;
+    }
     return _ConnectionPageMode.authentication;
   }
   if (status.phase == TerminalConnectionPhase.exited) {
@@ -2390,6 +2597,7 @@ List<_ConnectionLogEntry> _connectionLogEntries(
   SerialConnectionProfile? serialProfile,
   List<TerminalConnectionEvent> events,
 ) {
+  if (profile?.username.trim().isEmpty == true) return const [];
   final logs = <_ConnectionLogEntry>[];
   if (profile != null) {
     logs.add(
@@ -2674,6 +2882,22 @@ bool _hasLatestFido2PinRequest(List<TerminalConnectionEvent> events) {
   for (final event in events.reversed) {
     if (event.kind == TerminalConnectionEventKind.authPassphraseRequired) {
       return event.method == 'fido2';
+    }
+    if (event.kind == TerminalConnectionEventKind.connectStart ||
+        event.kind == TerminalConnectionEventKind.authSuccess ||
+        event.kind == TerminalConnectionEventKind.connected) {
+      return false;
+    }
+  }
+  return false;
+}
+
+bool _hasLatestPrivateKeyPassphraseRequest(
+  List<TerminalConnectionEvent> events,
+) {
+  for (final event in events.reversed) {
+    if (event.kind == TerminalConnectionEventKind.authPassphraseRequired) {
+      return event.method != 'fido2';
     }
     if (event.kind == TerminalConnectionEventKind.connectStart ||
         event.kind == TerminalConnectionEventKind.authSuccess ||

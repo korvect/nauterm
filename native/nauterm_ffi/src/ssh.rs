@@ -20,7 +20,7 @@ use encoding_rs::{Decoder, Encoding, UTF_8};
 use russh::client::{self, AuthResult};
 use russh::keys::agent::client::{AgentClient, AgentStream};
 use russh::keys::known_hosts;
-use russh::keys::{decode_secret_key, Error as KeyError, HashAlg, PrivateKeyWithHashAlg};
+use russh::keys::{decode_secret_key, Error as KeyError, HashAlg};
 use russh::ChannelMsg;
 use serde::Deserialize;
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
@@ -31,7 +31,9 @@ mod probe;
 mod proxy;
 mod sftp;
 
-pub(crate) use auth::{authenticate, openssh_certificate_type};
+pub(crate) use auth::{
+    authenticate, openssh_certificate_type, prepare_private_key, HostKeyVerification,
+};
 use probe::*;
 pub(crate) use proxy::connect_ssh_tcp_stream;
 #[cfg(test)]
@@ -1191,7 +1193,9 @@ pub(crate) async fn start_mosh_server(
     .with_username(username)]));
     let output = Arc::new(Mutex::new(Vec::new()));
     let wakeup = Arc::new(Mutex::new(None));
+    let host_key_verification = HostKeyVerification::default();
     let handler = SshClientHandler {
+        host_key_verification: host_key_verification.clone(),
         host: host.to_owned(),
         port,
         known_hosts_path: known_hosts_path.map(PathBuf::from),
@@ -1201,6 +1205,7 @@ pub(crate) async fn start_mosh_server(
         wakeup: wakeup.clone(),
     };
     let result = async {
+        let private_key = prepare_private_key(private_key, &events, &wakeup)?;
         let (mut handle, udp_host) =
             connect_ssh_with_timeout_and_udp_host(config, host, port, proxy, handler).await?;
         authenticate(
@@ -1212,6 +1217,7 @@ pub(crate) async fn start_mosh_server(
             password,
             &events,
             &wakeup,
+            &host_key_verification,
         )
         .await
         .map_err(|error| format!("authentication failed: {error}"))?;
@@ -1297,7 +1303,9 @@ async fn list_directory_entries(
     let events = Arc::new(Mutex::new(Vec::<SessionEvent>::new()));
     let output = Arc::new(Mutex::new(Vec::new()));
     let wakeup = Arc::new(Mutex::new(None));
+    let host_key_verification = HostKeyVerification::default();
     let handler = SshClientHandler {
+        host_key_verification: host_key_verification.clone(),
         host: host.to_owned(),
         port,
         known_hosts_path: known_hosts_path.map(PathBuf::from),
@@ -1306,6 +1314,7 @@ async fn list_directory_entries(
         events: events.clone(),
         wakeup: wakeup.clone(),
     };
+    let private_key = prepare_private_key(private_key, &events, &wakeup)?;
     let mut handle = connect_ssh_with_timeout(config, host, port, None, handler).await?;
 
     authenticate(
@@ -1317,6 +1326,7 @@ async fn list_directory_entries(
         password,
         &events,
         &wakeup,
+        &host_key_verification,
     )
     .await
     .map_err(|error| format!("authentication failed: {error}"))?;
@@ -1444,6 +1454,7 @@ struct SshTarget {
 
 #[derive(Clone)]
 struct SshClientHandler {
+    host_key_verification: HostKeyVerification,
     host: String,
     port: u16,
     known_hosts_path: Option<PathBuf>,
@@ -1608,6 +1619,8 @@ impl client::Handler for SshClientHandler {
         let host_key_trust_mode = self.host_key_trust_mode;
         let events = self.events.clone();
         let wakeup = self.wakeup.clone();
+        let host_key_verification = self.host_key_verification.clone();
+        let allow_unsigned_probe = host_key_verification.begin_host_key_check();
         let server_public_key = server_public_key.public_key();
 
         async move {
@@ -1658,17 +1671,19 @@ impl client::Handler for SshClientHandler {
                 }
                 Ok(false) => match host_key_trust_mode {
                     HostKeyTrustMode::Strict => {
-                        push_event(
-                            &events,
-                            &wakeup,
-                            SessionEvent::new(
-                                "host_key_unknown",
-                                format!("Host key for {host}:{port} is not trusted yet."),
-                            )
-                            .with_host_port(&host, port)
-                            .with_fingerprint(&fingerprint),
-                        );
-                        Ok(false)
+                        let event = SessionEvent::new(
+                            "host_key_unknown",
+                            format!("Host key for {host}:{port} is not trusted yet."),
+                        )
+                        .with_host_port(&host, port)
+                        .with_fingerprint(&fingerprint);
+                        if allow_unsigned_probe {
+                            host_key_verification.defer(event);
+                            Ok(true)
+                        } else {
+                            push_event(&events, &wakeup, event);
+                            Ok(false)
+                        }
                     }
                     HostKeyTrustMode::AcceptOnce => {
                         push_event(
@@ -1845,8 +1860,11 @@ async fn run_ssh_session(
         .with_host_port(&target.host, target.port)
         .with_username(&target.username),
     );
+    let private_key = prepare_private_key(target.private_key.as_deref(), &events, &wakeup)?;
     let config = ssh_client_config_with_keepalive(target.ssh_keepalive_interval_seconds);
+    let host_key_verification = HostKeyVerification::default();
     let handler = SshClientHandler {
+        host_key_verification: host_key_verification.clone(),
         host: target.host.clone(),
         port: target.port,
         known_hosts_path: target.known_hosts_path.clone(),
@@ -1874,12 +1892,13 @@ async fn run_ssh_session(
         authenticate(
             &mut handle,
             &target.username,
-            target.private_key.as_deref(),
+            private_key,
             target.certificate.as_deref(),
             target.passphrase.as_deref(),
             target.password.as_deref(),
             &events,
             &wakeup,
+            &host_key_verification,
         ),
     )
     .await

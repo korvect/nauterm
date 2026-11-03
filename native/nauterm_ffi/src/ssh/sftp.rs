@@ -54,7 +54,9 @@ pub(super) async fn list_sftp_directory_entries(
     let events = Arc::new(Mutex::new(Vec::<SessionEvent>::new()));
     let output = Arc::new(Mutex::new(Vec::new()));
     let wakeup = Arc::new(Mutex::new(None));
+    let host_key_verification = HostKeyVerification::default();
     let handler = SshClientHandler {
+        host_key_verification: host_key_verification.clone(),
         host: host.to_owned(),
         port,
         known_hosts_path: known_hosts_path.map(PathBuf::from),
@@ -64,6 +66,7 @@ pub(super) async fn list_sftp_directory_entries(
         wakeup: wakeup.clone(),
     };
     let result = async {
+        let private_key = prepare_private_key(private_key, &events, &wakeup)?;
         let mut handle = cancel_on_sftp_cancel(
             &cancel,
             connect_ssh_with_timeout(config, host, port, proxy, handler),
@@ -80,6 +83,7 @@ pub(super) async fn list_sftp_directory_entries(
                 password,
                 &events,
                 &wakeup,
+                &host_key_verification,
             )
             .await
             .map_err(|error| format!("authentication failed: {error}"))
@@ -190,7 +194,9 @@ pub(super) async fn open_sftp_session(
     let config = ssh_client_config_for_sftp(transfer_threads);
     let output = Arc::new(Mutex::new(Vec::new()));
     let wakeup = Arc::new(Mutex::new(None));
+    let host_key_verification = HostKeyVerification::default();
     let handler = SshClientHandler {
+        host_key_verification: host_key_verification.clone(),
         host: host.to_owned(),
         port,
         known_hosts_path: known_hosts_path.map(PathBuf::from),
@@ -199,6 +205,7 @@ pub(super) async fn open_sftp_session(
         events: events.clone(),
         wakeup: wakeup.clone(),
     };
+    let private_key = prepare_private_key(private_key, &events, &wakeup)?;
     let mut handle = connect_ssh_with_timeout(config, host, port, proxy, handler).await?;
     authenticate(
         &mut handle,
@@ -209,6 +216,7 @@ pub(super) async fn open_sftp_session(
         password,
         &events,
         &wakeup,
+        &host_key_verification,
     )
     .await
     .map_err(|error| format!("authentication failed: {error}"))?;
@@ -257,7 +265,9 @@ pub(super) async fn open_sudo_sftp_session(
     let config = ssh_client_config_for_sftp(transfer_threads);
     let output = Arc::new(Mutex::new(Vec::new()));
     let wakeup = Arc::new(Mutex::new(None));
+    let host_key_verification = HostKeyVerification::default();
     let handler = SshClientHandler {
+        host_key_verification: host_key_verification.clone(),
         host: host.to_owned(),
         port,
         known_hosts_path: known_hosts_path.map(PathBuf::from),
@@ -266,6 +276,7 @@ pub(super) async fn open_sudo_sftp_session(
         events: events.clone(),
         wakeup: wakeup.clone(),
     };
+    let private_key = prepare_private_key(private_key, &events, &wakeup)?;
     let mut handle = connect_ssh_with_timeout(config, host, port, proxy, handler).await?;
     authenticate(
         &mut handle,
@@ -276,6 +287,7 @@ pub(super) async fn open_sudo_sftp_session(
         password,
         &events,
         &wakeup,
+        &host_key_verification,
     )
     .await
     .map_err(|error| format!("authentication failed: {error}"))?;
