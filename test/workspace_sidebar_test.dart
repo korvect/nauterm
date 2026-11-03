@@ -63,7 +63,7 @@ void main() {
     },
   );
 
-  testWidgets('narrow sidebar starts collapsed and can be expanded manually', (
+  testWidgets('narrow sidebar stays collapsed until there is enough space', (
     tester,
   ) async {
     await _pumpApp(tester, width: 700);
@@ -72,9 +72,44 @@ void main() {
     await tester.tap(find.byKey(_toggleKey));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
+    expect(tester.getSize(find.byKey(_sidebarKey)).width, 56);
+    expect(
+      find.byTooltip('Widen the window to expand the sidebar'),
+      findsOneWidget,
+    );
+    tester.view.physicalSize = const Size(1100, 800);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
     expect(tester.getSize(find.byKey(_sidebarKey)).width, 190);
     expect(find.byTooltip('Collapse sidebar'), findsOneWidget);
     _expectToggleOnDivider(tester);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('shrinking the window overrides manual expansion temporarily', (
+    tester,
+  ) async {
+    await _pumpApp(tester, width: 1100);
+    for (var i = 0; i < 2; i++) {
+      await tester.tap(find.byKey(_toggleKey));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+    }
+    expect(tester.getSize(find.byKey(_sidebarKey)).width, 190);
+    tester.view.physicalSize = const Size(700, 800);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(tester.getSize(find.byKey(_sidebarKey)).width, 56);
+    await tester.tap(find.byKey(_toggleKey));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(tester.getSize(find.byKey(_sidebarKey)).width, 56);
+    _expectToggleOnDivider(tester);
+    tester.view.physicalSize = const Size(1100, 800);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(tester.getSize(find.byKey(_sidebarKey)).width, 190);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });

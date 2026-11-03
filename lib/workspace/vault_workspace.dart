@@ -155,9 +155,8 @@ class _VaultWorkspace extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final collapsed =
-            sidebarCollapsed ??
-            constraints.maxWidth < _sidebarCollapseBreakpoint;
+        final tooNarrow = constraints.maxWidth < _sidebarCollapseBreakpoint;
+        final collapsed = tooNarrow || (sidebarCollapsed ?? false);
         final duration = MediaQuery.disableAnimationsOf(context)
             ? Duration.zero
             : _sidebarAnimationDuration;
@@ -296,10 +295,14 @@ class _VaultWorkspace extends StatelessWidget {
                     ),
                     child: _WorkspaceButton(
                       tooltip: context.tr(
-                        collapsed
+                        tooNarrow
+                            ? 'workspace.sidebar.expandUnavailable.label'
+                            : collapsed
                             ? 'workspace.sidebar.expand.label'
                             : 'workspace.sidebar.collapse.label',
-                        fallback: collapsed
+                        fallback: tooNarrow
+                            ? 'Widen the window to expand the sidebar'
+                            : collapsed
                             ? 'Expand sidebar'
                             : 'Collapse sidebar',
                       ),
@@ -309,7 +312,9 @@ class _VaultWorkspace extends StatelessWidget {
                       width: 24,
                       height: 24,
                       horizontalPadding: 0,
-                      onPressed: () => onSidebarCollapsedChanged(!collapsed),
+                      onPressed: tooNarrow
+                          ? null
+                          : () => onSidebarCollapsedChanged(!collapsed),
                       child: AnimatedRotation(
                         key: const ValueKey('workspace-sidebar-toggle-arrow'),
                         turns: collapsed ? 0.5 : 0,
@@ -318,7 +323,9 @@ class _VaultWorkspace extends StatelessWidget {
                         child: Icon(
                           LucideIcons.chevronLeft,
                           size: 14,
-                          color: togglePalette.mutedText,
+                          color: tooNarrow
+                              ? togglePalette.mutedText.withValues(alpha: 0.4)
+                              : togglePalette.mutedText,
                         ),
                       ),
                     ),

@@ -935,6 +935,7 @@
   "workspace.search.quickConnect.placeholder": "Search host:, group:, tag:, or user@host",
   "workspace.sidebar.collapse.label": "Collapse sidebar",
   "workspace.sidebar.expand.label": "Expand sidebar",
+  "workspace.sidebar.expandUnavailable.label": "Widen the window to expand the sidebar",
   "workspace.sidebar.hosts.label": "Hosts",
   "workspace.sidebar.keychain.label": "Keychain",
   "workspace.sidebar.knownHosts.label": "Known Hosts",
