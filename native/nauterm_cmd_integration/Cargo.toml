@@ -9,3 +9,6 @@ description = "Nauterm-owned native CMD integration protocol and console interce
 [dependencies]
 base64.workspace = true
 url.workspace = true
+
+[build-dependencies]
+cc = "1"

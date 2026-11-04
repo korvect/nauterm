@@ -42,10 +42,16 @@ impl From<Application> for Editor {
     }
 }
 
-/// The same association discovery as Open With, deduplicated by the settings
-/// model. No subprocess or application is launched during detection.
+/// Installed editor discovery. Windows keeps this separate from the general
+/// Open With list, whose handlers can include browsers and media players.
+/// No subprocess or application is launched during detection.
 pub fn editor_catalog(extensions: &[String]) -> Result<Vec<Editor>> {
-    #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
+    #[cfg(target_os = "windows")]
+    {
+        let _ = extensions;
+        windows::editor_catalog()
+    }
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     {
         let mut applications = vec![];
         for extension in extensions {
@@ -286,6 +292,17 @@ pub struct Application {
     pub is_default: bool,
 }
 
+pub(crate) fn application_location_valid(identifier: &str, path: &Path) -> bool {
+    #[cfg(target_os = "windows")]
+    if identifier.starts_with("win32-assoc:") {
+        return windows_identity::Association::parse(identifier)
+            .is_ok_and(|association| association.matches_path(path));
+    }
+    #[cfg(not(target_os = "windows"))]
+    let _ = identifier;
+    path.is_absolute()
+}
+
 fn normalized(applications: Vec<Application>, own_identifier: Option<&str>) -> Vec<Application> {
     let mut seen = HashSet::new();
     let mut applications: Vec<_> = applications
@@ -295,7 +312,7 @@ fn normalized(applications: Vec<Application>, own_identifier: Option<&str>) -> V
                 && !application.name.chars().any(char::is_control)
                 && !application.identifier.trim().is_empty()
                 && !application.identifier.chars().any(char::is_control)
-                && application.path.is_absolute()
+                && application_location_valid(&application.identifier, &application.path)
                 && Some(application.identifier.as_str()) != own_identifier
                 && seen.insert(application.identifier.clone())
         })
@@ -340,30 +357,75 @@ pub fn list_for_name(name: &str) -> Result<Vec<Application>> {
     list(Path::new(name))
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug)]
+#[cfg_attr(not(target_os = "windows"), derive(PartialEq, Eq))]
 struct Identity {
     #[cfg(unix)]
     device: u64,
     #[cfg(unix)]
     inode: u64,
-    #[cfg(not(unix))]
+    #[cfg(target_os = "windows")]
+    volume: u32,
+    #[cfg(target_os = "windows")]
+    index: u64,
+    // Keep the original object alive so an unlink/recreate cannot reuse its ID
+    // during a native application chooser. Sharing allows edits and renames.
+    #[cfg(target_os = "windows")]
+    _file: fs::File,
+    #[cfg(not(any(unix, target_os = "windows")))]
     created: Option<std::time::SystemTime>,
 }
+#[cfg(target_os = "windows")]
+impl PartialEq for Identity {
+    fn eq(&self, other: &Self) -> bool {
+        self.volume == other.volume && self.index == other.index
+    }
+}
+#[cfg(target_os = "windows")]
+impl Eq for Identity {}
 impl Identity {
-    fn read(metadata: &fs::Metadata) -> Self {
+    fn read(path: &Path, metadata: &fs::Metadata) -> Result<Self> {
+        #[cfg(not(target_os = "windows"))]
+        let _ = path;
         #[cfg(unix)]
         {
             use std::os::unix::fs::MetadataExt;
-            Self {
+            Ok(Self {
                 device: metadata.dev(),
                 inode: metadata.ino(),
-            }
+            })
         }
-        #[cfg(not(unix))]
+        #[cfg(target_os = "windows")]
         {
-            Self {
+            use ::windows::Win32::{
+                Foundation::HANDLE,
+                Storage::FileSystem::{
+                    BY_HANDLE_FILE_INFORMATION, FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE,
+                    FILE_SHARE_READ, FILE_SHARE_WRITE, GetFileInformationByHandle,
+                },
+            };
+            use std::os::windows::{fs::OpenOptionsExt, io::AsRawHandle};
+            let _ = metadata;
+            let file = fs::OpenOptions::new()
+                .access_mode(FILE_READ_ATTRIBUTES.0)
+                .share_mode(FILE_SHARE_READ.0 | FILE_SHARE_WRITE.0 | FILE_SHARE_DELETE.0)
+                .open(path)?;
+            ensure!(file.metadata()?.is_file(), "Choose a regular local file.");
+            let mut info = BY_HANDLE_FILE_INFORMATION::default();
+            // SAFETY: The borrowed file handle and output live throughout this
+            // call. The retained File owns and eventually closes the handle.
+            unsafe { GetFileInformationByHandle(HANDLE(file.as_raw_handle()), &mut info)? };
+            Ok(Self {
+                volume: info.dwVolumeSerialNumber,
+                index: (u64::from(info.nFileIndexHigh) << 32) | u64::from(info.nFileIndexLow),
+                _file: file,
+            })
+        }
+        #[cfg(not(any(unix, target_os = "windows")))]
+        {
+            Ok(Self {
                 created: metadata.created().ok(),
-            }
+            })
         }
     }
 }
@@ -388,10 +450,11 @@ impl FileTarget {
             explicit || crate::file_model::can_open_local(&path)?,
             "This file cannot be opened through an implicit file association. Choose an explicit application instead."
         );
+        let identity = Identity::read(&resolved, &metadata)?;
         Ok(Self {
             path,
             resolved,
-            identity: Identity::read(&metadata),
+            identity,
             explicit,
         })
     }
@@ -404,7 +467,7 @@ impl FileTarget {
         ensure!(
             resolved == self.resolved
                 && metadata.is_file()
-                && Identity::read(&metadata) == self.identity,
+                && Identity::read(&resolved, &metadata)? == self.identity,
             "The selected file changed while choosing an application. Select it again."
         );
         ensure!(
@@ -418,6 +481,61 @@ impl FileTarget {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    #[ignore = "Subprocess argv fixture used by the Windows literal filename test"]
+    fn windows_literal_filename_fixture() -> Result<()> {
+        let arguments: Vec<_> = std::env::args_os().collect();
+        let Some(separator) = arguments.iter().position(|argument| argument == "--") else {
+            return Ok(());
+        };
+        ensure!(
+            arguments.len() == separator + 3,
+            "Invalid fixture arguments"
+        );
+        let file = arguments.last().context("Missing fixture filename")?;
+        let capture = &arguments[arguments.len() - 2];
+        fs::write(capture, serde_json::to_vec(file)?)?;
+        Ok(())
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn windows_configured_command_passes_unicode_and_metacharacters_literally() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let capture = temp.path().join("captured argv.json");
+        let file = temp.path().join("中文 & %PATH% $(not-run) file.txt");
+        fs::write(&file, b"synthetic content")?;
+        let editor = Editor::Command {
+            label: "Synthetic argv recorder".into(),
+            executable: std::env::current_exe()?,
+            arguments: vec![
+                "--exact".into(),
+                "external_application::tests::windows_literal_filename_fixture".into(),
+                "--ignored".into(),
+                "--nocapture".into(),
+                "--".into(),
+                capture.to_str().unwrap().into(),
+            ],
+        };
+        open_editor(&file, Some(&editor))?.recv_blocking()??;
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        loop {
+            if fs::read(&capture).is_ok_and(|bytes| {
+                serde_json::from_slice::<std::ffi::OsString>(&bytes)
+                    .is_ok_and(|received| received == file.as_os_str())
+            }) {
+                break;
+            }
+            ensure!(
+                std::time::Instant::now() < deadline,
+                "The Windows process did not receive one literal filename."
+            );
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        Ok(())
+    }
 
     #[cfg(unix)]
     #[test]

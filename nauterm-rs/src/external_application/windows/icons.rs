@@ -102,6 +102,34 @@ fn png(icon: Icon) -> Option<Vec<u8>> {
     Some(png)
 }
 pub(super) fn extract(path: &str, index: i32) -> Option<Vec<u8>> {
+    // Packaged applications expose PRI resource references, not HICON files.
+    // Let the Shell resolve the package's scale/language-qualified PNG path.
+    if path.starts_with("@{") {
+        let source = HSTRING::from(path);
+        let mut buffer = vec![0; 32768];
+        // SAFETY: The UTF-16 source and fixed-capacity output remain live.
+        unsafe { SHLoadIndirectString(&source, &mut buffer, None) }.ok()?;
+        let end = buffer.iter().position(|&unit| unit == 0)?;
+        let resolved = PathBuf::from(String::from_utf16(&buffer[..end]).ok()?);
+        if !resolved.is_absolute() || fs::metadata(&resolved).ok()?.len() > 2 * 1024 * 1024 {
+            return None;
+        }
+        let bytes = fs::read(resolved).ok()?;
+        let decoder = image::codecs::png::PngDecoder::new(std::io::Cursor::new(bytes)).ok()?;
+        let image = image::DynamicImage::from_decoder(decoder).ok()?;
+        let rgba = image.thumbnail(SIZE as u32, SIZE as u32).to_rgba8();
+        use image::ImageEncoder;
+        let mut png = vec![];
+        image::codecs::png::PngEncoder::new(&mut png)
+            .write_image(
+                rgba.as_raw(),
+                rgba.width(),
+                rgba.height(),
+                image::ExtendedColorType::Rgba8,
+            )
+            .ok()?;
+        return Some(png);
+    }
     let path = HSTRING::from(path);
     let mut icon = HICON::default();
     // SAFETY: The native extraction writes at most one owned icon handle.
@@ -116,6 +144,9 @@ pub(super) fn extract(path: &str, index: i32) -> Option<Vec<u8>> {
     png(Icon(icon))
 }
 pub(super) fn file(path: &Path) -> Option<Vec<u8>> {
+    if !path.is_absolute() {
+        return None;
+    }
     let path = HSTRING::from(path.as_os_str());
     let mut info = SHFILEINFOW::default();
     // SAFETY: The Shell writes into a correctly-sized output structure. The

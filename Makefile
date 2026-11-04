@@ -190,11 +190,24 @@ package-windows-arm64:
 	DIST_DIR="$(DIST_DIR)" CLEAN_DIST="$(CLEAN_DIST)" pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/package_windows.ps1 -Arch arm64
 
 .PHONY: run-rs build-rs check-rs bundle-rs-macos package-rs-macos appcast-rs-macos
+ifeq ($(OS),Windows_NT)
+rs_empty :=
+rs_space := $(rs_empty) $(rs_empty)
+rs_git_bash = $(if $(strip $(1)),$(wildcard $(subst $(rs_space),\$(rs_space),$(subst \,/,$(1))/$(2)/bin/bash.exe)))
+GIT_BASH ?= $(or $(call rs_git_bash,$(ProgramW6432),Git),$(call rs_git_bash,$(ProgramFiles),Git),$(call rs_git_bash,$(LOCALAPPDATA),Programs/Git),bash)
+
+run-rs:
+	"$(GIT_BASH)" nauterm-rs/scripts/run.sh
+
+build-rs:
+	"$(GIT_BASH)" nauterm-rs/scripts/build.sh
+else
 run-rs:
 	bash nauterm-rs/scripts/run.sh
 
 build-rs:
 	bash nauterm-rs/scripts/build.sh
+endif
 
 check-rs:
 	cargo check -p nauterm-rs --all-targets --locked

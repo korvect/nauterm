@@ -11,6 +11,7 @@ try {
     $line = PSConsoleHostReadLine
     if ($line -ne "Write-Output '中文'") { throw 'The existing reader was not preserved' }
     $global:__nautermAiArmed = $true
+    $global:__nautermLastNative = $true
     $global:LASTEXITCODE = 23
     Write-Error 'synthetic command failure' -ErrorAction SilentlyContinue
     $failedPrompt = prompt
@@ -34,7 +35,7 @@ try {
         if (!$data.Contains($expected)) { throw ('Missing protocol event: ' + $expected) }
     }
     if (!$failedPrompt.Contains(']133;B;aid=')) { throw 'Missing input boundary' }
-    $key = Get-PSReadLineKeyHandler -Chord 'Ctrl+x,Ctrl+u'
+    $key = Get-PSReadLineKeyHandler | Where-Object { $_.Key -eq 'Ctrl+x,Ctrl+u' }
     if ($key.Function -ne 'Nauterm command') { throw 'Missing AI clean-line binding' }
 } finally {
     [Console]::SetOut($originalOutput)

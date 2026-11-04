@@ -181,7 +181,12 @@ impl Core {
         let mut options = defaults.options(palette);
         options.shell_path = shell
             .or(defaults.preferences.shell_path.as_deref())
-            .map(str::to_owned);
+            .map(str::to_owned)
+            .or_else(|| {
+                cfg!(windows)
+                    .then(nauterm_core::pty::default_local_shell_path)
+                    .flatten()
+            });
         ensure!(
             options
                 .shell_path
@@ -190,22 +195,10 @@ impl Core {
             "The configured shell is not an available executable."
         );
         options.working_directory = directory.map(PathBuf::from);
-        let history_shell = options.shell_path.clone().or_else(|| {
-            if cfg!(windows) {
-                let path = std::env::var_os("PATH")?;
-                for name in ["pwsh.exe", "powershell.exe", "cmd.exe"] {
-                    for directory in std::env::split_paths(&path) {
-                        let candidate = directory.join(name);
-                        if candidate.is_file() {
-                            return candidate.to_str().map(str::to_owned);
-                        }
-                    }
-                }
-                None
-            } else {
-                std::env::var("SHELL").ok()
-            }
-        });
+        let history_shell = options
+            .shell_path
+            .clone()
+            .or_else(nauterm_core::pty::default_local_shell_path);
         let integration = crate::ai::terminal_runner::Integration::local(
             options.shell_path.as_deref(),
             options.command.is_none(),

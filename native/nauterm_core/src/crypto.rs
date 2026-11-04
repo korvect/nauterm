@@ -29,9 +29,8 @@ use zeroize::Zeroizing;
 #[cfg(all(feature = "test-credential-store", not(debug_assertions)))]
 compile_error!("test-credential-store must never be enabled in release builds");
 
-#[cfg(not(feature = "test-credential-store"))]
-// Both clients must resolve the same existing keys. This service is independent
-// of the RS bundle identifier and its private configuration/recovery directory.
+// Account names stay stable within each client's independent keyring service.
+// The test store uses the same account names with deterministic fixture keys.
 pub const KEYRING_DEVICE_KEY_ACCOUNT: &str = "device-key";
 pub const KEYRING_DATABASE_KEY_ACCOUNT: &str = "local-database-key";
 

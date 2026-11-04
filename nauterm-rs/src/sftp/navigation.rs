@@ -6,8 +6,68 @@ struct Part {
     label: String,
     path: String,
 }
+
+fn needs_verbatim_component(part: &str) -> bool {
+    let stem = part
+        .split('.')
+        .next()
+        .unwrap_or_default()
+        .trim_end_matches(' ');
+    let device = ["CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"]
+        .iter()
+        .any(|name| stem.eq_ignore_ascii_case(name));
+    let numbered_device = stem.get(..3).is_some_and(|prefix| {
+        prefix.eq_ignore_ascii_case("COM") || prefix.eq_ignore_ascii_case("LPT")
+    }) && stem.get(3..).is_some_and(|suffix| {
+        ["1", "2", "3", "4", "5", "6", "7", "8", "9", "¹", "²", "³"].contains(&suffix)
+    });
+    part.ends_with(['.', ' '])
+        || part.contains(['<', '>', ':', '"', '|', '?', '*'])
+        || device
+        || numbered_device
+}
+
+fn display_path(path: &str, windows: bool) -> String {
+    let Some(rest) = path.strip_prefix(r"\\?\").filter(|_| windows) else {
+        return path.into();
+    };
+    let unc = rest
+        .get(..4)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("UNC\\"));
+    let ordinary = if unc {
+        format!(r"\\{}", &rest[4..])
+    } else if rest.as_bytes().get(..3).is_some_and(|prefix| {
+        prefix[0].is_ascii_alphabetic() && prefix[1] == b':' && prefix[2] == b'\\'
+    }) {
+        rest.into()
+    } else {
+        // Volume GUIDs and other device namespaces have no ordinary equivalent.
+        return path.into();
+    };
+    // Keep verbatim syntax when ordinary Win32 parsing could resolve a different
+    // object. This also makes copied paths useful in applications without long-
+    // path support. The browser's filesystem/navigation identity never changes.
+    if ordinary.encode_utf16().count() >= 260
+        || ordinary
+            .split('\\')
+            .filter(|part| !part.is_empty())
+            .skip(if unc { 2 } else { 1 })
+            .any(needs_verbatim_component)
+    {
+        path.into()
+    } else {
+        ordinary
+    }
+}
+
+fn input_target(input: &str, current: &str, windows: bool) -> String {
+    if input == display_path(current, windows) {
+        current.into()
+    } else {
+        input.into()
+    }
+}
 fn parts(path: &str, windows: bool) -> Vec<Part> {
-    let path = path.trim();
     if path.is_empty() {
         return vec![];
     }
@@ -90,17 +150,29 @@ fn visible_start(widths: &[f32], available: f32) -> usize {
         .unwrap_or(widths.len().saturating_sub(1))
 }
 impl FilePane {
+    pub(super) fn display_path(&self, path: &str) -> String {
+        display_path(path, self.remote.is_none() && cfg!(windows))
+    }
+    pub(super) fn path_target(&self, input: &str) -> String {
+        input_target(
+            input,
+            &self.history.path,
+            self.remote.is_none() && cfg!(windows),
+        )
+    }
     pub(super) fn edit_path(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.editing_path = true;
+        let path = self.display_path(&self.history.path);
         self.path.update(cx, |input, cx| {
-            input.set_value(self.history.path.clone(), window, cx);
+            input.set_value(path, window, cx);
             input.focus(window, cx);
             input.select_all(window, cx);
         });
         cx.notify();
     }
     pub(super) fn breadcrumbs(&self, cx: &mut Context<Self>) -> AnyElement {
-        let parts = parts(&self.history.path, self.remote.is_none() && cfg!(windows));
+        let windows = self.remote.is_none() && cfg!(windows);
+        let parts = parts(&self.history.path, windows);
         let owner = cx.weak_entity();
         let p = self.palette();
         canvas(
@@ -206,7 +278,7 @@ impl FilePane {
                                     .text_ellipsis()
                                     .child(part.label.clone()),
                             )
-                            .raw_tooltip(part.path.clone())
+                            .raw_tooltip(display_path(&part.path, windows))
                             .on_click(move |_, window, cx| {
                                 let _ = navigate.update(cx, |pane, cx| {
                                     pane.navigate(target.clone(), Navigation::Visit, window, cx)
@@ -231,6 +303,116 @@ impl FilePane {
 mod tests {
     use super::*;
     use core::prelude::v1::test;
+
+    #[test]
+    fn local_display_paths_hide_only_ordinary_windows_prefixes() {
+        for (path, expected) in [
+            (r"\\?\C:\Users\valurno", r"C:\Users\valurno"),
+            (r"\\?\D:\用户\My files", r"D:\用户\My files"),
+            (r"\\?\UNC\server\share\目录", r"\\server\share\目录"),
+            (r"C:\Users\fixture", r"C:\Users\fixture"),
+            (r"\\server\share\目录", r"\\server\share\目录"),
+            (r"\\?\UNC\server\CON\folder", r"\\server\CON\folder"),
+        ] {
+            assert_eq!(display_path(path, true), expected);
+            assert_eq!(
+                display_path(path, false),
+                path,
+                "Remote/POSIX paths are literal"
+            );
+        }
+        for path in [
+            r"\\?\Volume{fixture}\folder",
+            r"\\.\PhysicalDrive0",
+            r"/home/用户",
+        ] {
+            assert_eq!(display_path(path, true), path);
+        }
+    }
+
+    #[test]
+    fn display_paths_keep_required_verbatim_semantics() {
+        for path in [
+            r"\\?\C:\data\trailing.",
+            r"\\?\C:\data\trailing ",
+            r"\\?\C:\data\CON.txt",
+            r"\\?\C:\data\COM1",
+            r"\\?\C:\data\LPT².log",
+            r"\\?\C:\data\file:stream",
+            r"\\?\UNC\server\share\AUX",
+        ] {
+            assert_eq!(display_path(path, true), path);
+        }
+        let long = format!(r"\\?\C:\{}\目录", "folder\\".repeat(45));
+        assert_eq!(display_path(&long, true), long);
+    }
+
+    #[test]
+    fn unchanged_display_input_keeps_the_exact_navigation_identity() {
+        for path in [
+            r"\\?\C:\Users\fixture",
+            r"\\?\UNC\server\share\目录",
+            r"\\?\C:\data\trailing ",
+        ] {
+            let displayed = display_path(path, true);
+            assert_eq!(input_target(&displayed, path, true), path);
+            let changed = format!("{displayed}\\new");
+            assert_eq!(input_target(&changed, path, true), changed);
+            assert!(
+                parts(path, true)
+                    .iter()
+                    .all(|part| !part.label.contains('?'))
+            );
+            assert_eq!(parts(path, true).last().unwrap().path, path);
+        }
+        assert_eq!(
+            parts("/tmp/with trailing space ", false)
+                .last()
+                .unwrap()
+                .path,
+            "/tmp/with trailing space "
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn canonical_local_directory_stays_usable_after_display_and_input_round_trip()
+    -> anyhow::Result<()> {
+        let fixture = tempfile::tempdir()?;
+        let directory = fixture.path().join("中文 & reports");
+        std::fs::create_dir(&directory)?;
+        std::fs::write(directory.join("report.txt"), b"fixture")?;
+        let native = directory.canonicalize()?;
+        let path = native.to_str().unwrap();
+        assert!(path.starts_with(r"\\?\"));
+        let displayed = display_path(path, true);
+        assert!(!displayed.starts_with(r"\\?\"));
+        let target = input_target(&displayed, path, true);
+        assert_eq!(std::path::Path::new(&target), native);
+        assert!(
+            file_model::list_local(std::path::Path::new(&target))?
+                .iter()
+                .any(|entry| entry.name == "report.txt"
+                    && entry
+                        .native_path
+                        .as_ref()
+                        .is_some_and(|path| path.starts_with(&native)))
+        );
+        // Verbatim paths can name directories which ordinary Win32 trimming
+        // would redirect. Display/edit and breadcrumb targets must keep them.
+        let special = native.join("trailing ");
+        std::fs::create_dir(&special)?;
+        let path = special.to_str().unwrap();
+        assert_eq!(display_path(path, true), path);
+        assert_eq!(parts(path, true).last().unwrap().path, path);
+        let target = input_target(path, path, true);
+        assert_eq!(
+            file_model::local_path(&target, fixture.path(), &native)?,
+            special
+        );
+        Ok(())
+    }
+
     #[test]
     fn breadcrumbs_keep_posix_home_drive_and_unc_navigation_targets() {
         let targets = |path, windows| {

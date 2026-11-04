@@ -7,6 +7,8 @@ use sha2::{Digest, Sha256};
 use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 
 use super::*;
+#[cfg(all(test, feature = "integration-tests"))]
+mod integration_tests;
 mod local_upload;
 
 static NEXT_STAGING_PATH_ID: AtomicU64 = AtomicU64::new(1);

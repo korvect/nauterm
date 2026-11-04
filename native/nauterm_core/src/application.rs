@@ -62,4 +62,46 @@ mod tests {
         assert!(configure_selection(&default, Client::NautermRs).is_err());
         assert_eq!(default.get(), Some(&Client::Nauterm));
     }
+
+    #[cfg(all(
+        windows,
+        feature = "integration-tests",
+        not(feature = "test-credential-store")
+    ))]
+    #[test]
+    fn windows_credential_store_keeps_client_secrets_independent(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let account = format!(
+            "nauterm-validation-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)?
+                .as_nanos()
+        );
+        let flutter = keyring::Entry::new(Client::Nauterm.keyring_service(), &account)?;
+        let rs = keyring::Entry::new(Client::NautermRs.keyring_service(), &account)?;
+        for entry in [&flutter, &rs] {
+            assert!(matches!(entry.get_password(), Err(keyring::Error::NoEntry)));
+        }
+        struct FixtureCredentials([keyring::Entry; 2]);
+        impl Drop for FixtureCredentials {
+            fn drop(&mut self) {
+                for entry in &self.0 {
+                    let _ = entry.delete_credential();
+                }
+            }
+        }
+        let entries = FixtureCredentials([flutter, rs]);
+        entries.0[0].set_password("flutter-validation-value")?;
+        entries.0[1].set_password("rs-validation-value")?;
+        assert_eq!(entries.0[0].get_password()?, "flutter-validation-value");
+        assert_eq!(entries.0[1].get_password()?, "rs-validation-value");
+        entries.0[1].delete_credential()?;
+        assert!(matches!(
+            entries.0[1].get_password(),
+            Err(keyring::Error::NoEntry)
+        ));
+        assert_eq!(entries.0[0].get_password()?, "flutter-validation-value");
+        Ok(())
+    }
 }

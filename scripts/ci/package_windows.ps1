@@ -277,36 +277,11 @@ $VcDllNames = if ($Arch -eq "arm64") {
 } else {
   @("vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll")
 }
-$VcSearchDirs = @(
-  "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Redist\MSVC\$VcArch\Microsoft.VC143.CRT",
-  "C:\Program Files\Microsoft Visual Studio\2022\Professional\VC\Redist\MSVC\$VcArch\Microsoft.VC143.CRT",
-  "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Redist\MSVC\$VcArch\Microsoft.VC143.CRT",
-  "C:\Windows\System32"
-)
-$VcCrtDir = $null
-foreach ($dir in $VcSearchDirs) {
-  if (Test-Path (Join-Path $dir "vcruntime140.dll")) {
-    $VcCrtDir = $dir
-    break
-  }
-}
-if ($null -eq $VcCrtDir) {
-  $VcCrtDir = Get-ChildItem -Path "C:\Program Files\Microsoft Visual Studio\2022\*\VC\Redist\MSVC\*\$VcArch\Microsoft.VC143.CRT" -Directory -ErrorAction SilentlyContinue |
-    Where-Object { Test-Path (Join-Path $_.FullName "vcruntime140.dll") } |
-    Select-Object -First 1 -ExpandProperty FullName
-}
-if ($null -eq $VcCrtDir) {
-  Write-Warning "VC++ runtime ($VcArch) not found on this machine; the package will rely on the target system's VC++ Redistributable being installed."
-} else {
-  foreach ($dll in $VcDllNames) {
-    $src = Join-Path $VcCrtDir $dll
-    if (Test-Path $src) {
-      Copy-Item $src (Join-Path $ReleaseDir $dll) -Force
-      Write-Host "Bundled VC++ runtime ($VcArch): $dll"
-    } else {
-      Write-Warning "VC++ runtime DLL missing in $VcCrtDir : $dll"
-    }
-  }
+. (Join-Path $PSScriptRoot 'windows_runtime.ps1')
+$VcCrtDir = Find-WindowsVcRuntime -Architecture $VcArch -DllNames $VcDllNames
+foreach ($dll in $VcDllNames) {
+  Copy-Item -LiteralPath (Join-Path $VcCrtDir $dll) -Destination (Join-Path $ReleaseDir $dll) -Force
+  Write-Host "Bundled VC++ runtime ($VcArch): $dll"
 }
 
 if ($Client -eq "flutter") {
