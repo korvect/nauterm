@@ -9,11 +9,12 @@ use std::{
     sync::LazyLock,
 };
 
-static PROMPTS: LazyLock<[Regex; 3]> = LazyLock::new(|| {
+static PROMPTS: LazyLock<[Regex; 4]> = LazyLock::new(|| {
     [
         Regex::new(r"^\[.*\s([~/][^\]]*)\][#$%>](?:\s|$)").unwrap(),
         Regex::new(r":(~|/[^$%#>]*?)\s*[#$%>](?:\s|$)").unwrap(),
         Regex::new(r"^PS\s+(.+?)>(?:\s|$)").unwrap(),
+        Regex::new(r"^([A-Za-z]:[\\/][^>]*)>(?:\s|$)").unwrap(),
     ]
 });
 static LISTING: LazyLock<Regex> = LazyLock::new(|| {
@@ -21,7 +22,6 @@ static LISTING: LazyLock<Regex> = LazyLock::new(|| {
 });
 static LINE_SUFFIX: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^(.*?):\d+(?::\d+)?$").unwrap());
-static WINDOWS_DRIVE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[A-Za-z]:[\\/]").unwrap());
 
 pub struct Context<'a> {
     pub command_directory: Option<&'a str>,
@@ -29,6 +29,7 @@ pub struct Context<'a> {
     pub current_directory: Option<&'a str>,
     pub home: Option<&'a Path>,
     pub process_directory: Option<&'a Path>,
+    pub windows_paths: bool,
 }
 pub struct LocalTarget {
     pub path: PathBuf,
@@ -92,14 +93,10 @@ fn prompt_directory(line: &str, home: Option<&Path>) -> Option<PathBuf> {
     expand(value.as_str().trim_end(), home)
 }
 fn resolve(frame: &Frame, row: u32, value: &str, context: &Context<'_>) -> Option<PathBuf> {
-    let value = if WINDOWS_DRIVE.is_match(value) {
-        value
-    } else {
-        LINE_SUFFIX
-            .captures(value)
-            .and_then(|c| c.get(1))
-            .map_or(value, |m| m.as_str())
-    };
+    let value = LINE_SUFFIX
+        .captures(value)
+        .and_then(|c| c.get(1))
+        .map_or(value, |m| m.as_str());
     let path = expand(value, context.home)?;
     if path.is_absolute() {
         return Some(path);
@@ -125,13 +122,18 @@ fn resolve(frame: &Frame, row: u32, value: &str, context: &Context<'_>) -> Optio
         .or_else(|| context.process_directory.map(Path::to_path_buf))?;
     base.is_absolute().then(|| base.join(path))
 }
-fn decode(value: &str) -> String {
+fn decode(value: &str, windows_paths: bool) -> String {
     let mut value = value.trim();
     if value.len() >= 2
         && ((value.starts_with('\'') && value.ends_with('\''))
             || (value.starts_with('"') && value.ends_with('"')))
     {
         value = &value[1..value.len() - 1];
+    }
+    // PowerShell and CMD use backslashes as path separators, including UNC
+    // prefixes. POSIX unescaping would turn C:\\Users\\name into C:Usersname.
+    if windows_paths {
+        return value.to_owned();
     }
     let mut chars = value.chars();
     let mut result = String::new();
@@ -185,7 +187,7 @@ pub fn target_at(
         let name = value.as_str().split(" -> ").next()?.trim_end();
         let (start, end) = line.cells(value.start(), value.start() + name.len());
         if (start..end).contains(&column)
-            && let Some(path) = resolve(frame, row, &decode(name), context)
+            && let Some(path) = resolve(frame, row, &decode(name, context.windows_paths), context)
             && exists(&path)
         {
             return Some(LocalTarget {
@@ -224,7 +226,7 @@ pub fn target_at(
         if raw.chars().count() > 256 {
             continue;
         }
-        let value = decode(raw);
+        let value = decode(raw, context.windows_paths);
         if value.is_empty() || value.starts_with('-') {
             continue;
         }
@@ -310,6 +312,7 @@ mod tests {
             current_directory: cwd,
             home: Some(home),
             process_directory: Some(home),
+            windows_paths: cfg!(windows),
         }
     }
     #[test]
@@ -324,11 +327,7 @@ mod tests {
         let target = target_at(&sample, (3, 0), &context, |path| path == expected).unwrap();
         assert_eq!(target.path, expected);
         assert_eq!(target.selection.start, 40 * i64::from(sample.columns));
-        for text in [
-            "'report final.txt'",
-            "report\\ final.txt",
-            "report final.txt",
-        ] {
+        for text in ["'report final.txt'", "report final.txt"] {
             let sample = frame(&[text]);
             let expected = old.join("report final.txt");
             assert_eq!(
@@ -338,6 +337,63 @@ mod tests {
                 expected
             );
         }
+        let context = Context {
+            windows_paths: false,
+            ..context
+        };
+        assert_eq!(
+            target_at(&frame(&["report\\ final.txt"]), (10, 0), &context, |path| {
+                path == old.join("report final.txt")
+            })
+            .unwrap()
+            .path,
+            old.join("report final.txt")
+        );
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_paths_keep_separators_unicode_and_line_suffixes() -> anyhow::Result<()> {
+        let root = tempfile::tempdir()?;
+        let directory = root.path().join("中文 & spaced directory");
+        std::fs::create_dir(&directory)?;
+        let file = directory.join("报告 final.txt");
+        std::fs::write(&file, b"fixture")?;
+        let context = context(None, root.path().to_str(), root.path());
+        for text in [
+            file.display().to_string(),
+            format!("\"{}\"", file.display()),
+            format!("'{}'", file.display()),
+            format!("{}:42:8", file.display()),
+            r"中文 & spaced directory\报告 final.txt".to_owned(),
+        ] {
+            let column = text[..text.find("报告").unwrap()].chars().count() as u32 + 1;
+            let target = target_at(&frame(&[&text]), (column, 0), &context, Path::exists)
+                .unwrap_or_else(|| panic!("Windows path was not detected: {text}"));
+            assert_eq!(target.path, file);
+        }
+        for prompt in [
+            format!("PS {}> dir", directory.display()),
+            format!("{}> dir", directory.display()),
+        ] {
+            let sample = frame(&[&prompt, "报告 final.txt"]);
+            assert_eq!(
+                target_at(&sample, (1, 1), &context, Path::exists)
+                    .unwrap()
+                    .path,
+                file
+            );
+        }
+        let unc = r"\\server\share\中文 folder\报告.txt";
+        assert_eq!(decode(&format!("\"{unc}\""), true), unc);
+        let expected = PathBuf::from(unc);
+        assert_eq!(
+            target_at(&frame(&[unc]), (3, 0), &context, |path| path == expected)
+                .unwrap()
+                .path,
+            expected
+        );
         Ok(())
     }
     #[test]

@@ -181,6 +181,11 @@ jobs:
         shell: pwsh
         run: ./scripts/ci/setup_windows_openssl.ps1 -Arch "${{ matrix.arch }}"
 
+      - name: Verify Windows runtime architecture selection
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/tests/check_windows_runtime.ps1
+
       - name: Install pinned Rust toolchain
         shell: bash
         run: |
@@ -210,6 +215,10 @@ jobs:
 
       - name: Build the GPUI executable
         run: cargo build -p nauterm-rs --locked
+
+      - name: Exercise Windows shell protocols on real ConPTY
+        if: runner.os == 'Windows'
+        run: python scripts/tests/check_windows_shell_protocol.py --build-cmd --all-powershell
 
       - name: Assemble the macOS GPUI bundle
         if: runner.os == 'macOS'

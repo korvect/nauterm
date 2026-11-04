@@ -410,7 +410,7 @@ impl FilePane {
             ),
             cx.subscribe_in(&path, window, |this, _, event: &InputEvent, window, cx| {
                 if matches!(event, InputEvent::PressEnter { .. }) {
-                    let target = this.path.read(cx).value().to_string();
+                    let target = this.path_target(&this.path.read(cx).value());
                     this.editing_path = false;
                     this.focus.focus(window, cx);
                     this.navigate(target, Navigation::Visit, window, cx);
@@ -1212,7 +1212,7 @@ impl FilePane {
                                 this.selection
                                     .paths
                                     .iter()
-                                    .cloned()
+                                    .map(|path| this.display_path(path))
                                     .collect::<Vec<_>>()
                                     .join("\n"),
                             ))

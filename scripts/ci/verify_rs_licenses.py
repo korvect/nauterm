@@ -12,11 +12,12 @@ TARGETS = (
     "aarch64-pc-windows-msvc", "x86_64-pc-windows-msvc",
     "aarch64-unknown-linux-gnu", "x86_64-unknown-linux-gnu",
 )
-PRIVATE_PACKAGES = {"nauterm_core", "nauterm-rs"}
+# Workspace-owned code ships under the root LICENSE, not third-party notices.
+PRIVATE_PACKAGES = {"nauterm_core", "nauterm_cmd_integration", "nauterm-rs"}
 
 
 def verify(project: Path, targets: list, offline: bool) -> None:
-    notices = json.loads((project / "nauterm-rs/assets/licenses/nauterm-rs-rust.json").read_text())
+    notices = json.loads((project / "nauterm-rs/assets/licenses/nauterm-rs-rust.json").read_text(encoding="utf-8"))
     included = {
         (package["name"], package["version"])
         for license_group in notices["licenses"]
@@ -30,7 +31,7 @@ def verify(project: Path, targets: list, offline: bool) -> None:
         ]
         if offline:
             command.append("--offline")
-        output = subprocess.run(command, cwd=project, check=True, capture_output=True, text=True).stdout
+        output = subprocess.run(command, cwd=project, check=True, capture_output=True, text=True, encoding="utf-8").stdout
         for line in output.splitlines():
             package = re.match(r"^([A-Za-z0-9_-]+) v([^\s]+)", line)
             if package and package[1] not in PRIVATE_PACKAGES:

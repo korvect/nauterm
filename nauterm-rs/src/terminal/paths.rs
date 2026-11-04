@@ -1,6 +1,6 @@
 use super::*;
 use crate::{
-    path_completion::{Entry, Query},
+    path_completion::{Entry, Query, WindowsShell},
     path_reader::{Cancellation, Source},
 };
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -93,7 +93,18 @@ impl Terminal {
             self.paths.dismissed = None;
             let cwd = self.working_directory.value();
             let (cwd, home, local) = self.paths.source.context(cwd.as_deref())?;
-            let query = Query::parse(&input, &cwd, home, local)?;
+            let windows_shell = if cfg!(windows) && local {
+                self.local_shell()
+                    .as_deref()
+                    .and_then(WindowsShell::from_path)
+            } else {
+                None
+            };
+            let query = if let Some(shell) = windows_shell {
+                Query::parse_windows(&input, &cwd, home, shell)?
+            } else {
+                Query::parse(&input, &cwd, home, local)?
+            };
             let key = Key {
                 cwd,
                 directory: query.directory.clone(),

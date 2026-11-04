@@ -104,19 +104,28 @@ fn control(
         .cursor(CursorStyle::PointingHand)
         .text_color(foreground)
         .when(cfg!(target_os = "windows"), |button| {
-            button.window_control_area(area)
+            // GPUI checks native areas in paint order, with the parent's Drag
+            // area first. Exclude that ancestor from hit testing at the button
+            // so Windows receives Min/Max/Close instead of a caption click.
+            button.window_control_area(area).occlude()
         })
-        .on_mouse_down(MouseButton::Left, |_, window, cx| {
-            // Consume the press before the surrounding titlebar starts a move.
-            // Windows also forwards non-client presses through GPUI, so handle
-            // both platforms here instead of performing the native action twice.
-            window.prevent_default();
-            cx.stop_propagation();
-        })
-        .on_click(move |event, window, cx| {
-            cx.stop_propagation();
-            action(event, window, cx);
-        })
+        .when(
+            !cfg!(target_os = "windows") || area == WindowControlArea::Close,
+            |button| {
+                // Windows owns Min/Max non-client clicks (including restore and
+                // Snap Layouts). Only Close needs our exit confirmation. Linux's
+                // client-side controls own all three actions.
+                button
+                    .on_mouse_down(MouseButton::Left, |_, window, cx| {
+                        window.prevent_default();
+                        cx.stop_propagation();
+                    })
+                    .on_click(move |event, window, cx| {
+                        cx.stop_propagation();
+                        action(event, window, cx);
+                    })
+            },
+        )
         .child(
             div()
                 .size(px(26.))

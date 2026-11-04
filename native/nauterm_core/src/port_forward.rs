@@ -285,6 +285,9 @@ async fn run_local_forward(
             set_status(&status, "stopped", None, bound_port);
             return Ok(());
         }
+        if handle.is_closed() {
+            return Err("SSH connection closed while local forwarding was active".to_owned());
+        }
         match tokio::time::timeout(FORWARD_POLL_INTERVAL, listener.accept()).await {
             Ok(Ok((stream, origin))) => {
                 if handle.is_closed() {
@@ -335,6 +338,9 @@ async fn run_dynamic_forward(
             set_status(&status, "stopped", None, bound_port);
             return Ok(());
         }
+        if handle.is_closed() {
+            return Err("SSH connection closed while SOCKS forwarding was active".to_owned());
+        }
         match tokio::time::timeout(FORWARD_POLL_INTERVAL, listener.accept()).await {
             Ok(Ok((stream, origin))) => {
                 if handle.is_closed() {
@@ -378,6 +384,9 @@ async fn run_remote_forward(
 
     while !stop.load(Ordering::Acquire) && !handle.is_closed() {
         tokio::time::sleep(FORWARD_POLL_INTERVAL).await;
+    }
+    if !stop.load(Ordering::Acquire) && handle.is_closed() {
+        return Err("SSH connection closed while remote forwarding was active".to_owned());
     }
     let _ = handle
         .cancel_tcpip_forward(config.bind_address, bound_port as u32)
@@ -647,6 +656,9 @@ fn adjust_active_connections(status: &Arc<Mutex<PortForwardStatus>>, delta: i32)
         };
     }
 }
+
+#[cfg(all(test, feature = "integration-tests"))]
+mod integration_tests;
 
 #[cfg(all(test, feature = "integration-tests"))]
 mod tests {

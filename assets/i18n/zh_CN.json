@@ -1128,6 +1128,7 @@
   "rs.ui.copy.noPasswordReferenceCreated": "未创建密码引用。",
   "rs.ui.copy.noProviderConfirmedUpdateYet": "尚无提供商确认更新成功。",
   "rs.ui.copy.noRemoteHostsExport": "没有可导出的远程主机。",
+  "rs.ui.copy.noRecommendedTextApplicationsFound": "未找到推荐的文本打开应用",
   "rs.ui.copy.noResults": "无结果",
   "rs.ui.copy.noSerialDevicesFoundEnterPath": "未找到串口设备，请手动输入路径。",
   "rs.ui.copy.noShellHistoryYet": "暂无命令历史",

@@ -195,7 +195,13 @@ fn parent_entry(path: String) -> Entry {
     }
 }
 pub fn local_path(input: &str, home: &Path, current: &Path) -> Result<PathBuf> {
-    let input = input.trim();
+    // Native Windows verbatim paths preserve literal trailing spaces/dots.
+    // Navigation from a listed entry must not reinterpret its exact name.
+    let input = if cfg!(windows) && input.starts_with(r"\\?\") {
+        input
+    } else {
+        input.trim()
+    };
     ensure!(!input.contains('\0'), "Invalid directory path");
     let path = if input.is_empty() || input == "~" {
         home.to_owned()

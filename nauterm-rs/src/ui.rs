@@ -2605,15 +2605,20 @@ impl Nauterm {
             .pl(px(if cfg!(target_os = "macos") { 78. } else { 8. }))
             .bg(painted_bar)
             .text_color(foreground)
-            .on_mouse_down(MouseButton::Left, |event, window, cx| {
-                // Buttons consume their own presses. All remaining chrome,
-                // including gaps between tabs, shares native drag/zoom behavior.
-                if event.click_count == 2 {
-                    window.zoom_window();
-                } else {
-                    window.start_window_move();
-                }
-                cx.stop_propagation();
+            .when(cfg!(target_os = "windows"), |bar| {
+                bar.window_control_area(WindowControlArea::Drag)
+            })
+            .when(!cfg!(target_os = "windows"), |bar| {
+                bar.on_mouse_down(MouseButton::Left, |event, window, cx| {
+                    // Buttons consume their own presses. All remaining chrome,
+                    // including gaps between tabs, shares native drag/zoom behavior.
+                    if event.click_count == 2 {
+                        window.zoom_window();
+                    } else {
+                        window.start_window_move();
+                    }
+                    cx.stop_propagation();
+                })
             })
             .child(
                 div()

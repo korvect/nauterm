@@ -18,6 +18,7 @@ pub(crate) enum Kind {
     Bash,
     Fish,
     PowerShell,
+    Cmd,
 }
 impl Kind {
     fn from_path(path: &str) -> Option<Self> {
@@ -27,6 +28,7 @@ impl Kind {
             "bash" | "rbash" => Some(Self::Bash),
             "fish" => Some(Self::Fish),
             "pwsh" | "powershell" => Some(Self::PowerShell),
+            "cmd" => Some(Self::Cmd),
             _ => None,
         }
     }
@@ -42,6 +44,7 @@ impl Integration {
             // .NET's Unix console decoder can map Ctrl+] to a different key.
             // An alphabetic chord is stable on both PowerShell platforms.
             Kind::PowerShell => b"\x18\x15",
+            Kind::Cmd => b"\x18",
             _ => b"\x18\x1d",
         }
     }
@@ -51,6 +54,9 @@ impl Integration {
         }
         let path = path?;
         let kind = Kind::from_path(path)?;
+        if kind == Kind::Cmd && !cfg!(windows) {
+            return None;
+        }
         let name = path.replace('\\', "/").to_ascii_lowercase();
         if !matches!(
             name.rsplit('/').next()?,
@@ -64,6 +70,8 @@ impl Integration {
                 | "pwsh.exe"
                 | "powershell"
                 | "powershell.exe"
+                | "cmd"
+                | "cmd.exe"
         ) {
             return None;
         }
@@ -90,7 +98,9 @@ impl Integration {
             Kind::Zsh => (include_str!("shell/zsh.sh"), "$$"),
             Kind::Bash => (include_str!("shell/bash.sh"), "$BASHPID"),
             Kind::Fish => (include_str!("shell/fish.sh"), "$fish_pid"),
-            Kind::PowerShell => unreachable!("PowerShell uses its own startup syntax"),
+            Kind::PowerShell | Kind::Cmd => {
+                unreachable!("Windows shells use native startup integration")
+            }
         };
         let ready = format!(
             "printf '\\033]777;nauterm-integration-ready={}\\007'; printf '\\r\\033[2K'",
@@ -200,6 +210,9 @@ pub async fn run(target: CommandTarget, command: String, cancel: Cancel) -> Resu
                 .shell
                 .as_deref()
                 .and_then(Kind::from_path)
+                // The CMD console hook can only be installed by the native
+                // launcher in a local process that Nauterm owns.
+                .filter(|kind| *kind != Kind::Cmd)
                 .map(|kind| Integration {
                     kind,
                     token: uuid::Uuid::new_v4().simple().to_string(),
@@ -243,10 +256,27 @@ pub async fn run(target: CommandTarget, command: String, cancel: Cancel) -> Resu
             )
             .await?;
         }
-        parser = Some(Parser::new(
-            &integration.token,
-            integration.kind == Kind::Fish,
-        ));
+        if integration.kind == Kind::Cmd {
+            // Native CMD returns completion after each physical command line.
+            // Tell its private console hook how many lines this submission
+            // contains so multiline AI input completes only at the final
+            // prompt. The header is read without echo and is never executed.
+            let normalized = command.replace("\r\n", "\n").replace('\r', "\n");
+            let lines = normalized.split_terminator('\n').count().max(1);
+            ensure!(lines <= 65536, "CMD command has too many lines.");
+            target.send(
+                format!("{lines};{}\x19", integration.token).as_bytes(),
+                &cancel,
+            )?;
+            marker(
+                &target,
+                format!("\x1b]777;nauterm-command-ready={}\x07", integration.token).as_bytes(),
+            )
+            .await?;
+        }
+        let mut capture = Parser::new(&integration.token, integration.kind == Kind::Fish);
+        capture.cmd = integration.kind == Kind::Cmd;
+        parser = Some(capture);
         target.submit(&command, &cancel)?;
         submitted = true;
         loop {
@@ -262,6 +292,14 @@ pub async fn run(target: CommandTarget, command: String, cancel: Cancel) -> Resu
                     tracked: true,
                 });
             }
+            ensure!(
+                find(
+                    &parser.pending,
+                    format!("\x1b]777;nauterm-integration-error={}", integration.token).as_bytes()
+                )
+                .is_none(),
+                "The terminal could not determine the CMD command exit status."
+            );
         }
     })
     .await;
@@ -323,6 +361,7 @@ struct Parser {
     head: Vec<u8>,
     scan: usize,
     fish: bool,
+    cmd: bool,
 }
 impl Parser {
     fn new(token: &str, fish: bool) -> Self {
@@ -332,6 +371,7 @@ impl Parser {
             head: vec![],
             scan: 0,
             fish,
+            cmd: false,
         }
     }
     fn push(&mut self, bytes: &[u8]) -> Option<(Vec<u8>, i64)> {
@@ -410,6 +450,9 @@ impl Parser {
         None
     }
     fn clean(&self, bytes: &[u8], command: &str) -> String {
+        if self.cmd {
+            return clean_output(&cmd_command_output(bytes), None);
+        }
         // Fish's CommandStarted boundary already excludes input echo.
         clean_output(bytes, (!self.fish).then_some(command))
     }
@@ -418,6 +461,41 @@ impl Parser {
         bytes.extend_from_slice(&self.pending);
         bytes
     }
+}
+
+// Native CMD brackets the output of every command, after cooked-input echo
+// and before the following prompt. Use those regions for multi-line AI input
+// so prompts and each line's echo do not become the AI tool's output.
+fn cmd_command_output(bytes: &[u8]) -> Vec<u8> {
+    let mut output = Vec::new();
+    let mut scan = 0;
+    let mut capture = false;
+    let prefix = b"\x1b]133;";
+    while let Some(relative) = find(&bytes[scan..], prefix) {
+        let start = scan + relative;
+        if capture {
+            output.extend_from_slice(&bytes[scan..start]);
+        }
+        let payload = &bytes[start + prefix.len()..];
+        let bell = payload.iter().position(|byte| *byte == 7);
+        let st = find(payload, b"\x1b\\");
+        let (end, terminator) = match (bell, st) {
+            (Some(a), Some(b)) if a <= b => (a, 1),
+            (Some(a), None) => (a, 1),
+            (_, Some(b)) => (b, 2),
+            _ => return output,
+        };
+        if payload[..end].starts_with(b"C;") {
+            capture = true;
+        } else if payload[..end].starts_with(b"D;") {
+            capture = false;
+        }
+        scan = start + prefix.len() + end + terminator;
+    }
+    if capture {
+        output.extend_from_slice(&bytes[scan..]);
+    }
+    output
 }
 impl Drop for Parser {
     fn drop(&mut self) {
@@ -490,6 +568,20 @@ fn echo_end(output: &str, command: &str, whitespace: bool) -> Option<usize> {
 mod tests {
     use super::*;
     #[test]
+    fn cmd_multiline_capture_excludes_each_input_echo_and_prompt() {
+        let raw = b"echo FIRST\r\n\x1b]133;C;aid=42\x07FIRST\r\n\x1b]4545;CommandExited;42;0\x07\x1b]133;D;0;aid=42\x07C:\\work>echo SECOND\r\n\x1b]133;C;aid=42\x07SECOND\r\n\x1b]133;D;0;aid=42\x07C:\\work>";
+        let mut parser = Parser::new("test-token", false);
+        parser.cmd = true;
+        assert_eq!(
+            parser.clean(raw, "echo FIRST\necho SECOND"),
+            "FIRST\nSECOND"
+        );
+        assert_eq!(
+            parser.clean(b"echo START\r\n\x1b]133;C;aid=42\x07partial", "echo START"),
+            "partial"
+        );
+    }
+    #[test]
     fn powershell_sessions_use_their_own_setup_syntax_and_in_process_tracking() {
         for path in [
             "pwsh",
@@ -505,7 +597,13 @@ mod tests {
             assert!(!setup.contains("printf"));
         }
         assert!(Integration::local(Some("powershell.exe"), false).is_none());
-        assert!(Integration::local(Some("cmd.exe"), true).is_none());
+        if cfg!(windows) {
+            let cmd = Integration::local(Some("cmd.exe"), true).unwrap();
+            assert_eq!(cmd.kind, Kind::Cmd);
+            assert_eq!(cmd.clean_line_keys(), b"\x18");
+        } else {
+            assert!(Integration::local(Some("cmd.exe"), true).is_none());
+        }
     }
     #[test]
     fn completion_markers_and_utf8_survive_every_boundary_and_both_terminators() {

@@ -1,22 +1,35 @@
 #[cfg(unix)]
 use std::ffi::CString;
+#[cfg(unix)]
 use std::fs::{self, File};
-use std::io::{self, ErrorKind, Read, Write};
+use std::io::{self, ErrorKind};
+#[cfg(unix)]
+use std::io::{Read, Write};
 #[cfg(unix)]
 use std::os::fd::{AsRawFd, FromRawFd};
+#[cfg(unix)]
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
+use std::sync::mpsc::Sender;
+#[cfg(unix)]
+use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::sync::{Arc, Mutex};
-use std::thread::{self, JoinHandle};
+#[cfg(unix)]
+use std::thread;
+use std::thread::JoinHandle;
+#[cfg(unix)]
 use std::time::Duration;
 
 use serde::Serialize;
 
-use crate::output_queue::{append_output, clear_output, drain_output_chunk};
+#[cfg(unix)]
+use crate::output_queue::append_output;
+use crate::output_queue::{clear_output, drain_output_chunk};
 use crate::pty::WakeupCallback;
 
+#[cfg(unix)]
 const SERIAL_READ_BUFFER_SIZE: usize = 16 * 1024;
+#[cfg(unix)]
 const SERIAL_POLL_INTERVAL: Duration = Duration::from_millis(8);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -115,6 +128,8 @@ pub struct SerialPump {
     pub has_more: bool,
 }
 
+// The serial worker is currently available only on Unix.
+#[cfg_attr(not(unix), allow(dead_code))]
 enum SerialCommand {
     Input(Vec<u8>),
     Shutdown,

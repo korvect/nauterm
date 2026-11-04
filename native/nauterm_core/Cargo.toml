@@ -65,6 +65,7 @@ zeroize.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"] }
+nauterm_cmd_integration = { path = "../nauterm_cmd_integration" }
 
 [dev-dependencies]
 tempfile.workspace = true

@@ -1,5 +1,6 @@
-//! Native application-launcher file chooser. The task owns its pending dialog,
-//! so cancel/navigation drops it before any application can be launched.
+//! Native application-launcher file chooser. Cancellation returns no selection;
+//! dropping the receiving task discards any result before an app can launch.
+//! On Windows rfd owns the dialog's STA thread until the native dialog closes.
 use super::*;
 use std::{future::Future, pin::Pin};
 

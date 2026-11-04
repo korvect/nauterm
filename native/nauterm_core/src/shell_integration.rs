@@ -58,46 +58,6 @@ fn directory_for_platform(uri: &[u8], windows: bool) -> Option<String> {
     Some(path)
 }
 
-#[cfg(test)]
-mod protocol_tests {
-    use super::*;
-    #[test]
-    fn file_uris_preserve_windows_drives_unc_paths_unicode_and_literal_percent() {
-        assert_eq!(
-            directory_for_platform(
-                b"file:///C:/Users/%E7%94%A8%E6%88%B7/My%20Project%23100%25",
-                true
-            )
-            .as_deref(),
-            Some("C:/Users/用户/My Project#100%")
-        );
-        assert_eq!(
-            directory_for_platform(b"file://server/share/Project%20Files", true).as_deref(),
-            Some("//server/share/Project Files")
-        );
-        assert_eq!(
-            directory_for_platform(b"file://localhost/D:/work", true).as_deref(),
-            Some("D:/work")
-        );
-        assert_eq!(
-            directory_for_platform(b"file://localhost/home/user/work", false).as_deref(),
-            Some("/home/user/work")
-        );
-        assert!(directory_for_platform(b"https://example.invalid/work", true).is_none());
-        assert!(directory_for_platform(b"file:///C:/bad%07path", true).is_none());
-        assert!(directory_for_platform(b"file:///bad%ff", false).is_none());
-    }
-    #[test]
-    fn powershell_setup_stays_in_the_current_shell_and_rejects_non_tokens() {
-        let command = powershell_setup("synthetic-token_123").unwrap();
-        assert!(command.contains("nauterm-integration-ready=synthetic-token_123"));
-        assert!(command.contains(". ([scriptblock]::Create"));
-        assert!(!command.contains("-EncodedCommand"));
-        assert!(powershell_setup("'; unwanted").is_none());
-        assert!(powershell_setup("").is_none());
-    }
-}
-
 pub fn write_resources(data_directory: &Path) -> io::Result<PathBuf> {
     let root = data_directory.join("shell-integration");
     write_if_changed(&root.join("nauterm.zsh"), crate::pty::ZSH_INTEGRATION)?;
@@ -255,5 +215,45 @@ mod tests {
             "user-owned fish configuration\n"
         );
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod protocol_tests {
+    use super::*;
+    #[test]
+    fn file_uris_preserve_windows_drives_unc_paths_unicode_and_literal_percent() {
+        assert_eq!(
+            directory_for_platform(
+                b"file:///C:/Users/%E7%94%A8%E6%88%B7/My%20Project%23100%25",
+                true
+            )
+            .as_deref(),
+            Some("C:/Users/用户/My Project#100%")
+        );
+        assert_eq!(
+            directory_for_platform(b"file://server/share/Project%20Files", true).as_deref(),
+            Some("//server/share/Project Files")
+        );
+        assert_eq!(
+            directory_for_platform(b"file://localhost/D:/work", true).as_deref(),
+            Some("D:/work")
+        );
+        assert_eq!(
+            directory_for_platform(b"file://localhost/home/user/work", false).as_deref(),
+            Some("/home/user/work")
+        );
+        assert!(directory_for_platform(b"https://example.invalid/work", true).is_none());
+        assert!(directory_for_platform(b"file:///C:/bad%07path", true).is_none());
+        assert!(directory_for_platform(b"file:///bad%ff", false).is_none());
+    }
+    #[test]
+    fn powershell_setup_stays_in_the_current_shell_and_rejects_non_tokens() {
+        let command = powershell_setup("synthetic-token_123").unwrap();
+        assert!(command.contains("nauterm-integration-ready=synthetic-token_123"));
+        assert!(command.contains(". ([scriptblock]::Create"));
+        assert!(!command.contains("-EncodedCommand"));
+        assert!(powershell_setup("'; unwanted").is_none());
+        assert!(powershell_setup("").is_none());
     }
 }

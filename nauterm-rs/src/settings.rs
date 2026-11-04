@@ -197,6 +197,7 @@ pub struct Settings {
     validation_error: Option<String>,
     editors: Entity<editors::EditorSettings>,
     editor_detection: Option<Task<()>>,
+    editor_extensions: Option<Vec<String>>,
     editor_generation: u64,
     _editor_events: Subscription,
     sftp: Entity<sftp::SftpPreferences>,
@@ -489,6 +490,9 @@ impl Settings {
             },
         );
         let search = Self::search_state(values.general.language, window, cx);
+        // Start discovery while the first settings page is usable, before the
+        // user reaches SFTP. The saved selection is already in its control.
+        cx.defer_in(window, |this, window, cx| this.detect_editors(window, cx));
         Self {
             values,
             language,
@@ -525,6 +529,7 @@ impl Settings {
             validation_error: None,
             editors,
             editor_detection: None,
+            editor_extensions: None,
             editor_generation: 0,
             _editor_events: editor_events,
             sftp,
@@ -555,9 +560,21 @@ impl Settings {
         cx.notify();
     }
     fn detect_editors(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        // Windows editor discovery always uses recommended .txt handlers;
+        // changing the file-action extensions does not invalidate that catalog.
+        let extensions = if cfg!(target_os = "windows") {
+            vec!["txt".to_owned()]
+        } else {
+            self.values.sftp_editors.text_extensions.clone()
+        };
+        if self.editor_extensions.as_ref() == Some(&extensions)
+            && (self.editor_detection.is_some() || self.editors.read(cx).catalog_ready())
+        {
+            return;
+        }
         self.editor_generation = self.editor_generation.wrapping_add(1);
         let generation = self.editor_generation;
-        let extensions = self.values.sftp_editors.text_extensions.clone();
+        self.editor_extensions = Some(extensions.clone());
         let configured = self.values.sftp_editors.external_editor.clone();
         self.editors.update(cx, |editors, cx| editors.detecting(cx));
         self.editor_detection = Some(cx.spawn_in(window, async move |this, cx| {

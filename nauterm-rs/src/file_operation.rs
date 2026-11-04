@@ -69,13 +69,30 @@ impl Operation {
                 _ => None,
             }
         }
+        fn local_overlaps(a: &str, b: &str) -> bool {
+            #[cfg(target_os = "windows")]
+            {
+                fn normalized(path: &str) -> String {
+                    let path = path.replace('\\', "/").to_ascii_lowercase();
+                    let path = if let Some(unc) = path.strip_prefix("//?/unc/") {
+                        format!("//{unc}")
+                    } else {
+                        path.strip_prefix("//?/").unwrap_or(&path).to_owned()
+                    };
+                    path.trim_end_matches('/').to_owned()
+                }
+                overlaps(&normalized(a), &normalized(b))
+            }
+            #[cfg(not(target_os = "windows"))]
+            overlaps(a, b)
+        }
         (same_server
             && remote(self)
                 .iter()
                 .any(|a| remote(other).iter().any(|b| overlaps(a, b))))
             || local(self)
                 .zip(local(other))
-                .is_some_and(|(a, b)| overlaps(a, b))
+                .is_some_and(|(a, b)| local_overlaps(a, b))
     }
     pub fn label(&self) -> &'static str {
         match self {
@@ -228,6 +245,50 @@ pub fn destination(input: &str, base: &str) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn native_local_tree_conflicts_preserve_drive_unc_and_verbatim_path_semantics() {
+        let upload = |path: &str| Operation::Upload {
+            remote_path: "/source".into(),
+            local_path: path.into(),
+            replace_existing: false,
+            transfer_threads: 8,
+        };
+        let download = |path: &str| Operation::Download {
+            remote_path: "/target".into(),
+            local_path: path.into(),
+            transfer_threads: 8,
+        };
+        for (parent, child) in [
+            (
+                r"C:\Data\中文 & folder",
+                r"c:/data/中文 & folder/report.txt",
+            ),
+            (r"\\server\share\目录", r"\\SERVER\share\目录\report.txt"),
+            (r"\\?\C:\Data", r"C:\Data\report.txt"),
+            (
+                r"\\?\UNC\server\share\目录",
+                r"\\server\share\目录\report.txt",
+            ),
+        ] {
+            assert!(upload(parent).conflicts(&download(child), false));
+            assert!(download(child).conflicts(&upload(parent), false));
+        }
+        assert!(!upload(r"C:\Data").conflicts(&download(r"D:\Data\file"), false));
+        assert!(!upload(r"C:\Data").conflicts(&download(r"C:\Database\file"), false));
+        assert!(!upload(r"\\server\share\a").conflicts(&download(r"\\server\other\a\b"), false));
+        assert!(
+            !Operation::Delete {
+                target_path: "/Data".into()
+            }
+            .conflicts(
+                &Operation::Delete {
+                    target_path: "/data/child".into()
+                },
+                true
+            )
+        );
+    }
     #[test]
     fn overlapping_remote_trees_and_shared_local_targets_are_serialized() {
         let deletion = Operation::Delete {

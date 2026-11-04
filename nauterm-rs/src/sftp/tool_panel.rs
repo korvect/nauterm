@@ -301,9 +301,9 @@ impl FilePane {
                             .font_family("monospace")
                             .text_size(px(11.5))
                             .line_height(px(18.))
-                            .child(self.history.path.clone()),
+                            .child(self.display_path(&self.history.path)),
                     )
-                    .raw_tooltip(self.history.path.clone())
+                    .raw_tooltip(self.display_path(&self.history.path))
                     .on_click(cx.listener(|this, _, window, cx| this.edit_path(window, cx))),
             )
             .children(self.favorite_controls(cx))

@@ -1128,6 +1128,7 @@
   "rs.ui.copy.noPasswordReferenceCreated": "No password reference was created.",
   "rs.ui.copy.noProviderConfirmedUpdateYet": "No provider has confirmed an update yet.",
   "rs.ui.copy.noRemoteHostsExport": "No remote hosts to export.",
+  "rs.ui.copy.noRecommendedTextApplicationsFound": "No recommended text applications found",
   "rs.ui.copy.noResults": "No results",
   "rs.ui.copy.noSerialDevicesFoundEnterPath": "No serial devices found. Enter a path manually.",
   "rs.ui.copy.noShellHistoryYet": "No shell history yet",

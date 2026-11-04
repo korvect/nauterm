@@ -57,7 +57,7 @@ impl Editor {
                             512
                         })
                     && !identifier.chars().any(char::is_control)
-                    && path.is_absolute()
+                    && crate::external_application::application_location_valid(identifier, path)
                     && path.to_str().is_some()
                     && !path.as_os_str().to_string_lossy().contains('\0'),
                 "Invalid application editor."

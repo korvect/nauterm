@@ -132,8 +132,11 @@ impl Nauterm {
             crate::lifecycle::prepare_shutdown().await;
             let _ = this.update_in(cx, |_, window, cx| match action {
                 ExitAction::Restart => cx.restart(),
-                ExitAction::Window => window.remove_window(),
-                ExitAction::Quit => cx.quit(),
+                // Windows/Linux main-window close is an application exit even
+                // when a settings or provider dialog is still open. macOS
+                // keeps its separate window-close lifecycle above.
+                ExitAction::Window if cfg!(target_os = "macos") => window.remove_window(),
+                ExitAction::Window | ExitAction::Quit => cx.quit(),
                 ExitAction::Settings => {}
             });
             if action == ExitAction::Restart {

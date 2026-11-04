@@ -86,11 +86,13 @@ try {
   Invoke-Check -Name "toolchain" -Program "rustup" -Arguments @("toolchain", "install", $toolchain, "--profile", "minimal", "--component", "clippy", "--component", "rustfmt")
   Invoke-Check -Name "target" -Program "rustup" -Arguments @("target", "add", $target, "--toolchain", $toolchain)
   Invoke-Check -Name "format" -Program "cargo" -Arguments @("+$toolchain", "fmt", "--all", "--check")
+  Invoke-Check -Name "runtime-selection" -Program "pwsh" -Arguments @("-NoProfile", "-File", "scripts/tests/check_windows_runtime.ps1")
   Invoke-Check -Name "clippy" -Program "cargo" -Arguments @("+$toolchain", "clippy", "-p", "nauterm_core", "-p", "nauterm-rs", "-p", "nauterm_cmd_integration", "--all-targets", "--target", $target, "--locked", "--", "-D", "warnings")
   Invoke-Check -Name "rs-tests" -Program "cargo" -Arguments @("+$toolchain", "test", "-p", "nauterm-rs", "--target", $target, "--locked")
   Invoke-Check -Name "powershell-tests" -Program "cargo" -Arguments @("+$toolchain", "test", "-p", "nauterm_core", "--features", "terminal-ghostty", "--target", $target, "--locked", "pty::powershell")
   Invoke-Check -Name "cmd-protocol-tests" -Program "cargo" -Arguments @("+$toolchain", "test", "-p", "nauterm_cmd_integration", "--target", $target, "--locked")
   Invoke-Check -Name "build" -Program "cargo" -Arguments @("+$toolchain", "build", "-p", "nauterm-rs", "--target", $target, "--locked")
+  Invoke-Check -Name "conpty-shell-protocol" -Program "python" -Arguments @("scripts/tests/check_windows_shell_protocol.py", "--build-cmd", "--target", $target, "--all-powershell")
 
   $metadataText = & cargo "+$toolchain" metadata --format-version 1 --no-deps --locked
   if ($LASTEXITCODE -ne 0) { throw "Unable to read Cargo target directory." }

@@ -2732,9 +2732,9 @@ mod tests {
     }
 
     use super::*;
-    #[cfg(feature = "integration-tests")]
+    #[cfg(all(feature = "integration-tests", not(windows)))]
     use std::thread;
-    #[cfg(feature = "integration-tests")]
+    #[cfg(all(feature = "integration-tests", not(windows)))]
     use std::time::{Duration, Instant};
 
     #[test]

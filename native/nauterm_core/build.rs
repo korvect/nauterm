@@ -257,7 +257,17 @@ fn stage_windows_runtime_dll(dll: &Path, cargo_out_dir: &Path) {
             )
         });
         let destination = destination_dir.join("ghostty-vt.dll");
-        std::fs::copy(dll, &destination).unwrap_or_else(|error| {
+        // Windows locks a loaded DLL against replacement. A running debug
+        // client must not prevent `cargo test` or Clippy from staging the
+        // identical pinned runtime in another feature configuration.
+        if std::fs::read(&destination)
+            .ok()
+            .zip(std::fs::read(dll).ok())
+            .is_some_and(|(existing, source)| existing == source)
+        {
+            continue;
+        }
+        replace_windows_runtime(dll, &destination).unwrap_or_else(|error| {
             panic!(
                 "failed to stage {} at {}: {error}",
                 dll.display(),
@@ -265,4 +275,34 @@ fn stage_windows_runtime_dll(dll: &Path, cargo_out_dir: &Path) {
             )
         });
     }
+}
+
+fn replace_windows_runtime(source: &Path, destination: &Path) -> std::io::Result<()> {
+    // Windows permits renaming a mapped DLL but prevents writing its bytes.
+    // Publish a complete file so new child processes get this build's DLL,
+    // while an already-running application retains its original mapping.
+    let id = std::process::id();
+    let temporary = destination.with_file_name(format!(".ghostty-vt-{id}.new"));
+    let previous = destination.with_file_name(format!(".ghostty-vt-{id}.old"));
+    std::fs::copy(source, &temporary)?;
+    let had_previous = destination.exists();
+    if had_previous {
+        if let Err(error) = std::fs::rename(destination, &previous) {
+            let _ = std::fs::remove_file(&temporary);
+            return Err(error);
+        }
+    }
+    if let Err(error) = std::fs::rename(&temporary, destination) {
+        if had_previous {
+            let _ = std::fs::rename(&previous, destination);
+        }
+        let _ = std::fs::remove_file(&temporary);
+        return Err(error);
+    }
+    if had_previous {
+        // A loaded mapping can keep the old owned build artifact alive until
+        // its process exits. Never remove or overwrite the mapped file's bytes.
+        let _ = std::fs::remove_file(previous);
+    }
+    Ok(())
 }

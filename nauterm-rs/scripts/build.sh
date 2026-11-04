@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 repository="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*)
+    MSYS2_ARG_CONV_EXCL='*' powershell.exe -NoProfile -ExecutionPolicy Bypass \
+      -File "$(cygpath -w "$repository/nauterm-rs/scripts/windows.ps1")" -Mode Build "$@"
+    exit $?
+    ;;
+esac
 work="$(mktemp -d "${TMPDIR:-/tmp}/nauterm-rs-build.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 cargo build --manifest-path "$repository/Cargo.toml" -p nauterm-rs --locked --message-format=json-render-diagnostics "$@" > "$work/build.jsonl"
