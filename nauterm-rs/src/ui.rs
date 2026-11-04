@@ -63,6 +63,9 @@ mod telnet_config;
 mod terminal_files;
 mod themes;
 pub use restoration::initial_window_bounds;
+
+#[cfg(feature = "window-diagnostics")]
+mod window_diagnostics;
 mod workspaces;
 use panes::SplitDrag;
 use workspaces::{QuickDialog, RenameWorkspace};
@@ -2598,6 +2601,7 @@ impl Nauterm {
             .items_center()
             .gap(px(6.))
             .px(px(8.))
+            .when(crate::window_chrome::has_controls(window), |bar| bar.pr_0())
             .pl(px(if cfg!(target_os = "macos") { 78. } else { 8. }))
             .bg(painted_bar)
             .text_color(foreground)
@@ -2818,6 +2822,14 @@ impl Nauterm {
                     },
                 )
             })
+            .child(crate::window_chrome::window_controls(
+                control_foreground,
+                window,
+                cx,
+                cx.listener(|this, _, window, cx| {
+                    this.request_exit(crate::settings::ExitAction::Window, window, cx);
+                }),
+            ))
     }
 
     fn sidebar(&self, collapsed: bool, width: f32, cx: &mut Context<Self>) -> impl IntoElement {

@@ -20,10 +20,16 @@ impl Glyph {
         gpui_kit::component::Icon::default().path(self.path())
     }
 }
-const PRODUCT_ICONS: &[(&str, &[u8])] = &[(
-    "nauterm/stop.svg",
-    include_bytes!("../../assets/icons/ui/stop.svg"),
-)];
+const PRODUCT_ICONS: &[(&str, &[u8])] = &[
+    (
+        "nauterm/stop.svg",
+        include_bytes!("../../assets/icons/ui/stop.svg"),
+    ),
+    (
+        "nauterm/window-restore.svg",
+        include_bytes!("../../assets/icons/ui/window-restore.svg"),
+    ),
+];
 pub fn icon(name: IconName) -> gpui_kit::component::Icon {
     gpui_kit::component::Icon::new(name)
 }

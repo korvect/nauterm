@@ -170,7 +170,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y clang cmake libasound2-dev libclang-dev \
-            libdbus-1-dev libfontconfig1-dev libfreetype6-dev libgtk-3-dev \
+            libdbus-1-dev libdecor-0-0 libdecor-0-plugin-1-gtk \
+            libfontconfig1-dev libfreetype6-dev libgtk-3-dev \
             libpipewire-0.3-dev libssl-dev libudev-dev libvulkan-dev \
             libwayland-dev libxcb1-dev libxcb-shape0-dev libxcb-xfixes0-dev \
             libxkbcommon-dev libxkbcommon-x11-dev pkg-config
@@ -188,7 +189,7 @@ jobs:
           rustup target add "$CARGO_BUILD_TARGET"
 
       - name: Check the GPUI client and shared Rust core
-        run: cargo clippy -p nauterm-rs --all-targets --locked -- -D warnings
+        run: cargo clippy -p nauterm-rs -p nauterm_cmd_integration --all-targets --locked -- -D warnings
 
       - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
         if: runner.os == 'Linux' && matrix.arch == 'x86_64'
@@ -203,6 +204,9 @@ jobs:
 
       - name: Run GPUI model and isolated-file unit tests
         run: cargo test -p nauterm-rs --locked
+
+      - name: Run native CMD protocol tests
+        run: cargo test -p nauterm_cmd_integration --locked
 
       - name: Build the GPUI executable
         run: cargo build -p nauterm-rs --locked

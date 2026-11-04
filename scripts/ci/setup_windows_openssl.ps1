@@ -1,3 +1,4 @@
+#requires -Version 7.0
 param(
   [ValidateSet("x86_64", "arm64")]
   [string]$Arch = "x86_64"
@@ -72,15 +73,18 @@ if (-not $opensslLibDir) {
   throw "OpenSSL import library libcrypto.lib was not found. Checked: $($opensslLibCandidates -join ', ')"
 }
 
-if (-not $env:GITHUB_ENV) {
-  throw "GITHUB_ENV is unavailable."
-}
-
 Write-Host "Using OpenSSL headers from $opensslDir and libraries from $opensslLibDir"
-Add-Content -Path $env:GITHUB_ENV -Value "OPENSSL_DIR=$opensslDir"
-Add-Content -Path $env:GITHUB_ENV -Value "OPENSSL_INCLUDE_DIR=$(Join-Path $opensslDir 'include')"
-Add-Content -Path $env:GITHUB_ENV -Value "OPENSSL_LIB_DIR=$opensslLibDir"
-Add-Content -Path $env:GITHUB_ENV -Value "LIB=$opensslLibDir;$env:LIB"
+$combinedLib = "$opensslLibDir;$env:LIB"
+$env:OPENSSL_DIR = $opensslDir
+$env:OPENSSL_INCLUDE_DIR = Join-Path $opensslDir "include"
+$env:OPENSSL_LIB_DIR = $opensslLibDir
+$env:LIB = $combinedLib
+if ($env:GITHUB_ENV) {
+  Add-Content -Path $env:GITHUB_ENV -Value "OPENSSL_DIR=$opensslDir"
+  Add-Content -Path $env:GITHUB_ENV -Value "OPENSSL_INCLUDE_DIR=$($env:OPENSSL_INCLUDE_DIR)"
+  Add-Content -Path $env:GITHUB_ENV -Value "OPENSSL_LIB_DIR=$opensslLibDir"
+  Add-Content -Path $env:GITHUB_ENV -Value "LIB=$combinedLib"
+}
 
 # nauterm_core links OpenSSL through rusqlite's bundled SQLCipher, so native
 # tests and the packaged app need the matching runtime DLL on PATH.
@@ -91,4 +95,7 @@ $runtimeDll = Get-ChildItem -Path $opensslBinDir -Filter "libcrypto-*-$runtimeAr
 if (-not $runtimeDll) {
   throw "OpenSSL runtime DLL was not found in $opensslBinDir"
 }
-Add-Content -Path $env:GITHUB_PATH -Value $opensslBinDir
+$env:PATH = "$opensslBinDir;$env:PATH"
+if ($env:GITHUB_PATH) {
+  Add-Content -Path $env:GITHUB_PATH -Value $opensslBinDir
+}

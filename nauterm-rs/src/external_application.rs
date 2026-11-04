@@ -12,11 +12,25 @@ use std::{
 mod macos;
 #[cfg(target_os = "macos")]
 pub use macos::choose;
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+mod chooser;
+#[cfg(target_os = "linux")]
+mod linux;
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+pub use chooser::choose;
+#[cfg(target_os = "windows")]
+mod windows;
+#[cfg(any(target_os = "windows", test))]
+mod windows_identity;
 
 mod icons;
 pub use icons::{cached as cached_icon, preload as preload_icon};
 
-pub const CAN_CHOOSE: bool = cfg!(target_os = "macos");
+pub const CAN_CHOOSE: bool = cfg!(any(
+    target_os = "macos",
+    target_os = "linux",
+    target_os = "windows"
+));
 
 impl From<Application> for Editor {
     fn from(application: Application) -> Self {
@@ -31,7 +45,7 @@ impl From<Application> for Editor {
 /// The same association discovery as Open With, deduplicated by the settings
 /// model. No subprocess or application is launched during detection.
 pub fn editor_catalog(extensions: &[String]) -> Result<Vec<Editor>> {
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
     {
         let mut applications = vec![];
         for extension in extensions {
@@ -42,7 +56,7 @@ pub fn editor_catalog(extensions: &[String]) -> Result<Vec<Editor>> {
             .map(Editor::from)
             .collect())
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     {
         let _ = extensions;
         let mut names = vec![
@@ -52,12 +66,6 @@ pub fn editor_catalog(extensions: &[String]) -> Result<Vec<Editor>> {
             ("Zed", "zed"),
             ("Sublime Text", "subl"),
         ];
-        #[cfg(target_os = "linux")]
-        names.extend([
-            ("GNOME Text Editor", "gnome-text-editor"),
-            ("Gedit", "gedit"),
-            ("Kate", "kate"),
-        ]);
         #[cfg(target_os = "windows")]
         names.push(("Notepad", "notepad.exe"));
         Ok(names
@@ -102,7 +110,7 @@ fn resolve_executable(executable: &Path) -> Result<PathBuf> {
         );
         return Ok(executable.to_owned());
     }
-    let mut directories: Vec<PathBuf> = std::env::var_os("PATH")
+    let directories: Vec<PathBuf> = std::env::var_os("PATH")
         .map(|value| {
             std::env::split_paths(&value)
                 .filter(|path| path.is_absolute())
@@ -110,7 +118,8 @@ fn resolve_executable(executable: &Path) -> Result<PathBuf> {
         })
         .unwrap_or_default();
     #[cfg(unix)]
-    {
+    let directories = {
+        let mut directories = directories;
         directories.extend(
             [
                 "/opt/homebrew/bin",
@@ -124,7 +133,8 @@ fn resolve_executable(executable: &Path) -> Result<PathBuf> {
         if let Some(user_dirs) = directories::UserDirs::new() {
             directories.push(user_dirs.home_dir().join(".local/bin"));
         }
-    }
+        directories
+    };
     for directory in directories {
         let candidate = directory.join(executable);
         if usable_executable(&candidate) {
@@ -217,16 +227,39 @@ pub fn open_editor(
                 is_default: false,
             }),
         ),
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(target_os = "linux")]
+        Some(Editor::Application {
+            identifier,
+            path: application,
+            ..
+        }) => {
+            let (sender, receiver) = async_channel::bounded(1);
+            let path = path.to_owned();
+            let application = application.clone();
+            let identifier = identifier.clone();
+            std::thread::Builder::new()
+                .name("nauterm-rs-application-launch".into())
+                .spawn(move || {
+                    let _ = sender.send_blocking(linux::launch(&path, &application, &identifier));
+                })?;
+            Ok(receiver)
+        }
+        #[cfg(target_os = "windows")]
+        Some(Editor::Application { .. }) => windows::open(path, editor),
+        #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
         Some(Editor::Application { .. }) => anyhow::bail!(
             "This saved application editor is only available on macOS. Select an installed editor in Settings."
         ),
         None => {
+            #[cfg(target_os = "windows")]
+            {
+                windows::open(path, None)
+            }
             #[cfg(target_os = "macos")]
             {
                 macos::open(path, None)
             }
-            #[cfg(not(target_os = "macos"))]
+            #[cfg(not(any(target_os = "macos", target_os = "windows")))]
             {
                 open_command(
                     path,
@@ -280,17 +313,20 @@ pub fn list(path: &Path) -> Result<Vec<Application>> {
         return Ok(vec![]);
     }
     #[cfg(target_os = "macos")]
-    {
-        let applications = macos::list(path)?;
-        for application in &applications {
-            preload_icon(&Editor::from(application.clone()));
-        }
-        Ok(applications)
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = path;
-        Ok(normalized(vec![], None))
+    let applications = macos::list(path)?;
+    #[cfg(target_os = "linux")]
+    let applications = linux::list(path)?;
+    #[cfg(target_os = "windows")]
+    let applications = windows::list(path)?;
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    let applications = normalized(vec![], None);
+    Ok(applications)
+}
+
+/// Call from a worker after publishing association metadata to the view.
+pub fn preload_application_icons(applications: &[Application]) {
+    for application in applications {
+        preload_icon(&Editor::from(application.clone()));
     }
 }
 
@@ -463,10 +499,11 @@ mod tests {
 
     #[test]
     fn associations_are_sorted_deduplicated_and_exclude_our_own_application() {
+        let temporary = tempfile::tempdir().unwrap();
         let app = |name: &str, id: &str| Application {
             name: name.into(),
             identifier: id.into(),
-            path: PathBuf::from("/Applications/Fixture.app"),
+            path: temporary.path().join("Fixture.app"),
             is_default: false,
         };
         let values = normalized(

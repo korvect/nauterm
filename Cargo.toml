@@ -1,6 +1,10 @@
 [workspace]
-members = ["native/nauterm_core", "nauterm-rs"]
+members = ["native/nauterm_core", "native/nauterm_cmd_integration", "nauterm-rs"]
 resolver = "2"
+exclude = ["third_party/gpui-pre-linux"]
+
+[patch.crates-io]
+gpui-pre-linux = { path = "third_party/gpui-pre-linux" }
 
 [workspace.package]
 version = "0.3.9"
@@ -28,6 +32,17 @@ incremental = false
 
 [profile.dev.package."*"]
 debug = 0
+
+# Dependency workspace profiles are not inherited. Keep GPUI's layout/scene
+# hot paths optimized during `make run-rs`, as in gpui-kit's own dev profile.
+[profile.dev.package.gpui-pre]
+opt-level = 3
+
+[profile.dev.package.gpui-pre-sum-tree]
+opt-level = 3
+
+[profile.dev.package.taffy]
+opt-level = 3
 
 [profile.release]
 lto = "thin"

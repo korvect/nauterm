@@ -48,6 +48,8 @@ mod pane_transfer;
 mod pane_tree;
 mod path_completion;
 mod path_reader;
+#[cfg(feature = "platform-diagnostics")]
+mod platform_diagnostics;
 mod port_forward;
 mod proxies;
 mod quick_connect;
@@ -98,6 +100,10 @@ mod workspace;
 use gpui_kit::{AppContext, KeyBinding, TitlebarOptions, WindowOptions, point, px, size};
 
 fn main() -> anyhow::Result<()> {
+    #[cfg(feature = "platform-diagnostics")]
+    if std::env::var("NAUTERM_OPEN_WITH_DIAGNOSTICS").as_deref() == Ok("1") {
+        return platform_diagnostics::open_with();
+    }
     let store = std::sync::Arc::new(store::Store::discover()?);
     let loaded = theme_catalog::load(&store.paths);
     for warning in &loaded.warnings {
@@ -261,12 +267,20 @@ fn open_main_window(
                 traffic_light_position: Some(point(px(8.), px(15.))),
             }),
             app_owns_titlebar_drag: true,
+            window_decorations: Some(gpui_kit::WindowDecorations::Client),
             ..Default::default()
         },
         cx,
         move |window, cx| {
             window_chrome::align_traffic_lights(window);
             let view = cx.new(|cx| ui::Nauterm::new(store, recovery, recovery_error, window, cx));
+            #[cfg(feature = "window-diagnostics")]
+            if std::env::var("NAUTERM_RESIZE_BENCH").as_deref() == Ok("1") {
+                let view = view.clone();
+                window.defer(cx, move |window, cx| {
+                    view.update(cx, |view, cx| view.start_resize_diagnostics(window, cx));
+                });
+            }
             app_menu::register_main_window(window, &view, cx);
             view
         },

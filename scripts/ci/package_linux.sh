@@ -207,8 +207,8 @@ if [ "${NAUTERM_APPIMAGE_ONLY:-0}" != "1" ]; then
 
   RS_DEB_DEPS=(); RS_RPM_DEPS=()
   if [ "$CLIENT" = rs ]; then
-    for dependency in 'libasound2 | libasound2t64' libdbus-1-3 libfontconfig1 libfreetype6 'libssl3 | libssl3t64' libvulkan1 libwayland-client0 libxcb1 libxcb-shape0 libxcb-xfixes0 libxkbcommon0 libxkbcommon-x11-0; do RS_DEB_DEPS+=(--depends "$dependency"); done
-    for dependency in alsa-lib dbus-libs fontconfig freetype openssl-libs vulkan-loader wayland-libs libxcb libxkbcommon libxkbcommon-x11; do RS_RPM_DEPS+=(--depends "$dependency"); done
+    for dependency in 'libasound2 | libasound2t64' libdbus-1-3 libdecor-0-0 libdecor-0-plugin-1-gtk libfontconfig1 libfreetype6 'libssl3 | libssl3t64' libvulkan1 libwayland-client0 libxcb1 libxcb-shape0 libxcb-xfixes0 libxkbcommon0 libxkbcommon-x11-0; do RS_DEB_DEPS+=(--depends "$dependency"); done
+    for dependency in alsa-lib dbus-libs libdecor fontconfig freetype openssl-libs vulkan-loader wayland-libs libxcb libxkbcommon libxkbcommon-x11; do RS_RPM_DEPS+=(--depends "$dependency"); done
   fi
   fpm "${COMMON_FPM_ARGS[@]}" "${RS_DEB_DEPS[@]}" \
     -t deb \
@@ -237,6 +237,11 @@ cp -a "$BUNDLE_DIR/." "$APPDIR/usr/lib/$BINARY_NAME/"
 create_desktop_file "$APPDIR/$APP_ID.desktop"
 cp "$APPDIR/$APP_ID.desktop" "$APPDIR/usr/share/applications/$APP_ID.desktop"
 install_icon "$APPDIR"
+RS_DECOR_ENV=""
+if [ "$CLIENT" = rs ]; then
+  python3 scripts/ci/stage_rs_libdecor.py "$APPDIR"
+  RS_DECOR_ENV='export LIBDECOR_PLUGIN_DIR="$HERE/usr/lib/libdecor/plugins-1"'
+fi
 # Intentionally do NOT inject a top-level icon or .DirIcon: an unintegrated
 # AppImage is expected to show the default file-manager icon. The icon for the
 # integrated desktop entry is supplied below via --icon-file.
@@ -244,6 +249,7 @@ install_icon "$APPDIR"
 cat > "$APPDIR/AppRun" <<EOF
 #!/usr/bin/env sh
 HERE="\$(dirname "\$(readlink -f "\$0")")"
+$RS_DECOR_ENV
 # Let GNOME/KDE find the icons and desktop entry bundled inside the AppImage.
 export XDG_DATA_DIRS="\$HERE/usr/share:\${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
 # Hint for BAMF (Ubuntu/GNOME dock) so the running window is matched to the

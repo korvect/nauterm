@@ -128,7 +128,7 @@ impl Drop for Choice {
         unsafe { self.panel.cancel(None) };
     }
 }
-pub fn choose() -> Result<Choice> {
+pub fn choose(_: &gpui_kit::Window) -> Result<Choice> {
     let mtm = MainThreadMarker::new().context("The application chooser requires the UI thread.")?;
     let panel = NSOpenPanel::openPanel(mtm);
     panel.setDirectoryURL(NSURL::from_directory_path("/Applications").as_deref());

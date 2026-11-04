@@ -130,7 +130,7 @@ impl RenderOnce for DialogFrame {
         let colors = self
             .colors
             .unwrap_or_else(|| DialogColors::workspace(cx.theme().is_dark()));
-        let available = window.viewport_size() - size(px(48.), px(48.));
+        let available = crate::window_chrome::content_bounds(window).size - size(px(48.), px(48.));
         div()
             .id(self.id.clone())
             .w(px(self.width))

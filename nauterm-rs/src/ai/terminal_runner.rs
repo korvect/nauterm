@@ -17,6 +17,7 @@ pub(crate) enum Kind {
     Zsh,
     Bash,
     Fish,
+    PowerShell,
 }
 impl Kind {
     fn from_path(path: &str) -> Option<Self> {
@@ -25,6 +26,7 @@ impl Kind {
             "zsh" | "rzsh" => Some(Self::Zsh),
             "bash" | "rbash" => Some(Self::Bash),
             "fish" => Some(Self::Fish),
+            "pwsh" | "powershell" => Some(Self::PowerShell),
             _ => None,
         }
     }
@@ -35,6 +37,14 @@ pub(crate) struct Integration {
     pub token: String,
 }
 impl Integration {
+    fn clean_line_keys(&self) -> &'static [u8] {
+        match self.kind {
+            // .NET's Unix console decoder can map Ctrl+] to a different key.
+            // An alphabetic chord is stable on both PowerShell platforms.
+            Kind::PowerShell => b"\x18\x15",
+            _ => b"\x18\x1d",
+        }
+    }
     pub fn local(path: Option<&str>, interactive: bool) -> Option<Self> {
         if !interactive {
             return None;
@@ -44,7 +54,16 @@ impl Integration {
         let name = path.replace('\\', "/").to_ascii_lowercase();
         if !matches!(
             name.rsplit('/').next()?,
-            "zsh" | "zsh.exe" | "bash" | "bash.exe" | "fish" | "fish.exe"
+            "zsh"
+                | "zsh.exe"
+                | "bash"
+                | "bash.exe"
+                | "fish"
+                | "fish.exe"
+                | "pwsh"
+                | "pwsh.exe"
+                | "powershell"
+                | "powershell.exe"
         ) {
             return None;
         }
@@ -61,12 +80,17 @@ impl Integration {
         })
     }
     fn setup(&self) -> String {
+        if self.kind == Kind::PowerShell {
+            return nauterm_core::shell_integration::powershell_setup(&self.token)
+                .expect("internally generated alphanumeric integration token");
+        }
         // Ported from lib/terminal/terminal_shell_integration.dart; these are
         // shell functions/hooks, not user rc files or a second shell session.
         let (template, aid) = match self.kind {
             Kind::Zsh => (include_str!("shell/zsh.sh"), "$$"),
             Kind::Bash => (include_str!("shell/bash.sh"), "$BASHPID"),
             Kind::Fish => (include_str!("shell/fish.sh"), "$fish_pid"),
+            Kind::PowerShell => unreachable!("PowerShell uses its own startup syntax"),
         };
         let ready = format!(
             "printf '\\033]777;nauterm-integration-ready={}\\007'; printf '\\r\\033[2K'",
@@ -210,7 +234,7 @@ pub async fn run(target: CommandTarget, command: String, cancel: Cancel) -> Resu
             target.remember(integration.clone())?;
         }
         quiet(&target).await?;
-        target.send(b"\x18\x1d", &cancel)?;
+        target.send(integration.clean_line_keys(), &cancel)?;
         touched = true;
         if integration.kind != Kind::Bash {
             marker(
@@ -465,6 +489,24 @@ fn echo_end(output: &str, command: &str, whitespace: bool) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn powershell_sessions_use_their_own_setup_syntax_and_in_process_tracking() {
+        for path in [
+            "pwsh",
+            "powershell.exe",
+            "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
+        ] {
+            let integration = Integration::local(Some(path), true).unwrap();
+            assert_eq!(integration.kind, Kind::PowerShell);
+            assert_eq!(integration.clean_line_keys(), b"\x18\x15");
+            let setup = integration.setup();
+            assert!(setup.contains(". ([scriptblock]::Create"));
+            assert!(setup.contains(&format!("nauterm-integration-ready={}", integration.token)));
+            assert!(!setup.contains("printf"));
+        }
+        assert!(Integration::local(Some("powershell.exe"), false).is_none());
+        assert!(Integration::local(Some("cmd.exe"), true).is_none());
+    }
     #[test]
     fn completion_markers_and_utf8_survive_every_boundary_and_both_terminators() {
         for end in [b"\x07".as_slice(), b"\x1b\\".as_slice()] {

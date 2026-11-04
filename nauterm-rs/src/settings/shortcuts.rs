@@ -1,5 +1,6 @@
 use super::*;
 use crate::shortcuts::{Binding, Command, Scope};
+use crate::typography::FontWeights;
 use gpui_kit::component::Disableable;
 
 impl Settings {
@@ -135,7 +136,7 @@ impl Settings {
                 .line_height(px(16.))
                 .font_family(crate::terminal_appearance::platform_family())
                 // Numeric monospace 500 must not inherit the macOS system-face adapter.
-                .font_weight(FontWeight::MEDIUM)
+                .font_weight(FontWeights::MEDIUM)
                 .custom(
                     crate::components::ButtonCustomVariant::for_surface(p)
                         .color(

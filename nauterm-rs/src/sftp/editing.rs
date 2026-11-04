@@ -152,14 +152,14 @@ impl FilePane {
         self.notice = Some(Message::info("Downloading a private copy for editing…"));
         self.action_work = Some(cx.spawn_in(window, async move |this, cx| {
             let result = async {
-                #[cfg(target_os = "macos")]
+                #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
                 let selected = if choose {
                     let choice = this.update_in(cx, |pane, window, cx| {
                         if pane.remote_edit_current(token, &path)
                             && window.is_window_active()
                             && !crate::components::overlay::is_modal_open(window, cx)
                         {
-                            Some(external_application::choose())
+                            Some(external_application::choose(window))
                         } else {
                             None
                         }

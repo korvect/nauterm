@@ -10,12 +10,10 @@ use alacritty_terminal::vte::ansi::{
     Color, CursorShape, CursorStyle, Handler, NamedColor, Processor, Rgb,
 };
 use base64::Engine as _;
-use percent_encoding::percent_decode_str;
 use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use url::Url;
 
 use crate::pty::{LocalPty, WakeupCallback};
 use crate::theme::{ANSI_PALETTE, DEFAULT_BACKGROUND, DEFAULT_CURSOR, DEFAULT_FOREGROUND};
@@ -2070,27 +2068,7 @@ pub(crate) fn shell_event_aid(payload: &[u8]) -> Option<&str> {
 }
 
 fn shell_integration_directory(payload: &[u8]) -> Option<String> {
-    let uri = std::str::from_utf8(payload).ok()?;
-    let url = Url::parse(uri).ok()?;
-    if url.scheme() != "file" {
-        return None;
-    }
-    let path = percent_decode_str(url.path())
-        .decode_utf8()
-        .ok()?
-        .into_owned();
-    #[cfg(windows)]
-    let path = {
-        let mut path = path;
-        if path.starts_with('/')
-            && path.as_bytes().get(2) == Some(&b':')
-            && path.as_bytes().get(1).is_some_and(u8::is_ascii_alphabetic)
-        {
-            path.remove(0);
-        }
-        path
-    };
-    (!path.is_empty()).then_some(path)
+    crate::shell_integration::directory_from_osc(payload)
 }
 
 fn command_block_marker(prefix: char, id: u64, starts_on_next_line: bool) -> [char; 6] {

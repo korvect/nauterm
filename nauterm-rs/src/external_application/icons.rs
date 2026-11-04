@@ -15,6 +15,11 @@ fn cache() -> &'static Mutex<Icons> {
 pub fn cached(editor: &Editor) -> Option<Arc<Image>> {
     cache().lock().unwrap().get(&editor.id()).cloned().flatten()
 }
+#[cfg(target_os = "windows")]
+pub(super) fn remember(editor: &Editor, bytes: Option<Vec<u8>>) {
+    let image = bytes.map(|bytes| Arc::new(Image::from_bytes(gpui_kit::ImageFormat::Png, bytes)));
+    cache().lock().unwrap().insert(editor.id(), image);
+}
 pub fn preload(editor: &Editor) {
     let id = editor.id();
     if cache().lock().unwrap().contains_key(&id) {
@@ -41,7 +46,16 @@ pub fn preload(editor: &Editor) {
         .filter(|bytes| bytes.len() <= 2 * 1024 * 1024)
         .map(|bytes| Arc::new(Image::from_bytes(gpui_kit::ImageFormat::Png, bytes)))
     };
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    let image = match editor {
+        Editor::Application { path, .. } => linux::icon(path),
+        Editor::Command { executable, .. } => linux::command_icon(executable),
+    }
+    .map(|(format, bytes)| Arc::new(Image::from_bytes(format, bytes)));
+    #[cfg(target_os = "windows")]
+    let image = windows::icon(editor)
+        .map(|bytes| Arc::new(Image::from_bytes(gpui_kit::ImageFormat::Png, bytes)));
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     let image: Option<Arc<Image>> = None;
     cache().lock().unwrap().insert(id, image);
 }

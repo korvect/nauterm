@@ -2981,18 +2981,7 @@ fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
 }
 
 fn shell_integration_directory(uri: &[u8]) -> Option<String> {
-    let uri = std::str::from_utf8(uri).ok()?.trim();
-    if uri.is_empty() {
-        return None;
-    }
-    url::Url::parse(uri)
-        .ok()
-        .filter(|url| url.scheme() == "file")
-        .map(|url| {
-            percent_encoding::percent_decode_str(url.path())
-                .decode_utf8_lossy()
-                .into_owned()
-        })
+    crate::shell_integration::directory_from_osc(uri)
 }
 
 fn install_png_decoder() {

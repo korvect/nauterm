@@ -7,6 +7,29 @@ repository root; both clients use the same native core.
 
 Use the Rust toolchain pinned in `../rust-toolchain.toml` and the native build
 prerequisites listed in the [main README](../README.md#building-from-source).
+On Linux, GPUI builds both X11 and Wayland support, so the X11 development
+libraries are required even in a Wayland desktop session. Ubuntu uses the same
+packages as `.github/workflows/quality-gates.yml`:
+
+```sh
+sudo apt-get install -y clang cmake libasound2-dev libclang-dev \
+  libdbus-1-dev libdecor-0-0 libdecor-0-plugin-1-gtk \
+  libfontconfig1-dev libfreetype6-dev libgtk-3-dev \
+  libpipewire-0.3-dev libssl-dev libudev-dev libvulkan-dev \
+  libwayland-dev libxcb1-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+  libxkbcommon-dev libxkbcommon-x11-dev pkg-config
+```
+
+`unable to find library -lxkbcommon-x11` means the development package is
+missing; the installed `libxkbcommon-x11.so.0` runtime alone does not provide
+the linker name. Install `libxkbcommon-x11-dev` before `make run-rs`.
+
+On GNOME Wayland, standard window titlebars use libdecor's GTK plugin.
+The main window retains its product-owned controls. A local Cargo patch in
+`third_party/gpui-pre-linux` contains the backend integration pending migration
+to the dependency fork. `cargo run -p nauterm-rs --example native_titlebar`
+opens a data-free window for manual decoration/resize testing.
+
 Run these commands from the repository root:
 
 ```sh

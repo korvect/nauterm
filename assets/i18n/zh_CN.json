@@ -3577,5 +3577,8 @@
       "pattern": "^(\\d+) GB$",
       "replacement": "{1} GB"
     }
-  ]
+  ],
+  "rs.window.minimize": "最小化",
+  "rs.window.maximize": "最大化",
+  "rs.window.restore": "还原"
 }

@@ -1,0 +1,11 @@
+[package]
+name = "nauterm_cmd_integration"
+version.workspace = true
+edition = "2024"
+publish = false
+license-file = "../../LICENSE"
+description = "Nauterm-owned native CMD integration protocol and console interception support"
+
+[dependencies]
+base64.workspace = true
+url.workspace = true
