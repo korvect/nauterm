@@ -107,7 +107,10 @@ pub fn normalize_path(value: &str, base: Option<&Path>, home: Option<&Path>) -> 
     let path = if let Some(rest) = value.strip_prefix("~/") {
         home.map(|home| home.join(rest))
             .unwrap_or_else(|| PathBuf::from(&value))
-    } else if Path::new(&value).is_absolute() || value.as_bytes().get(1) == Some(&b':') {
+    } else if value.starts_with('/') || value.as_bytes().get(1) == Some(&b':') {
+        // Imported SSH configurations may contain POSIX paths even on Windows.
+        // Retain those references instead of attaching the selected folder's
+        // drive letter; only genuinely relative references belong to `base`.
         PathBuf::from(&value)
     } else {
         base.map(|base| base.join(&value))

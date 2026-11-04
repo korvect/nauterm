@@ -165,7 +165,9 @@ pub(super) fn browser_menu(menu: Menu, owner: WeakEntity<FilePane>, cx: &App) ->
         .item(
             MenuItem::localized("rs.sftp.action.copyPath").on_click(move |_, _, cx| {
                 let _ = copy.update(cx, |pane, cx| {
-                    cx.write_to_clipboard(ClipboardItem::new_string(pane.history.path.clone()))
+                    cx.write_to_clipboard(ClipboardItem::new_string(
+                        pane.display_path(&pane.history.path),
+                    ))
                 });
             }),
         )
@@ -1696,7 +1698,7 @@ impl FilePane {
                                 .entries
                                 .iter()
                                 .take(6)
-                                .map(|entry| div().child(entry.path.clone())),
+                                .map(|entry| div().child(self.display_path(&entry.path))),
                         )
                     })
                     .children(details.iter().enumerate().map(|(index, operation)| {

@@ -179,6 +179,12 @@ impl Terminal {
                         current_directory: directory.as_deref(),
                         home: home.as_deref(),
                         process_directory: process_directory.as_deref(),
+                        windows_paths: cfg!(windows)
+                            && self
+                                .local_shell()
+                                .as_deref()
+                                .and_then(crate::path_completion::WindowsShell::from_path)
+                                .is_some(),
                     };
                     super::local_paths::target_at(&self.frame, cell, &context, |path| path.exists())
                         .and_then(|target| {

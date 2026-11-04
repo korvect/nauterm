@@ -791,6 +791,8 @@ fn state_aad(recording_id: &str) -> Vec<u8> {
 }
 
 fn sync_parent_directory(path: &Path) -> io::Result<()> {
+    #[cfg(not(unix))]
+    let _ = path;
     #[cfg(unix)]
     {
         if let Some(parent) = path.parent() {

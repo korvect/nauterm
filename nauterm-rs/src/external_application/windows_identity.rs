@@ -48,6 +48,14 @@ impl Association {
         let (extension, handler) = serde_json::from_str(raw)?;
         Self::new(extension, handler)
     }
+
+    /// Packaged Windows applications can expose a Shell handler name such as
+    /// `Photos` instead of an executable path. Retain that opaque locator only
+    /// when it is bound to the serialized association, never as a command.
+    pub fn matches_path(&self, path: &std::path::Path) -> bool {
+        path.to_str()
+            .is_some_and(|path| path.eq_ignore_ascii_case(&self.handler))
+    }
 }
 pub(super) fn executable_identifier(path: &str) -> String {
     use sha2::{Digest, Sha256};
@@ -104,6 +112,9 @@ mod tests {
         assert!(Association::new(".txt:stream".into(), handler.into()).is_err());
         assert!(Association::new(".txt".into(), "bad\0handler".into()).is_err());
         assert!(Association::new(".txt".into(), "".into()).is_err());
+        let packaged = Association::new(".png".into(), "Photos".into()).unwrap();
+        assert!(packaged.matches_path(std::path::Path::new("Photos")));
+        assert!(!packaged.matches_path(std::path::Path::new("Other App")));
         let identifier = executable_identifier(handler);
         assert!(is_executable(&identifier, handler));
         assert!(!is_executable(&identifier, r"C:\another\editor.exe"));

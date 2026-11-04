@@ -18,6 +18,8 @@ use polling::{Event as PollingEvent, Events, PollMode, Poller};
 use crate::output_queue::{append_output, clear_output, drain_output_chunk};
 use crate::terminal::{TerminalCommand, TerminalGeometry, TerminalOptions};
 mod powershell;
+#[cfg(all(test, windows, feature = "integration-tests"))]
+mod windows_tests;
 pub(crate) use powershell::SCRIPT as POWERSHELL_INTEGRATION;
 
 const CELL_WIDTH_PIXELS: u16 = 8;
@@ -73,9 +75,13 @@ impl LocalPty {
         terminal_options: &TerminalOptions,
     ) -> io::Result<Self> {
         let mut options = Options::default();
+        let resolved_shell_path = terminal_options
+            .shell_path
+            .clone()
+            .or_else(|| cfg!(windows).then(default_local_shell_path).flatten());
         if let Some(command) = &terminal_options.command {
             options.shell = shell_for_command_session(command);
-        } else if let Some(shell_path) = &terminal_options.shell_path {
+        } else if let Some(shell_path) = &resolved_shell_path {
             options.shell = shell_for_local_session(shell_path);
         } else {
             options.shell = default_local_shell();
@@ -102,12 +108,12 @@ impl LocalPty {
             options.env.insert(variable.to_owned(), entry.value.clone());
         }
         let shell_integration = if terminal_options.command.is_none() {
-            configure_shell_integration(&mut options, terminal_options.shell_path.as_deref())?
+            configure_shell_integration(&mut options, resolved_shell_path.as_deref())?
         } else {
             None
         };
         if shell_integration.is_none() {
-            configure_history_filtering(&mut options, terminal_options.shell_path.as_deref());
+            configure_history_filtering(&mut options, resolved_shell_path.as_deref());
         }
 
         let pty = tty::new(&options, window_size(geometry), 0)?;
@@ -264,8 +270,40 @@ fn configure_shell_integration(
         Some("bash") => configure_bash_integration(options, shell_path),
         Some("fish") => configure_fish_integration(options).map(Some),
         Some("pwsh" | "powershell") => powershell::configure(options, shell_path),
+        #[cfg(windows)]
+        Some("cmd") => configure_cmd_integration(options, shell_path).map(Some),
         _ => Ok(None),
     }
+}
+
+#[cfg(windows)]
+fn configure_cmd_integration(
+    options: &mut Options,
+    shell_path: &str,
+) -> io::Result<ShellIntegrationFiles> {
+    let files = ShellIntegrationFiles {
+        root: create_shell_integration_root()?,
+    };
+    let token = options
+        .env
+        .get("NAUTERM_SHELL_INTEGRATION_TOKEN")
+        .cloned()
+        .unwrap_or_else(|| {
+            let mut bytes = [0u8; 16];
+            getrandom::fill(&mut bytes).expect("Windows random integration token");
+            bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+        });
+    nauterm_cmd_integration::Token::new(&token)
+        .map_err(|error| io::Error::new(ErrorKind::InvalidInput, error))?;
+    let launcher = nauterm_cmd_integration::stage(&files.root)?;
+    let program = resolve_shell_program(shell_path)
+        .ok_or_else(|| io::Error::new(ErrorKind::NotFound, "CMD executable not found"))?;
+    options.env.insert("NAUTERM_CMD_TOKEN".into(), token);
+    options.shell = Some(Shell::new(
+        launcher.to_string_lossy().into_owned(),
+        vec![program],
+    ));
+    Ok(files)
 }
 
 fn create_shell_integration_root() -> io::Result<PathBuf> {
@@ -665,11 +703,24 @@ fn shell_name(shell_path: &str) -> Option<String> {
 
 #[cfg(windows)]
 fn default_local_shell() -> Option<Shell> {
+    default_local_shell_path().map(|program| Shell::new(program, Vec::new()))
+}
+
+/// The same default executable used by the native PTY. Clients use this for
+/// integration, history and completion so Windows app aliases cannot make
+/// those features disagree with the shell that is actually launched.
+pub fn default_local_shell_path() -> Option<String> {
+    #[cfg(not(windows))]
+    return std::env::var("SHELL")
+        .ok()
+        .filter(|shell| !shell.is_empty());
+    #[cfg(windows)]
     for shell in ["pwsh.exe", "powershell.exe", "cmd.exe"] {
         if let Some(program) = resolve_shell_program(shell) {
-            return Some(Shell::new(program, Vec::new()));
+            return Some(program);
         }
     }
+    #[cfg(windows)]
     None
 }
 
@@ -686,18 +737,30 @@ fn resolve_shell_program(shell_path: &str) -> Option<String> {
 
     let path = Path::new(shell_path);
     if path.is_absolute() || shell_path.contains(std::path::MAIN_SEPARATOR) {
-        return path.is_file().then(|| shell_path.to_owned());
+        return shell_executable_available(path).then(|| shell_path.to_owned());
     }
 
     let path_env = std::env::var_os("PATH")?;
     for directory in std::env::split_paths(&path_env) {
         let candidate = directory.join(shell_path);
-        if candidate.is_file() {
+        if shell_executable_available(&candidate) {
             return Some(candidate.to_string_lossy().into_owned());
         }
     }
 
     None
+}
+
+fn shell_executable_available(path: &Path) -> bool {
+    #[cfg(windows)]
+    {
+        // Windows App Execution Aliases are reparse points that need not
+        // resolve as ordinary files but CreateProcessW can execute them.
+        std::fs::symlink_metadata(path)
+            .is_ok_and(|metadata| metadata.is_file() || metadata.file_type().is_symlink())
+    }
+    #[cfg(not(windows))]
+    path.is_file()
 }
 
 fn resolve_working_directory(path: Option<&Path>) -> Option<PathBuf> {
