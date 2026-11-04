@@ -2848,6 +2848,7 @@ dependencies = [
  "gpui-pre-shared-string",
  "gpui-pre-sum-tree",
  "gpui-pre-util",
+ "hdrhistogram",
  "heapless",
  "image",
  "inventory",
@@ -2994,8 +2995,6 @@ dependencies = [
 [[package]]
 name = "gpui-pre-linux"
 version = "0.3.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7c6ffd2dce7b75cce0bb3382994912f84c2a05389a4a236bb8bd72cb098fc083"
 dependencies = [
  "accesskit",
  "accesskit_unix",
@@ -3424,6 +3423,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a5081f264ed7adee96ea4b4778b6bb9da0a7228b084587aa3bd3ff05da7c5a3b"
 dependencies = [
  "hashbrown 0.17.1",
+]
+
+[[package]]
+name = "hdrhistogram"
+version = "7.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f49d1053f4708f0af3cf9fc5bffc7e68a914a3c45becb231c80068c9c3f78bea"
+dependencies = [
+ "byteorder",
+ "num-traits",
 ]
 
 [[package]]
@@ -4722,6 +4731,7 @@ dependencies = [
  "directories",
  "futures-util",
  "gpui-kit",
+ "gpui-pre",
  "image",
  "libc",
  "nauterm_core",
@@ -4751,7 +4761,16 @@ dependencies = [
  "unicode-segmentation",
  "url",
  "uuid",
+ "windows 0.62.2",
  "zeroize",
+]
+
+[[package]]
+name = "nauterm_cmd_integration"
+version = "0.3.9"
+dependencies = [
+ "base64 0.23.1",
+ "url",
 ]
 
 [[package]]

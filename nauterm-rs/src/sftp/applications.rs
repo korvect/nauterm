@@ -164,15 +164,34 @@ fn application_menu(menu: Menu, owner: WeakEntity<FilePane>, sudo: bool, cx: &Ap
                 cx.spawn_in(window, async move |menu, cx| {
                     let result = cx
                         .background_spawn(async move {
-                            if let Some(editor) = &configured_icon {
-                                external_application::preload_icon(editor);
-                            }
                             match path {
                                 FilePath::Local(path) => external_application::list(&path),
                                 FilePath::Remote(path) => external_application::list_for_name(
                                     path.rsplit('/').next().unwrap_or_default(),
                                 ),
                             }
+                        })
+                        .await;
+                    let failed = result.is_err();
+                    let choices = result.unwrap_or_default();
+                    let _ = menu.update_in(cx, |menu, _, cx| {
+                        if revision.get() != generation
+                            || !owner
+                                .upgrade()
+                                .is_some_and(|pane| pane.read(cx).local_file_current(&scope))
+                        {
+                            return;
+                        }
+                        let values = items(&owner, &scope, &choices, false, failed, cx);
+                        menu.replace_items_if_open(values, cx);
+                    });
+                    let choices = cx
+                        .background_spawn(async move {
+                            if let Some(editor) = &configured_icon {
+                                external_application::preload_icon(editor);
+                            }
+                            external_application::preload_application_icons(&choices);
+                            choices
                         })
                         .await;
                     let _ = menu.update_in(cx, |menu, _, cx| {
@@ -183,10 +202,10 @@ fn application_menu(menu: Menu, owner: WeakEntity<FilePane>, sudo: bool, cx: &Ap
                         {
                             return;
                         }
-                        let failed = result.is_err();
-                        let choices = result.unwrap_or_default();
-                        let values = items(&owner, &scope, &choices, false, failed, cx);
-                        menu.replace_items_if_open(values, cx);
+                        menu.replace_items_if_open(
+                            items(&owner, &scope, &choices, false, failed, cx),
+                            cx,
+                        );
                     });
                 })
                 .detach();
@@ -385,7 +404,7 @@ impl FilePane {
                 let target = cx
                     .background_spawn(async move { FileTarget::prepare(path, explicit) })
                     .await?;
-                #[cfg(target_os = "macos")]
+                #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
                 let selected = if choose {
                     let choice = this.update_in(cx, |pane, window, cx| {
                         // Async file validation must not attach a native sheet
@@ -394,7 +413,7 @@ impl FilePane {
                             && window.is_window_active()
                             && !crate::components::overlay::is_modal_open(window, cx)
                         {
-                            Some(external_application::choose())
+                            Some(external_application::choose(window))
                         } else {
                             None
                         }

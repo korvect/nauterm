@@ -5,10 +5,16 @@ edition = "2024"
 publish = false
 description = "A cross-platform terminal and SSH client with SFTP file transfer, built with Rust and GPUI."
 
+[features]
+platform-diagnostics = []
+window-diagnostics = ["platform-diagnostics", "dep:gpui-profiler"]
+
 [dependencies]
 nauterm_core = { path = "../native/nauterm_core", default-features = false, features = ["terminal-ghostty"] }
 anyhow = "1"
 gpui-kit = { git = "https://github.com/korvect/gpui-kit", rev = "a466a9b8f7e0efbdd68f9bf0465a26a4b8a898d8" }
+# Enable the pinned core's profiler without selecting Kit's optional Fast backend.
+gpui-profiler = { package = "gpui-pre", version = "=0.3.10", default-features = false, features = ["profiler"], optional = true }
 serde.workspace = true
 serde_json.workspace = true
 semver = "1"
@@ -28,7 +34,7 @@ sha2.workspace = true
 url.workspace = true
 regex = "=1.13.1"
 unicode-segmentation = "=1.13.3"
-image = { version = "=0.25.10", default-features = false }
+image = { version = "=0.25.10", default-features = false, features = ["png"] }
 sys-locale = "=0.3.2"
 toml.workspace = true
 reqwest = { workspace = true, features = ["blocking", "json", "rustls"] }
@@ -49,3 +55,6 @@ objc2-core-foundation = { version = "=0.3.2", default-features = false, features
 objc2-core-graphics = { version = "=0.3.2", default-features = false, features = ["std", "CGDataProvider", "CGFont"] }
 objc2-core-text = { version = "=0.3.2", default-features = false, features = ["std", "CTFontManager", "CTFontManagerErrors", "objc2-core-graphics"] }
 objc2-app-kit = { version = "=0.3.2", default-features = false, features = ["std", "block2", "NSApplication", "NSButton", "NSEvent", "NSImage", "NSImageRep", "NSBitmapImageRep", "NSGraphics", "NSGraphicsContext", "objc2-core-graphics", "NSView", "NSOpenPanel", "NSPanel", "NSResponder", "NSRunningApplication", "NSSavePanel", "NSWindow", "NSWorkspace"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "=0.62.2", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_Storage_FileSystem", "Win32_System_Com", "Win32_System_Registry", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }

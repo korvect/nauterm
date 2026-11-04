@@ -54,6 +54,13 @@ pub fn open(
     options.prompt = options
         .prompt
         .map(|prompt| crate::localization::text(cx, &prompt));
+    // RFD's mixed file/folder picker is macOS-only. Other platforms must
+    // delegate mixed selection to GPUI rather than reference unavailable APIs.
+    #[cfg(not(target_os = "macos"))]
+    if options.directories && options.files {
+        let picker = cx.prompt_for_paths(options);
+        return Box::pin(async move { picker.await.map_err(Into::into) });
+    }
     let Some(initial) = initial else {
         let picker = cx.prompt_for_paths(options);
         return Box::pin(async move { picker.await.map_err(Into::into) });
@@ -82,11 +89,16 @@ pub fn open(
                 dialog.pick_folder().await.map(|file| vec![file])
             }
         } else if options.directories {
-            if options.multiple {
-                dialog.pick_files_or_folders().await
-            } else {
-                dialog.pick_file_or_folder().await.map(|file| vec![file])
+            #[cfg(target_os = "macos")]
+            {
+                if options.multiple {
+                    dialog.pick_files_or_folders().await
+                } else {
+                    dialog.pick_file_or_folder().await.map(|file| vec![file])
+                }
             }
+            #[cfg(not(target_os = "macos"))]
+            unreachable!("mixed selection uses the platform chooser above")
         } else if options.multiple {
             dialog.pick_files().await
         } else {

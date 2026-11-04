@@ -141,7 +141,7 @@ impl RenderOnce for ThemePreview {
                                                     // The system UI's macOS 530 adapter
                                                     // selects Bold in Menlo. Keep the
                                                     // reference's numeric monospace 500.
-                                                    .font_weight(FontWeight::MEDIUM)
+                                                    .font_weight(FontWeights::MEDIUM)
                                                     .text_size(px(11.))
                                                     .line_height(px(14.))
                                                     .child("$ ls -la"),

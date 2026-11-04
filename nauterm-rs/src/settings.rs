@@ -563,20 +563,34 @@ impl Settings {
         self.editor_detection = Some(cx.spawn_in(window, async move |this, cx| {
             let result = cx
                 .background_spawn(async move {
-                    if let Some(editor) = &configured {
-                        crate::external_application::preload_icon(editor);
-                    }
                     crate::external_application::editor_catalog(&extensions)
                         .map_err(|error| error.to_string())
                 })
                 .await;
+            let catalog = result.as_ref().ok().cloned().unwrap_or_default();
+            let _ = this.update_in(cx, |this, window, cx| {
+                if this.editor_generation != generation {
+                    return;
+                }
+                this.editors
+                    .update(cx, |editors, cx| editors.detected(result, window, cx));
+            });
+            cx.background_spawn(async move {
+                if let Some(editor) = &configured {
+                    crate::external_application::preload_icon(editor);
+                }
+                for editor in &catalog {
+                    crate::external_application::preload_icon(editor);
+                }
+            })
+            .await;
             let _ = this.update_in(cx, |this, window, cx| {
                 if this.editor_generation != generation {
                     return;
                 }
                 this.editor_detection = None;
                 this.editors
-                    .update(cx, |editors, cx| editors.detected(result, window, cx));
+                    .update(cx, |editors, cx| editors.refresh_icons(window, cx));
             });
         }));
     }

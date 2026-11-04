@@ -17,6 +17,8 @@ use polling::{Event as PollingEvent, Events, PollMode, Poller};
 
 use crate::output_queue::{append_output, clear_output, drain_output_chunk};
 use crate::terminal::{TerminalCommand, TerminalGeometry, TerminalOptions};
+mod powershell;
+pub(crate) use powershell::SCRIPT as POWERSHELL_INTEGRATION;
 
 const CELL_WIDTH_PIXELS: u16 = 8;
 const CELL_HEIGHT_PIXELS: u16 = 16;
@@ -261,6 +263,7 @@ fn configure_shell_integration(
         Some("zsh") => configure_zsh_integration(options).map(Some),
         Some("bash") => configure_bash_integration(options, shell_path),
         Some("fish") => configure_fish_integration(options).map(Some),
+        Some("pwsh" | "powershell") => powershell::configure(options, shell_path),
         _ => Ok(None),
     }
 }
