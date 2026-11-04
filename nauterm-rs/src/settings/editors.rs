@@ -145,7 +145,10 @@ impl EditorSettings {
         self.extensions.update(cx, |input, cx| {
             input.set_value(self.config.text_extensions.join(", "), window, cx)
         });
-        self.select.set_selected(
+        // Options retain image snapshots. Refresh them as well as the selected
+        // ID when the owner reapplies settings after icon/catalog loading.
+        self.select.reconcile(
+            self.catalog.iter().map(option).collect(),
             self.config.external_editor.as_ref().map(Editor::id),
             window,
             cx,
@@ -154,6 +157,15 @@ impl EditorSettings {
     }
     pub fn detecting(&mut self, cx: &mut Context<Self>) {
         self.error = None;
+        cx.notify();
+    }
+    pub fn refresh_icons(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.select.reconcile(
+            self.catalog.iter().map(option).collect(),
+            self.config.external_editor.as_ref().map(Editor::id),
+            window,
+            cx,
+        );
         cx.notify();
     }
     pub fn detected(

@@ -8,6 +8,96 @@ const START: &str = "# >>> Nauterm shell integration >>>";
 const END: &str = "# <<< Nauterm shell integration <<<";
 const FISH_HEADER: &str = "# Managed by Nauterm. Use Settings to uninstall.";
 
+pub const POWERSHELL: &str = crate::pty::POWERSHELL_INTEGRATION;
+
+/// One command line for installing the same hooks in an existing PowerShell
+/// session. EncodedCommand cannot be used here because that would open a child.
+pub fn powershell_setup(token: &str) -> Option<String> {
+    if token.is_empty()
+        || !token
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+    {
+        return None;
+    }
+    use base64::Engine;
+    let encoded = base64::engine::general_purpose::STANDARD.encode(POWERSHELL.as_bytes());
+    Some(format!(" $env:NAUTERM_SHELL_INTEGRATION_TOKEN='{token}'; . ([scriptblock]::Create([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{encoded}')))); __nautermOsc '777;nauterm-integration-ready={token}'; [Console]::Write(\"`r$([char]27)[2K\")"))
+}
+
+pub(crate) fn directory_from_osc(uri: &[u8]) -> Option<String> {
+    directory_for_platform(uri, cfg!(windows))
+}
+
+fn directory_for_platform(uri: &[u8], windows: bool) -> Option<String> {
+    let uri = std::str::from_utf8(uri).ok()?.trim();
+    let url = url::Url::parse(uri).ok()?;
+    if url.scheme() != "file" {
+        return None;
+    }
+    let mut path = percent_encoding::percent_decode_str(url.path())
+        .decode_utf8()
+        .ok()?
+        .into_owned();
+    if path.is_empty() || path.chars().any(char::is_control) {
+        return None;
+    }
+    if windows {
+        if let Some(host) = url
+            .host_str()
+            .filter(|host| !host.is_empty() && *host != "localhost")
+        {
+            path = format!("//{host}{path}");
+        } else if path.starts_with('/')
+            && path.as_bytes().get(2) == Some(&b':')
+            && path.as_bytes().get(1).is_some_and(u8::is_ascii_alphabetic)
+        {
+            path.remove(0);
+        }
+    }
+    Some(path)
+}
+
+#[cfg(test)]
+mod protocol_tests {
+    use super::*;
+    #[test]
+    fn file_uris_preserve_windows_drives_unc_paths_unicode_and_literal_percent() {
+        assert_eq!(
+            directory_for_platform(
+                b"file:///C:/Users/%E7%94%A8%E6%88%B7/My%20Project%23100%25",
+                true
+            )
+            .as_deref(),
+            Some("C:/Users/用户/My Project#100%")
+        );
+        assert_eq!(
+            directory_for_platform(b"file://server/share/Project%20Files", true).as_deref(),
+            Some("//server/share/Project Files")
+        );
+        assert_eq!(
+            directory_for_platform(b"file://localhost/D:/work", true).as_deref(),
+            Some("D:/work")
+        );
+        assert_eq!(
+            directory_for_platform(b"file://localhost/home/user/work", false).as_deref(),
+            Some("/home/user/work")
+        );
+        assert!(directory_for_platform(b"https://example.invalid/work", true).is_none());
+        assert!(directory_for_platform(b"file:///C:/bad%07path", true).is_none());
+        assert!(directory_for_platform(b"file:///bad%ff", false).is_none());
+    }
+    #[test]
+    fn powershell_setup_stays_in_the_current_shell_and_rejects_non_tokens() {
+        let command = powershell_setup("synthetic-token_123").unwrap();
+        assert!(command.contains("nauterm-integration-ready=synthetic-token_123"));
+        assert!(command.contains(". ([scriptblock]::Create"));
+        assert!(!command.contains("-EncodedCommand"));
+        assert!(powershell_setup("'; unwanted").is_none());
+        assert!(powershell_setup("").is_none());
+    }
+}
+
 pub fn write_resources(data_directory: &Path) -> io::Result<PathBuf> {
     let root = data_directory.join("shell-integration");
     write_if_changed(&root.join("nauterm.zsh"), crate::pty::ZSH_INTEGRATION)?;

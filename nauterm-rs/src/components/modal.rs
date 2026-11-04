@@ -248,16 +248,16 @@ impl RenderOnce for Modal {
         let confirm_lease = lease.downgrade();
         let backdrop_lease = lease.downgrade();
         let backdrop_manager = manager.downgrade();
-        let viewport = window.viewport_size();
+        let content_bounds = crate::window_chrome::content_bounds(window);
         deferred(
-            anchored().position(point(px(0.), px(0.))).child(
+            anchored().position(content_bounds.origin).child(
                 div()
                     .id(self.id.clone())
 
                     .role(if self.alert { Role::AlertDialog } else { Role::Dialog })
                     .aria_label(crate::localization::text(cx, &self.label))
-                    .w(viewport.width)
-                    .h(viewport.height)
+                    .w(content_bounds.size.width)
+                    .h(content_bounds.size.height)
                     .p(px(24.))
                     .relative()
                     .flex()

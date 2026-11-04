@@ -50,7 +50,12 @@ impl Editor {
                 identifier, path, ..
             } => ensure!(
                 !identifier.is_empty()
-                    && identifier.len() <= 512
+                    && identifier.len()
+                        <= (if identifier.starts_with("win32-assoc:") {
+                            64 * 1024
+                        } else {
+                            512
+                        })
                     && !identifier.chars().any(char::is_control)
                     && path.is_absolute()
                     && path.to_str().is_some()

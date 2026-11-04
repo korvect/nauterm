@@ -2660,5 +2660,8 @@
   "workspace.tooltip.filterByTags": "Filter by tags",
   "workspace.tooltip.gridView": "Grid view",
   "workspace.tooltip.listView": "List view",
-  "workspace.tooltip.sort": "Sort: {order}"
+  "workspace.tooltip.sort": "Sort: {order}",
+  "rs.window.minimize": "Minimize",
+  "rs.window.maximize": "Maximize",
+  "rs.window.restore": "Restore"
 }

@@ -108,9 +108,24 @@ impl Nauterm {
         let provider_service = self.store.ai_providers().map_err(|error| error.to_string());
         let sync_service = self.store.sync_service().map_err(|error| error.to_string());
         let update_directory = self.store.state_directory.join("updates");
+        let standard_titlebar = {
+            #[cfg(feature = "window-diagnostics")]
+            {
+                std::env::var("NAUTERM_RESIZE_BENCH_DECOR").as_deref() != Ok("client")
+            }
+            #[cfg(not(feature = "window-diagnostics"))]
+            {
+                true
+            }
+        };
         let result = gpui_kit::open_window(
             WindowOptions {
                 app_id: Some("com.korvect.nauterm.rs".into()),
+                window_decorations: Some(if standard_titlebar {
+                    WindowDecorations::Server
+                } else {
+                    WindowDecorations::Client
+                }),
                 window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
                     None,
                     size(px(950.), px(620.)),
@@ -121,7 +136,7 @@ impl Nauterm {
                     title: Some(
                         format!("Nauterm RS {}", crate::localization::text(cx, "Settings")).into(),
                     ),
-                    appears_transparent: false,
+                    appears_transparent: !standard_titlebar,
                     ..Default::default()
                 }),
                 ..Default::default()
