@@ -18,6 +18,13 @@ void main() {
 
     await tester.tap(find.text('New key'));
     await tester.pump(const Duration(milliseconds: 1));
+    final drawerPanel = find.byKey(
+      const ValueKey('workspace-editor-drawer-panel'),
+    );
+    expect(tester.getSize(drawerPanel).width, 360);
+    expect(tester.takeException(), isNull);
+    await tester.pump(const Duration(milliseconds: 80));
+    expect(tester.getSize(drawerPanel).width, 360);
     expect(tester.takeException(), isNull);
     await tester.pump(const Duration(milliseconds: 200));
 

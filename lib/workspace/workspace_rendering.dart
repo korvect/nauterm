@@ -287,10 +287,16 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
       builder: (context, _) {
         final editorOpen = _editorStack.isNotEmpty;
 
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        return Stack(
+          clipBehavior: Clip.hardEdge,
           children: [
-            Expanded(
+            AnimatedPositioned(
+              duration: const Duration(milliseconds: 170),
+              curve: Curves.easeOutCubic,
+              left: 0,
+              top: 0,
+              bottom: 0,
+              right: editorOpen ? _workspaceEditorDrawerWidth : 0,
               child: ExcludeFocus(
                 excluding: editorOpen,
                 child: Stack(
@@ -316,247 +322,247 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
                 ),
               ),
             ),
-            AnimatedContainer(
+            AnimatedPositioned(
+              key: const ValueKey('workspace-editor-drawer-position'),
               duration: const Duration(milliseconds: 170),
               curve: Curves.easeOutCubic,
-              width: editorOpen ? _workspaceEditorDrawerWidth : 0,
-              child: ClipRect(
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  widthFactor: editorOpen ? 1 : 0,
-                  child: SizedBox(
-                    width: _workspaceEditorDrawerWidth,
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        for (final section in _SidebarSection.values)
-                          for (
-                            var index = 0;
-                            index < _editorStackFor(section).length;
-                            index++
-                          )
-                            Offstage(
-                              key: ObjectKey(_editorStackFor(section)[index]),
-                              offstage:
-                                  section != _section ||
-                                  index != _editorStackFor(section).length - 1,
-                              child: TickerMode(
-                                enabled:
-                                    section == _section &&
-                                    index ==
-                                        _editorStackFor(section).length - 1,
-                                child: FocusScope(
-                                  key: ValueKey(
-                                    'workspace-editor-focus-region:${section.name}:$index',
-                                  ),
-                                  child: _WorkspaceEditorDrawer(
-                                    request: _editorStackFor(
-                                      section,
-                                    )[index].request,
-                                    groups: _groupEntries,
-                                    hosts: _hostEntries,
-                                    keys: _keyEntries,
-                                    identities: _identityEntries,
-                                    tags: _tagEntries,
-                                    proxies: _proxyEntries,
-                                    snippetPackages: _snippetPackages,
-                                    snippets: _snippets,
-                                    shellHistory: _shellHistory,
-                                    terminalThemeCatalog: _terminalThemeCatalog,
-                                    onClose: _closeEditor,
-                                    onCreateGroup: _createGroupForEditor,
-                                    onCreateGroupFromProtocol:
-                                        _createGroupFromProtocol,
-                                    onCreateCredential:
-                                        _createCredentialForEditor,
-                                    onCreateIdentity: _createIdentityForEditor,
-                                    onCreateProxy: _createProxyForEditor,
-                                    onCreateTag: _createTag,
-                                    onCreateSnippet: _createSnippetForEditor,
-                                    onCreateSnippetPackage:
-                                        _createSnippetPackageForEditor,
-                                    onEditHostEnvironment:
-                                        _editHostEnvironmentForEditor,
-                                    onSaveGeneratedKey: _saveGeneratedKey,
-                                    onExportKey: _exportKeyToHost,
-                                    createKeyExportConnection:
-                                        _createKeyExportConnection,
-                                    buildKeyExportConnectionPage:
-                                        _buildKeyExportConnectionPage,
-                                    buildHostSelector:
-                                        (search, onBack, onSelected) =>
-                                            _SftpHostSelectorPane(
-                                              groups: _groups,
-                                              hosts: _hosts
-                                                  .where(
-                                                    (host) =>
-                                                        host.type == 'remote',
-                                                  )
-                                                  .toList(),
-                                              tags: _tagEntries,
-                                              searchController: search,
-                                              onBack: onBack,
-                                              onHostSelected: (host) =>
-                                                  onSelected(host.id),
-                                            ),
-                                    onShowNotification: _showWorkspaceMessage,
-                                    onSaveGroup: _saveGroup,
-                                    onDuplicateGroup: (group) {
-                                      _handleGroupContextAction(
-                                        _mapGroups([group], _hostEntries).first,
-                                        _ContextMenuActionId.duplicate,
-                                      );
-                                    },
-                                    onDeleteGroup: (group) {
-                                      () async {
-                                        final item = _mapGroups([
-                                          group,
-                                        ], _hostEntries).first;
-                                        await _deleteGroup(item);
-                                        if (mounted &&
-                                            !_groupEntries.any(
-                                              (entry) => entry.id == group.id,
-                                            )) {
-                                          _closeEditor();
-                                        }
-                                      }();
-                                    },
-                                    onSaveHost: _saveHost,
-                                    onConnectHost: (host) {
-                                      _connectHost(
-                                        _mapHost(
-                                          host,
-                                          _identityEntries,
-                                          _tagNamesByUuid(_tagEntries),
-                                        ),
-                                      );
-                                    },
-                                    onDuplicateHost: (host) {
-                                      _handleHostContextAction(
-                                        _mapHost(
-                                          host,
-                                          _identityEntries,
-                                          _tagNamesByUuid(_tagEntries),
-                                        ),
-                                        _ContextMenuActionId.duplicate,
-                                      );
-                                    },
-                                    onDeleteHost: (host) {
-                                      () async {
-                                        final item = _mapHost(
-                                          host,
-                                          _identityEntries,
-                                          _tagNamesByUuid(_tagEntries),
-                                        );
-                                        await _deleteHost(item);
-                                        if (mounted &&
-                                            !_hostEntries.any(
-                                              (entry) => entry.id == host.id,
-                                            )) {
-                                          _closeEditor();
-                                        }
-                                      }();
-                                    },
-                                    onSaveHostEnvironment:
-                                        _saveHostEnvironmentForEditor,
-                                    onSaveKey: _saveKey,
-                                    onDuplicateKey: (key) {
-                                      _handleKeyContextAction(
-                                        _mapKey(key),
-                                        _ContextMenuActionId.duplicate,
-                                      );
-                                    },
-                                    onExportKeyToHost: (key) {
-                                      _exportKey(_mapKey(key));
-                                    },
-                                    onExportKeyToFile: (key) {
-                                      unawaited(_exportKeyToFile(key));
-                                    },
-                                    onDeleteKey: (key) {
-                                      () async {
-                                        await _deleteKey(_mapKey(key));
-                                        if (mounted &&
-                                            !_keyEntries.any(
-                                              (entry) => entry.id == key.id,
-                                            )) {
-                                          _closeEditor();
-                                        }
-                                      }();
-                                    },
-                                    onSaveIdentity: _saveIdentity,
-                                    onDuplicateIdentity: (identity) {
-                                      _handleIdentityContextAction(
-                                        _mapIdentity(identity),
-                                        _ContextMenuActionId.duplicate,
-                                      );
-                                    },
-                                    onDeleteIdentity: (identity) {
-                                      () async {
-                                        await _deleteIdentity(
-                                          _mapIdentity(identity),
-                                        );
-                                        if (mounted &&
-                                            !_identityEntries.any(
-                                              (entry) =>
-                                                  entry.id == identity.id,
-                                            )) {
-                                          _closeEditor();
-                                        }
-                                      }();
-                                    },
-                                    onSavePortForward: _savePortForward,
-                                    onDeletePortForward: _deletePortForward,
-                                    onSaveProxy: _saveProxy,
-                                    onDuplicateProxy: (proxy) {
-                                      final item = _mapProxy(
-                                        proxy,
+              top: 0,
+              bottom: 0,
+              right: editorOpen ? 0 : -_workspaceEditorDrawerWidth,
+              width: _workspaceEditorDrawerWidth,
+              child: ExcludeSemantics(
+                excluding: !editorOpen,
+                child: IgnorePointer(
+                  ignoring: !editorOpen,
+                  child: Stack(
+                    key: const ValueKey('workspace-editor-drawer-panel'),
+                    fit: StackFit.expand,
+                    children: [
+                      for (final section in _SidebarSection.values)
+                        for (
+                          var index = 0;
+                          index < _editorStackFor(section).length;
+                          index++
+                        )
+                          Offstage(
+                            key: ObjectKey(_editorStackFor(section)[index]),
+                            offstage:
+                                section != _section ||
+                                index != _editorStackFor(section).length - 1,
+                            child: TickerMode(
+                              enabled:
+                                  section == _section &&
+                                  index == _editorStackFor(section).length - 1,
+                              child: FocusScope(
+                                key: ValueKey(
+                                  'workspace-editor-focus-region:${section.name}:$index',
+                                ),
+                                child: _WorkspaceEditorDrawer(
+                                  request: _editorStackFor(
+                                    section,
+                                  )[index].request,
+                                  groups: _groupEntries,
+                                  hosts: _hostEntries,
+                                  keys: _keyEntries,
+                                  identities: _identityEntries,
+                                  tags: _tagEntries,
+                                  proxies: _proxyEntries,
+                                  snippetPackages: _snippetPackages,
+                                  snippets: _snippets,
+                                  shellHistory: _shellHistory,
+                                  terminalThemeCatalog: _terminalThemeCatalog,
+                                  onClose: _closeEditor,
+                                  onCreateGroup: _createGroupForEditor,
+                                  onCreateGroupFromProtocol:
+                                      _createGroupFromProtocol,
+                                  onCreateCredential:
+                                      _createCredentialForEditor,
+                                  onCreateIdentity: _createIdentityForEditor,
+                                  onCreateProxy: _createProxyForEditor,
+                                  onCreateTag: _createTag,
+                                  onCreateSnippet: _createSnippetForEditor,
+                                  onCreateSnippetPackage:
+                                      _createSnippetPackageForEditor,
+                                  onEditHostEnvironment:
+                                      _editHostEnvironmentForEditor,
+                                  onSaveGeneratedKey: _saveGeneratedKey,
+                                  onExportKey: _exportKeyToHost,
+                                  createKeyExportConnection:
+                                      _createKeyExportConnection,
+                                  buildKeyExportConnectionPage:
+                                      _buildKeyExportConnectionPage,
+                                  buildHostSelector:
+                                      (search, onBack, onSelected) =>
+                                          _SftpHostSelectorPane(
+                                            groups: _groups,
+                                            hosts: _hosts
+                                                .where(
+                                                  (host) =>
+                                                      host.type == 'remote',
+                                                )
+                                                .toList(),
+                                            tags: _tagEntries,
+                                            searchController: search,
+                                            onBack: onBack,
+                                            onHostSelected: (host) =>
+                                                onSelected(host.id),
+                                          ),
+                                  onShowNotification: _showWorkspaceMessage,
+                                  onSaveGroup: _saveGroup,
+                                  onDuplicateGroup: (group) {
+                                    _handleGroupContextAction(
+                                      _mapGroups([group], _hostEntries).first,
+                                      _ContextMenuActionId.duplicate,
+                                    );
+                                  },
+                                  onDeleteGroup: (group) {
+                                    () async {
+                                      final item = _mapGroups([
+                                        group,
+                                      ], _hostEntries).first;
+                                      await _deleteGroup(item);
+                                      if (mounted &&
+                                          !_groupEntries.any(
+                                            (entry) => entry.id == group.id,
+                                          )) {
+                                        _closeEditor();
+                                      }
+                                    }();
+                                  },
+                                  onSaveHost: _saveHost,
+                                  onConnectHost: (host) {
+                                    _connectHost(
+                                      _mapHost(
+                                        host,
                                         _identityEntries,
+                                        _tagNamesByUuid(_tagEntries),
+                                      ),
+                                    );
+                                  },
+                                  onDuplicateHost: (host) {
+                                    _handleHostContextAction(
+                                      _mapHost(
+                                        host,
+                                        _identityEntries,
+                                        _tagNamesByUuid(_tagEntries),
+                                      ),
+                                      _ContextMenuActionId.duplicate,
+                                    );
+                                  },
+                                  onDeleteHost: (host) {
+                                    () async {
+                                      final item = _mapHost(
+                                        host,
+                                        _identityEntries,
+                                        _tagNamesByUuid(_tagEntries),
                                       );
-                                      _handleProxyContextAction(
-                                        item,
-                                        _ContextMenuActionId.duplicate,
+                                      await _deleteHost(item);
+                                      if (mounted &&
+                                          !_hostEntries.any(
+                                            (entry) => entry.id == host.id,
+                                          )) {
+                                        _closeEditor();
+                                      }
+                                    }();
+                                  },
+                                  onSaveHostEnvironment:
+                                      _saveHostEnvironmentForEditor,
+                                  onSaveKey: _saveKey,
+                                  onDuplicateKey: (key) {
+                                    _handleKeyContextAction(
+                                      _mapKey(key),
+                                      _ContextMenuActionId.duplicate,
+                                    );
+                                  },
+                                  onExportKeyToHost: (key) {
+                                    _exportKey(_mapKey(key));
+                                  },
+                                  onExportKeyToFile: (key) {
+                                    unawaited(_exportKeyToFile(key));
+                                  },
+                                  onDeleteKey: (key) {
+                                    () async {
+                                      await _deleteKey(_mapKey(key));
+                                      if (mounted &&
+                                          !_keyEntries.any(
+                                            (entry) => entry.id == key.id,
+                                          )) {
+                                        _closeEditor();
+                                      }
+                                    }();
+                                  },
+                                  onSaveIdentity: _saveIdentity,
+                                  onDuplicateIdentity: (identity) {
+                                    _handleIdentityContextAction(
+                                      _mapIdentity(identity),
+                                      _ContextMenuActionId.duplicate,
+                                    );
+                                  },
+                                  onDeleteIdentity: (identity) {
+                                    () async {
+                                      await _deleteIdentity(
+                                        _mapIdentity(identity),
                                       );
-                                    },
-                                    onDeleteProxy: (proxy) {
-                                      () async {
-                                        await _confirmAndDeleteProxy(
-                                          proxy.id,
-                                          proxy.name,
-                                        );
-                                        if (mounted &&
-                                            !_proxyEntries.any(
-                                              (entry) => entry.id == proxy.id,
-                                            )) {
-                                          _closeEditor();
-                                        }
-                                      }();
-                                    },
-                                    onSaveSnippetPackage: _saveSnippetPackage,
-                                    onDeleteSnippetPackage: (package) {
-                                      () async {
-                                        await _confirmAndDeleteSnippetPackage(
-                                          package,
-                                        );
-                                        if (mounted &&
-                                            !_snippetPackageEntries.any(
-                                              (entry) => entry.id == package.id,
-                                            )) {
-                                          _closeEditor();
-                                        }
-                                      }();
-                                    },
-                                    onSaveSnippet: _saveSnippet,
-                                    onDuplicateSnippet: _duplicateSnippet,
-                                    onDeleteSnippet: _deleteSnippet,
-                                    onCreateSnippetFromShellHistory:
-                                        _createSnippetFromShellHistory,
-                                    onClearShellHistory: _clearShellHistory,
-                                  ),
+                                      if (mounted &&
+                                          !_identityEntries.any(
+                                            (entry) => entry.id == identity.id,
+                                          )) {
+                                        _closeEditor();
+                                      }
+                                    }();
+                                  },
+                                  onSavePortForward: _savePortForward,
+                                  onDeletePortForward: _deletePortForward,
+                                  onSaveProxy: _saveProxy,
+                                  onDuplicateProxy: (proxy) {
+                                    final item = _mapProxy(
+                                      proxy,
+                                      _identityEntries,
+                                    );
+                                    _handleProxyContextAction(
+                                      item,
+                                      _ContextMenuActionId.duplicate,
+                                    );
+                                  },
+                                  onDeleteProxy: (proxy) {
+                                    () async {
+                                      await _confirmAndDeleteProxy(
+                                        proxy.id,
+                                        proxy.name,
+                                      );
+                                      if (mounted &&
+                                          !_proxyEntries.any(
+                                            (entry) => entry.id == proxy.id,
+                                          )) {
+                                        _closeEditor();
+                                      }
+                                    }();
+                                  },
+                                  onSaveSnippetPackage: _saveSnippetPackage,
+                                  onDeleteSnippetPackage: (package) {
+                                    () async {
+                                      await _confirmAndDeleteSnippetPackage(
+                                        package,
+                                      );
+                                      if (mounted &&
+                                          !_snippetPackageEntries.any(
+                                            (entry) => entry.id == package.id,
+                                          )) {
+                                        _closeEditor();
+                                      }
+                                    }();
+                                  },
+                                  onSaveSnippet: _saveSnippet,
+                                  onDuplicateSnippet: _duplicateSnippet,
+                                  onDeleteSnippet: _deleteSnippet,
+                                  onCreateSnippetFromShellHistory:
+                                      _createSnippetFromShellHistory,
+                                  onClearShellHistory: _clearShellHistory,
                                 ),
                               ),
                             ),
-                      ],
-                    ),
+                          ),
+                    ],
                   ),
                 ),
               ),

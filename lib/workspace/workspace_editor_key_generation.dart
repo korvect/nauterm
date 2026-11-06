@@ -932,6 +932,27 @@ class _KeyEditorContentState extends State<_KeyEditorContent> {
     ),
   );
 
+  Widget _buildDetectedPassphraseInput() {
+    final visible = _keyRequiresPassphrase;
+    final duration = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : const Duration(milliseconds: 180);
+
+    return AnimatedSize(
+      key: const ValueKey('key-passphrase-animation'),
+      duration: duration,
+      curve: Curves.easeOutCubic,
+      alignment: Alignment.topCenter,
+      clipBehavior: Clip.hardEdge,
+      child: visible
+          ? Padding(
+              padding: EdgeInsets.only(top: _workspaceFormFieldGap),
+              child: _buildPassphraseInput(),
+            )
+          : const SizedBox.shrink(),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final initial = widget.request.initial;
@@ -991,10 +1012,7 @@ class _KeyEditorContentState extends State<_KeyEditorContent> {
             title: tr('common.label.key', fallback: 'Key'),
             children: [
               _buildCredentialNameInput(),
-              if (_keyRequiresPassphrase) ...[
-                SizedBox(height: _workspaceFormFieldGap),
-                _buildPassphraseInput(),
-              ],
+              _buildDetectedPassphraseInput(),
               SizedBox(height: _workspaceFormFieldGap),
               _WorkspaceInput(
                 controller: _privateController,
@@ -1037,10 +1055,7 @@ class _KeyEditorContentState extends State<_KeyEditorContent> {
             title: tr('common.label.key', fallback: 'Key'),
             children: [
               _buildCredentialNameInput(),
-              if (_keyRequiresPassphrase) ...[
-                SizedBox(height: _workspaceFormFieldGap),
-                _buildPassphraseInput(),
-              ],
+              _buildDetectedPassphraseInput(),
               SizedBox(height: _workspaceFormFieldGap),
               if (widget.request.certificateMode) ...[
                 _WorkspaceInput(

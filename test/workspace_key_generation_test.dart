@@ -45,6 +45,7 @@ void main() {
           } else {
             await tester.enterText(_privateKeyField(), privateKey);
             await tester.pump();
+            await tester.pumpAndSettle();
             expect(
               tester.widget<TextField>(_privateKeyField()).focusNode!.hasFocus,
               isTrue,
@@ -121,6 +122,46 @@ void main() {
     await tester.tap(find.text('Save'));
     await tester.pump();
     expect((await saved.future).passphrase, isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+  testWidgets('detected passphrase field animates its layout in and out', (
+    tester,
+  ) async {
+    final saved = Completer<KeyEntry>();
+    await _pumpNewKeyEditor(tester, false, saved);
+    await tester.enterText(_privateKeyField(), openSshHeader('none'));
+    await tester.pumpAndSettle();
+
+    final animation = find.byKey(const ValueKey('key-passphrase-animation'));
+    final privateKeyLabel = find.text('Private key *');
+    final initialHeight = tester.getSize(animation).height;
+    final initialPrivateKeyTop = tester.getTopLeft(privateKeyLabel).dy;
+    expect(initialHeight, 0);
+
+    await tester.enterText(_privateKeyField(), openSshHeader('aes256-ctr'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 90));
+    final expandingHeight = tester.getSize(animation).height;
+    final expandingPrivateKeyTop = tester.getTopLeft(privateKeyLabel).dy;
+    expect(expandingHeight, greaterThan(0));
+    expect(expandingPrivateKeyTop, greaterThan(initialPrivateKeyTop));
+    expect(find.text('Passphrase'), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 120));
+    final expandedHeight = tester.getSize(animation).height;
+    expect(expandedHeight, greaterThan(expandingHeight));
+
+    await tester.enterText(_privateKeyField(), openSshHeader('none'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 90));
+    final collapsingHeight = tester.getSize(animation).height;
+    expect(find.text('Passphrase'), findsNothing);
+    expect(collapsingHeight, greaterThan(0));
+    expect(collapsingHeight, lessThan(expandedHeight));
+
+    await tester.pump(const Duration(milliseconds: 120));
+    expect(tester.getSize(animation).height, 0);
+    expect(tester.getTopLeft(privateKeyLabel).dy, initialPrivateKeyTop);
     await tester.pumpWidget(const SizedBox.shrink());
   });
   testWidgets(
@@ -261,6 +302,7 @@ Future<void> _importKeyFile(WidgetTester tester, String privateKey) async {
     await tester.pump();
   }
   expect(_passphraseField(), findsOneWidget);
+  await tester.pumpAndSettle();
 }
 
 Finder _privateKeyField() => find.descendant(
