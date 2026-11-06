@@ -1239,7 +1239,6 @@ class TerminalLogEntry {
   const TerminalLogEntry({
     required this.id,
     required this.title,
-    this.themeId,
     this.hostId,
     this.hostUuid,
     this.host,
@@ -1259,7 +1258,6 @@ class TerminalLogEntry {
 
   final String id;
   final String title;
-  final String? themeId;
   final int? hostId;
   final String? hostUuid;
   final String? host;
@@ -1279,7 +1277,6 @@ class TerminalLogEntry {
   TerminalLogEntry copyWith({
     String? id,
     String? title,
-    String? themeId,
     int? hostId,
     String? hostUuid,
     String? host,
@@ -1299,7 +1296,6 @@ class TerminalLogEntry {
     return TerminalLogEntry(
       id: id ?? this.id,
       title: title ?? this.title,
-      themeId: themeId ?? this.themeId,
       hostId: hostId ?? this.hostId,
       hostUuid: hostUuid ?? this.hostUuid,
       host: host ?? this.host,
@@ -1321,7 +1317,6 @@ class TerminalLogEntry {
   Map<String, Object?> toJson() => {
     'id': id,
     'title': title,
-    'theme_id': _normalizeThemeId(themeId),
     'host_id': hostId,
     'host_uuid': hostUuid,
     'host': host,
@@ -1344,7 +1339,6 @@ class TerminalLogEntry {
     return TerminalLogEntry(
       id: _string(map['id']),
       title: _string(map['title']),
-      themeId: _normalizeThemeId(_stringOrNull(map['theme_id'])),
       hostId: _intOrNull(map['host_id']),
       hostUuid: _stringOrNull(map['host_uuid']),
       host: _stringOrNull(map['host']),

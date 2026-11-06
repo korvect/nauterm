@@ -526,7 +526,6 @@ extension _NautermWorkspaceRestore on _NautermWorkspaceState {
         recorder: _createTerminalRecorder(
           title: session.title,
           target: workingDirectory,
-          themeId: host?.themeId,
           hostId: host?.id,
           username: _localShellUsername(),
           shellPath: shellPath,
@@ -573,7 +572,6 @@ extension _NautermWorkspaceRestore on _NautermWorkspaceState {
         final recorder = _createTerminalRecorder(
           title: session.title,
           target: '${auth.username}@${auth.host}:${auth.port}',
-          themeId: host.themeId,
           hostId: host.id,
           host: auth.host,
           port: auth.port,
@@ -677,7 +675,6 @@ extension _NautermWorkspaceRestore on _NautermWorkspaceState {
           recorder: _createTerminalRecorder(
             title: session.title,
             target: 'telnet $address:${host.telnetPort ?? 23}',
-            themeId: host.telnetThemeId,
             hostId: host.id,
             host: address,
             port: host.telnetPort ?? 23,

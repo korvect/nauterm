@@ -187,6 +187,9 @@ extension _NautermWorkspaceTerminalActions on _NautermWorkspaceState {
           theme: view.theme,
           recorder: _createTerminalRecorder(
             title: title,
+            hostId: sshProfile.hostId,
+            host: sshProfile.host,
+            port: sshProfile.port,
             username: sshProfile.username,
             target: '${sshProfile.host}:${sshProfile.port}',
             awaitConnection: true,
@@ -209,6 +212,7 @@ extension _NautermWorkspaceTerminalActions on _NautermWorkspaceState {
           recorder: _createTerminalRecorder(
             title: title,
             username: _localShellUsername(),
+            sourceHostUuid: view.activeTab.sourceHostUuid,
             shellPath: _resolvedLocalShellPath(null),
           ),
           onExit: () =>
@@ -415,6 +419,9 @@ extension _NautermWorkspaceTerminalActions on _NautermWorkspaceState {
         theme: targetView.theme,
         recorder: _createTerminalRecorder(
           title: title,
+          hostId: sshProfile.hostId,
+          host: sshProfile.host,
+          port: sshProfile.port,
           username: sshProfile.username,
           target: '${sshProfile.host}:${sshProfile.port}',
           awaitConnection: true,
@@ -435,6 +442,7 @@ extension _NautermWorkspaceTerminalActions on _NautermWorkspaceState {
         recorder: _createTerminalRecorder(
           title: title,
           username: _localShellUsername(),
+          sourceHostUuid: targetView.activeTab.sourceHostUuid,
           shellPath: _resolvedLocalShellPath(null),
         ),
         onExit: () => _closeTerminalViewTab(tab.id, viewId, viewId),

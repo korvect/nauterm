@@ -2531,6 +2531,15 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       );
       return;
     }
+    final host = log.hostId != null
+        ? _dataStore?.getHost(log.hostId!)
+        : _dataStore
+              ?.listHosts()
+              .where(
+                (host) => log.hostUuid != null && host.uuid == log.hostUuid,
+              )
+              .firstOrNull;
+    final telnet = _terminalLogUsesTelnetTheme(log, host);
     final controller = TerminalController(
       driver: NativeReplayTerminalDriver.create(
         columns: log.columns ?? 100,
@@ -2548,6 +2557,8 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       theme: _defaultThemeForSettings(),
       controller: controller,
       replay: true,
+      replayUsesTelnetTheme: telnet,
+      sourceHostUuid: host?.uuid ?? log.hostUuid,
       replayLoading: true,
     );
     _setWorkspaceState(() {
@@ -2561,19 +2572,24 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
     widget.controller?._notifyTabsChanged();
 
     try {
+      final themeRevision = _terminalThemeRevision;
       final results = await Future.wait<Object>([
         store.captureInfo(
           log.id,
           captureFile: log.captureFile,
           includeHash: log.endedAt != null && log.captureSha256 != null,
         ),
-        _themeForId(log.themeId),
+        _themeForId(
+          telnet ? host?.telnetThemeId : host?.themeId,
+          darkThemeId: telnet ? host?.telnetDarkThemeId : host?.darkThemeId,
+        ),
       ]);
       final captureInfo = results[0] as TerminalLogCaptureInfo;
       final theme = results[1] as TerminalTheme;
       if (mounted &&
           !controller.isDisposed &&
-          workspace.terminalTabs.contains(replayTab)) {
+          workspace.terminalTabs.contains(replayTab) &&
+          themeRevision == _terminalThemeRevision) {
         _setWorkspaceState(() {
           replayTab.primaryView.activeTab.theme = theme;
         });
@@ -2602,6 +2618,28 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
         _setWorkspaceState(() => replayTab.replayLoading = false);
       }
     }
+  }
+
+  bool _terminalLogUsesTelnetTheme(TerminalLogEntry log, HostEntry? host) {
+    final recorder = _recordingService.recorders
+        .where((recorder) => recorder.id == log.id)
+        .firstOrNull;
+    final events =
+        recorder?.snapshot().events ??
+        [
+          for (final event
+              in _dataStore?.listTerminalLogEvents(log.id) ??
+                  const <TerminalLogEvent>[])
+            TerminalRecordingEvent.fromJson(event.toJson()),
+        ];
+    final protocol = events
+        .map((event) => event.connectionProtocol)
+        .whereType<TerminalRecordingProtocol>()
+        .firstOrNull;
+    return protocol == TerminalRecordingProtocol.telnet ||
+        (protocol == null &&
+            host?.telnetEnabled == true &&
+            host?.sshEnabled == false);
   }
 
   Future<void> _loadReplayCapture(

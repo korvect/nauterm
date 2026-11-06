@@ -9,6 +9,8 @@ import 'terminal_theme.dart';
 
 enum TerminalRecordingEventType { input, connection, output, exit }
 
+enum TerminalRecordingProtocol { local, ssh, mosh, telnet, serial }
+
 const Object _sentinel = Object();
 
 @immutable
@@ -36,6 +38,19 @@ class TerminalRecordingEvent {
   final String message;
   final String? connectionKind;
   final String? data;
+
+  TerminalRecordingProtocol? get connectionProtocol {
+    if (type != TerminalRecordingEventType.connection) return null;
+    final protocol = TerminalRecordingProtocol.values
+        .where((value) => value.name == data)
+        .firstOrNull;
+    if (protocol != null) return protocol;
+    // Older recordings only identified the transport in connection messages.
+    if (message.startsWith('Connecting to telnet://')) {
+      return TerminalRecordingProtocol.telnet;
+    }
+    return null;
+  }
 
   Map<String, Object?> toJson() => {
     'timestamp': timestamp.toIso8601String(),
@@ -117,7 +132,6 @@ class TerminalSessionRecording {
     required this.events,
     required this.shellHistory,
     this.target,
-    this.themeId,
     this.captureBase64 = '',
     this.captureBytes,
     this.endedAt,
@@ -128,7 +142,6 @@ class TerminalSessionRecording {
       id: json['id'] as String? ?? '',
       title: json['title'] as String? ?? 'Terminal',
       target: json['target'] as String?,
-      themeId: json['theme_id'] as String?,
       startedAt: DateTime.parse(json['started_at'] as String),
       endedAt: json['ended_at'] == null
           ? null
@@ -157,7 +170,6 @@ class TerminalSessionRecording {
   final String id;
   final String title;
   final String? target;
-  final String? themeId;
   final DateTime startedAt;
   final DateTime? endedAt;
   final String captureBase64;
@@ -201,7 +213,6 @@ class TerminalSessionRecording {
   TerminalSessionRecording copyWith({
     String? title,
     Object? target = _sentinel,
-    Object? themeId = _sentinel,
     DateTime? startedAt,
     Object? endedAt = _sentinel,
     String? captureBase64,
@@ -214,9 +225,6 @@ class TerminalSessionRecording {
       id: id,
       title: title ?? this.title,
       target: identical(target, _sentinel) ? this.target : target as String?,
-      themeId: identical(themeId, _sentinel)
-          ? this.themeId
-          : themeId as String?,
       startedAt: startedAt ?? this.startedAt,
       endedAt: identical(endedAt, _sentinel)
           ? this.endedAt
@@ -235,7 +243,6 @@ class TerminalSessionRecording {
     'id': id,
     'title': title,
     'target': target,
-    'theme_id': themeId,
     'started_at': startedAt.toIso8601String(),
     'ended_at': endedAt?.toIso8601String(),
     'capture_base64': captureBase64,
@@ -249,7 +256,6 @@ class TerminalSessionRecording {
     'id': id,
     'title': title,
     'target': target,
-    'theme_id': themeId,
     'started_at': startedAt.toIso8601String(),
     'ended_at': endedAt?.toIso8601String(),
     'capture_file': captureFile,
@@ -263,7 +269,6 @@ class TerminalSessionRecorder {
   TerminalSessionRecorder({
     required this.title,
     this.target,
-    this.themeId,
     this.onChanged,
     this.onConnectionEstablished,
     this.onShellHistoryEntry,
@@ -275,7 +280,6 @@ class TerminalSessionRecorder {
   final String id;
   final String title;
   final String? target;
-  final String? themeId;
   final DateTime startedAt;
   final VoidCallback? onChanged;
   final VoidCallback? onConnectionEstablished;
@@ -300,7 +304,6 @@ class TerminalSessionRecorder {
       id: id,
       title: title,
       target: target,
-      themeId: themeId,
       startedAt: startedAt,
       endedAt: _endedAt,
       captureBase64: base64Encode(_capture.toBytes()),
@@ -446,7 +449,10 @@ class TerminalSessionRecorder {
     onChanged?.call();
   }
 
-  void recordConnectionEvent(TerminalConnectionEvent event) {
+  void recordConnectionEvent(
+    TerminalConnectionEvent event, {
+    TerminalRecordingProtocol? protocol,
+  }) {
     if (!isActive) {
       return;
     }
@@ -461,6 +467,7 @@ class TerminalSessionRecorder {
         type: TerminalRecordingEventType.connection,
         message: line,
         connectionKind: event.kind.name,
+        data: protocol?.name,
       ),
     );
     _trimEvents();
@@ -555,7 +562,15 @@ class TerminalSessionRecorder {
 
   void _trimEvents() {
     if (_events.length > 1200) {
-      _events = _events.sublist(_events.length - 1200);
+      final start = _events.length - 1200;
+      final connectionIndex = _events.indexWhere(
+        (event) => event.connectionProtocol != null,
+      );
+      final connection = connectionIndex >= 0 && connectionIndex < start
+          ? _events[connectionIndex]
+          : null;
+      _events = _events.sublist(start);
+      if (connection != null) _events[0] = connection;
     }
   }
 }

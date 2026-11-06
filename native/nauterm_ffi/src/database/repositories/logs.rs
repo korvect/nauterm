@@ -17,16 +17,15 @@ impl NautermDatabase {
         transaction.execute(
             r#"
             INSERT INTO terminal_logs (
-              uuid, title, theme_id, host_uuid, host, port, username, shell_path,
+              uuid, title, host_uuid, host, port, username, shell_path,
               work_dir, cwd, capture_file, capture_bytes, capture_sha256,
               columns, rows, started_at, ended_at
             )
             VALUES (
-              ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+              ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
             )
             ON CONFLICT(uuid) DO UPDATE SET
               title = excluded.title,
-              theme_id = excluded.theme_id,
               host_uuid = excluded.host_uuid,
               host = excluded.host,
               port = excluded.port,
@@ -45,7 +44,6 @@ impl NautermDatabase {
             params![
                 log_uuid,
                 log.title,
-                log.theme_id,
                 host_uuid,
                 log.host,
                 log.port,
@@ -105,7 +103,6 @@ impl NautermDatabase {
               terminal_logs.id AS local_id,
               terminal_logs.uuid AS id,
               terminal_logs.title,
-              terminal_logs.theme_id,
               terminal_logs.host_uuid,
               terminal_logs.host,
               terminal_logs.port,
@@ -197,7 +194,6 @@ impl NautermDatabase {
               terminal_logs.id AS local_id,
               terminal_logs.uuid AS id,
               terminal_logs.title,
-              terminal_logs.theme_id,
               terminal_logs.host_uuid,
               terminal_logs.host,
               terminal_logs.port,

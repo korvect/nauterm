@@ -35,6 +35,23 @@ void main() {
     },
   );
 
+  test('terminal logs ignore legacy theme metadata', () {
+    final log = TerminalLogEntry.fromJson({
+      'id': 'legacy-log',
+      'title': 'Remote',
+      'theme_id': 'ayu-dark',
+      'host_id': 42,
+      'capture_file': 'legacy.ntrcap',
+      'started_at': DateTime.utc(2026).toIso8601String(),
+    });
+    expect(log.hostId, 42);
+    expect(log.toJson(), isNot(contains('theme_id')));
+    expect(
+      log.copyWith(title: 'Renamed').toJson(),
+      isNot(contains('theme_id')),
+    );
+  });
+
   test(
     'both theme slots and follow preference round-trip independently',
     () async {

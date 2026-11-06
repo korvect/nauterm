@@ -11,6 +11,50 @@ import 'package:nauterm/terminal/terminal_recording.dart';
 import 'package:nauterm/terminal/terminal_theme.dart';
 
 void main() {
+  test('recordings ignore legacy themes and no longer serialize them', () {
+    final recorder = TerminalSessionRecorder(title: 'Local');
+    final json = recorder.snapshot().toJson();
+    expect(json, isNot(contains('theme_id')));
+    expect(recorder.snapshot().toMetadataJson(), isNot(contains('theme_id')));
+    final legacy = TerminalSessionRecording.fromJson({
+      ...json,
+      'theme_id': 'ayu-dark',
+    });
+    expect(legacy.toJson(), isNot(contains('theme_id')));
+  });
+
+  test('connection events preserve transport independently of themes', () {
+    for (final protocol in TerminalRecordingProtocol.values) {
+      final recorder = TerminalSessionRecorder(title: 'Remote');
+      recorder.recordConnectionEvent(
+        const TerminalConnectionEvent(
+          kind: TerminalConnectionEventKind.connected,
+          message: 'Connected',
+        ),
+        protocol: protocol,
+      );
+      final event = TerminalRecordingEvent.fromJson(
+        recorder.snapshot().events.single.toJson(),
+      );
+      expect(event.connectionProtocol, protocol);
+    }
+    final legacy = TerminalRecordingEvent(
+      timestamp: DateTime.utc(2026),
+      type: TerminalRecordingEventType.connection,
+      message: 'Connecting to telnet://example.test:23.',
+    );
+    expect(legacy.connectionProtocol, TerminalRecordingProtocol.telnet);
+    expect(
+      TerminalRecordingEvent(
+        timestamp: DateTime.utc(2026),
+        type: TerminalRecordingEventType.input,
+        message: 'telnet',
+        data: 'telnet',
+      ).connectionProtocol,
+      isNull,
+    );
+  });
+
   test('terminal recorder uses a uuid v7 recording id', () {
     final recorder = TerminalSessionRecorder(title: 'Local');
 
@@ -24,6 +68,27 @@ void main() {
       ),
     );
   });
+
+  test(
+    'connection protocol survives trimming a long session event history',
+    () {
+      final recorder = TerminalSessionRecorder(title: 'Remote');
+      recorder.recordConnectionEvent(
+        const TerminalConnectionEvent(
+          kind: TerminalConnectionEventKind.connected,
+          message: 'Connected',
+        ),
+        protocol: TerminalRecordingProtocol.telnet,
+      );
+      for (var index = 0; index < 1300; index++) {
+        recorder.recordInput('x');
+      }
+      final events = recorder.snapshot().events;
+      expect(events, hasLength(1200));
+      expect(events.first.connectionProtocol, TerminalRecordingProtocol.telnet);
+      expect(events.last.type, TerminalRecordingEventType.input);
+    },
+  );
 
   test('terminal recorder confirms a connection only once', () {
     var confirmations = 0;

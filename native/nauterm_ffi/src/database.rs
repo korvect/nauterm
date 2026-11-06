@@ -618,8 +618,6 @@ pub struct TerminalLogEntry {
     pub local_id: Option<i64>,
     pub title: String,
     #[serde(default)]
-    pub theme_id: Option<String>,
-    #[serde(default)]
     pub host_id: Option<i64>,
     #[serde(default)]
     pub host_uuid: Option<String>,
@@ -2993,7 +2991,6 @@ fn terminal_log_from_row(row: &Row<'_>) -> rusqlite::Result<TerminalLogEntry> {
         id: row.get("id")?,
         local_id: row.get("local_id")?,
         title: row.get("title")?,
-        theme_id: row.get("theme_id")?,
         host_id: row.get("host_id")?,
         host_uuid: row.get("host_uuid")?,
         host: row.get("host")?,
@@ -3198,6 +3195,14 @@ mod tests {
         database
             .connection
             .execute_batch(
+                "ALTER TABLE terminal_logs ADD COLUMN theme_id TEXT;
+             INSERT INTO terminal_logs (uuid, title, theme_id, capture_file, started_at)
+             VALUES ('legacy-log', 'Legacy', 'ayu-dark', 'legacy.ntrcap', 1);",
+            )
+            .unwrap();
+        database
+            .connection
+            .execute_batch(
                 "ALTER TABLE groups DROP COLUMN dark_theme_id;
             ALTER TABLE groups DROP COLUMN telnet_dark_theme_id;
             ALTER TABLE hosts DROP COLUMN dark_theme_id;
@@ -3212,6 +3217,14 @@ mod tests {
         assert_eq!(host.telnet_theme_id.as_deref(), Some("nysa-light"));
         assert_eq!(host.dark_theme_id, None);
         assert_eq!(host.telnet_dark_theme_id, None);
+        assert!(!table_column_exists(&database.connection, "terminal_logs", "theme_id").unwrap());
+        let log = database
+            .list_terminal_logs(None, None)
+            .unwrap()
+            .pop()
+            .unwrap();
+        assert_eq!(log.capture_file, "legacy.ntrcap");
+        assert!(serde_json::to_value(log).unwrap().get("theme_id").is_none());
     }
 
     #[test]
@@ -4972,7 +4985,6 @@ mod tests {
             id: "session-1".to_string(),
             local_id: None,
             title: "cassandra".to_string(),
-            theme_id: Some("atom-one-dark".to_string()),
             host_id: Some(7),
             host_uuid: None,
             host: Some("10.0.0.12".to_string()),

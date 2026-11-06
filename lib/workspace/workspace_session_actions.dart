@@ -580,7 +580,7 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
     String? startupSnippet,
     Map<String, String> environment = const {},
     TerminalTheme? theme,
-    String? themeId,
+    int? hostId,
   }) {
     final resolvedShellPath = _resolvedLocalShellPath(shellPath);
     _setWorkspaceState(() {
@@ -607,7 +607,8 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
         recorder: _createTerminalRecorder(
           title: tabTitle,
           target: workingDirectory,
-          themeId: themeId,
+          hostId: hostId,
+          sourceHostUuid: sourceHostUuid,
           username: _localShellUsername(),
           shellPath: resolvedShellPath,
           workDir: workingDirectory,
@@ -795,7 +796,7 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
         workingDirectory: _emptyToNull(host.workDir),
         sourceHostUuid: host.uuid,
         theme: theme,
-        themeId: host.themeId,
+        hostId: host.id,
       );
       return;
     }
@@ -947,7 +948,6 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
       final recorder = _createTerminalRecorder(
         title: host.name,
         target: '${auth.username}@${auth.host}:${auth.port}',
-        themeId: host.themeId,
         hostId: host.id,
         host: auth.host,
         port: auth.port,
@@ -1106,7 +1106,6 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
         recorder: _createTerminalRecorder(
           title: host.name,
           target: 'telnet $address:$resolvedPort',
-          themeId: host.telnetThemeId,
           hostId: host.id,
           host: address,
           port: resolvedPort,
@@ -1236,7 +1235,6 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
         recorder: _createTerminalRecorder(
           title: host.name,
           target: '${auth.username}@${auth.host}:${auth.port}',
-          themeId: host.themeId,
           hostId: host.id,
           host: auth.host,
           port: auth.port,
@@ -1399,7 +1397,6 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
     final revision = ++_terminalThemeRevision;
     final updates = <(_TerminalViewTabEntry, TerminalTheme)>[];
     for (final tab in _allTerminalTabs.toList()) {
-      if (tab.replay) continue;
       for (final view in tab.rootLayout.views) {
         for (final entry in view.tabs) {
           final id =
@@ -1416,7 +1413,9 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
                               entry.sourceHostUuid != null,
                         )
                         .firstOrNull;
-          final telnet = entry.controller.telnetProfile != null;
+          final telnet = tab.replay
+              ? tab.replayUsesTelnetTheme
+              : entry.controller.telnetProfile != null;
           final theme = await _themeForId(
             telnet ? host?.telnetThemeId : host?.themeId,
             darkThemeId: telnet ? host?.telnetDarkThemeId : host?.darkThemeId,
@@ -1440,8 +1439,8 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
   TerminalSessionRecorder? _createTerminalRecorder({
     required String title,
     String? target,
-    String? themeId,
     int? hostId,
+    String? sourceHostUuid,
     String? host,
     int? port,
     String? username,
@@ -1461,7 +1460,6 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
     recorder = TerminalSessionRecorder(
       title: title,
       target: target,
-      themeId: themeId,
       onChanged: _handleRecordingChanged,
       onConnectionEstablished: awaitConnection
           ? () => _confirmTerminalRecording(recorder.id)
@@ -1476,7 +1474,14 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
       recorder,
       pending: awaitConnection,
       context: TerminalLogContext(
-        hostId: hostId,
+        hostId:
+            hostId ??
+            (sourceHostUuid == null
+                ? null
+                : _hostEntries
+                      .where((host) => host.uuid == sourceHostUuid)
+                      .firstOrNull
+                      ?.id),
         host: _emptyToNull(host),
         port: port,
         username: _emptyToNull(username),
@@ -1848,8 +1853,10 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
     return TerminalLogEntry(
       id: recording.id,
       title: recording.title,
-      themeId: recording.themeId,
       hostId: context.hostId,
+      hostUuid: context.hostId == null
+          ? null
+          : _dataStore?.getHost(context.hostId!)?.uuid,
       host: _emptyToNull(context.host),
       port: context.port,
       username: _emptyToNull(context.username),

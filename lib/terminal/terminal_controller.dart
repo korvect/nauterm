@@ -1990,23 +1990,28 @@ class TerminalController extends ChangeNotifier {
     if (_connectionEvents.length > 400) {
       _connectionEvents.removeRange(0, _connectionEvents.length - 400);
     }
-    _recorder?.recordConnectionEvent(stampedEvent);
+    _recorder?.recordConnectionEvent(
+      stampedEvent,
+      protocol: _recordingProtocol,
+    );
     _logConnectionEvent(stampedEvent);
     _applyConnectionEvent(stampedEvent);
   }
 
+  TerminalRecordingProtocol get _recordingProtocol =>
+      _remoteTransport == _RemoteTerminalTransport.mosh
+      ? TerminalRecordingProtocol.mosh
+      : _remoteTransport == _RemoteTerminalTransport.ssh
+      ? TerminalRecordingProtocol.ssh
+      : _serialProfile != null
+      ? TerminalRecordingProtocol.serial
+      : _telnetProfile != null
+      ? TerminalRecordingProtocol.telnet
+      : TerminalRecordingProtocol.local;
+
   void _logConnectionEvent(TerminalConnectionEvent event) {
-    final protocol = _remoteTransport == _RemoteTerminalTransport.mosh
-        ? 'mosh'
-        : _remoteTransport == _RemoteTerminalTransport.ssh
-        ? 'ssh'
-        : _serialProfile != null
-        ? 'serial'
-        : _telnetProfile != null
-        ? 'telnet'
-        : 'local';
     final fields = <String, Object?>{
-      'protocol': protocol,
+      'protocol': _recordingProtocol.name,
       'event': event.kind.name,
       if (event.exitStatus != null) 'exit_status': event.exitStatus,
     };

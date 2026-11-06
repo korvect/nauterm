@@ -368,6 +368,14 @@ fn migrate_v4_to_v5(connection: &mut Connection) -> rusqlite::Result<()> {
          ALTER TABLE hosts ADD COLUMN dark_theme_id TEXT;
          ALTER TABLE hosts ADD COLUMN telnet_dark_theme_id TEXT;",
     )?;
+    let has_log_theme: bool = transaction.query_row(
+        "SELECT EXISTS(SELECT 1 FROM pragma_table_info('terminal_logs') WHERE name = 'theme_id')",
+        [],
+        |row| row.get(0),
+    )?;
+    if has_log_theme {
+        transaction.execute_batch("ALTER TABLE terminal_logs DROP COLUMN theme_id;")?;
+    }
     transaction.pragma_update(None, "user_version", 5)?;
     transaction.commit()
 }

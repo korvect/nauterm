@@ -325,7 +325,6 @@ fn create_terminal_log_schema(connection: &Connection) -> rusqlite::Result<()> {
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           uuid TEXT NOT NULL UNIQUE,
           title TEXT NOT NULL,
-          theme_id TEXT,
           host_uuid TEXT,
           host TEXT,
           port INTEGER,

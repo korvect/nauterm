@@ -31,6 +31,7 @@ class _TerminalTab {
     TerminalFontConfig? font,
     _TerminalViewLayout? rootLayout,
     this.replay = false,
+    this.replayUsesTelnetTheme = false,
     this.replayLoading = false,
     this.bellIndicator = false,
     this.pageMode = _TerminalTabPageMode.ssh,
@@ -62,6 +63,7 @@ class _TerminalTab {
   final String title;
   final _TerminalViewLayout rootLayout;
   final bool replay;
+  final bool replayUsesTelnetTheme;
   bool replayLoading;
   bool bellIndicator;
   TerminalFontConfig font;
@@ -103,6 +105,7 @@ class _TerminalTab {
       font: font,
       rootLayout: rootLayout ?? this.rootLayout,
       replay: replay,
+      replayUsesTelnetTheme: replayUsesTelnetTheme,
       replayLoading: replayLoading,
       bellIndicator: bellIndicator,
       pageMode: pageMode,

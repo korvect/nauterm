@@ -434,7 +434,6 @@ void main() {
       TerminalLogEntry(
         id: 'session-1',
         title: 'cassandra',
-        themeId: 'atom-one-dark',
         hostId: hostId,
         host: '10.0.0.12',
         port: 22,
