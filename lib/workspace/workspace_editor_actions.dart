@@ -1743,7 +1743,10 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
     final key = keyId == null ? null : _dataStore?.getKey(keyId);
     final privateKey = _emptyToNull(key?.privateKey);
     final certificate = _emptyToNull(key?.certificate);
-    final passphrase = _emptyToNull(key?.passphrase);
+    final savedPassphrase = key?.passphrase;
+    final passphrase = savedPassphrase?.isEmpty == true
+        ? null
+        : savedPassphrase;
     final password = privateKey == null
         ? (identity == null
               ? _emptyToNull(host.password)

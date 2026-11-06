@@ -36,6 +36,7 @@ import '../data/known_hosts_store.dart';
 import '../data/host_import.dart';
 import '../data/nauterm_config_store.dart';
 import '../data/nauterm_data_store.dart';
+import '../data/ssh_private_key.dart';
 import '../data/nauterm_paths.dart';
 import '../data/recording_service.dart';
 import '../data/shell_history_reader.dart';

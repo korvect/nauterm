@@ -1,13 +1,68 @@
 part of 'nauterm_workspace.dart';
 
+@visibleForTesting
+Widget buildKeyEditorForTesting({
+  required Future<void> Function(KeyEntry) onSave,
+  bool relatedCredential = false,
+  bool generate = false,
+  KeyEntry? initial,
+  Future<({String privateKey, String publicKey})> Function(String passphrase)?
+  generateKey,
+}) {
+  Future<_GeneratedSshKeyPair> generatePair({
+    required String type,
+    required String comment,
+    required String passphrase,
+    int? bits,
+  }) async {
+    if (generateKey == null) {
+      return _generateSshKeyPair(
+        type: type,
+        comment: comment,
+        passphrase: passphrase,
+        bits: bits,
+      );
+    }
+    final pair = await generateKey(passphrase);
+    return _GeneratedSshKeyPair(
+      privateKey: pair.privateKey,
+      publicKey: pair.publicKey,
+    );
+  }
+
+  if (generate && !relatedCredential) {
+    return _GenerateKeyEditorContent(
+      onClose: () {},
+      onSave: onSave,
+      generateKey: generatePair,
+    );
+  }
+  return _KeyEditorContent(
+    request: _KeyEditorRequest(
+      initial: initial,
+      credentialCreation: relatedCredential,
+    ),
+    onClose: () {},
+    onSave: onSave,
+    generateKey: generatePair,
+    onDuplicate: (_) {},
+    onExportToHost: (_) {},
+    onExportToFile: (_) {},
+    onDelete: (_) {},
+  );
+}
+
 class _GenerateKeyEditorContent extends StatefulWidget {
   const _GenerateKeyEditorContent({
     required this.onClose,
     required this.onSave,
+    this.generateKey = _generateSshKeyPair,
   });
 
   final VoidCallback onClose;
   final _SaveGeneratedKey onSave;
+
+  final _SshKeyGenerator generateKey;
 
   @override
   State<_GenerateKeyEditorContent> createState() =>
@@ -21,6 +76,7 @@ class _GenerateKeyEditorContentState extends State<_GenerateKeyEditorContent> {
   int _ecdsaBits = 521;
   int _rsaBits = 4096;
   bool _passphraseVisible = false;
+  bool _savePassphrase = false;
   bool _generating = false;
   String? _error;
   late bool _nameIsAutomatic;
@@ -86,10 +142,14 @@ class _GenerateKeyEditorContentState extends State<_GenerateKeyEditorContent> {
     });
 
     try {
-      final generated = await _generateSshKeyPair(
+      final passphrase = _passphraseController.text;
+      final savedPassphrase = _savePassphrase && passphrase.isNotEmpty
+          ? passphrase
+          : null;
+      final generated = await widget.generateKey(
         type: _keyType,
         comment: name,
-        passphrase: _passphraseController.text,
+        passphrase: passphrase,
         bits: _selectedKeySize,
       );
       await widget.onSave(
@@ -97,6 +157,7 @@ class _GenerateKeyEditorContentState extends State<_GenerateKeyEditorContent> {
           name: name,
           privateKey: generated.privateKey,
           publicKey: generated.publicKey,
+          passphrase: savedPassphrase,
         ),
       );
       if (mounted) {
@@ -214,6 +275,15 @@ class _GenerateKeyEditorContentState extends State<_GenerateKeyEditorContent> {
                 height: 28,
                 minWidth: 28,
               ),
+            ),
+            SizedBox(height: _workspaceFormFieldGap),
+            _WorkspaceToggleRow(
+              label: tr(
+                'workspace.keys.label.savePassphrase',
+                fallback: 'Save passphrase',
+              ),
+              value: _savePassphrase,
+              onChanged: (value) => setState(() => _savePassphrase = value),
             ),
           ],
         ),
@@ -443,6 +513,7 @@ class _KeyEditorContent extends StatefulWidget {
     required this.request,
     required this.onClose,
     required this.onSave,
+    this.generateKey = _generateSshKeyPair,
     required this.onDuplicate,
     required this.onExportToHost,
     required this.onExportToFile,
@@ -456,6 +527,8 @@ class _KeyEditorContent extends StatefulWidget {
   final ValueChanged<KeyEntry> onExportToHost;
   final ValueChanged<KeyEntry> onExportToFile;
   final ValueChanged<KeyEntry> onDelete;
+
+  final _SshKeyGenerator generateKey;
 
   @override
   State<_KeyEditorContent> createState() => _KeyEditorContentState();
@@ -475,6 +548,7 @@ class _KeyEditorContentState extends State<_KeyEditorContent> {
   bool _pickerLaunchPending = false;
   bool _dropHovered = false;
   bool _passphraseVisible = false;
+  bool _savePassphrase = false;
   _CredentialCreationMethod _creationMethod = _CredentialCreationMethod.paste;
   String _generatedKeyType = 'ecdsa';
   int _ecdsaBits = 521;
@@ -540,11 +614,15 @@ class _KeyEditorContentState extends State<_KeyEditorContent> {
     _nameIsAutomatic = _nameController.text.trim().isEmpty;
   }
 
+  bool get _editingEncryptedKey =>
+      widget.request.initial != null &&
+      sshPrivateKeyRequiresPassphrase(_privateController.text);
+
   void _handlePrivateKeyChanged() {
     _refreshAutomaticName();
-    if (_privateKeyError != null && _privateController.text.trim().isNotEmpty) {
-      setState(() => _privateKeyError = null);
-    }
+    setState(() {
+      if (_privateController.text.trim().isNotEmpty) _privateKeyError = null;
+    });
   }
 
   void _handleCertificateChanged() {
@@ -728,7 +806,10 @@ class _KeyEditorContentState extends State<_KeyEditorContent> {
         privateKey: _emptyToNull(_privateController.text),
         publicKey: _emptyToNull(_publicController.text),
         certificate: _emptyToNull(_certificateController.text),
-        passphrase: widget.request.initial?.passphrase,
+        passphrase:
+            _editingEncryptedKey && _passphraseController.text.isNotEmpty
+            ? _passphraseController.text
+            : null,
       ),
     );
   }
@@ -747,10 +828,14 @@ class _KeyEditorContentState extends State<_KeyEditorContent> {
       _error = null;
     });
     try {
-      final generated = await _generateSshKeyPair(
+      final passphrase = _passphraseController.text;
+      final savedPassphrase = _savePassphrase && passphrase.isNotEmpty
+          ? passphrase
+          : null;
+      final generated = await widget.generateKey(
         type: _generatedKeyType,
         comment: name,
-        passphrase: _passphraseController.text,
+        passphrase: passphrase,
         bits: _selectedGeneratedKeySize,
       );
       await widget.onSave(
@@ -758,6 +843,7 @@ class _KeyEditorContentState extends State<_KeyEditorContent> {
           name: name,
           privateKey: generated.privateKey,
           publicKey: generated.publicKey,
+          passphrase: savedPassphrase,
           certificate: _emptyToNull(_certificateController.text),
         ),
       );
@@ -818,6 +904,31 @@ class _KeyEditorContentState extends State<_KeyEditorContent> {
     );
   }
 
+  Widget _buildPassphraseInput() => _WorkspaceInput(
+    controller: _passphraseController,
+    label: tr('common.label.passphrase', fallback: 'Passphrase'),
+    obscureText: !_passphraseVisible,
+    trailing: _WorkspaceButton(
+      icon: _passphraseVisible
+          ? Icons.visibility_rounded
+          : Icons.visibility_off_rounded,
+      tooltip: _passphraseVisible
+          ? tr(
+              'workspace.keys.action.hidePassphrase',
+              fallback: 'Hide passphrase',
+            )
+          : tr(
+              'workspace.keys.action.showPassphrase',
+              fallback: 'Show passphrase',
+            ),
+      onPressed: () => setState(() => _passphraseVisible = !_passphraseVisible),
+      variant: _WorkspaceButtonVariant.text,
+      size: _WorkspaceControlSize.tiny,
+      height: 28,
+      minWidth: 28,
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     final initial = widget.request.initial;
@@ -877,6 +988,10 @@ class _KeyEditorContentState extends State<_KeyEditorContent> {
             title: tr('common.label.key', fallback: 'Key'),
             children: [
               _buildCredentialNameInput(),
+              if (_editingEncryptedKey) ...[
+                SizedBox(height: _workspaceFormFieldGap),
+                _buildPassphraseInput(),
+              ],
               SizedBox(height: _workspaceFormFieldGap),
               _WorkspaceInput(
                 controller: _privateController,
@@ -1020,35 +1135,24 @@ class _KeyEditorContentState extends State<_KeyEditorContent> {
               ],
             ],
           ),
+        ],
+        if (_isGenerating) ...[
           SizedBox(height: 14),
           _WorkspaceFormSection(
             title: tr('workspace.keys.section.security', fallback: 'Security'),
             children: [
-              _WorkspaceInput(
-                controller: _passphraseController,
-                label: tr('common.label.passphrase', fallback: 'Passphrase'),
-                obscureText: !_passphraseVisible,
-                trailing: _WorkspaceButton(
-                  icon: _passphraseVisible
-                      ? Icons.visibility_rounded
-                      : Icons.visibility_off_rounded,
-                  tooltip: _passphraseVisible
-                      ? tr(
-                          'workspace.keys.action.hidePassphrase',
-                          fallback: 'Hide passphrase',
-                        )
-                      : tr(
-                          'workspace.keys.action.showPassphrase',
-                          fallback: 'Show passphrase',
-                        ),
-                  onPressed: () =>
-                      setState(() => _passphraseVisible = !_passphraseVisible),
-                  variant: _WorkspaceButtonVariant.text,
-                  size: _WorkspaceControlSize.tiny,
-                  height: 28,
-                  minWidth: 28,
+              _buildPassphraseInput(),
+              if (_isGenerating) ...[
+                SizedBox(height: _workspaceFormFieldGap),
+                _WorkspaceToggleRow(
+                  label: tr(
+                    'workspace.keys.label.savePassphrase',
+                    fallback: 'Save passphrase',
+                  ),
+                  value: _savePassphrase,
+                  onChanged: (value) => setState(() => _savePassphrase = value),
                 ),
-              ),
+              ],
             ],
           ),
         ],
@@ -1357,6 +1461,13 @@ String? _defaultSshKeyDirectoryPath() {
   final sshDirectory = '$home${io.Platform.pathSeparator}.ssh';
   return io.Directory(sshDirectory).existsSync() ? sshDirectory : home;
 }
+
+typedef _SshKeyGenerator = Future<_GeneratedSshKeyPair> Function({
+  required String type,
+  required String comment,
+  required String passphrase,
+  int? bits,
+});
 
 class _GeneratedSshKeyPair {
   const _GeneratedSshKeyPair({

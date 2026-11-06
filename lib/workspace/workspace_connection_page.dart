@@ -1252,7 +1252,7 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
           : widget.dataStore?.getKey(detail!.keyId!);
       final identityKey = identityKeyEntry?.privateKey?.trim();
       final identityCertificate = identityKeyEntry?.certificate?.trim();
-      final identityPassphrase = identityKeyEntry?.passphrase?.trim();
+      final identityPassphrase = identityKeyEntry?.passphrase;
       if (identityKey != null && identityKey.isNotEmpty) {
         nextPrivateKey = identityKey;
         nextCertificate = identityCertificate?.isEmpty == true
