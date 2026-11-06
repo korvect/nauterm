@@ -1377,16 +1377,24 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
           terminalTab.theme = theme;
         }
       }
-      terminalThemeId =
-          entry.id == 'default' || entry.id == nysaLightTerminalThemeId
-          ? null
-          : entry.id;
-      terminalCustomTheme = theme;
+      if (terminalFollowAppTheme && _workspaceDark) {
+        terminalDarkThemeId = entry.id;
+        terminalDarkCustomTheme = theme;
+      } else {
+        terminalThemeId =
+            entry.id == 'default' || entry.id == nysaLightTerminalThemeId
+            ? null
+            : entry.id;
+        terminalCustomTheme = theme;
+      }
     });
     try {
       await NautermConfigStore(NautermPaths.resolve()).saveTerminalTheme(
-        themeId: terminalThemeId,
-        customThemeJson: terminalCustomTheme.toJson(),
+        themeId: terminalFollowAppTheme && _workspaceDark
+            ? terminalDarkThemeId
+            : terminalThemeId,
+        customThemeJson: theme.toJson(),
+        dark: terminalFollowAppTheme && _workspaceDark,
       );
     } on Object {
       _showWorkspaceMessage(

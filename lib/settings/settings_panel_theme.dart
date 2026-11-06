@@ -1,6 +1,34 @@
 part of 'settings_panel.dart';
 
 Widget _buildSettingsThemeSection(_SettingsPanelState state) {
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      _SettingsRow(
+        title: tr(
+          'settings.terminal.followTheme.title',
+          fallback: 'Switch themes automatically',
+        ),
+        subtitle: tr(
+          'settings.terminal.followTheme.description',
+          fallback: 'Use the matching terminal theme for the app’s light or dark mode.',
+        ),
+        trailing: _SettingsSwitch(
+          key: const ValueKey('settings-terminal-follow-appearance'),
+          value: terminalFollowAppTheme,
+          onChanged: (value) {
+            state._mutate(() => terminalFollowAppTheme = value);
+            state._persistRuntimeSettings();
+          },
+        ),
+      ),
+      const SizedBox(height: 18),
+      _buildSettingsThemeEditor(state),
+    ],
+  );
+}
+
+Widget _buildSettingsThemeEditor(_SettingsPanelState state) {
   final theme = state._effectiveTheme;
   final allThemes = state._allThemes;
   final filtered = state._themeSearchQuery.isEmpty
@@ -11,7 +39,7 @@ Widget _buildSettingsThemeSection(_SettingsPanelState state) {
               t.theme.name.toLowerCase().contains(q);
         }).toList();
   return SizedBox(
-    height: 620,
+    height: 660,
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -20,11 +48,7 @@ Widget _buildSettingsThemeSection(_SettingsPanelState state) {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              TerminalThemePreviewCard(
-                title: _settingsThemeDisplayName(state),
-                theme: theme,
-                compact: true,
-              ),
+              _buildSettingsThemePreviews(state),
               SizedBox(height: 14),
               Expanded(
                 child: Container(
@@ -200,6 +224,9 @@ Widget _buildSettingsThemeSection(_SettingsPanelState state) {
                     child: _ThemeGrid(
                       themes: filtered,
                       selectedId: state._themeId,
+                      defaultId: state._editingDarkTheme
+                          ? nysaDarkTerminalThemeId
+                          : nysaLightTerminalThemeId,
                       onSelect: state._selectTheme,
                     ),
                   ),
@@ -212,17 +239,16 @@ Widget _buildSettingsThemeSection(_SettingsPanelState state) {
   );
 }
 
-String _settingsThemeDisplayName(_SettingsPanelState state) {
-  if (state._themeId == null) {
-    return defaultTerminalTheme.name;
+String _settingsThemeDisplayName(_SettingsPanelState state, bool dark) {
+  final id = dark ? state._darkThemeId : state._lightThemeId;
+  if (id == null) {
+    return state._themeForSlot(dark).name;
   }
-  if (state._themeId == 'custom') {
+  if (id == 'custom') {
     return 'Custom';
   }
-  final match = state._allThemes
-      ?.where((t) => t.id == state._themeId)
-      .firstOrNull;
-  return match?.theme.name ?? state._themeId ?? 'Default';
+  final match = state._allThemes?.where((t) => t.id == id).firstOrNull;
+  return match?.theme.name ?? id;
 }
 
 class _ApplicationThemeSelector extends StatelessWidget {
@@ -594,8 +620,10 @@ class _ThemeGrid extends StatelessWidget {
     required this.themes,
     required this.selectedId,
     required this.onSelect,
+    this.defaultId = nysaLightTerminalThemeId,
   });
 
+  final String defaultId;
   final List<StoredTerminalTheme> themes;
   final String? selectedId;
   final ValueChanged<String?> onSelect;
@@ -615,7 +643,7 @@ class _ThemeGrid extends StatelessWidget {
           itemCount: themes.length,
           itemBuilder: (context, index) {
             final entry = themes[index];
-            final isDefault = entry.id == nysaLightTerminalThemeId;
+            final isDefault = entry.id == defaultId;
             return TerminalThemePreviewCard(
               title: entry.theme.name,
               theme: entry.theme,
@@ -1243,3 +1271,47 @@ class _TerminalPaddingControlState extends State<_TerminalPaddingControl> {
     );
   }
 }
+
+Widget _buildSettingsThemePreviews(_SettingsPanelState state) => Row(
+  children: [
+    for (final dark in [false, true]) ...[
+      if (dark) const SizedBox(width: 14),
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              tr(
+                dark
+                    ? 'settings.terminal.darkTheme'
+                    : 'settings.terminal.lightTheme',
+                fallback: dark ? 'Dark theme' : 'Light theme',
+              ),
+              style: TextStyle(color: _text, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                key: ValueKey(
+                  dark
+                      ? 'settings-dark-theme-slot'
+                      : 'settings-light-theme-slot',
+                ),
+                borderRadius: BorderRadius.circular(10),
+                onTap: () =>
+                    state._mutate(() => state._editingDarkTheme = dark),
+                child: TerminalThemePreviewCard(
+                  title: _settingsThemeDisplayName(state, dark),
+                  theme: state._themeForSlot(dark),
+                  compact: true,
+                  selected: state._editingDarkTheme == dark,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ],
+  ],
+);

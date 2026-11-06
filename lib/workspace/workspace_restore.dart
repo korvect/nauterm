@@ -506,7 +506,10 @@ extension _NautermWorkspaceRestore on _NautermWorkspaceState {
 
     if (target.protocol == WorkspaceTerminalProtocol.local) {
       if (host != null && host.type != NautermHostType.local) return null;
-      final theme = await _themeForId(host?.themeId);
+      final theme = await _themeForId(
+        host?.themeId,
+        darkThemeId: host?.darkThemeId,
+      );
       if (!mounted) return null;
       final shellPath = _resolvedLocalShellPath(
         _emptyToNull(host?.shellPath) ?? target.shellPath,
@@ -546,7 +549,12 @@ extension _NautermWorkspaceRestore on _NautermWorkspaceState {
     final themeId = target.protocol == WorkspaceTerminalProtocol.telnet
         ? host.telnetThemeId
         : host.themeId;
-    final theme = await _themeForId(themeId);
+    final theme = await _themeForId(
+      themeId,
+      darkThemeId: target.protocol == WorkspaceTerminalProtocol.telnet
+          ? host.telnetDarkThemeId
+          : host.darkThemeId,
+    );
     if (!mounted) return null;
 
     late final TerminalController controller;

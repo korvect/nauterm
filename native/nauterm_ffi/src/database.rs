@@ -21,7 +21,7 @@ mod schema;
 
 use schema::create_schema;
 
-const SCHEMA_VERSION: i32 = 4;
+const SCHEMA_VERSION: i32 = 5;
 #[cfg(test)]
 const DEFAULT_MOSH_SERVER_COMMAND: &str = "mosh-server new -s -l LANG=en_US.UTF-8";
 const DEVICE_ID_METADATA_KEY: &str = "device_id";
@@ -70,6 +70,8 @@ pub struct HostGroup {
     #[serde(default)]
     pub theme_id: Option<String>,
     #[serde(default)]
+    pub dark_theme_id: Option<String>,
+    #[serde(default)]
     pub startup_snippet_id: Option<i64>,
     #[serde(default)]
     pub startup_snippet_uuid: Option<String>,
@@ -93,6 +95,8 @@ pub struct HostGroup {
     pub telnet_port: Option<i64>,
     #[serde(default)]
     pub telnet_theme_id: Option<String>,
+    #[serde(default)]
+    pub telnet_dark_theme_id: Option<String>,
     #[serde(default)]
     pub environment_variables: Vec<HostEnvironmentVariable>,
     #[serde(default)]
@@ -263,6 +267,8 @@ pub struct HostEntry {
     #[serde(default)]
     pub theme_id: Option<String>,
     #[serde(default)]
+    pub dark_theme_id: Option<String>,
+    #[serde(default)]
     pub startup_snippet_id: Option<i64>,
     #[serde(default)]
     pub startup_snippet_uuid: Option<String>,
@@ -286,6 +292,8 @@ pub struct HostEntry {
     pub telnet_port: Option<i64>,
     #[serde(default)]
     pub telnet_theme_id: Option<String>,
+    #[serde(default)]
+    pub telnet_dark_theme_id: Option<String>,
     #[serde(default)]
     pub environment_variables: Vec<HostEnvironmentVariable>,
     #[serde(default)]
@@ -2325,11 +2333,11 @@ fn host_summary_select_sql(where_clause: &str) -> String {
           hosts.id, hosts.uuid, hosts.name, hosts.group_uuid,
           hosts.identity_uuid, hosts.proxy_uuid,
           hosts.host, hosts.port, hosts.username,
-          NULL AS password, hosts.theme_id, hosts.startup_snippet_uuid,
+          NULL AS password, hosts.theme_id, hosts.dark_theme_id, hosts.startup_snippet_uuid,
           hosts.ssh_enabled, hosts.mosh_enabled, hosts.mosh_server_command,
           hosts.telnet_enabled,
           hosts.telnet_identity_uuid, hosts.telnet_username,
-          NULL AS telnet_password, hosts.telnet_port, hosts.telnet_theme_id,
+          NULL AS telnet_password, hosts.telnet_port, hosts.telnet_theme_id, hosts.telnet_dark_theme_id,
           NULL AS environment_variables, hosts.encoding, hosts.telnet_encoding,
           hosts.type,
           hosts.key_uuid, hosts.shell_path, hosts.work_dir, hosts.os, hosts.distro,
@@ -2670,6 +2678,7 @@ fn group_from_row(row: &Row<'_>) -> rusqlite::Result<HostGroup> {
         username: row.get("username")?,
         password: row.get("password")?,
         theme_id: row.get("theme_id")?,
+        dark_theme_id: row.get("dark_theme_id")?,
         startup_snippet_id: row.get("startup_snippet_id")?,
         startup_snippet_uuid: row.get("startup_snippet_uuid")?,
         ssh_enabled: row.get("ssh_enabled")?,
@@ -2685,6 +2694,7 @@ fn group_from_row(row: &Row<'_>) -> rusqlite::Result<HostGroup> {
         telnet_password: row.get("telnet_password")?,
         telnet_port: row.get("telnet_port")?,
         telnet_theme_id: row.get("telnet_theme_id")?,
+        telnet_dark_theme_id: row.get("telnet_dark_theme_id")?,
         environment_variables: host_environment_variables_from_json(
             row.get("environment_variables")?,
         ),
@@ -2772,6 +2782,7 @@ fn host_from_row(row: &Row<'_>) -> rusqlite::Result<HostEntry> {
         username: row.get("username")?,
         password: row.get("password")?,
         theme_id: row.get("theme_id")?,
+        dark_theme_id: row.get("dark_theme_id")?,
         startup_snippet_id: row.get("startup_snippet_id")?,
         startup_snippet_uuid: row.get("startup_snippet_uuid")?,
         ssh_enabled: row.get("ssh_enabled")?,
@@ -2787,6 +2798,7 @@ fn host_from_row(row: &Row<'_>) -> rusqlite::Result<HostEntry> {
         telnet_password: row.get("telnet_password")?,
         telnet_port: row.get("telnet_port")?,
         telnet_theme_id: row.get("telnet_theme_id")?,
+        telnet_dark_theme_id: row.get("telnet_dark_theme_id")?,
         environment_variables: host_environment_variables_from_json(
             row.get("environment_variables")?,
         ),
@@ -3177,6 +3189,32 @@ mod tests {
     }
 
     #[test]
+    fn migrates_schema_four_theme_pairs_without_changing_existing_hosts() {
+        let mut database = NautermDatabase::open_in_memory().unwrap();
+        let host: HostEntry = serde_json::from_value(serde_json::json!({
+            "name": "Existing", "type": "remote", "host": "example.test", "theme_id": "ayu-light", "telnet_theme_id": "nysa-light"
+        })).unwrap();
+        let id = database.save_host(&host).unwrap();
+        database
+            .connection
+            .execute_batch(
+                "ALTER TABLE groups DROP COLUMN dark_theme_id;
+            ALTER TABLE groups DROP COLUMN telnet_dark_theme_id;
+            ALTER TABLE hosts DROP COLUMN dark_theme_id;
+            ALTER TABLE hosts DROP COLUMN telnet_dark_theme_id;
+            PRAGMA user_version = 4;",
+            )
+            .unwrap();
+        migrations::migrate_schema(&mut database.connection, 4).unwrap();
+        let host = database.get_host(id).unwrap().unwrap();
+        assert_eq!(database.schema_version().unwrap(), 5);
+        assert_eq!(host.theme_id.as_deref(), Some("ayu-light"));
+        assert_eq!(host.telnet_theme_id.as_deref(), Some("nysa-light"));
+        assert_eq!(host.dark_theme_id, None);
+        assert_eq!(host.telnet_dark_theme_id, None);
+    }
+
+    #[test]
     fn opens_encrypted_file_database() {
         let path = std::env::temp_dir().join(format!(
             "nauterm-database-open-{}-{}.sqlite",
@@ -3318,6 +3356,10 @@ mod tests {
             .execute_batch(
                 "PRAGMA foreign_keys = OFF;
                  ALTER TABLE keys DROP COLUMN passphrase;
+                 ALTER TABLE groups DROP COLUMN dark_theme_id;
+                 ALTER TABLE groups DROP COLUMN telnet_dark_theme_id;
+                 ALTER TABLE hosts DROP COLUMN dark_theme_id;
+                 ALTER TABLE hosts DROP COLUMN telnet_dark_theme_id;
                  PRAGMA user_version = 2;",
             )
             .unwrap();
@@ -4446,6 +4488,7 @@ mod tests {
                 username: Some("admin".to_string()),
                 password: None,
                 theme_id: None,
+                dark_theme_id: None,
                 startup_snippet_id: None,
                 startup_snippet_uuid: None,
                 ssh_enabled: Some(true),
@@ -4460,6 +4503,7 @@ mod tests {
                 telnet_password: Some("telnet-secret".to_string()),
                 telnet_port: Some(23),
                 telnet_theme_id: Some("ayu-dark".to_string()),
+                telnet_dark_theme_id: None,
                 environment_variables: vec![HostEnvironmentVariable {
                     variable: "LANG".to_string(),
                     value: "en_US.UTF-8".to_string(),
@@ -4662,6 +4706,7 @@ mod tests {
                 username: Some("admin".to_string()),
                 password: None,
                 theme_id: None,
+                dark_theme_id: None,
                 startup_snippet_id: None,
                 startup_snippet_uuid: None,
                 ssh_enabled: Some(true),
@@ -4674,6 +4719,7 @@ mod tests {
                 telnet_password: None,
                 telnet_port: None,
                 telnet_theme_id: None,
+                telnet_dark_theme_id: None,
                 environment_variables: Vec::new(),
                 encoding: Some("UTF-8".to_string()),
                 telnet_encoding: Some("UTF-8".to_string()),

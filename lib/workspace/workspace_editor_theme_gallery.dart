@@ -4,12 +4,14 @@ class _ThemeGalleryDrawer extends StatefulWidget {
   const _ThemeGalleryDrawer({
     required this.themesFuture,
     required this.selectedThemeId,
+    this.dark = false,
     required this.onClose,
     required this.onSelected,
   });
 
   final Future<List<StoredTerminalTheme>> themesFuture;
   final String? selectedThemeId;
+  final bool dark;
   final VoidCallback onClose;
   final void Function(String? themeId, StoredTerminalTheme? selectedTheme)
   onSelected;
@@ -121,16 +123,22 @@ class _ThemeGalleryDrawerState extends State<_ThemeGalleryDrawer> {
 
                   final themes = snapshot.data ?? const <StoredTerminalTheme>[];
                   final allEntries = <_ThemeGalleryEntry>[
+                    _ThemeGalleryEntry(
+                      id: null,
+                      title: tr('common.label.default', fallback: 'Default'),
+                      theme: widget.dark
+                          ? terminalDarkCustomTheme
+                          : terminalThemeId == null
+                          ? defaultTerminalTheme
+                          : terminalCustomTheme,
+                      storedTheme: null,
+                    ),
                     for (final theme in themes)
                       _ThemeGalleryEntry(
-                        id: theme.id == nysaLightTerminalThemeId
-                            ? null
-                            : theme.id,
+                        id: theme.id,
                         title: theme.theme.name,
                         theme: theme.theme,
-                        storedTheme: theme.id == nysaLightTerminalThemeId
-                            ? null
-                            : theme,
+                        storedTheme: theme,
                       ),
                   ];
                   final entries = _filterThemeGalleryEntries(
@@ -169,11 +177,7 @@ class _ThemeGalleryDrawerState extends State<_ThemeGalleryDrawer> {
                         ),
                         itemBuilder: (context, index) {
                           final entry = entries[index];
-                          final selected =
-                              entry.id == widget.selectedThemeId ||
-                              (entry.id == null &&
-                                  widget.selectedThemeId ==
-                                      nysaLightTerminalThemeId);
+                          final selected = entry.id == widget.selectedThemeId;
                           return Material(
                             color: Colors.transparent,
                             child: InkWell(

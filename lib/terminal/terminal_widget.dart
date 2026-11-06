@@ -1472,6 +1472,8 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
                                           _hoveredOpenTarget?.selection,
                                       focused: _focusNode.hasFocus,
                                       theme: widget.theme,
+                                      sourceTheme:
+                                          widget.controller.sourceTheme,
                                       weight: _config.font.weight,
                                       boldWeight: _config.font.boldWeight,
                                       graphicImages: Map.unmodifiable(

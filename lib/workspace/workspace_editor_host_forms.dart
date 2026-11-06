@@ -66,13 +66,18 @@ class _GroupEditorContentState extends State<_GroupEditorContent> {
   bool _encodingConfigured = false;
   bool _telnetEncodingConfigured = false;
   bool _sshShowMore = false;
+  bool _telnetShowMore = false;
   String _encoding = defaultHostEncoding;
   String _telnetEncoding = defaultHostEncoding;
   String? _themeId;
+  String? _darkThemeId;
   String? _telnetThemeId;
+  String? _telnetDarkThemeId;
   late List<HostEnvironmentVariable> _environmentVariables;
   StoredTerminalTheme? _selectedTheme;
+  StoredTerminalTheme? _selectedDarkTheme;
   StoredTerminalTheme? _selectedTelnetTheme;
+  StoredTerminalTheme? _selectedTelnetDarkTheme;
   Future<List<StoredTerminalTheme>>? _themeGalleryFuture;
   bool _themeGalleryOpen = false;
   _HostThemeTarget _themeGalleryTarget = _HostThemeTarget.ssh;
@@ -123,7 +128,9 @@ class _GroupEditorContentState extends State<_GroupEditorContent> {
     _encoding = _normalizeHostEncoding(initial?.encoding);
     _telnetEncoding = _normalizeHostEncoding(initial?.telnetEncoding);
     _themeId = normalizeTerminalThemeId(initial?.themeId);
+    _darkThemeId = normalizeTerminalThemeId(initial?.darkThemeId);
     _telnetThemeId = normalizeTerminalThemeId(initial?.telnetThemeId);
+    _telnetDarkThemeId = normalizeTerminalThemeId(initial?.telnetDarkThemeId);
     _environmentVariables = List.of(initial?.environmentVariables ?? const []);
     _sshCredentialKind = _credentialKindForKeyId(widget.keys, _keyId);
     if (_parentId != null && !_canUseGroupAsParent(widget.groups, _parentId)) {
@@ -139,7 +146,9 @@ class _GroupEditorContentState extends State<_GroupEditorContent> {
     }
     _showSelectedIdentityName();
     _loadSelectedTheme();
+    _loadSelectedDarkTheme();
     _loadSelectedTelnetTheme();
+    _loadSelectedTelnetDarkTheme();
   }
 
   Future<void> _loadSelectedTheme() async {
@@ -157,6 +166,21 @@ class _GroupEditorContentState extends State<_GroupEditorContent> {
     });
   }
 
+  Future<void> _loadSelectedDarkTheme() async {
+    final themeId = _darkThemeId;
+    if (themeId == null) return;
+    final theme = await widget.terminalThemeCatalog?.loadTheme(themeId);
+    if (!mounted || themeId != _darkThemeId) return;
+    setState(() {
+      if (theme == null) {
+        _darkThemeId = null;
+        _selectedDarkTheme = null;
+      } else {
+        _selectedDarkTheme = StoredTerminalTheme(id: themeId, theme: theme);
+      }
+    });
+  }
+
   Future<void> _loadSelectedTelnetTheme() async {
     final themeId = _telnetThemeId;
     if (themeId == null) return;
@@ -168,6 +192,24 @@ class _GroupEditorContentState extends State<_GroupEditorContent> {
         _selectedTelnetTheme = null;
       } else {
         _selectedTelnetTheme = StoredTerminalTheme(id: themeId, theme: theme);
+      }
+    });
+  }
+
+  Future<void> _loadSelectedTelnetDarkTheme() async {
+    final themeId = _telnetDarkThemeId;
+    if (themeId == null) return;
+    final theme = await widget.terminalThemeCatalog?.loadTheme(themeId);
+    if (!mounted || themeId != _telnetDarkThemeId) return;
+    setState(() {
+      if (theme == null) {
+        _telnetDarkThemeId = null;
+        _selectedTelnetDarkTheme = null;
+      } else {
+        _selectedTelnetDarkTheme = StoredTerminalTheme(
+          id: themeId,
+          theme: theme,
+        );
       }
     });
   }
@@ -292,7 +334,9 @@ class _GroupEditorContentState extends State<_GroupEditorContent> {
       _telnetEncodingConfigured = true;
     }
     _themeId ??= normalizeTerminalThemeId(group.themeId);
+    _darkThemeId ??= normalizeTerminalThemeId(group.darkThemeId);
     _telnetThemeId ??= normalizeTerminalThemeId(group.telnetThemeId);
+    _telnetDarkThemeId ??= normalizeTerminalThemeId(group.telnetDarkThemeId);
     if (_sshEnabled) {
       final existingVariables = {
         for (final variable in _environmentVariables) variable.variable,
@@ -318,7 +362,9 @@ class _GroupEditorContentState extends State<_GroupEditorContent> {
       }
     });
     _loadSelectedTheme();
+    _loadSelectedDarkTheme();
     _loadSelectedTelnetTheme();
+    _loadSelectedTelnetDarkTheme();
   }
 
   void _showSelectedIdentityName() {
@@ -495,7 +541,9 @@ class _GroupEditorContentState extends State<_GroupEditorContent> {
             : null,
         telnetPort: _telnetEnabled ? telnetPort : null,
         themeId: _sshEnabled ? _themeId : null,
+        darkThemeId: _sshEnabled ? _darkThemeId : null,
         telnetThemeId: _telnetEnabled ? _telnetThemeId : null,
+        telnetDarkThemeId: _telnetEnabled ? _telnetDarkThemeId : null,
         environmentVariables: _sshEnabled ? _environmentVariables : const [],
         encoding: _sshEnabled ? _encoding : null,
         telnetEncoding: _telnetEnabled ? _telnetEncoding : null,
@@ -678,6 +726,12 @@ class _GroupEditorContentState extends State<_GroupEditorContent> {
             ),
             showMore: _sshShowMore,
             onShowMoreChanged: (value) => setState(() => _sshShowMore = value),
+            darkTheme: _HostThemeSelector(
+              selectedTheme: _selectedDarkTheme,
+              dark: true,
+              onOpenGallery: () =>
+                  _openThemeGalleryFor(_HostThemeTarget.sshDark),
+            ),
             moreChildren: [
               _WorkspaceSelect<int?>(
                 label: 'Startup snippet',
@@ -832,6 +886,16 @@ class _GroupEditorContentState extends State<_GroupEditorContent> {
               selectedTheme: _selectedTelnetTheme,
               onOpenGallery: _openTelnetThemeGallery,
             ),
+            showMore: _telnetShowMore,
+            onShowMoreChanged: (value) =>
+                setState(() => _telnetShowMore = value),
+            darkTheme: _HostThemeSelector(
+              selectedTheme: _selectedTelnetDarkTheme,
+              dark: true,
+              onOpenGallery: () =>
+                  _openThemeGalleryFor(_HostThemeTarget.telnetDark),
+            ),
+            moreChildren: [],
           ),
         ],
         if (!_sshEnabled || !_telnetEnabled) ...[
@@ -872,14 +936,27 @@ class _GroupEditorContentState extends State<_GroupEditorContent> {
                   themesFuture:
                       _themeGalleryFuture ??
                       Future.value(const <StoredTerminalTheme>[]),
-                  selectedThemeId:
-                      _themeGalleryTarget == _HostThemeTarget.telnet
-                      ? _telnetThemeId
-                      : _themeId,
+                  dark:
+                      _themeGalleryTarget == _HostThemeTarget.sshDark ||
+                      _themeGalleryTarget == _HostThemeTarget.telnetDark,
+                  selectedThemeId: switch (_themeGalleryTarget) {
+                    _HostThemeTarget.ssh => _themeId,
+                    _HostThemeTarget.telnet => _telnetThemeId,
+                    _HostThemeTarget.sshDark => _darkThemeId,
+                    _HostThemeTarget.telnetDark => _telnetDarkThemeId,
+                  },
                   onClose: () => setState(() => _themeGalleryOpen = false),
                   onSelected: (themeId, selectedTheme) {
                     setState(() {
-                      if (_themeGalleryTarget == _HostThemeTarget.telnet) {
+                      if (_themeGalleryTarget == _HostThemeTarget.sshDark) {
+                        _darkThemeId = normalizeTerminalThemeId(themeId);
+                        _selectedDarkTheme = selectedTheme;
+                      } else if (_themeGalleryTarget ==
+                          _HostThemeTarget.telnetDark) {
+                        _telnetDarkThemeId = normalizeTerminalThemeId(themeId);
+                        _selectedTelnetDarkTheme = selectedTheme;
+                      } else if (_themeGalleryTarget ==
+                          _HostThemeTarget.telnet) {
                         _telnetThemeId = normalizeTerminalThemeId(themeId);
                         _selectedTelnetTheme = selectedTheme;
                       } else {
@@ -1135,15 +1212,20 @@ class _HostEditorContentState extends State<_HostEditorContent> {
   int? _startupSnippetId;
   _SshCredentialKind? _sshCredentialKind;
   String? _themeId;
+  String? _darkThemeId;
   String? _telnetThemeId;
+  String? _telnetDarkThemeId;
   String _encoding = defaultHostEncoding;
   String _telnetEncoding = defaultHostEncoding;
   late Set<String> _tagUuids;
   StoredTerminalTheme? _selectedTheme;
+  StoredTerminalTheme? _selectedDarkTheme;
   StoredTerminalTheme? _selectedTelnetTheme;
+  StoredTerminalTheme? _selectedTelnetDarkTheme;
   Future<List<StoredTerminalTheme>>? _themeGalleryFuture;
   bool _themeGalleryOpen = false;
   bool _sshShowMore = false;
+  bool _telnetShowMore = false;
   _HostThemeTarget _themeGalleryTarget = _HostThemeTarget.ssh;
   bool _saving = false;
   String? _error;
@@ -1199,7 +1281,9 @@ class _HostEditorContentState extends State<_HostEditorContent> {
     _telnetIdentityId = initial?.telnetIdentityId;
     _keyId = initial?.keyId;
     _themeId = normalizeTerminalThemeId(initial?.themeId);
+    _darkThemeId = normalizeTerminalThemeId(initial?.darkThemeId);
     _telnetThemeId = normalizeTerminalThemeId(initial?.telnetThemeId);
+    _telnetDarkThemeId = normalizeTerminalThemeId(initial?.telnetDarkThemeId);
     _encoding = _normalizeHostEncoding(initial?.encoding);
     _telnetEncoding = _normalizeHostEncoding(initial?.telnetEncoding);
     _tagUuids = {...?initial?.tagUuids};
@@ -1243,7 +1327,9 @@ class _HostEditorContentState extends State<_HostEditorContent> {
     _showSelectedIdentityName();
     _refreshAutomaticName();
     _loadSelectedTheme();
+    _loadSelectedDarkTheme();
     _loadSelectedTelnetTheme();
+    _loadSelectedTelnetDarkTheme();
   }
 
   Future<void> _loadSelectedTheme() async {
@@ -1263,6 +1349,27 @@ class _HostEditorContentState extends State<_HostEditorContent> {
         _selectedTheme = null;
       } else {
         _selectedTheme = StoredTerminalTheme(id: themeId, theme: theme);
+      }
+    });
+  }
+
+  Future<void> _loadSelectedDarkTheme() async {
+    final themeId = _darkThemeId;
+    if (themeId == null) {
+      return;
+    }
+
+    final theme = await widget.terminalThemeCatalog?.loadTheme(themeId);
+    if (!mounted || themeId != _darkThemeId) {
+      return;
+    }
+
+    setState(() {
+      if (theme == null) {
+        _darkThemeId = null;
+        _selectedDarkTheme = null;
+      } else {
+        _selectedDarkTheme = StoredTerminalTheme(id: themeId, theme: theme);
       }
     });
   }
@@ -1308,6 +1415,30 @@ class _HostEditorContentState extends State<_HostEditorContent> {
         _selectedTelnetTheme = null;
       } else {
         _selectedTelnetTheme = StoredTerminalTheme(id: themeId, theme: theme);
+      }
+    });
+  }
+
+  Future<void> _loadSelectedTelnetDarkTheme() async {
+    final themeId = _telnetDarkThemeId;
+    if (themeId == null) {
+      return;
+    }
+
+    final theme = await widget.terminalThemeCatalog?.loadTheme(themeId);
+    if (!mounted || themeId != _telnetDarkThemeId) {
+      return;
+    }
+
+    setState(() {
+      if (theme == null) {
+        _telnetDarkThemeId = null;
+        _selectedTelnetDarkTheme = null;
+      } else {
+        _selectedTelnetDarkTheme = StoredTerminalTheme(
+          id: themeId,
+          theme: theme,
+        );
       }
     });
   }
@@ -1464,7 +1595,9 @@ class _HostEditorContentState extends State<_HostEditorContent> {
       _telnetEncodingConfigured = true;
     }
     _themeId ??= normalizeTerminalThemeId(group.themeId);
+    _darkThemeId ??= normalizeTerminalThemeId(group.darkThemeId);
     _telnetThemeId ??= normalizeTerminalThemeId(group.telnetThemeId);
+    _telnetDarkThemeId ??= normalizeTerminalThemeId(group.telnetDarkThemeId);
     if (_sshEnabled) {
       final existingVariables = {
         for (final variable in _environmentVariables) variable.variable,
@@ -1490,7 +1623,9 @@ class _HostEditorContentState extends State<_HostEditorContent> {
       }
     });
     _loadSelectedTheme();
+    _loadSelectedDarkTheme();
     _loadSelectedTelnetTheme();
+    _loadSelectedTelnetDarkTheme();
   }
 
   void _showSelectedIdentityName() {
@@ -1637,6 +1772,7 @@ class _HostEditorContentState extends State<_HostEditorContent> {
             ? _emptyToNull(_passwordController.text)
             : null,
         themeId: normalizeTerminalThemeId(_themeId),
+        darkThemeId: normalizeTerminalThemeId(_darkThemeId),
         sshEnabled: true,
         moshEnabled: _moshEnabled,
         moshServerCommand: _moshEnabled
@@ -1666,6 +1802,7 @@ class _HostEditorContentState extends State<_HostEditorContent> {
             : null,
         telnetPort: _intFromText(_telnetPortController.text),
         telnetThemeId: normalizeTerminalThemeId(_telnetThemeId),
+        telnetDarkThemeId: normalizeTerminalThemeId(_telnetDarkThemeId),
         telnetEncoding: _telnetEncoding,
       ),
     );
@@ -1721,6 +1858,7 @@ class _HostEditorContentState extends State<_HostEditorContent> {
             ? _emptyToNull(_passwordController.text)
             : null,
         themeId: normalizeTerminalThemeId(_themeId),
+        darkThemeId: normalizeTerminalThemeId(_darkThemeId),
         startupSnippetId: sshEnabled ? _startupSnippetId : null,
         sshEnabled: sshEnabled,
         moshEnabled: moshEnabled,
@@ -1738,6 +1876,9 @@ class _HostEditorContentState extends State<_HostEditorContent> {
         telnetPort: telnetEnabled ? telnetPort : null,
         telnetThemeId: telnetEnabled
             ? normalizeTerminalThemeId(_telnetThemeId)
+            : null,
+        telnetDarkThemeId: telnetEnabled
+            ? normalizeTerminalThemeId(_telnetDarkThemeId)
             : null,
         environmentVariables: sshEnabled ? _environmentVariables : const [],
         encoding: _encoding,
@@ -2026,6 +2167,12 @@ class _HostEditorContentState extends State<_HostEditorContent> {
             ),
             showMore: _sshShowMore,
             onShowMoreChanged: (value) => setState(() => _sshShowMore = value),
+            darkTheme: _HostThemeSelector(
+              selectedTheme: _selectedDarkTheme,
+              dark: true,
+              onOpenGallery: () =>
+                  _openThemeGalleryFor(_HostThemeTarget.sshDark),
+            ),
             moreChildren: [
               _WorkspaceSelect<int?>(
                 label: 'Startup snippet',
@@ -2192,6 +2339,16 @@ class _HostEditorContentState extends State<_HostEditorContent> {
               selectedTheme: _selectedTelnetTheme,
               onOpenGallery: _openTelnetThemeGallery,
             ),
+            showMore: _telnetShowMore,
+            onShowMoreChanged: (value) =>
+                setState(() => _telnetShowMore = value),
+            darkTheme: _HostThemeSelector(
+              selectedTheme: _selectedTelnetDarkTheme,
+              dark: true,
+              onOpenGallery: () =>
+                  _openThemeGalleryFor(_HostThemeTarget.telnetDark),
+            ),
+            moreChildren: [],
           ),
         ],
         if (!isLocal && (!_sshEnabled || !_telnetEnabled)) ...[
@@ -2235,14 +2392,27 @@ class _HostEditorContentState extends State<_HostEditorContent> {
                   themesFuture:
                       _themeGalleryFuture ??
                       Future.value(const <StoredTerminalTheme>[]),
-                  selectedThemeId:
-                      _themeGalleryTarget == _HostThemeTarget.telnet
-                      ? _telnetThemeId
-                      : _themeId,
+                  dark:
+                      _themeGalleryTarget == _HostThemeTarget.sshDark ||
+                      _themeGalleryTarget == _HostThemeTarget.telnetDark,
+                  selectedThemeId: switch (_themeGalleryTarget) {
+                    _HostThemeTarget.ssh => _themeId,
+                    _HostThemeTarget.telnet => _telnetThemeId,
+                    _HostThemeTarget.sshDark => _darkThemeId,
+                    _HostThemeTarget.telnetDark => _telnetDarkThemeId,
+                  },
                   onClose: () => setState(() => _themeGalleryOpen = false),
                   onSelected: (themeId, selectedTheme) {
                     setState(() {
-                      if (_themeGalleryTarget == _HostThemeTarget.telnet) {
+                      if (_themeGalleryTarget == _HostThemeTarget.sshDark) {
+                        _darkThemeId = normalizeTerminalThemeId(themeId);
+                        _selectedDarkTheme = selectedTheme;
+                      } else if (_themeGalleryTarget ==
+                          _HostThemeTarget.telnetDark) {
+                        _telnetDarkThemeId = normalizeTerminalThemeId(themeId);
+                        _selectedTelnetDarkTheme = selectedTheme;
+                      } else if (_themeGalleryTarget ==
+                          _HostThemeTarget.telnet) {
                         _telnetThemeId = normalizeTerminalThemeId(themeId);
                         _selectedTelnetTheme = selectedTheme;
                       } else {
@@ -2479,7 +2649,7 @@ bool sshCredentialUsesCertificateForTesting(KeyEntry key) {
   return key.certificate != null;
 }
 
-enum _HostThemeTarget { ssh, telnet }
+enum _HostThemeTarget { ssh, telnet, sshDark, telnetDark }
 
 enum _ProtocolMenuAction { createGroup, remove }
 
@@ -2490,6 +2660,7 @@ class _ProtocolFormSection extends StatelessWidget {
     required this.onRemove,
     required this.credentials,
     required this.theme,
+    this.darkTheme,
     this.onCreateGroup,
     this.moreChildren = const [],
     this.showMore = false,
@@ -2501,6 +2672,7 @@ class _ProtocolFormSection extends StatelessWidget {
   final VoidCallback onRemove;
   final List<Widget> credentials;
   final Widget theme;
+  final Widget? darkTheme;
   final VoidCallback? onCreateGroup;
   final List<Widget> moreChildren;
   final bool showMore;
@@ -2518,7 +2690,7 @@ class _ProtocolFormSection extends StatelessWidget {
           16,
           16,
           16,
-          moreChildren.isNotEmpty && !showMore ? 12 : 16,
+          (moreChildren.isNotEmpty || darkTheme != null) && !showMore ? 12 : 16,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -2623,15 +2795,29 @@ class _ProtocolFormSection extends StatelessWidget {
             Divider(height: 25, color: _sidebarDivider),
             ...credentials,
             Divider(height: 25, color: _sidebarDivider),
-            if (moreChildren.isNotEmpty && showMore) ...[
-              ...moreChildren,
-              SizedBox(height: 12),
-              Divider(height: 1, color: _sidebarDivider),
-              SizedBox(height: 12),
+            if ((moreChildren.isNotEmpty || darkTheme != null) && showMore) ...[
+              if (moreChildren.isNotEmpty) ...[
+                ...moreChildren,
+                SizedBox(height: 12),
+                Divider(height: 1, color: _sidebarDivider),
+                SizedBox(height: 12),
+              ],
+              _GenerateKeyFieldLabel(
+                tr('workspace.host.lightTheme', fallback: 'Light theme'),
+              ),
+              SizedBox(height: 8),
               theme,
+              if (darkTheme != null) ...[
+                SizedBox(height: _workspaceFormFieldGap),
+                _GenerateKeyFieldLabel(
+                  tr('workspace.host.darkTheme', fallback: 'Dark theme'),
+                ),
+                SizedBox(height: 8),
+                darkTheme!,
+              ],
             ] else ...[
               theme,
-              if (moreChildren.isNotEmpty) ...[
+              if (moreChildren.isNotEmpty || darkTheme != null) ...[
                 SizedBox(height: 8),
                 _ProtocolShowMoreButton(
                   onPressed: () => onShowMoreChanged?.call(true),
@@ -2810,16 +2996,26 @@ class _HostThemeSelector extends StatelessWidget {
   const _HostThemeSelector({
     required this.selectedTheme,
     required this.onOpenGallery,
+    this.dark = false,
   });
 
+  final bool dark;
   final StoredTerminalTheme? selectedTheme;
   final VoidCallback onOpenGallery;
 
   @override
   Widget build(BuildContext context) {
     final selected = selectedTheme;
-    final previewTheme = selected?.theme ?? defaultTerminalTheme;
-    final title = selected == null ? 'Default' : selected.theme.name;
+    final previewTheme =
+        selected?.theme ??
+        (dark
+            ? terminalDarkCustomTheme
+            : terminalThemeId == null
+            ? defaultTerminalTheme
+            : terminalCustomTheme);
+    final title = selected == null
+        ? tr('common.label.default', fallback: 'Default')
+        : selected.theme.name;
 
     return Material(
       color: Colors.transparent,

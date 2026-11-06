@@ -445,18 +445,50 @@ class _SettingsPanelState extends State<SettingsPanel> {
       .toString();
   TerminalType _emulationType = terminalEmulationType;
   TerminalEmulatorBackend _emulatorBackend = terminalEmulatorBackend;
-  String? _themeId = terminalThemeId;
-  TerminalTheme _customTheme = terminalCustomTheme;
+  bool _editingDarkTheme = false;
+  String? _lightThemeId = terminalThemeId;
+  String? _darkThemeId = terminalDarkThemeId;
+  TerminalTheme _lightCustomTheme = terminalCustomTheme;
+  TerminalTheme _darkCustomTheme = terminalDarkCustomTheme;
+  String? get _themeId => _editingDarkTheme ? _darkThemeId : _lightThemeId;
+  set _themeId(String? value) {
+    if (_editingDarkTheme) {
+      _darkThemeId = value;
+    } else {
+      _lightThemeId = value;
+    }
+  }
+
+  TerminalTheme get _customTheme =>
+      _editingDarkTheme ? _darkCustomTheme : _lightCustomTheme;
+  set _customTheme(TerminalTheme value) {
+    if (_editingDarkTheme) {
+      _darkCustomTheme = value;
+    } else {
+      _lightCustomTheme = value;
+    }
+  }
+
+  TerminalTheme _themeForSlot(bool dark) {
+    final id = dark ? _darkThemeId : _lightThemeId;
+    if (id == 'custom') return dark ? _darkCustomTheme : _lightCustomTheme;
+    return _allThemes?.where((entry) => entry.id == id).firstOrNull?.theme ??
+        (dark ? nysaDarkTerminalTheme : defaultTerminalTheme);
+  }
+
+  void _publishThemeSelection() {
+    if (_editingDarkTheme) {
+      terminalDarkThemeId = _themeId ?? nysaDarkTerminalThemeId;
+      terminalDarkCustomTheme = _effectiveTheme;
+    } else {
+      terminalThemeId = _themeId;
+      terminalCustomTheme = _effectiveTheme;
+    }
+  }
+
   List<StoredTerminalTheme>? _allThemes;
   String _themeSearchQuery = '';
-  TerminalTheme get _effectiveTheme {
-    if (_themeId == 'custom') return _customTheme;
-    if (_allThemes != null && _themeId != null) {
-      final match = _allThemes!.where((t) => t.id == _themeId).firstOrNull;
-      if (match != null) return match.theme;
-    }
-    return defaultTerminalTheme;
-  }
+  TerminalTheme get _effectiveTheme => _themeForSlot(_editingDarkTheme);
 
   bool _useOptionAsMetaKey = terminalKeyboardConfig.useOptionAsMetaKey;
   bool _reportMouseEvents = terminalKeyboardConfig.reportMouseEvents;
@@ -728,9 +760,13 @@ class _SettingsPanelState extends State<SettingsPanel> {
             _sshKeepaliveIntervalSeconds;
         _emulationType = settings.emulationType;
         _emulatorBackend = settings.emulatorBackend;
-        _themeId = settings.themeId;
+        _lightThemeId = settings.themeId;
+        _darkThemeId = settings.darkThemeId;
+        _darkCustomTheme = settings.darkCustomThemeJson == null
+            ? nysaDarkTerminalTheme
+            : TerminalTheme.fromJson(settings.darkCustomThemeJson!);
         if (settings.customThemeJson != null) {
-          _customTheme = TerminalTheme.fromJson(settings.customThemeJson!);
+          _lightCustomTheme = TerminalTheme.fromJson(settings.customThemeJson!);
         }
         _windowWidth = (settings.window.width ?? mainWindowSize.width)
             .round()
@@ -1489,7 +1525,13 @@ class _SettingsPanelState extends State<SettingsPanel> {
         terminalEmulationType = defaults.emulationType;
         _emulatorBackend = defaults.emulatorBackend;
         terminalEmulatorBackend = defaults.emulatorBackend;
-        _themeId = defaults.themeId;
+        _editingDarkTheme = false;
+        _lightThemeId = defaults.themeId;
+        _darkThemeId = defaults.darkThemeId;
+        _darkCustomTheme = nysaDarkTerminalTheme;
+        terminalDarkThemeId = defaults.darkThemeId;
+        terminalDarkCustomTheme = nysaDarkTerminalTheme;
+        terminalFollowAppTheme = defaults.followAppTheme;
         terminalThemeId = defaults.themeId;
         _customTheme = defaults.customThemeJson == null
             ? defaultTerminalTheme
@@ -1582,8 +1624,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
     setState(() {
       _themeId = id;
       if (id != 'custom') {
-        terminalThemeId = id;
-        terminalCustomTheme = _effectiveTheme;
+        _publishThemeSelection();
       }
     });
     _persistRuntimeSettings();
@@ -1591,7 +1632,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
 
   void _updateThemeColor(String field, Color color) {
     setState(() {
-      final t = _customTheme;
+      final t = _effectiveTheme;
       _customTheme = TerminalTheme(
         name: t.name,
         type: t.type,
@@ -1636,14 +1677,14 @@ class _SettingsPanelState extends State<SettingsPanel> {
         bright: t.bright,
       );
       _themeId = 'custom';
-      terminalThemeId = 'custom';
-      terminalCustomTheme = _customTheme;
+      _publishThemeSelection();
     });
     _persistRuntimeSettings();
   }
 
   void _updateAnsiColor(bool bright, int index, Color color) {
     setState(() {
+      _customTheme = _effectiveTheme;
       if (bright) {
         _customTheme = TerminalTheme(
           name: _customTheme.name,
@@ -1666,8 +1707,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
         );
       }
       _themeId = 'custom';
-      terminalThemeId = 'custom';
-      terminalCustomTheme = _customTheme;
+      _publishThemeSelection();
     });
     _persistRuntimeSettings();
   }

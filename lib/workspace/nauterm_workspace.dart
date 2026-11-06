@@ -310,7 +310,8 @@ class NautermWorkspace extends ConsumerStatefulWidget {
   ConsumerState<NautermWorkspace> createState() => _NautermWorkspaceState();
 }
 
-class _NautermWorkspaceState extends ConsumerState<NautermWorkspace> {
+class _NautermWorkspaceState extends ConsumerState<NautermWorkspace>
+    with WidgetsBindingObserver {
   late final Object _workspaceModelKey;
   late final _NautermWorkspaceModel _workspaceModel;
   late final AiConversationRepository _aiConversationRepository;
@@ -328,6 +329,8 @@ class _NautermWorkspaceState extends ConsumerState<NautermWorkspace> {
   late final Map<_SidebarSection, _WorkspaceItemSelectionController>
   _itemSelectionControllers;
   TerminalThemeCatalog? _terminalThemeCatalog;
+  int? _lastTerminalThemeSignature;
+  int _terminalThemeRevision = 0;
   TerminalLogCaptureStore? _terminalLogCaptureStore;
   int _terminalCaptureDiskUsage = 0;
   NautermRecordingConfig _lastRecordingConfig = terminalRecordingConfig;
@@ -880,6 +883,8 @@ class _NautermWorkspaceState extends ConsumerState<NautermWorkspace> {
     );
     aiAssistantConfigListenable.addListener(_handleAiConfigChanged);
     terminalConfigNotifier.addListener(_handleTerminalConfigChanged);
+    appThemeModeListenable.addListener(_handleTerminalAppearanceChanged);
+    WidgetsBinding.instance.addObserver(this);
     fullscreenNotifier.addListener(_handleFullscreenChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_loadWorkspaceDataAfterUiPresentation());
@@ -960,7 +965,11 @@ class _NautermWorkspaceState extends ConsumerState<NautermWorkspace> {
     }
   }
 
+  @override
+  void didChangePlatformBrightness() => _handleTerminalAppearanceChanged();
+
   void _handleTerminalConfigChanged() {
+    _handleTerminalAppearanceChanged();
     if (mounted) {
       setState(() {
         if (!terminalBellConfig.tabIndicator) {
@@ -1119,6 +1128,8 @@ class _NautermWorkspaceState extends ConsumerState<NautermWorkspace> {
     );
     aiAssistantConfigListenable.removeListener(_handleAiConfigChanged);
     terminalConfigNotifier.removeListener(_handleTerminalConfigChanged);
+    appThemeModeListenable.removeListener(_handleTerminalAppearanceChanged);
+    WidgetsBinding.instance.removeObserver(this);
     fullscreenNotifier.removeListener(_handleFullscreenChanged);
     widget.controller?._detach(this);
     for (final tab in _allTerminalTabs) {

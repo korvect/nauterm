@@ -4,8 +4,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../terminal/terminal_config.dart';
+import '../terminal/terminal_theme.dart';
 import 'nauterm_config.dart';
 import 'nauterm_paths.dart';
+import 'terminal_theme_store.dart';
 
 const String nautermMacOSDefaultConfigAsset =
     'assets/config/default-macos.json';
@@ -48,7 +50,36 @@ class NautermConfigStore {
   }
 
   Future<NautermRuntimeSettings> loadRuntimeSettings() async {
-    final config = await loadConfig();
+    var config = await loadConfig();
+    final appearance = config.terminal.appearance;
+    final catalog = TerminalThemeCatalog(
+      paths.themesDirectory,
+      additionalDirectories: paths.additionalThemeDirectories,
+    );
+    if (appearance.themeId != null && appearance.themeId != 'custom') {
+      final light = await catalog.loadTheme(appearance.themeId);
+      if (light != null) {
+        config = config.copyWith(
+          terminal: config.terminal.copyWith(
+            appearance: config.terminal.appearance.copyWith(
+              customThemeJson: light.toJson(),
+            ),
+          ),
+        );
+      }
+    }
+    if (appearance.darkThemeId != 'custom') {
+      final dark = await catalog.loadTheme(appearance.darkThemeId);
+      if (dark != null) {
+        config = config.copyWith(
+          terminal: config.terminal.copyWith(
+            appearance: config.terminal.appearance.copyWith(
+              darkCustomThemeJson: dark.toJson(),
+            ),
+          ),
+        );
+      }
+    }
     return _runtimeSettingsFromConfig(config);
   }
 
@@ -78,6 +109,9 @@ class NautermConfigStore {
       emulationType: terminal.emulation,
       emulatorBackend: terminal.emulationEngine,
       themeId: terminal.appearance.themeId,
+      darkThemeId: terminal.appearance.darkThemeId,
+      darkCustomThemeJson: terminal.appearance.darkCustomThemeJson,
+      followAppTheme: terminal.appearance.followAppTheme,
       customThemeJson: terminal.appearance.customThemeJson,
       cursor: terminal.appearance.cursor,
       confirmOnClose: config.tabs.confirmOnClose,
@@ -107,6 +141,9 @@ class NautermConfigStore {
           emulationEngine: settings.emulatorBackend,
           appearance: NautermTerminalAppearanceConfig(
             themeId: settings.themeId,
+            darkThemeId: settings.darkThemeId,
+            darkCustomThemeJson: settings.darkCustomThemeJson,
+            followAppTheme: settings.followAppTheme,
             customThemeJson: settings.customThemeJson,
             font: settings.font,
             cursor: settings.cursor,
@@ -155,13 +192,18 @@ class NautermConfigStore {
   Future<void> saveTerminalTheme({
     required String? themeId,
     required Map<String, Object?> customThemeJson,
+    bool dark = false,
   }) {
     return _enqueueSave(() async {
       final config = await loadConfig();
       final appearance = config.terminal.appearance.copyWith(
-        themeId: themeId,
-        customThemeJson: customThemeJson,
-        clearThemeId: themeId == null,
+        darkThemeId: dark ? themeId ?? nysaDarkTerminalThemeId : null,
+        darkCustomThemeJson: dark ? customThemeJson : null,
+        themeId: dark ? config.terminal.appearance.themeId : themeId,
+        customThemeJson: dark
+            ? config.terminal.appearance.customThemeJson
+            : customThemeJson,
+        clearThemeId: !dark && themeId == null,
       );
       await _writeConfig(
         config.copyWith(

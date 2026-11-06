@@ -254,6 +254,9 @@ class NautermTerminalConfig {
 class NautermTerminalAppearanceConfig {
   const NautermTerminalAppearanceConfig({
     this.themeId,
+    this.darkThemeId = nysaDarkTerminalThemeId,
+    this.darkCustomThemeJson,
+    this.followAppTheme = false,
     this.customThemeJson,
     this.font = const TerminalFontConfig(),
     this.cursor = const TerminalCursorConfig(),
@@ -262,6 +265,9 @@ class NautermTerminalAppearanceConfig {
   });
 
   final String? themeId;
+  final String darkThemeId;
+  final Map<String, Object?>? darkCustomThemeJson;
+  final bool followAppTheme;
   final Map<String, Object?>? customThemeJson;
   final TerminalFontConfig font;
   final TerminalCursorConfig cursor;
@@ -273,6 +279,8 @@ class NautermTerminalAppearanceConfig {
     final theme = _map(json['theme']);
     final id = (theme['id'] as String?)?.trim();
     final custom = theme['custom'];
+    final dark = _map(json['darkTheme']);
+    final darkCustom = dark['custom'];
     return NautermTerminalAppearanceConfig(
       themeId:
           id == null ||
@@ -281,6 +289,11 @@ class NautermTerminalAppearanceConfig {
               id == nysaLightTerminalThemeId
           ? null
           : id,
+      darkThemeId: (dark['id'] as String?) ?? nysaDarkTerminalThemeId,
+      darkCustomThemeJson: darkCustom is Map
+          ? darkCustom.cast<String, Object?>()
+          : null,
+      followAppTheme: json['followAppTheme'] as bool? ?? false,
       customThemeJson: custom is Map ? custom.cast<String, Object?>() : null,
       font: _fontFromJson(json['font']),
       cursor: _cursorFromJson(json['cursor']),
@@ -291,11 +304,17 @@ class NautermTerminalAppearanceConfig {
 
   NautermTerminalAppearanceConfig copyWith({
     String? themeId,
+    String? darkThemeId,
+    Map<String, Object?>? darkCustomThemeJson,
+    bool? followAppTheme,
     Map<String, Object?>? customThemeJson,
     bool clearThemeId = false,
     bool clearCustomTheme = false,
   }) {
     return NautermTerminalAppearanceConfig(
+      darkThemeId: darkThemeId ?? this.darkThemeId,
+      darkCustomThemeJson: darkCustomThemeJson ?? this.darkCustomThemeJson,
+      followAppTheme: followAppTheme ?? this.followAppTheme,
       themeId: clearThemeId ? null : themeId ?? this.themeId,
       customThemeJson: clearCustomTheme
           ? null
@@ -311,6 +330,11 @@ class NautermTerminalAppearanceConfig {
     'theme': <String, Object?>{
       'id': themeId ?? 'default',
       if (customThemeJson != null) 'custom': customThemeJson,
+    },
+    'followAppTheme': followAppTheme,
+    'darkTheme': <String, Object?>{
+      'id': darkThemeId,
+      if (darkCustomThemeJson != null) 'custom': darkCustomThemeJson,
     },
     'font': _fontToJson(font),
     'cursor': <String, Object?>{

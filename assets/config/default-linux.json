@@ -20,6 +20,10 @@
       "theme": {
         "id": "default"
       },
+      "darkTheme": {
+        "id": "nysa-dark"
+      },
+      "followAppTheme": false,
       "font": {
         "family": "DejaVu Sans Mono",
         "cjkFamily": null,

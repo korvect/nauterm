@@ -115,7 +115,7 @@ fn smart_merge_preserves_local_passphrase_for_each_legacy_schema() {
         let mut connection = connection_with_key();
         let mut payload = key_payload(None);
         migrate_sync_payload(&mut payload, schema);
-        assert_eq!(merge_payload(&mut connection, &payload, true).unwrap(), 1);
+        assert_eq!(merge_payload(&mut connection, &payload, 3).unwrap(), 1);
         assert_eq!(
             saved_key(&connection),
             ("Remote key".into(), Some("saved local passphrase".into()))
@@ -129,7 +129,7 @@ fn legacy_new_keys_default_to_no_saved_passphrase() {
     connection.execute("DELETE FROM keys", []).unwrap();
     let mut payload = key_payload(None);
     migrate_sync_payload(&mut payload, 3);
-    merge_payload(&mut connection, &payload, true).unwrap();
+    merge_payload(&mut connection, &payload, 3).unwrap();
     assert_eq!(saved_key(&connection), ("Remote key".into(), None));
 }
 
@@ -137,7 +137,7 @@ fn legacy_new_keys_default_to_no_saved_passphrase() {
 fn current_schema_explicit_null_clears_saved_passphrase() {
     let mut connection = connection_with_key();
     let payload = key_payload(Some(Value::Null));
-    merge_payload(&mut connection, &payload, false).unwrap();
+    merge_payload(&mut connection, &payload, 5).unwrap();
     assert_eq!(saved_key(&connection), ("Remote key".into(), None));
 }
 
@@ -155,15 +155,15 @@ fn migration_does_not_relax_validation_for_corrupt_records() {
     let mut connection = connection_with_key();
     let mut current_payload = key_payload(None);
     migrate_sync_payload(&mut current_payload, 4);
-    assert!(merge_payload(&mut connection, &current_payload, false).is_err());
+    assert!(merge_payload(&mut connection, &current_payload, 5).is_err());
     let mut old_payload = key_payload(None);
     old_payload.tables.get_mut("keys").unwrap()[0].remove("public_key");
     migrate_sync_payload(&mut old_payload, 3);
-    assert!(merge_payload(&mut connection, &old_payload, true).is_err());
+    assert!(merge_payload(&mut connection, &old_payload, 3).is_err());
     let mut unknown_field = key_payload(None);
     unknown_field.tables.get_mut("keys").unwrap()[0].insert("unknown".into(), Value::Null);
     migrate_sync_payload(&mut unknown_field, 3);
-    assert!(merge_payload(&mut connection, &unknown_field, true).is_err());
+    assert!(merge_payload(&mut connection, &unknown_field, 3).is_err());
     assert_eq!(
         saved_key(&connection).1.as_deref(),
         Some("saved local passphrase")
@@ -194,43 +194,15 @@ impl Drop for TemporarySyncFile {
 
 #[test]
 fn all_strategies_read_legacy_files_and_write_current_schema() {
-    for schema in 1..=3 {
+    for schema in 1..=4 {
         for strategy in [
             SyncStrategy::SmartMerge,
             SyncStrategy::LocalWins,
             SyncStrategy::RemoteWins,
         ] {
-            let mut connection = connection_with_key();
-            // Other sync tables are empty: add their export columns to the minimal merge fixture.
-            for table in SYNC_TABLES {
-                let mut statement = connection
-                    .prepare(&format!("PRAGMA table_info({})", table.name))
-                    .unwrap();
-                let columns: BTreeSet<String> = statement
-                    .query_map([], |row| row.get(1))
-                    .unwrap()
-                    .collect::<rusqlite::Result<_>>()
-                    .unwrap();
-                drop(statement);
-                for column in table.columns {
-                    if !columns.contains(*column) {
-                        connection
-                            .execute_batch(&format!(
-                                "ALTER TABLE {} ADD COLUMN {}",
-                                table.name, column
-                            ))
-                            .unwrap();
-                    }
-                }
-            }
-            connection.execute_batch(
-                "ALTER TABLE app_metadata ADD COLUMN created_at INTEGER DEFAULT 0;
-                 ALTER TABLE app_metadata ADD COLUMN updated_at INTEGER DEFAULT 0;
-                 INSERT INTO app_metadata (key, value) VALUES ('device_id', '01979f62-8548-7000-8000-000000000103');
-                 PRAGMA user_version = 4;"
-            ).unwrap();
+            let mut connection = complete_connection_with_key();
             let envelope = encrypt_payload(
-                key_payload(None),
+                key_payload(if schema == 4 { Some(Value::Null) } else { None }),
                 Some(MASTER_KEY),
                 schema,
                 None,
@@ -271,7 +243,9 @@ fn all_strategies_read_legacy_files_and_write_current_schema() {
             );
             assert_eq!(
                 passphrase.as_deref(),
-                if strategy == SyncStrategy::RemoteWins {
+                if strategy == SyncStrategy::RemoteWins
+                    || (schema == 4 && strategy == SyncStrategy::SmartMerge)
+                {
                     None
                 } else {
                     Some("saved local passphrase")
@@ -279,13 +253,105 @@ fn all_strategies_read_legacy_files_and_write_current_schema() {
             );
             let upgraded: SyncEnvelope =
                 serde_json::from_slice(&fs::read(&file.0).unwrap()).unwrap();
-            assert_eq!(upgraded.header.schema_version, 4);
+            assert_eq!(upgraded.header.schema_version, 5);
             assert_eq!(upgraded.header.vault_id, vault_id);
-            let (_, payload, _) = decrypt_envelope(upgraded, Some(MASTER_KEY), None, 4).unwrap();
+            let (_, payload, _) = decrypt_envelope(upgraded, Some(MASTER_KEY), None, 5).unwrap();
             assert_eq!(
                 payload.tables["keys"][0]["passphrase"].as_str(),
                 passphrase.as_deref()
             );
         }
+    }
+}
+
+fn complete_connection_with_key() -> Connection {
+    let connection = connection_with_key();
+    // Other sync tables are empty: add their export columns to the minimal merge fixture.
+    for table in SYNC_TABLES {
+        let mut statement = connection
+            .prepare(&format!("PRAGMA table_info({})", table.name))
+            .unwrap();
+        let columns: BTreeSet<String> = statement
+            .query_map([], |row| row.get(1))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap();
+        drop(statement);
+        for column in table.columns {
+            if !columns.contains(*column) {
+                connection
+                    .execute_batch(&format!("ALTER TABLE {} ADD COLUMN {}", table.name, column))
+                    .unwrap();
+            }
+        }
+    }
+    connection.execute_batch(
+        "ALTER TABLE app_metadata ADD COLUMN created_at INTEGER DEFAULT 0;
+         ALTER TABLE app_metadata ADD COLUMN updated_at INTEGER DEFAULT 0;
+         INSERT INTO app_metadata (key, value) VALUES ('device_id', '01979f62-8548-7000-8000-000000000103');
+         PRAGMA user_version = 5;"
+    ).unwrap();
+    connection
+}
+
+#[test]
+fn schema_four_dark_theme_defaults_preserve_local_overrides_during_merge() {
+    let mut connection = complete_connection_with_key();
+    let mut payload = key_payload(Some(Value::Null));
+    payload.tables.clear();
+    for (name, uuid) in [
+        ("groups", "01979f62-8548-7000-8000-000000000201"),
+        ("hosts", "01979f62-8548-7000-8000-000000000202"),
+    ] {
+        connection
+            .execute_batch(&format!("CREATE UNIQUE INDEX {name}_uuid ON {name}(uuid)"))
+            .unwrap();
+        connection.execute(&format!("INSERT INTO {name}(uuid, name, updated_at, version, dark_theme_id, telnet_dark_theme_id) VALUES (?, 'Local', 10, 1, 'saved-ssh-dark', 'saved-telnet-dark')"), [uuid]).unwrap();
+        let table = SYNC_TABLES.iter().find(|table| table.name == name).unwrap();
+        let mut record: SyncRecord = table
+            .columns
+            .iter()
+            .map(|column| ((*column).to_string(), Value::Null))
+            .collect();
+        record.remove("dark_theme_id");
+        record.remove("telnet_dark_theme_id");
+        record.insert("uuid".into(), Value::String(uuid.into()));
+        record.insert("name".into(), Value::String("Remote".into()));
+        record.insert("type".into(), Value::String("remote".into()));
+        if name == "groups" {
+            record.remove("type");
+        }
+        record.insert("created_at".into(), Value::from(1));
+        record.insert("updated_at".into(), Value::from(20));
+        record.insert("version".into(), Value::from(2));
+        payload.tables.insert(name.into(), vec![record]);
+    }
+    migrate_sync_payload(&mut payload, 4);
+    merge_payload(&mut connection, &payload, 4).unwrap();
+    for name in ["groups", "hosts"] {
+        let values: (String, String, String) = connection
+            .query_row(
+                &format!("SELECT name, dark_theme_id, telnet_dark_theme_id FROM {name}"),
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(
+            values,
+            (
+                "Remote".into(),
+                "saved-ssh-dark".into(),
+                "saved-telnet-dark".into()
+            )
+        );
+    }
+    replace_payload(&mut connection, &payload).unwrap();
+    for name in ["groups", "hosts"] {
+        let dark: Option<String> = connection
+            .query_row(&format!("SELECT dark_theme_id FROM {name}"), [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(dark, None);
     }
 }

@@ -10,13 +10,19 @@ pub(super) fn migrate_schema(connection: &mut Connection, version: i32) -> rusql
         1 => {
             migrate_v1_to_v2(connection)?;
             migrate_v2_to_v3(connection)?;
-            migrate_v3_to_v4(connection)
+            migrate_v3_to_v4(connection)?;
+            migrate_v4_to_v5(connection)
         }
         2 => {
             migrate_v2_to_v3(connection)?;
-            migrate_v3_to_v4(connection)
+            migrate_v3_to_v4(connection)?;
+            migrate_v4_to_v5(connection)
         }
-        3 => migrate_v3_to_v4(connection),
+        3 => {
+            migrate_v3_to_v4(connection)?;
+            migrate_v4_to_v5(connection)
+        }
+        4 => migrate_v4_to_v5(connection),
         SCHEMA_VERSION => Ok(()),
         _ => Err(rusqlite::Error::InvalidParameterName(format!(
             "database schema version {version} is unsupported; expected {SCHEMA_VERSION}"
@@ -351,5 +357,17 @@ fn migrate_v3_to_v4(connection: &mut Connection) -> rusqlite::Result<()> {
     let transaction = connection.transaction()?;
     transaction.execute_batch("ALTER TABLE keys ADD COLUMN passphrase TEXT;")?;
     transaction.pragma_update(None, "user_version", 4)?;
+    transaction.commit()
+}
+
+fn migrate_v4_to_v5(connection: &mut Connection) -> rusqlite::Result<()> {
+    let transaction = connection.transaction()?;
+    transaction.execute_batch(
+        "ALTER TABLE groups ADD COLUMN dark_theme_id TEXT;
+         ALTER TABLE groups ADD COLUMN telnet_dark_theme_id TEXT;
+         ALTER TABLE hosts ADD COLUMN dark_theme_id TEXT;
+         ALTER TABLE hosts ADD COLUMN telnet_dark_theme_id TEXT;",
+    )?;
+    transaction.pragma_update(None, "user_version", 5)?;
     transaction.commit()
 }

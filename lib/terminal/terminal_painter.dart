@@ -60,6 +60,7 @@ class TerminalPainter extends CustomPainter {
     this.openTargetSelection,
     required this.focused,
     required this.theme,
+    this.sourceTheme = defaultTerminalTheme,
     this.predictedText = '',
     this.weight = 400,
     this.boldWeight = 700,
@@ -81,6 +82,7 @@ class TerminalPainter extends CustomPainter {
   final TerminalSelection? openTargetSelection;
   final bool focused;
   final TerminalTheme theme;
+  final TerminalTheme sourceTheme;
   final String predictedText;
   final int weight;
   final int boldWeight;
@@ -1051,13 +1053,15 @@ class TerminalPainter extends CustomPainter {
   }
 
   Color _resolveColor(Color color) {
-    if (color == terminalDefaultForeground) {
+    if (color == sourceTheme.primary.foreground ||
+        color == terminalDefaultForeground) {
       return theme.primary.foreground;
     }
-    if (color == terminalDefaultBackground) {
+    if (color == sourceTheme.primary.background ||
+        color == terminalDefaultBackground) {
       return theme.primary.background;
     }
-    if (color == terminalDefaultCursor) {
+    if (color == sourceTheme.cursor.cursor || color == terminalDefaultCursor) {
       return theme.cursor.cursor;
     }
 

@@ -21,6 +21,7 @@ pub(super) fn create_schema(connection: &Connection) -> rusqlite::Result<()> {
           username TEXT,
           password TEXT,
           theme_id TEXT,
+          dark_theme_id TEXT,
           startup_snippet_uuid TEXT,
           ssh_enabled INTEGER CHECK (ssh_enabled IS NULL OR ssh_enabled IN (0, 1)),
           mosh_enabled INTEGER CHECK (mosh_enabled IS NULL OR mosh_enabled IN (0, 1)),
@@ -31,6 +32,7 @@ pub(super) fn create_schema(connection: &Connection) -> rusqlite::Result<()> {
           telnet_password TEXT,
           telnet_port INTEGER CHECK (telnet_port IS NULL OR telnet_port BETWEEN 1 AND 65535),
           telnet_theme_id TEXT,
+          telnet_dark_theme_id TEXT,
           environment_variables TEXT
             CHECK (
               environment_variables IS NULL OR
@@ -104,6 +106,7 @@ pub(super) fn create_schema(connection: &Connection) -> rusqlite::Result<()> {
           username TEXT,
           password TEXT,
           theme_id TEXT,
+          dark_theme_id TEXT,
           startup_snippet_uuid TEXT,
           ssh_enabled INTEGER CHECK (ssh_enabled IS NULL OR ssh_enabled IN (0, 1)),
           mosh_enabled INTEGER CHECK (mosh_enabled IS NULL OR mosh_enabled IN (0, 1)),
@@ -114,6 +117,7 @@ pub(super) fn create_schema(connection: &Connection) -> rusqlite::Result<()> {
           telnet_password TEXT,
           telnet_port INTEGER CHECK (telnet_port IS NULL OR telnet_port BETWEEN 1 AND 65535),
           telnet_theme_id TEXT,
+          telnet_dark_theme_id TEXT,
           environment_variables TEXT
             CHECK (
               environment_variables IS NULL OR

@@ -54,11 +54,11 @@ impl NautermDatabase {
                 UPDATE groups
                 SET name = ?, parent_uuid = ?, identity_uuid = ?,
                     proxy_uuid = ?, port = ?, username = ?, password = ?,
-                    theme_id = ?, startup_snippet_uuid = ?, ssh_enabled = ?,
+                    theme_id = ?, dark_theme_id = ?, startup_snippet_uuid = ?, ssh_enabled = ?,
                     mosh_enabled = ?, mosh_server_command = ?,
                     telnet_enabled = ?, telnet_identity_uuid = ?,
                     telnet_username = ?, telnet_password = ?, telnet_port = ?,
-                    telnet_theme_id = ?, environment_variables = ?,
+                    telnet_theme_id = ?, telnet_dark_theme_id = ?, environment_variables = ?,
                     encoding = ?, telnet_encoding = ?, key_uuid = ?,
                     updated_at = CAST(unixepoch('subsec') * 1000 AS INTEGER),
                     deleted_at = NULL,
@@ -74,6 +74,7 @@ impl NautermDatabase {
                     group.username,
                     password,
                     group.theme_id,
+                    group.dark_theme_id,
                     startup_snippet_uuid,
                     group.ssh_enabled,
                     group.mosh_enabled,
@@ -84,6 +85,7 @@ impl NautermDatabase {
                     telnet_password,
                     group.telnet_port,
                     group.telnet_theme_id,
+                    group.telnet_dark_theme_id,
                     environment_variables,
                     encoding,
                     telnet_encoding,
@@ -99,14 +101,14 @@ impl NautermDatabase {
             r#"
             INSERT INTO groups (
               uuid, name, parent_uuid, identity_uuid, proxy_uuid, port,
-              username, password, theme_id, startup_snippet_uuid, ssh_enabled,
+              username, password, theme_id, dark_theme_id, startup_snippet_uuid, ssh_enabled,
               mosh_enabled, mosh_server_command, telnet_enabled,
               telnet_identity_uuid, telnet_username, telnet_password,
-              telnet_port, telnet_theme_id, environment_variables, encoding,
+              telnet_port, telnet_theme_id, telnet_dark_theme_id, environment_variables, encoding,
               telnet_encoding, key_uuid, created_at, updated_at
             )
             VALUES (
-              ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+              ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
               ?, ?, CAST(unixepoch('subsec') * 1000 AS INTEGER),
               CAST(unixepoch('subsec') * 1000 AS INTEGER)
             )
@@ -121,6 +123,7 @@ impl NautermDatabase {
                 group.username,
                 password,
                 group.theme_id,
+                group.dark_theme_id,
                 startup_snippet_uuid,
                 group.ssh_enabled,
                 group.mosh_enabled,
@@ -131,6 +134,7 @@ impl NautermDatabase {
                 telnet_password,
                 group.telnet_port,
                 group.telnet_theme_id,
+                group.telnet_dark_theme_id,
                 environment_variables,
                 encoding,
                 telnet_encoding,
@@ -569,10 +573,10 @@ impl NautermDatabase {
                 SET name = ?, group_uuid = ?,
                     identity_uuid = ?,
                     proxy_uuid = ?,
-                    host = ?, port = ?, username = ?, password = ?, theme_id = ?,
+                    host = ?, port = ?, username = ?, password = ?, theme_id = ?, dark_theme_id = ?,
                     startup_snippet_uuid = ?, ssh_enabled = ?, mosh_enabled = ?, mosh_server_command = ?, telnet_enabled = ?,
                     telnet_identity_uuid = ?, telnet_username = ?,
-                    telnet_password = ?, telnet_port = ?, telnet_theme_id = ?,
+                    telnet_password = ?, telnet_port = ?, telnet_theme_id = ?, telnet_dark_theme_id = ?,
 	                    environment_variables = ?, encoding = ?, telnet_encoding = ?, type = ?,
 	                    key_uuid = ?, shell_path = ?, work_dir = ?,
 	                    os = ?, distro = ?,
@@ -591,6 +595,7 @@ impl NautermDatabase {
                     host.username,
                     password,
                     host.theme_id,
+                    host.dark_theme_id,
                     startup_snippet_uuid,
                     host.ssh_enabled,
                     host.mosh_enabled,
@@ -601,6 +606,7 @@ impl NautermDatabase {
                     telnet_password,
                     host.telnet_port,
                     host.telnet_theme_id,
+                    host.telnet_dark_theme_id,
                     environment_variables,
                     encoding,
                     telnet_encoding,
@@ -622,14 +628,14 @@ impl NautermDatabase {
             r#"
             INSERT INTO hosts (
               uuid, name, group_uuid, identity_uuid, proxy_uuid, host, port, username, password,
-              theme_id, startup_snippet_uuid, ssh_enabled, mosh_enabled, mosh_server_command, telnet_enabled,
+              theme_id, dark_theme_id, startup_snippet_uuid, ssh_enabled, mosh_enabled, mosh_server_command, telnet_enabled,
               telnet_identity_uuid, telnet_username, telnet_password,
-              telnet_port, telnet_theme_id, environment_variables, encoding, telnet_encoding,
+              telnet_port, telnet_theme_id, telnet_dark_theme_id, environment_variables, encoding, telnet_encoding,
 	              type, key_uuid, shell_path, work_dir, os, distro,
 	              created_at, updated_at
 	            )
 	            VALUES (
-	              ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+	              ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
 	              CAST(unixepoch('subsec') * 1000 AS INTEGER),
 	              CAST(unixepoch('subsec') * 1000 AS INTEGER)
             )
@@ -645,6 +651,7 @@ impl NautermDatabase {
                 host.username,
                 password,
                 host.theme_id,
+                    host.dark_theme_id,
                 startup_snippet_uuid,
                 host.ssh_enabled,
                 host.mosh_enabled,
@@ -655,6 +662,7 @@ impl NautermDatabase {
                 telnet_password,
                 host.telnet_port,
                 host.telnet_theme_id,
+                    host.telnet_dark_theme_id,
                 environment_variables,
                 encoding,
                 telnet_encoding,

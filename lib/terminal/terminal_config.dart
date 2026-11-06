@@ -53,6 +53,9 @@ TerminalType terminalEmulationType = TerminalType.xterm256Color;
 TerminalEmulatorBackend terminalEmulatorBackend =
     TerminalEmulatorBackend.ghostty;
 String? terminalThemeId;
+String terminalDarkThemeId = nysaDarkTerminalThemeId;
+TerminalTheme terminalDarkCustomTheme = nysaDarkTerminalTheme;
+bool terminalFollowAppTheme = false;
 TerminalTheme terminalCustomTheme = defaultTerminalTheme;
 
 EdgeInsets terminalPadding = EdgeInsets.zero;
@@ -485,6 +488,9 @@ class NautermRuntimeSettings {
     this.emulationType = TerminalType.xterm256Color,
     this.emulatorBackend = TerminalEmulatorBackend.ghostty,
     this.themeId,
+    this.darkThemeId = nysaDarkTerminalThemeId,
+    this.darkCustomThemeJson,
+    this.followAppTheme = false,
     this.customThemeJson,
     this.cursor = const TerminalCursorConfig(),
     this.bell = const TerminalBellConfig(),
@@ -519,6 +525,9 @@ class NautermRuntimeSettings {
   final TerminalType emulationType;
   final TerminalEmulatorBackend emulatorBackend;
   final String? themeId;
+  final String darkThemeId;
+  final Map<String, Object?>? darkCustomThemeJson;
+  final bool followAppTheme;
   final Map<String, Object?>? customThemeJson;
   final TerminalCursorConfig cursor;
   final TerminalBellConfig bell;
@@ -546,6 +555,11 @@ void applyNautermRuntimeSettings(NautermRuntimeSettings settings) {
   terminalEmulationType = settings.emulationType;
   terminalEmulatorBackend = settings.emulatorBackend;
   terminalThemeId = settings.themeId;
+  terminalDarkThemeId = settings.darkThemeId;
+  terminalFollowAppTheme = settings.followAppTheme;
+  terminalDarkCustomTheme = settings.darkCustomThemeJson == null
+      ? nysaDarkTerminalTheme
+      : TerminalTheme.fromJson(settings.darkCustomThemeJson!);
   terminalCustomTheme = settings.customThemeJson != null
       ? TerminalTheme.fromJson(settings.customThemeJson!)
       : defaultTerminalTheme;
@@ -612,6 +626,9 @@ NautermRuntimeSettings currentNautermRuntimeSettings() {
     emulationType: terminalEmulationType,
     emulatorBackend: terminalEmulatorBackend,
     themeId: terminalThemeId,
+    darkThemeId: terminalDarkThemeId,
+    darkCustomThemeJson: terminalDarkCustomTheme.toJson(),
+    followAppTheme: terminalFollowAppTheme,
     customThemeJson: terminalCustomTheme.toJson(),
     cursor: TerminalCursorConfig(
       shape: terminalCursorShape,

@@ -1058,6 +1058,8 @@ void main() {
         )
         .first;
     await tester.scrollUntilVisible(select, 300, scrollable: scrollable);
+    await Scrollable.ensureVisible(tester.element(select), alignment: 0.5);
+    await tester.pump();
     await tester.tap(select);
     await tester.pump();
 

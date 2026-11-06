@@ -613,6 +613,9 @@ class TerminalController extends ChangeNotifier {
   final String? _shellPath;
   final String? _startupSnippet;
   final TerminalTheme _theme;
+
+  /// Default colors used when creating the native terminal session.
+  TerminalTheme get sourceTheme => _theme;
   String _moshServerCommand;
   SshConnectionProfile? _sshProfile;
   SerialConnectionProfile? _serialProfile;

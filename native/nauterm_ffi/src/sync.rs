@@ -204,6 +204,7 @@ const SYNC_TABLES: &[SyncTable] = &[
             "username",
             "password",
             "theme_id",
+            "dark_theme_id",
             "startup_snippet_uuid",
             "ssh_enabled",
             "mosh_enabled",
@@ -214,6 +215,7 @@ const SYNC_TABLES: &[SyncTable] = &[
             "telnet_password",
             "telnet_port",
             "telnet_theme_id",
+            "telnet_dark_theme_id",
             "environment_variables",
             "encoding",
             "telnet_encoding",
@@ -299,6 +301,7 @@ const SYNC_TABLES: &[SyncTable] = &[
             "username",
             "password",
             "theme_id",
+            "dark_theme_id",
             "startup_snippet_uuid",
             "ssh_enabled",
             "mosh_enabled",
@@ -309,6 +312,7 @@ const SYNC_TABLES: &[SyncTable] = &[
             "telnet_password",
             "telnet_port",
             "telnet_theme_id",
+            "telnet_dark_theme_id",
             "environment_variables",
             "encoding",
             "telnet_encoding",
@@ -541,11 +545,9 @@ fn sync_file(
             decrypt_envelope(envelope, master_key, local_key.as_deref(), schema_version)?;
         reject_rollback(connection, &remote_header, file_kind.revision_scope())?;
         imported_records = match strategy {
-            SyncStrategy::SmartMerge => merge_payload(
-                connection,
-                &remote_payload,
-                remote_header.schema_version < 4,
-            )?,
+            SyncStrategy::SmartMerge => {
+                merge_payload(connection, &remote_payload, remote_header.schema_version)?
+            }
             SyncStrategy::LocalWins => 0,
             SyncStrategy::RemoteWins => replace_payload(connection, &remote_payload)?,
         };
@@ -980,17 +982,13 @@ fn list_relation_uuids(
 fn merge_payload(
     connection: &mut Connection,
     payload: &SyncPayload,
-    preserve_legacy_passphrase: bool,
+    source_schema_version: i32,
 ) -> Result<usize, SyncError> {
     validate_payload_tables(payload)?;
     let dek = crate::crypto::local_dek_if_configured(connection)?;
     let transaction = connection.transaction()?;
-    let imported = merge_payload_in_transaction(
-        &transaction,
-        payload,
-        dek.as_ref(),
-        preserve_legacy_passphrase,
-    )?;
+    let imported =
+        merge_payload_in_transaction(&transaction, payload, dek.as_ref(), source_schema_version)?;
     transaction.commit()?;
     Ok(imported)
 }
@@ -999,7 +997,7 @@ fn merge_payload_in_transaction(
     transaction: &Transaction<'_>,
     payload: &SyncPayload,
     dek: Option<&crate::crypto::Dek>,
-    preserve_legacy_passphrase: bool,
+    source_schema_version: i32,
 ) -> Result<usize, SyncError> {
     let mut imported = 0;
     // Host tag relations are restored while importing each host, so tags must
@@ -1015,7 +1013,7 @@ fn merge_payload_in_transaction(
             .map(Vec::as_slice)
             .unwrap_or_default();
         for record in records {
-            if merge_record(transaction, table, record, dek, preserve_legacy_passphrase)? {
+            if merge_record(transaction, table, record, dek, source_schema_version)? {
                 imported += 1;
             }
         }
@@ -1033,7 +1031,7 @@ fn replace_payload(connection: &mut Connection, payload: &SyncPayload) -> Result
     for table in SYNC_TABLES.iter().rev() {
         transaction.execute(&format!("DELETE FROM {} {}", table.name, table.filter), [])?;
     }
-    let imported = merge_payload_in_transaction(&transaction, payload, dek.as_ref(), false)?;
+    let imported = merge_payload_in_transaction(&transaction, payload, dek.as_ref(), 5)?;
     transaction.commit()?;
     Ok(imported)
 }
@@ -1066,7 +1064,7 @@ fn merge_record(
     table: &SyncTable,
     record: &SyncRecord,
     dek: Option<&crate::crypto::Dek>,
-    preserve_legacy_passphrase: bool,
+    source_schema_version: i32,
 ) -> Result<bool, SyncError> {
     validate_record(table, record)?;
     let uuid = record_string(record, "uuid")?;
@@ -1142,7 +1140,10 @@ fn merge_record(
         .iter()
         .filter(|column| {
             **column != "uuid"
-                && !(preserve_legacy_passphrase && table.name == "keys" && **column == "passphrase")
+                && !(source_schema_version < 4 && table.name == "keys" && **column == "passphrase")
+                && !(source_schema_version < 5
+                    && matches!(table.name, "hosts" | "groups")
+                    && matches!(**column, "dark_theme_id" | "telnet_dark_theme_id"))
         })
         .map(|column| format!("{column} = excluded.{column}"))
         .collect::<Vec<_>>()
@@ -1469,6 +1470,16 @@ fn migrate_sync_payload(payload: &mut SyncPayload, source_schema_version: i32) {
             }
         }
     }
+    if source_schema_version < 5 {
+        for table in ["groups", "hosts"] {
+            if let Some(records) = payload.tables.get_mut(table) {
+                for record in records {
+                    record.entry("dark_theme_id").or_insert(Value::Null);
+                    record.entry("telnet_dark_theme_id").or_insert(Value::Null);
+                }
+            }
+        }
+    }
 }
 
 fn validate_envelope_header(
@@ -1481,7 +1492,8 @@ fn validate_envelope_header(
             header.format_version
         )));
     }
-    let can_migrate = current_schema_version == 4 && matches!(header.schema_version, 1..=3);
+    let can_migrate = matches!(current_schema_version, 4..=5)
+        && (1..current_schema_version).contains(&header.schema_version);
     if header.schema_version != current_schema_version && !can_migrate {
         return Err(SyncError::new(format!(
             "Unsupported sync database schema version {}.",

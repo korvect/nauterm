@@ -654,7 +654,7 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
         serialConfig: serialConfig,
         label: tabTitle,
         config: currentTerminalConfig(),
-        theme: defaultTerminalTheme,
+        theme: _defaultThemeForSettings(),
         recorder: _createTerminalRecorder(
           title: tabTitle,
           target: '${serialConfig.serialPort} @ ${serialConfig.summary}',
@@ -670,7 +670,7 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
         _TerminalTab(
           id: id,
           title: tabTitle,
-          theme: defaultTerminalTheme,
+          theme: _defaultThemeForSettings(),
           controller: controller,
         ),
       );
@@ -782,7 +782,10 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
     }
     final host = rawHost;
     if (host.type == NautermHostType.local) {
-      final theme = await _themeForId(host.themeId);
+      final theme = await _themeForId(
+        host.themeId,
+        darkThemeId: host.darkThemeId,
+      );
       if (!mounted) {
         return;
       }
@@ -845,7 +848,10 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
     HostEntry host,
     _HostItem item,
   ) async {
-    final theme = await _themeForId(host.themeId);
+    final theme = await _themeForId(
+      host.themeId,
+      darkThemeId: host.darkThemeId,
+    );
     if (!mounted) {
       return;
     }
@@ -921,7 +927,10 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
       return;
     }
 
-    final theme = await _themeForId(host.themeId);
+    final theme = await _themeForId(
+      host.themeId,
+      darkThemeId: host.darkThemeId,
+    );
     if (!mounted) {
       return;
     }
@@ -1069,7 +1078,10 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
               .firstOrNull;
     final username = _firstNonEmpty([identity?.username, host.telnetUsername]);
     final password = _firstNonEmpty([identity?.password, host.telnetPassword]);
-    final theme = await _themeForId(host.telnetThemeId);
+    final theme = await _themeForId(
+      host.telnetThemeId,
+      darkThemeId: host.telnetDarkThemeId,
+    );
     if (!mounted) {
       return;
     }
@@ -1171,7 +1183,10 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
     HostEntry host,
     _PortForwardSshAuth auth,
   ) async {
-    final theme = await _themeForId(host.themeId);
+    final theme = await _themeForId(
+      host.themeId,
+      darkThemeId: host.darkThemeId,
+    );
     if (!mounted) {
       return;
     }
@@ -1282,8 +1297,8 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
         username: query.username,
         knownHostsPath: NautermPaths.resolve().knownHostsFile.path,
         label: query.label,
-        environment: _terminalEnvironmentForTheme(defaultTerminalTheme),
-        theme: defaultTerminalTheme,
+        environment: _terminalEnvironmentForTheme(_defaultThemeForSettings()),
+        theme: _defaultThemeForSettings(),
         recorder: _createTerminalRecorder(
           title: query.label,
           target: '${query.username}@${query.host}:${query.port}',
@@ -1305,7 +1320,7 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
         _TerminalTab(
           id: id,
           title: query.label,
-          theme: defaultTerminalTheme,
+          theme: _defaultThemeForSettings(),
           controller: controller,
         ),
       );
@@ -1351,14 +1366,76 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
     });
   }
 
-  Future<TerminalTheme> _themeForId(String? themeId) async {
-    final theme = await _terminalThemeCatalog?.loadTheme(themeId);
-    return theme ?? defaultTerminalTheme;
+  Future<TerminalTheme> _themeForId(
+    String? themeId, {
+    String? darkThemeId,
+  }) async {
+    final dark = terminalFollowAppTheme && _workspaceDark;
+    final selected =
+        (dark ? darkThemeId : themeId) ??
+        (dark ? terminalDarkThemeId : terminalThemeId);
+    return await _terminalThemeCatalog?.loadTheme(selected) ??
+        _defaultThemeForSettings();
   }
 
   TerminalTheme _defaultThemeForSettings() {
+    if (terminalFollowAppTheme && _workspaceDark) {
+      return terminalDarkCustomTheme;
+    }
     return terminalThemeId == null ? defaultTerminalTheme : terminalCustomTheme;
   }
+
+  Future<void> _refreshTerminalThemes() async {
+    final signature = Object.hash(
+      terminalFollowAppTheme,
+      _workspaceDark,
+      terminalThemeId,
+      terminalCustomTheme,
+      terminalDarkThemeId,
+      terminalDarkCustomTheme,
+    );
+    if (signature == _lastTerminalThemeSignature) return;
+    _lastTerminalThemeSignature = signature;
+    final revision = ++_terminalThemeRevision;
+    final updates = <(_TerminalViewTabEntry, TerminalTheme)>[];
+    for (final tab in _allTerminalTabs.toList()) {
+      if (tab.replay) continue;
+      for (final view in tab.rootLayout.views) {
+        for (final entry in view.tabs) {
+          final id =
+              entry.controller.sshProfile?.hostId ??
+              entry.controller.telnetProfile?.hostId;
+          final host = id != null
+              ? _dataStore?.getHost(id)
+              : entry.pendingConnection?.host ??
+                    _dataStore
+                        ?.listHosts()
+                        .where(
+                          (host) =>
+                              host.uuid == entry.sourceHostUuid &&
+                              entry.sourceHostUuid != null,
+                        )
+                        .firstOrNull;
+          final telnet = entry.controller.telnetProfile != null;
+          final theme = await _themeForId(
+            telnet ? host?.telnetThemeId : host?.themeId,
+            darkThemeId: telnet ? host?.telnetDarkThemeId : host?.darkThemeId,
+          );
+          if (!mounted || revision != _terminalThemeRevision) return;
+          updates.add((entry, theme));
+        }
+      }
+    }
+    if (!mounted || revision != _terminalThemeRevision) return;
+    _setWorkspaceState(() {
+      for (final (entry, theme) in updates) {
+        entry.theme = theme;
+      }
+    });
+  }
+
+  void _handleTerminalAppearanceChanged() =>
+      unawaited(_refreshTerminalThemes());
 
   TerminalSessionRecorder? _createTerminalRecorder({
     required String title,

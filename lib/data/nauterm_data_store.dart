@@ -88,6 +88,7 @@ class HostGroup {
     this.username,
     this.password,
     this.themeId,
+    this.darkThemeId,
     this.startupSnippetId,
     this.startupSnippetUuid,
     this.sshEnabled,
@@ -100,6 +101,7 @@ class HostGroup {
     this.telnetPassword,
     this.telnetPort,
     this.telnetThemeId,
+    this.telnetDarkThemeId,
     this.environmentVariables = const [],
     this.encoding,
     this.telnetEncoding,
@@ -126,6 +128,7 @@ class HostGroup {
   final String? username;
   final String? password;
   final String? themeId;
+  final String? darkThemeId;
   final int? startupSnippetId;
   final String? startupSnippetUuid;
   final bool? sshEnabled;
@@ -138,6 +141,7 @@ class HostGroup {
   final String? telnetPassword;
   final int? telnetPort;
   final String? telnetThemeId;
+  final String? telnetDarkThemeId;
   final List<HostEnvironmentVariable> environmentVariables;
   final String? encoding;
   final String? telnetEncoding;
@@ -164,6 +168,7 @@ class HostGroup {
     'username': username,
     'password': password,
     'theme_id': _normalizeThemeId(themeId),
+    'dark_theme_id': _normalizeThemeId(darkThemeId),
     'startup_snippet_id': startupSnippetId,
     'startup_snippet_uuid': startupSnippetUuid,
     'ssh_enabled': sshEnabled,
@@ -176,6 +181,7 @@ class HostGroup {
     'telnet_password': telnetPassword,
     'telnet_port': telnetPort,
     'telnet_theme_id': _normalizeThemeId(telnetThemeId),
+    'telnet_dark_theme_id': _normalizeThemeId(telnetDarkThemeId),
     'environment_variables': [
       for (final variable in environmentVariables) variable.toJson(),
     ],
@@ -207,6 +213,7 @@ class HostGroup {
       username: _stringOrNull(map['username']),
       password: _stringOrNull(map['password']),
       themeId: _normalizeThemeId(_stringOrNull(map['theme_id'])),
+      darkThemeId: _normalizeThemeId(_stringOrNull(map['dark_theme_id'])),
       startupSnippetId: _intOrNull(map['startup_snippet_id']),
       startupSnippetUuid: _stringOrNull(map['startup_snippet_uuid']),
       sshEnabled: _boolOrNull(map['ssh_enabled']),
@@ -219,6 +226,9 @@ class HostGroup {
       telnetPassword: _stringOrNull(map['telnet_password']),
       telnetPort: _intOrNull(map['telnet_port']),
       telnetThemeId: _normalizeThemeId(_stringOrNull(map['telnet_theme_id'])),
+      telnetDarkThemeId: _normalizeThemeId(
+        _stringOrNull(map['telnet_dark_theme_id']),
+      ),
       environmentVariables: _environmentVariablesOrEmpty(
         map['environment_variables'],
       ),
@@ -437,6 +447,7 @@ class HostEntry {
     this.username,
     this.password,
     this.themeId,
+    this.darkThemeId,
     this.startupSnippetId,
     this.startupSnippetUuid,
     bool? sshEnabled,
@@ -449,6 +460,7 @@ class HostEntry {
     this.telnetPassword,
     this.telnetPort,
     this.telnetThemeId,
+    this.telnetDarkThemeId,
     this.environmentVariables = const [],
     String? encoding,
     String? telnetEncoding,
@@ -487,6 +499,7 @@ class HostEntry {
   final String? username;
   final String? password;
   final String? themeId;
+  final String? darkThemeId;
   final int? startupSnippetId;
   final String? startupSnippetUuid;
   final bool? sshEnabledOverride;
@@ -499,6 +512,7 @@ class HostEntry {
   final String? telnetPassword;
   final int? telnetPort;
   final String? telnetThemeId;
+  final String? telnetDarkThemeId;
   final List<HostEnvironmentVariable> environmentVariables;
   final String? encodingOverride;
   final String? telnetEncodingOverride;
@@ -546,6 +560,7 @@ class HostEntry {
     'username': username,
     'password': password,
     'theme_id': _normalizeThemeId(themeId),
+    'dark_theme_id': _normalizeThemeId(darkThemeId),
     'startup_snippet_id': startupSnippetId,
     'startup_snippet_uuid': startupSnippetUuid,
     'ssh_enabled': sshEnabledOverride,
@@ -558,6 +573,7 @@ class HostEntry {
     'telnet_password': telnetPassword,
     'telnet_port': telnetPort,
     'telnet_theme_id': _normalizeThemeId(telnetThemeId),
+    'telnet_dark_theme_id': _normalizeThemeId(telnetDarkThemeId),
     'environment_variables': [
       for (final variable in environmentVariables) variable.toJson(),
     ],
@@ -595,6 +611,7 @@ class HostEntry {
       username: username,
       password: password,
       themeId: themeId,
+      darkThemeId: darkThemeId,
       startupSnippetId: startupSnippetId,
       startupSnippetUuid: startupSnippetUuid,
       sshEnabled: sshEnabledOverride,
@@ -607,6 +624,7 @@ class HostEntry {
       telnetPassword: telnetPassword,
       telnetPort: telnetPort,
       telnetThemeId: telnetThemeId,
+      telnetDarkThemeId: telnetDarkThemeId,
       environmentVariables: environmentVariables,
       encoding: encodingOverride,
       telnetEncoding: telnetEncodingOverride,
@@ -644,6 +662,7 @@ class HostEntry {
       username: _stringOrNull(map['username']),
       password: _stringOrNull(map['password']),
       themeId: _normalizeThemeId(_stringOrNull(map['theme_id'])),
+      darkThemeId: _normalizeThemeId(_stringOrNull(map['dark_theme_id'])),
       startupSnippetId: _intOrNull(map['startup_snippet_id']),
       startupSnippetUuid: _stringOrNull(map['startup_snippet_uuid']),
       sshEnabled: _boolOrNull(map['ssh_enabled']),
@@ -656,6 +675,9 @@ class HostEntry {
       telnetPassword: _stringOrNull(map['telnet_password']),
       telnetPort: _intOrNull(map['telnet_port']),
       telnetThemeId: _normalizeThemeId(_stringOrNull(map['telnet_theme_id'])),
+      telnetDarkThemeId: _normalizeThemeId(
+        _stringOrNull(map['telnet_dark_theme_id']),
+      ),
       environmentVariables: _environmentVariablesOrEmpty(
         map['environment_variables'],
       ),

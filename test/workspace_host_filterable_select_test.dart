@@ -271,7 +271,10 @@ void main() {
     await tester.pump();
 
     final groupThemePreview = find.descendant(
-      of: newGroupDrawer,
+      of: find.descendant(
+        of: newGroupDrawer,
+        matching: find.byKey(const ValueKey('workspace-editor-scroll-view')),
+      ),
       matching: find.byType(TerminalThemePreviewCard),
     );
     expect(groupThemePreview, findsOneWidget);

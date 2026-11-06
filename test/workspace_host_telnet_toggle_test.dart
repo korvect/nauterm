@@ -59,13 +59,22 @@ void main() {
     }
 
     expect(mosh, findsOneWidget);
-    position.jumpTo(position.maxScrollExtent);
+    await Scrollable.ensureVisible(tester.element(mosh), alignment: 0.5);
     await tester.pump();
     await tester.tap(mosh);
     await tester.pump();
     await tester.tap(find.text('Enabled').last);
     await tester.pump();
     expect(find.text('Mosh server command'), findsOneWidget);
+    final themePreviews = find.descendant(
+      of: find.byKey(const ValueKey('workspace-editor-scroll-view')),
+      matching: find.byType(TerminalThemePreviewCard),
+    );
+    expect(themePreviews, findsNWidgets(2));
+    expect(
+      tester.getTopLeft(themePreviews.last).dy,
+      greaterThan(tester.getBottomRight(themePreviews.first).dy),
+    );
     expect(
       tester
           .widgetList<TextField>(find.byType(TextField))
@@ -73,7 +82,7 @@ void main() {
       isTrue,
     );
     expect(
-      tester.getTopLeft(find.byType(TerminalThemePreviewCard)).dy,
+      tester.getTopLeft(themePreviews.first).dy,
       greaterThan(tester.getTopLeft(mosh).dy),
     );
 
