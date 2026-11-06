@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -27,6 +28,51 @@ void main() {
   });
 
   for (final relatedCredential in [false, true]) {
+    for (final importFile in [false, true]) {
+      testWidgets(
+        'encrypted key creation saves passphrase, related=$relatedCredential, import=$importFile',
+        (tester) async {
+          final saved = Completer<KeyEntry>();
+          await _pumpNewKeyEditor(tester, relatedCredential, saved);
+          expect(find.text('Passphrase'), findsNothing);
+          final privateKey = openSshHeader('aes256-ctr');
+          if (importFile) {
+            if (relatedCredential) {
+              await tester.tap(find.text('Import'));
+              await tester.pump();
+            }
+            await _importKeyFile(tester, privateKey);
+          } else {
+            await tester.enterText(_privateKeyField(), privateKey);
+            await tester.pump();
+            expect(
+              tester.widget<TextField>(_privateKeyField()).focusNode!.hasFocus,
+              isTrue,
+            );
+          }
+          final passphrase = _passphraseField();
+          expect(passphrase, findsOneWidget);
+          expect(tester.widget<TextField>(passphrase).obscureText, isTrue);
+          expect(find.text('Security'), findsNothing);
+          expect(
+            tester.getTopLeft(find.text('Name')).dy,
+            lessThan(tester.getTopLeft(find.text('Passphrase')).dy),
+          );
+          expect(
+            tester.getTopLeft(find.text('Passphrase')).dy,
+            lessThan(tester.getTopLeft(find.text('Private key *')).dy),
+          );
+          await tester.enterText(passphrase, '  imported passphrase  ');
+          await tester.tap(find.text('Save'));
+          await tester.pump();
+          expect(saved.isCompleted, isTrue);
+          final key = await saved.future;
+          expect(key.privateKey, privateKey);
+          expect(key.passphrase, '  imported passphrase  ');
+          await tester.pumpWidget(const SizedBox.shrink());
+        },
+      );
+    }
     for (final savePassphrase in [false, true]) {
       testWidgets(
         'generated key respects Save passphrase, related=$relatedCredential, save=$savePassphrase',
@@ -64,6 +110,43 @@ void main() {
       },
     );
   }
+  testWidgets('new encrypted key can be saved without a passphrase', (
+    tester,
+  ) async {
+    final saved = Completer<KeyEntry>();
+    await _pumpNewKeyEditor(tester, false, saved);
+    await tester.enterText(_privateKeyField(), openSshHeader('aes256-ctr'));
+    await tester.pump();
+    expect(_passphraseField(), findsOneWidget);
+    await tester.tap(find.text('Save'));
+    await tester.pump();
+    expect((await saved.future).passphrase, isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+  testWidgets(
+    'replacing a new encrypted key with an unencrypted key hides its passphrase',
+    (tester) async {
+      final saved = Completer<KeyEntry>();
+      await _pumpNewKeyEditor(tester, false, saved);
+      await tester.enterText(_privateKeyField(), openSshHeader('aes256-ctr'));
+      await tester.pump();
+      await tester.enterText(_passphraseField(), 'stale passphrase');
+      final privateKey = openSshHeader('none');
+      await tester.enterText(_privateKeyField(), privateKey);
+      await tester.pump();
+      expect(find.text('Passphrase'), findsNothing);
+      expect(
+        tester.widget<TextField>(_privateKeyField()).focusNode!.hasFocus,
+        isTrue,
+      );
+      await tester.tap(find.text('Save'));
+      await tester.pump();
+      final key = await saved.future;
+      expect(key.privateKey, privateKey);
+      expect(key.passphrase, isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
   for (final passphrase in ['updated passphrase', '', '  exact spaces  ']) {
     testWidgets(
       'encrypted key passphrase can be edited or cleared: "$passphrase"',
@@ -131,6 +214,62 @@ void main() {
     },
   );
 }
+
+Future<void> _pumpNewKeyEditor(
+  WidgetTester tester,
+  bool relatedCredential,
+  Completer<KeyEntry> saved,
+) async {
+  await tester.binding.setSurfaceSize(const Size(500, 1000));
+  addTearDown(() => tester.binding.setSurfaceSize(null));
+  await tester.pumpWidget(
+    MaterialApp(
+      home: Scaffold(
+        body: buildKeyEditorForTesting(
+          relatedCredential: relatedCredential,
+          onSave: (key) async => saved.complete(key),
+        ),
+      ),
+    ),
+  );
+  await tester.pump();
+}
+
+Future<void> _importKeyFile(WidgetTester tester, String privateKey) async {
+  final directory = Directory.systemTemp.createTempSync('nauterm-key-import-');
+  addTearDown(() => directory.deleteSync(recursive: true));
+  final file = File('${directory.path}/test-key')
+    ..writeAsStringSync(privateKey);
+  await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+    'com.korvect.nauterm/file_drop',
+    const StandardMethodCodec().encodeMethodCall(
+      MethodCall('filesDropped', {
+        'paths': [file.path],
+      }),
+    ),
+    null,
+  );
+  await tester.pump();
+  for (
+    var attempt = 0;
+    _passphraseField().evaluate().isEmpty && attempt < 50;
+    attempt++
+  ) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 10)),
+    );
+    await tester.pump();
+  }
+  expect(_passphraseField(), findsOneWidget);
+}
+
+Finder _privateKeyField() => find.descendant(
+  of: find.ancestor(
+    of: find.text('Private key *'),
+    matching: find.byType(InputDecorator),
+  ),
+  matching: find.byType(TextField),
+);
 
 Future<void> _pumpGenerator(
   WidgetTester tester,

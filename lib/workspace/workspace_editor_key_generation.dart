@@ -614,8 +614,7 @@ class _KeyEditorContentState extends State<_KeyEditorContent> {
     _nameIsAutomatic = _nameController.text.trim().isEmpty;
   }
 
-  bool get _editingEncryptedKey =>
-      widget.request.initial != null &&
+  bool get _keyRequiresPassphrase =>
       sshPrivateKeyRequiresPassphrase(_privateController.text);
 
   void _handlePrivateKeyChanged() {
@@ -807,7 +806,7 @@ class _KeyEditorContentState extends State<_KeyEditorContent> {
         publicKey: _emptyToNull(_publicController.text),
         certificate: _emptyToNull(_certificateController.text),
         passphrase:
-            _editingEncryptedKey && _passphraseController.text.isNotEmpty
+            _keyRequiresPassphrase && _passphraseController.text.isNotEmpty
             ? _passphraseController.text
             : null,
       ),
@@ -904,28 +903,32 @@ class _KeyEditorContentState extends State<_KeyEditorContent> {
     );
   }
 
-  Widget _buildPassphraseInput() => _WorkspaceInput(
-    controller: _passphraseController,
-    label: tr('common.label.passphrase', fallback: 'Passphrase'),
-    obscureText: !_passphraseVisible,
-    trailing: _WorkspaceButton(
-      icon: _passphraseVisible
-          ? Icons.visibility_rounded
-          : Icons.visibility_off_rounded,
-      tooltip: _passphraseVisible
-          ? tr(
-              'workspace.keys.action.hidePassphrase',
-              fallback: 'Hide passphrase',
-            )
-          : tr(
-              'workspace.keys.action.showPassphrase',
-              fallback: 'Show passphrase',
-            ),
-      onPressed: () => setState(() => _passphraseVisible = !_passphraseVisible),
-      variant: _WorkspaceButtonVariant.text,
-      size: _WorkspaceControlSize.tiny,
-      height: 28,
-      minWidth: 28,
+  Widget _buildPassphraseInput() => KeyedSubtree(
+    key: const ValueKey('key-passphrase-input'),
+    child: _WorkspaceInput(
+      controller: _passphraseController,
+      label: tr('common.label.passphrase', fallback: 'Passphrase'),
+      obscureText: !_passphraseVisible,
+      trailing: _WorkspaceButton(
+        icon: _passphraseVisible
+            ? Icons.visibility_rounded
+            : Icons.visibility_off_rounded,
+        tooltip: _passphraseVisible
+            ? tr(
+                'workspace.keys.action.hidePassphrase',
+                fallback: 'Hide passphrase',
+              )
+            : tr(
+                'workspace.keys.action.showPassphrase',
+                fallback: 'Show passphrase',
+              ),
+        onPressed: () =>
+            setState(() => _passphraseVisible = !_passphraseVisible),
+        variant: _WorkspaceButtonVariant.text,
+        size: _WorkspaceControlSize.tiny,
+        height: 28,
+        minWidth: 28,
+      ),
     ),
   );
 
@@ -988,7 +991,7 @@ class _KeyEditorContentState extends State<_KeyEditorContent> {
             title: tr('common.label.key', fallback: 'Key'),
             children: [
               _buildCredentialNameInput(),
-              if (_editingEncryptedKey) ...[
+              if (_keyRequiresPassphrase) ...[
                 SizedBox(height: _workspaceFormFieldGap),
                 _buildPassphraseInput(),
               ],
@@ -1034,6 +1037,10 @@ class _KeyEditorContentState extends State<_KeyEditorContent> {
             title: tr('common.label.key', fallback: 'Key'),
             children: [
               _buildCredentialNameInput(),
+              if (_keyRequiresPassphrase) ...[
+                SizedBox(height: _workspaceFormFieldGap),
+                _buildPassphraseInput(),
+              ],
               SizedBox(height: _workspaceFormFieldGap),
               if (widget.request.certificateMode) ...[
                 _WorkspaceInput(
