@@ -541,7 +541,11 @@ fn sync_file(
             decrypt_envelope(envelope, master_key, local_key.as_deref(), schema_version)?;
         reject_rollback(connection, &remote_header, file_kind.revision_scope())?;
         imported_records = match strategy {
-            SyncStrategy::SmartMerge => merge_payload(connection, &remote_payload)?,
+            SyncStrategy::SmartMerge => merge_payload(
+                connection,
+                &remote_payload,
+                remote_header.schema_version < 4,
+            )?,
             SyncStrategy::LocalWins => 0,
             SyncStrategy::RemoteWins => replace_payload(connection, &remote_payload)?,
         };
@@ -973,11 +977,20 @@ fn list_relation_uuids(
     Ok(values)
 }
 
-fn merge_payload(connection: &mut Connection, payload: &SyncPayload) -> Result<usize, SyncError> {
+fn merge_payload(
+    connection: &mut Connection,
+    payload: &SyncPayload,
+    preserve_legacy_passphrase: bool,
+) -> Result<usize, SyncError> {
     validate_payload_tables(payload)?;
     let dek = crate::crypto::local_dek_if_configured(connection)?;
     let transaction = connection.transaction()?;
-    let imported = merge_payload_in_transaction(&transaction, payload, dek.as_ref())?;
+    let imported = merge_payload_in_transaction(
+        &transaction,
+        payload,
+        dek.as_ref(),
+        preserve_legacy_passphrase,
+    )?;
     transaction.commit()?;
     Ok(imported)
 }
@@ -986,6 +999,7 @@ fn merge_payload_in_transaction(
     transaction: &Transaction<'_>,
     payload: &SyncPayload,
     dek: Option<&crate::crypto::Dek>,
+    preserve_legacy_passphrase: bool,
 ) -> Result<usize, SyncError> {
     let mut imported = 0;
     // Host tag relations are restored while importing each host, so tags must
@@ -1001,7 +1015,7 @@ fn merge_payload_in_transaction(
             .map(Vec::as_slice)
             .unwrap_or_default();
         for record in records {
-            if merge_record(transaction, table, record, dek)? {
+            if merge_record(transaction, table, record, dek, preserve_legacy_passphrase)? {
                 imported += 1;
             }
         }
@@ -1019,7 +1033,7 @@ fn replace_payload(connection: &mut Connection, payload: &SyncPayload) -> Result
     for table in SYNC_TABLES.iter().rev() {
         transaction.execute(&format!("DELETE FROM {} {}", table.name, table.filter), [])?;
     }
-    let imported = merge_payload_in_transaction(&transaction, payload, dek.as_ref())?;
+    let imported = merge_payload_in_transaction(&transaction, payload, dek.as_ref(), false)?;
     transaction.commit()?;
     Ok(imported)
 }
@@ -1052,6 +1066,7 @@ fn merge_record(
     table: &SyncTable,
     record: &SyncRecord,
     dek: Option<&crate::crypto::Dek>,
+    preserve_legacy_passphrase: bool,
 ) -> Result<bool, SyncError> {
     validate_record(table, record)?;
     let uuid = record_string(record, "uuid")?;
@@ -1125,7 +1140,10 @@ fn merge_record(
     let assignments = table
         .columns
         .iter()
-        .filter(|column| **column != "uuid")
+        .filter(|column| {
+            **column != "uuid"
+                && !(preserve_legacy_passphrase && table.name == "keys" && **column == "passphrase")
+        })
         .map(|column| format!("{column} = excluded.{column}"))
         .collect::<Vec<_>>()
         .join(", ");
@@ -1434,8 +1452,23 @@ fn decrypt_envelope(
                 )
             })?,
     );
-    let payload = serde_json::from_slice::<SyncPayload>(&plaintext)?;
+    let mut payload = serde_json::from_slice::<SyncPayload>(&plaintext)?;
+    validate_payload_tables(&payload)?;
+    migrate_sync_payload(&mut payload, envelope.header.schema_version);
     Ok((envelope.header, payload, key))
+}
+
+// Schemas 1 and 2 changed database constraints without changing sync columns.
+// Schema 4 adds keys.passphrase; preserve the original authenticated header and
+// normalize only the decrypted payload before applying the selected strategy.
+fn migrate_sync_payload(payload: &mut SyncPayload, source_schema_version: i32) {
+    if matches!(source_schema_version, 1..=3) {
+        if let Some(keys) = payload.tables.get_mut("keys") {
+            for record in keys {
+                record.entry("passphrase").or_insert(Value::Null);
+            }
+        }
+    }
 }
 
 fn validate_envelope_header(
@@ -1448,7 +1481,8 @@ fn validate_envelope_header(
             header.format_version
         )));
     }
-    if header.schema_version != current_schema_version {
+    let can_migrate = current_schema_version == 4 && matches!(header.schema_version, 1..=3);
+    if header.schema_version != current_schema_version && !can_migrate {
         return Err(SyncError::new(format!(
             "Unsupported sync database schema version {}.",
             header.schema_version
@@ -1872,3 +1906,7 @@ mod tests {
         assert!(decrypt_envelope(tampered, Some("Correct master key 1!"), None, 31).is_err());
     }
 }
+
+#[cfg(test)]
+#[path = "sync_compatibility_tests.rs"]
+mod compatibility_tests;
