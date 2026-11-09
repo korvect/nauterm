@@ -1267,7 +1267,7 @@ impl SessionManager {
     pub fn drain_events(&mut self, id: SessionId) -> Vec<SessionEvent> {
         self.sessions
             .get(&id)
-            .and_then(|actor| actor.call(|session| session.events.drain(..).collect()))
+            .and_then(|actor| actor.call(|session| std::mem::take(&mut session.events)))
             .unwrap_or_default()
     }
 

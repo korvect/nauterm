@@ -2,10 +2,14 @@ use std::env;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const REQUIRED_ZIG_VERSION: &str = "0.16.0";
+const REQUIRED_ZIG_VERSION: &str = "0.17.0";
 const GHOSTTY_REPOSITORY: &str = "https://github.com/ghostty-org/ghostty.git";
-const GHOSTTY_COMMIT: &str = "d0c5ba6cd9db9aa6e47da4526668891989e95fb9";
-const GHOSTTY_VERSION: &str = "1.3.2-dev";
+/// libghostty-vt is released separately from the Ghostty app under `vt-X.Y.Z`
+/// tags. Pin the release tag commit, not a moving branch.
+const GHOSTTY_COMMIT: &str = "0fa3d577a5614150ff8e2c152de5fb9d5c6d2dec";
+/// The version of the pinned sources after their Git metadata is removed.
+/// An explicit source override keeps its own upstream version metadata.
+const GHOSTTY_LIB_VERSION: &str = "1.0.0";
 
 fn main() {
     println!("cargo:rerun-if-env-changed=NAUTERM_ZIG");
@@ -18,11 +22,13 @@ fn main() {
 
     let cargo_out_dir = PathBuf::from(env::var_os("OUT_DIR").unwrap());
     if let Some(lib_dir) = env::var_os("NAUTERM_GHOSTTY_VT_LIB_DIR") {
+        println!("cargo:rerun-if-changed={}", Path::new(&lib_dir).display());
         link_ghostty(Path::new(&lib_dir), &cargo_out_dir);
         return;
     }
 
-    let ghostty_root = match env::var_os("NAUTERM_GHOSTTY_SOURCE_DIR") {
+    let source_override = env::var_os("NAUTERM_GHOSTTY_SOURCE_DIR");
+    let ghostty_root = match &source_override {
         Some(source_dir) => {
             let source_dir = PathBuf::from(source_dir);
             if !source_dir.join("build.zig").is_file() {
@@ -35,26 +41,28 @@ fn main() {
         }
         None => fetch_ghostty(&cargo_out_dir),
     };
-    let build_zig = ghostty_root.join("build.zig");
-
     let zig = env::var_os("NAUTERM_ZIG").unwrap_or_else(|| "zig".into());
     verify_zig_version(&zig);
 
     let target = env::var("TARGET").expect("Cargo TARGET is required");
     let zig_target = zig_target(&target);
     let out_dir = cargo_out_dir.join("ghostty-vt");
-    let output = Command::new(&zig)
-        .current_dir(&ghostty_root)
-        .args([
-            "build",
-            "--verbose",
-            "-Demit-lib-vt=true",
-            "-Demit-xcframework=false",
-            "-Doptimize=ReleaseFast",
-            &format!("-Dversion-string={GHOSTTY_VERSION}"),
-            &format!("-Dtarget={zig_target}"),
-            "--prefix",
-        ])
+    let mut build = Command::new(&zig);
+    build.current_dir(&ghostty_root).args([
+        "build",
+        "--verbose",
+        "-Demit-lib-vt=true",
+        "-Demit-xcframework=false",
+        "-Doptimize=ReleaseFast",
+        &format!("-Dtarget={zig_target}"),
+    ]);
+    // Cached sources live inside Nauterm's checkout. Without this override,
+    // upstream's Git detection can report Nauterm's revision as its own.
+    if source_override.is_none() {
+        build.arg(format!("-Dlib-version-string={GHOSTTY_LIB_VERSION}"));
+    }
+    let output = build
+        .arg("--prefix")
         .arg(&out_dir)
         .output()
         .expect("failed to execute Zig while building libghostty-vt");
@@ -74,15 +82,14 @@ fn main() {
         );
     }
 
-    println!("cargo:rerun-if-changed={}", build_zig.display());
-    println!(
-        "cargo:rerun-if-changed={}",
-        ghostty_root.join("src/terminal").display()
-    );
-    println!(
-        "cargo:rerun-if-changed={}",
-        ghostty_root.join("include/ghostty/vt.h").display()
-    );
+    // Include build helpers and the split C headers as well as terminal code.
+    // Do not watch the source root: Zig writes its caches below it.
+    for input in ["build.zig", "build.zig.zon", "src", "include", "pkg"] {
+        println!(
+            "cargo:rerun-if-changed={}",
+            ghostty_root.join(input).display()
+        );
+    }
     link_ghostty(&out_dir.join("lib"), &cargo_out_dir);
 }
 
@@ -92,11 +99,31 @@ fn verify_zig_version(zig: &std::ffi::OsStr) {
         .output()
         .expect("Zig is required to build libghostty-vt");
     let version = String::from_utf8_lossy(&output.stdout);
-    if !output.status.success() || version.trim() != REQUIRED_ZIG_VERSION {
-        panic!(
-            "libghostty-vt requires Zig {REQUIRED_ZIG_VERSION}; found `{}`",
-            version.trim()
-        );
+    let found = version.trim();
+    // libghostty-vt's own build check accepts any patch release of the required
+    // major.minor, so 0.17.1 satisfies a 0.17.0 minimum.
+    if !output.status.success() || !zig_version_satisfies(found, REQUIRED_ZIG_VERSION) {
+        panic!("libghostty-vt requires Zig {REQUIRED_ZIG_VERSION} or a newer patch release; found `{found}`");
+    }
+}
+
+fn zig_version_satisfies(found: &str, required: &str) -> bool {
+    let parse = |text: &str| -> Option<[u64; 3]> {
+        let mut parts = text.trim().split('.');
+        let major = parts.next()?.parse().ok()?;
+        let minor = parts.next()?.parse().ok()?;
+        let patch = parts.next().unwrap_or("0").parse().ok()?;
+        // Reject pre-release suffixes such as `0.17.0-dev.1`.
+        if parts.next().is_some() {
+            return None;
+        }
+        Some([major, minor, patch])
+    };
+    match (parse(found), parse(required)) {
+        (Some(found), Some(required)) => {
+            found[0] == required[0] && found[1] == required[1] && found[2] >= required[2]
+        }
+        _ => false,
     }
 }
 
@@ -228,6 +255,10 @@ fn link_ghostty_windows(lib_dir: &Path, cargo_out_dir: &Path) {
     // weak extern defaults (LNK1227 on ARM64). The Rust extern block uses
     // raw-dylib so rustc generates a clean import library directly from the
     // C declarations instead of consuming Zig's CRT-affecting import library.
+    if env::var_os("NAUTERM_GHOSTTY_VT_LIB_DIR").is_some() {
+        // A Windows DLL may live in bin/, beside the watched lib/ directory.
+        println!("cargo:rerun-if-changed={}", dll.display());
+    }
     stage_windows_runtime_dll(&dll, cargo_out_dir);
 }
 

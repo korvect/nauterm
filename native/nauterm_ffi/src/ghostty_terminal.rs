@@ -33,23 +33,25 @@ struct GhosttySelectWordOptions {
 const GHOSTTY_SUCCESS: c_int = 0;
 const GHOSTTY_OUT_OF_SPACE: c_int = -3;
 
-const TERMINAL_OPT_COLOR_FOREGROUND: c_int = 11;
-const TERMINAL_OPT_USERDATA: c_int = 0;
-const TERMINAL_OPT_WRITE_PTY: c_int = 1;
-const TERMINAL_OPT_BELL: c_int = 2;
-const TERMINAL_OPT_COLOR_BACKGROUND: c_int = 12;
-const TERMINAL_OPT_COLOR_CURSOR: c_int = 13;
-const TERMINAL_OPT_COLOR_PALETTE: c_int = 14;
-const TERMINAL_OPT_KITTY_IMAGE_STORAGE_LIMIT: c_int = 15;
-const TERMINAL_OPT_DEFAULT_CURSOR_STYLE: c_int = 22;
-const TERMINAL_OPT_DEFAULT_CURSOR_BLINK: c_int = 23;
-const TERMINAL_OPT_CLIPBOARD_WRITE: c_int = 26;
-const TERMINAL_OPT_SCROLLBACK_MAX_BYTES: c_int = 27;
-const TERMINAL_OPT_SCROLLBACK_MAX_LINES: c_int = 28;
-const TERMINAL_OPT_MODE: c_int = 34;
-const TERMINAL_OPT_RENDER_HOLD: c_int = 41;
+// Enum values mirror libghostty-vt 1.0.0. Every option/operation enum there
+// reserves 0 for an INVALID sentinel, so the members we use start at 1.
+const TERMINAL_OPT_COLOR_FOREGROUND: c_int = 12;
+const TERMINAL_OPT_USERDATA: c_int = 1;
+const TERMINAL_OPT_WRITE_PTY: c_int = 2;
+const TERMINAL_OPT_BELL: c_int = 3;
+const TERMINAL_OPT_COLOR_BACKGROUND: c_int = 13;
+const TERMINAL_OPT_COLOR_CURSOR: c_int = 14;
+const TERMINAL_OPT_COLOR_PALETTE: c_int = 15;
+const TERMINAL_OPT_KITTY_IMAGE_STORAGE_LIMIT: c_int = 16;
+const TERMINAL_OPT_DEFAULT_CURSOR_STYLE: c_int = 23;
+const TERMINAL_OPT_DEFAULT_CURSOR_BLINK: c_int = 24;
+const TERMINAL_OPT_CLIPBOARD_WRITE: c_int = 27;
+const TERMINAL_OPT_SCROLLBACK_MAX_BYTES: c_int = 28;
+const TERMINAL_OPT_SCROLLBACK_MAX_LINES: c_int = 29;
+const TERMINAL_OPT_MODE: c_int = 35;
+const TERMINAL_OPT_RENDER_HOLD: c_int = 42;
 #[cfg(windows)]
-const TERMINAL_OPT_RESIZE_PULL_SCROLLBACK: c_int = 40;
+const TERMINAL_OPT_RESIZE_PULL_SCROLLBACK: c_int = 41;
 
 const TERMINAL_DATA_ACTIVE_SCREEN: c_int = 6;
 const TERMINAL_DATA_SCROLLBAR: c_int = 9;
@@ -59,6 +61,11 @@ const TERMINAL_DATA_SCROLLBACK_ROWS: c_int = 15;
 const TERMINAL_DATA_COLOR_CURSOR: c_int = 20;
 const TERMINAL_DATA_KITTY_GRAPHICS: c_int = 30;
 const TERMINAL_DATA_MODE: c_int = 37;
+
+const SYS_OPT_DECODE_PNG: c_int = 2;
+
+const SEARCH_OPT_NEEDLE: c_int = 1;
+const SEARCH_DATA_MATCHES: c_int = 6;
 
 const KITTY_GRAPHICS_DATA_PLACEMENT_ITERATOR: c_int = 1;
 const KITTY_PLACEMENT_DATA_IMAGE_ID: c_int = 1;
@@ -70,8 +77,9 @@ const KITTY_PLACEMENT_DATA_Z: c_int = 12;
 const KITTY_IMAGE_DATA_WIDTH: c_int = 3;
 const KITTY_IMAGE_DATA_HEIGHT: c_int = 4;
 const KITTY_IMAGE_DATA_FORMAT: c_int = 5;
-const KITTY_IMAGE_DATA_DATA_PTR: c_int = 7;
-const KITTY_IMAGE_DATA_DATA_LEN: c_int = 8;
+/// 1.0.0 replaced the separate DATA_PTR/DATA_LEN fields with one
+/// `GhosttyString`. Reading the old 7 as a bare pointer now overflows.
+const KITTY_IMAGE_DATA_PIXELS: c_int = 7;
 const KITTY_IMAGE_DATA_GENERATION: c_int = 9;
 
 const RENDER_DATA_COLS: c_int = 1;
@@ -113,6 +121,10 @@ const SCROLL_VIEWPORT_ROW: c_int = 3;
 const POINT_TAG_VIEWPORT: c_int = 1;
 const POINT_TAG_SCREEN: c_int = 2;
 const FORMATTER_FORMAT_PLAIN: c_int = 0;
+const FORMATTER_OPT_EMIT: c_int = 1;
+const FORMATTER_OPT_UNWRAP: c_int = 2;
+const FORMATTER_OPT_TRIM: c_int = 3;
+const FORMATTER_OPT_SELECTION: c_int = 4;
 const MODE_DECCKM: u16 = 1;
 const MODE_X10_MOUSE: u16 = 9;
 const MODE_KEYPAD_KEYS: u16 = 66;
@@ -144,6 +156,22 @@ const FLAG_DASHED_UNDERLINE: u16 = 0x4000;
 
 const STYLE_COLOR_PALETTE: c_int = 1;
 const STYLE_COLOR_RGB: c_int = 2;
+
+// GhosttyStyleFlags bits. 1.0.0 packs every attribute into one u16: bits 0..=7
+// are on/off attributes and bits 8..=10 hold the GhosttySgrUnderline value.
+const STYLE_FLAG_BOLD: u16 = 1 << 0;
+const STYLE_FLAG_ITALIC: u16 = 1 << 1;
+const STYLE_FLAG_FAINT: u16 = 1 << 2;
+const STYLE_FLAG_INVERSE: u16 = 1 << 4;
+const STYLE_FLAG_INVISIBLE: u16 = 1 << 5;
+const STYLE_FLAG_STRIKETHROUGH: u16 = 1 << 6;
+const STYLE_UNDERLINE_SHIFT: u32 = 8;
+const STYLE_UNDERLINE_MASK: u16 = 0x7 << STYLE_UNDERLINE_SHIFT;
+const SGR_UNDERLINE_SINGLE: c_int = 1;
+const SGR_UNDERLINE_DOUBLE: c_int = 2;
+const SGR_UNDERLINE_CURLY: c_int = 3;
+const SGR_UNDERLINE_DOTTED: c_int = 4;
+const SGR_UNDERLINE_DASHED: c_int = 5;
 const KITTY_UNICODE_PLACEHOLDER: char = '\u{10eeee}';
 
 type GhosttyTerminal = *mut c_void;
@@ -182,41 +210,33 @@ impl GhosttyColorRgb {
 union GhosttyStyleColorValue {
     palette: u8,
     rgb: GhosttyColorRgb,
-    padding: u64,
 }
 
+/// Four bytes: a `u8` tag followed by a three-byte payload. 1.0.0 dropped the
+/// eight-byte padded union the pre-release builds used.
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct GhosttyStyleColor {
-    tag: c_int,
+    tag: u8,
     value: GhosttyStyleColorValue,
 }
 
+/// A fixed 16-byte layout with no size prefix. Attributes live in a packed
+/// `GhosttyStyleFlags` word, so this type is no longer `GHOSTTY_INIT_SIZED`.
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct GhosttyStyle {
-    size: usize,
     fg_color: GhosttyStyleColor,
     bg_color: GhosttyStyleColor,
     underline_color: GhosttyStyleColor,
-    bold: bool,
-    italic: bool,
-    faint: bool,
-    blink: bool,
-    inverse: bool,
-    invisible: bool,
-    strikethrough: bool,
-    overline: bool,
-    underline: c_int,
+    flags: u16,
+    reserved: u16,
 }
 
 impl Default for GhosttyStyle {
     fn default() -> Self {
-        // The C API initializes every field when queried. Only the sized ABI
-        // prefix must be populated by the caller.
-        let mut value: Self = unsafe { std::mem::zeroed() };
-        value.size = std::mem::size_of::<Self>();
-        value
+        // The C API writes every field when queried.
+        unsafe { std::mem::zeroed() }
     }
 }
 
@@ -287,7 +307,6 @@ struct GhosttyPoint {
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct GhosttyGridRef {
-    size: usize,
     node: *mut c_void,
     x: u16,
     y: u16,
@@ -296,7 +315,6 @@ struct GhosttyGridRef {
 impl Default for GhosttyGridRef {
     fn default() -> Self {
         Self {
-            size: std::mem::size_of::<Self>(),
             node: ptr::null_mut(),
             x: 0,
             y: 0,
@@ -305,9 +323,8 @@ impl Default for GhosttyGridRef {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 struct GhosttySelection {
-    size: usize,
     start: GhosttyGridRef,
     end: GhosttyGridRef,
     rectangle: bool,
@@ -318,27 +335,6 @@ struct GhosttySelectionBuffer {
     ptr: *mut GhosttySelection,
     cap: usize,
     len: usize,
-}
-
-impl Default for GhosttySelection {
-    fn default() -> Self {
-        Self {
-            size: std::mem::size_of::<Self>(),
-            start: GhosttyGridRef::default(),
-            end: GhosttyGridRef::default(),
-            rectangle: false,
-        }
-    }
-}
-
-#[repr(C)]
-#[derive(Clone, Copy)]
-struct GhosttySelectionFormatOptions {
-    size: usize,
-    emit: c_int,
-    unwrap: bool,
-    trim: bool,
-    selection: *const GhosttySelection,
 }
 
 #[repr(C)]
@@ -381,7 +377,6 @@ struct GhosttyPaste {
 
 #[repr(C)]
 struct GhosttyClipboardWrite {
-    size: usize,
     location: c_int,
     contents: *const GhosttyClipboardContent,
     contents_len: usize,
@@ -529,7 +524,10 @@ unsafe extern "C" {
     ) -> c_int;
     fn ghostty_terminal_get(terminal: GhosttyTerminal, data: c_int, value: *mut c_void) -> c_int;
     fn ghostty_terminal_vt_write(terminal: GhosttyTerminal, data: *const u8, len: usize);
-    fn ghostty_terminal_scroll_viewport(terminal: GhosttyTerminal, behavior: GhosttyScrollViewport);
+    fn ghostty_terminal_scroll_viewport(
+        terminal: GhosttyTerminal,
+        behavior: GhosttyScrollViewport,
+    ) -> c_int;
     fn ghostty_terminal_grid_ref(
         terminal: GhosttyTerminal,
         point: GhosttyPoint,
@@ -565,14 +563,19 @@ unsafe extern "C" {
         terminal: GhosttyTerminal,
         selection: *mut GhosttySelection,
     ) -> c_int;
-    fn ghostty_terminal_selection_format_buf(
+    fn ghostty_formatter_terminal_new(
+        allocator: *const c_void,
+        formatter: *mut *mut c_void,
         terminal: GhosttyTerminal,
-        options: GhosttySelectionFormatOptions,
+    ) -> c_int;
+    fn ghostty_formatter_set(formatter: *mut c_void, option: c_int, value: *const c_void) -> c_int;
+    fn ghostty_formatter_format_buf(
+        formatter: *mut c_void,
         buffer: *mut u8,
         buffer_len: usize,
         out_written: *mut usize,
     ) -> c_int;
-
+    fn ghostty_formatter_free(formatter: *mut c_void);
     fn ghostty_render_state_new(allocator: *const c_void, state: *mut GhosttyRenderState) -> c_int;
     fn ghostty_render_state_free(state: GhosttyRenderState);
     fn ghostty_render_state_update(state: GhosttyRenderState, terminal: GhosttyTerminal) -> c_int;
@@ -743,6 +746,7 @@ impl GhosttyTerminalEngine {
             .palette_u32()
             .map(GhosttyColorRgb::from_u32);
         let scrollback = options.scrollback_lines;
+        let unlimited_scrollback_bytes: usize = usize::MAX;
         let kitty_limit: u64 = 64 * 1024 * 1024;
         let cursor_style: c_int = match options.cursor_shape_u32() {
             1 => 2,
@@ -780,8 +784,12 @@ impl GhosttyTerminalEngine {
             ),
             // Nauterm exposes scrollback as a line limit. Disable Ghostty's
             // independent byte limit so wide terminals do not retain fewer
-            // rows than the configured value.
-            (TERMINAL_OPT_SCROLLBACK_MAX_BYTES, ptr::null()),
+            // rows than the configured value. 1.0.0 reserves SIZE_MAX for "no
+            // byte limit"; NULL now restores the 10 KB default instead.
+            (
+                TERMINAL_OPT_SCROLLBACK_MAX_BYTES,
+                &unlimited_scrollback_bytes as *const _ as *const c_void,
+            ),
             (
                 TERMINAL_OPT_SCROLLBACK_MAX_LINES,
                 &scrollback as *const _ as *const c_void,
@@ -1108,41 +1116,20 @@ impl GhosttyTerminalEngine {
         selection: &GhosttySelection,
         trim: bool,
     ) -> Option<String> {
-        let options = GhosttySelectionFormatOptions {
-            size: std::mem::size_of::<GhosttySelectionFormatOptions>(),
-            emit: FORMATTER_FORMAT_PLAIN,
-            unwrap: true,
-            trim,
-            selection,
-        };
-        let mut required = 0usize;
-        let result = unsafe {
-            ghostty_terminal_selection_format_buf(
-                self.terminal,
-                options,
-                ptr::null_mut(),
-                0,
-                &mut required,
-            )
-        };
-        if result != GHOSTTY_OUT_OF_SPACE && !(result == GHOSTTY_SUCCESS && required == 0) {
+        // 1.0.0 replaced the one-shot GhosttySelectionFormatOptions call with a
+        // formatter handle. The formatter borrows the terminal, so it must not
+        // outlive this call; creating one per copy keeps that trivially true and
+        // copies are user-initiated rather than per-cell.
+        let mut formatter = ptr::null_mut();
+        if unsafe { ghostty_formatter_terminal_new(ptr::null(), &mut formatter, self.terminal) }
+            != GHOSTTY_SUCCESS
+            || formatter.is_null()
+        {
             return None;
         }
-        let mut bytes = vec![0u8; required];
-        let result = unsafe {
-            ghostty_terminal_selection_format_buf(
-                self.terminal,
-                options,
-                bytes.as_mut_ptr(),
-                bytes.len(),
-                &mut required,
-            )
-        };
-        if result != GHOSTTY_SUCCESS {
-            return None;
-        }
-        bytes.truncate(required);
-        Some(String::from_utf8_lossy(&bytes).into_owned())
+        let formatted = unsafe { format_selection_with_formatter(formatter, selection, trim) };
+        unsafe { ghostty_formatter_free(formatter) };
+        formatted
     }
 
     fn selection_for_offsets(&self, start: i64, end: i64) -> Option<GhosttySelection> {
@@ -1837,8 +1824,13 @@ impl TerminalEmulator for GhosttyTerminalEngine {
             ptr: query.as_ptr(),
             len: query.len(),
         };
-        if unsafe { ghostty_search_set(self.search, 0, &needle as *const _ as *const c_void) }
-            != GHOSTTY_SUCCESS
+        if unsafe {
+            ghostty_search_set(
+                self.search,
+                SEARCH_OPT_NEEDLE,
+                &needle as *const _ as *const c_void,
+            )
+        } != GHOSTTY_SUCCESS
             || unsafe { ghostty_search_run(self.search) } != GHOSTTY_SUCCESS
         {
             return TerminalSearchResult::not_found(self.size.columns, self.size.rows);
@@ -1848,16 +1840,26 @@ impl TerminalEmulator for GhosttyTerminalEngine {
             cap: 0,
             len: 0,
         };
-        let result =
-            unsafe { ghostty_search_get(self.search, 5, &mut buffer as *mut _ as *mut c_void) };
+        let result = unsafe {
+            ghostty_search_get(
+                self.search,
+                SEARCH_DATA_MATCHES,
+                &mut buffer as *mut _ as *mut c_void,
+            )
+        };
         if result != GHOSTTY_SUCCESS && result != GHOSTTY_OUT_OF_SPACE {
             return TerminalSearchResult::not_found(self.size.columns, self.size.rows);
         }
         let mut selections = vec![GhosttySelection::default(); buffer.len];
         buffer.ptr = selections.as_mut_ptr();
         buffer.cap = selections.len();
-        if unsafe { ghostty_search_get(self.search, 5, &mut buffer as *mut _ as *mut c_void) }
-            != GHOSTTY_SUCCESS
+        if unsafe {
+            ghostty_search_get(
+                self.search,
+                SEARCH_DATA_MATCHES,
+                &mut buffer as *mut _ as *mut c_void,
+            )
+        } != GHOSTTY_SUCCESS
         {
             return TerminalSearchResult::not_found(self.size.columns, self.size.rows);
         }
@@ -2242,6 +2244,50 @@ impl TerminalEmulator for GhosttyTerminalEngine {
     }
 }
 
+/// Drive a formatter to plain text for one selection. Mirrors the plain,
+/// unwrapped, optionally trimmed output Ghostty copies to the clipboard.
+unsafe fn format_selection_with_formatter(
+    formatter: *mut c_void,
+    selection: &GhosttySelection,
+    trim: bool,
+) -> Option<String> {
+    let emit: c_int = FORMATTER_FORMAT_PLAIN;
+    let unwrap = true;
+    for (option, value) in [
+        (FORMATTER_OPT_EMIT, &emit as *const c_int as *const c_void),
+        (
+            FORMATTER_OPT_UNWRAP,
+            &unwrap as *const bool as *const c_void,
+        ),
+        (FORMATTER_OPT_TRIM, &trim as *const bool as *const c_void),
+        (
+            FORMATTER_OPT_SELECTION,
+            selection as *const GhosttySelection as *const c_void,
+        ),
+    ] {
+        if ghostty_formatter_set(formatter, option, value) != GHOSTTY_SUCCESS {
+            return None;
+        }
+    }
+
+    let mut required = 0usize;
+    let result = ghostty_formatter_format_buf(formatter, ptr::null_mut(), 0, &mut required);
+    if result != GHOSTTY_OUT_OF_SPACE && !(result == GHOSTTY_SUCCESS && required == 0) {
+        return None;
+    }
+    if required == 0 {
+        return Some(String::new());
+    }
+    let mut bytes = vec![0u8; required];
+    if ghostty_formatter_format_buf(formatter, bytes.as_mut_ptr(), bytes.len(), &mut required)
+        != GHOSTTY_SUCCESS
+    {
+        return None;
+    }
+    bytes.truncate(required);
+    Some(String::from_utf8_lossy(&bytes).into_owned())
+}
+
 fn export_cell(
     iterator: GhosttyRowCells,
     viewport_column: usize,
@@ -2305,18 +2351,19 @@ fn export_cell(
     }
 
     let mut flags = 0u16;
-    flags |= u16::from(style.inverse) * FLAG_INVERSE;
-    flags |= u16::from(style.bold) * FLAG_BOLD;
-    flags |= u16::from(style.italic) * FLAG_ITALIC;
-    flags |= u16::from(style.faint) * FLAG_DIM;
-    flags |= u16::from(style.invisible) * FLAG_HIDDEN;
-    flags |= u16::from(style.strikethrough) * FLAG_STRIKEOUT;
-    flags |= match style.underline {
-        1 => FLAG_UNDERLINE,
-        2 => FLAG_DOUBLE_UNDERLINE,
-        3 => FLAG_UNDERCURL,
-        4 => FLAG_DOTTED_UNDERLINE,
-        5 => FLAG_DASHED_UNDERLINE,
+    let style_flags = style.flags;
+    flags |= u16::from(style_flags & STYLE_FLAG_INVERSE != 0) * FLAG_INVERSE;
+    flags |= u16::from(style_flags & STYLE_FLAG_BOLD != 0) * FLAG_BOLD;
+    flags |= u16::from(style_flags & STYLE_FLAG_ITALIC != 0) * FLAG_ITALIC;
+    flags |= u16::from(style_flags & STYLE_FLAG_FAINT != 0) * FLAG_DIM;
+    flags |= u16::from(style_flags & STYLE_FLAG_INVISIBLE != 0) * FLAG_HIDDEN;
+    flags |= u16::from(style_flags & STYLE_FLAG_STRIKETHROUGH != 0) * FLAG_STRIKEOUT;
+    flags |= match style_underline(style_flags) {
+        SGR_UNDERLINE_SINGLE => FLAG_UNDERLINE,
+        SGR_UNDERLINE_DOUBLE => FLAG_DOUBLE_UNDERLINE,
+        SGR_UNDERLINE_CURLY => FLAG_UNDERCURL,
+        SGR_UNDERLINE_DOTTED => FLAG_DOTTED_UNDERLINE,
+        SGR_UNDERLINE_DASHED => FLAG_DASHED_UNDERLINE,
         _ => 0,
     };
     flags |= match wide {
@@ -2448,11 +2495,16 @@ fn parse_virtual_placeholder(
 }
 
 fn style_color_id(color: GhosttyStyleColor) -> Option<u32> {
-    match color.tag {
+    match c_int::from(color.tag) {
         STYLE_COLOR_PALETTE => Some(unsafe { color.value.palette } as u32),
         STYLE_COLOR_RGB => Some(unsafe { color.value.rgb }.as_u32()),
         _ => None,
     }
+}
+
+/// Underline style lives in bits 8..=10 of `GhosttyStyleFlags`.
+fn style_underline(flags: u16) -> c_int {
+    ((flags & STYLE_UNDERLINE_MASK) >> STYLE_UNDERLINE_SHIFT) as c_int
 }
 
 fn scale_grid_edge(image_size: u32, edge: u32, grid_size: u32) -> u32 {
@@ -2599,19 +2651,17 @@ fn export_graphic_image(id: u32, image: GhosttyKittyGraphicsImage) -> Option<Ter
     let mut width = 0u32;
     let mut height = 0u32;
     let mut format = 0i32;
-    let mut data_ptr: *const u8 = ptr::null();
-    let mut data_len = 0usize;
+    let mut pixels = GhosttyString::default();
     if !image_get(image, KITTY_IMAGE_DATA_GENERATION, &mut generation)
         || !image_get(image, KITTY_IMAGE_DATA_WIDTH, &mut width)
         || !image_get(image, KITTY_IMAGE_DATA_HEIGHT, &mut height)
         || !image_get(image, KITTY_IMAGE_DATA_FORMAT, &mut format)
-        || !image_get(image, KITTY_IMAGE_DATA_DATA_PTR, &mut data_ptr)
-        || !image_get(image, KITTY_IMAGE_DATA_DATA_LEN, &mut data_len)
-        || data_ptr.is_null()
+        || !image_get(image, KITTY_IMAGE_DATA_PIXELS, &mut pixels)
+        || pixels.ptr.is_null()
     {
         return None;
     }
-    let source = unsafe { slice::from_raw_parts(data_ptr, data_len) };
+    let source = unsafe { slice::from_raw_parts(pixels.ptr, pixels.len) };
     let rgba = pixels_to_rgba(source, width, height, format)?;
     Some(TerminalGraphicImage {
         id,
@@ -2938,7 +2988,7 @@ fn shell_integration_directory(uri: &[u8]) -> Option<String> {
 fn install_png_decoder() {
     static INSTALL: Once = Once::new();
     INSTALL.call_once(|| unsafe {
-        let _ = ghostty_sys_set(1, decode_png as *const () as *const c_void);
+        let _ = ghostty_sys_set(SYS_OPT_DECODE_PNG, decode_png as *const () as *const c_void);
     });
 }
 
@@ -3009,9 +3059,8 @@ unsafe extern "C" fn clipboard_write(
         return;
     }
     // Requests are borrowed only for this callback, including the reply handle.
-    if unsafe { (*write).size } < std::mem::size_of::<GhosttyClipboardWrite>() {
-        return;
-    }
+    // 1.0.0 removed the leading `size` field from GhosttyClipboardWrite, so
+    // there is no prefix left to validate.
     let result = unsafe { receive_clipboard_write(terminal, userdata, write) };
     if let Some(reply) = unsafe { (*write).reply } {
         let response = GhosttyClipboardWriteReply {
@@ -3332,7 +3381,6 @@ mod tests {
             },
         };
         let request = GhosttyClipboardWrite {
-            size: std::mem::size_of::<GhosttyClipboardWrite>(),
             location: 0,
             contents: &content,
             contents_len: 1,
@@ -3443,6 +3491,33 @@ mod tests {
             .collect::<String>();
         assert!(rendered.contains("A红e\u{301}"));
         assert_eq!(snapshot.emulator_backend, TerminalEmulatorBackend::Ghostty);
+    }
+
+    #[test]
+    fn exports_packed_style_flags_and_rgb_colors() {
+        let mut terminal = GhosttyTerminalEngine::new(12, 2, TerminalOptions::default()).unwrap();
+        terminal.write_bytes(
+            b"\x1b[1;2;3;7;8;9;38;2;17;34;51;48;2;68;85;102mA\x1b[0m\
+              \x1b[4:1mB\x1b[4:2mC\x1b[4:3mD\x1b[4:4mE\x1b[4:5mF\x1b[0mG",
+        );
+        let snapshot = terminal.snapshot();
+        assert_eq!(
+            snapshot.cells[0].flags,
+            FLAG_BOLD | FLAG_DIM | FLAG_ITALIC | FLAG_INVERSE | FLAG_HIDDEN | FLAG_STRIKEOUT,
+        );
+        // Inverse is carried as a flag; the renderer swaps these colors.
+        assert_eq!(snapshot.cells[0].foreground, 0x112233);
+        assert_eq!(snapshot.cells[0].background, 0x445566);
+        for (cell, expected) in snapshot.cells[1..7].iter().zip([
+            FLAG_UNDERLINE,
+            FLAG_DOUBLE_UNDERLINE,
+            FLAG_UNDERCURL,
+            FLAG_DOTTED_UNDERLINE,
+            FLAG_DASHED_UNDERLINE,
+            0,
+        ]) {
+            assert_eq!(cell.flags, expected);
+        }
     }
 
     #[test]

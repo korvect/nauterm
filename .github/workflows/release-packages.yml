@@ -30,7 +30,7 @@ permissions:
 env:
   FLUTTER_VERSION: 3.47.9
   RUST_TOOLCHAIN: 1.99.1
-  ZIG_VERSION: 0.16.0
+  ZIG_VERSION: 0.17.1
   NAUTERM_BUILD_NUMBER: ${{ github.run_number }}
   NAUTERM_UPDATE_REPOSITORY: ${{ vars.NAUTERM_UPDATE_REPOSITORY || github.repository }}
   NAUTERM_GITHUB_CLIENT_ID: ${{ vars.NAUTERM_GITHUB_CLIENT_ID }}
@@ -347,7 +347,7 @@ jobs:
         with:
           version: ${{ env.ZIG_VERSION }}
 
-      # Zig 0.16.0's native Windows ARM64 compiler exits with 0xc0000005 while
+      # Zig's native Windows ARM64 compiler exits with 0xc0000005 while
       # compiling Ghostty. Run the pinned x86_64 host compiler through Windows
       # ARM emulation; build.rs still targets aarch64-windows-msvc explicitly.
       - name: Install x86_64 Zig host compiler (arm64)
@@ -355,7 +355,7 @@ jobs:
         shell: pwsh
         run: |
           $version = "${{ env.ZIG_VERSION }}"
-          if ($version -ne "0.16.0") {
+          if ($version -ne "0.17.1") {
             throw "Update the pinned x86_64 Zig checksum for version $version"
           }
           $package = "zig-x86_64-windows-$version"
@@ -363,7 +363,7 @@ jobs:
           $url = "https://ziglang.org/download/$version/$package.zip"
           Invoke-WebRequest -Uri $url -OutFile $archive -UseBasicParsing
 
-          $expectedSha256 = "68659eb5f1e4eb1437a722f1dd889c5a322c9954607f5edcf337bc3684a75a7e"
+          $expectedSha256 = "b03f477a1943673e02aca0f570e8030dffd536ce1f45cbc4d3326ec31159562e"
           $actualSha256 = (Get-FileHash -Path $archive -Algorithm SHA256).Hash.ToLowerInvariant()
           if ($actualSha256 -ne $expectedSha256) {
             throw "Zig archive checksum mismatch: expected $expectedSha256, got $actualSha256"
@@ -376,10 +376,10 @@ jobs:
             throw "Zig executable not found: $zigExe"
           }
 
-          # Zig 0.16.0's Windows SelfInfo code casts an opaque procedure
-          # pointer to an ARM64 function pointer without asserting its higher
-          # alignment. Apply the compiler diagnostic's required @alignCast to
-          # this pinned, checksum-verified standard library.
+          # Zig's Windows SelfInfo code casts an opaque procedure pointer to an
+          # ARM64 function pointer without asserting its higher alignment.
+          # Apply the compiler diagnostic's required @alignCast to this pinned,
+          # checksum-verified standard library.
           $selfInfo = Join-Path $zigDir "lib\std\debug\SelfInfo\Windows.zig"
           $source = [IO.File]::ReadAllText($selfInfo)
           $before = '@ptrCast(try si.loadNtdllProc(@tagName(proc)))'

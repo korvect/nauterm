@@ -67,6 +67,19 @@ fn validate(manifest: &Value) -> Result<(), String> {
             )*
         }};
     }
+    // A packed bitfield manifest names its bits instead of its bytes, so the
+    // offsets above cannot describe it. Compare the bit layout instead.
+    macro_rules! bitfield {
+        ($name:literal, $underlying:ty, $($bit:literal => $lsb:expr, $width:expr),* $(,)?) => {{
+            let ty = &types[$name];
+            expect(&ty["size"], size_of::<$underlying>(), concat!($name, ".size"))?;
+            expect(&ty["align"], align_of::<$underlying>(), concat!($name, ".align"))?;
+            $(
+                expect(&ty["bits"][$bit]["lsb"], $lsb, concat!($name, ".", $bit, ".lsb"))?;
+                expect(&ty["bits"][$bit]["width"], $width, concat!($name, ".", $bit, ".width"))?;
+            )*
+        }};
+    }
     layout!(GhosttyColorRgb, "GhosttyColorRgb", r, g, b);
     layout!(
         GhosttySelectWordOptions,
@@ -90,50 +103,39 @@ fn validate(manifest: &Value) -> Result<(), String> {
     layout!(GhosttyBuffer, "GhosttyBuffer", ptr, cap, len);
     layout!(GhosttyStyleColor, "GhosttyStyleColor", tag, value);
     layout!(GhosttyStyleColorValue, "GhosttyStyleColorValue",);
+    // 1.0.0 froze GhosttyStyle as a 16-byte, size-prefix-free struct and moved
+    // every attribute into one packed flag word.
     layout!(
         GhosttyStyle,
         "GhosttyStyle",
-        size,
         fg_color,
         bg_color,
         underline_color,
-        bold,
-        italic,
-        faint,
-        blink,
-        inverse,
-        invisible,
-        strikethrough,
-        overline,
-        underline
+        flags,
+        reserved
+    );
+    bitfield!(
+        "GhosttyStyleFlags",
+        u16,
+        "bold" => STYLE_FLAG_BOLD.trailing_zeros() as usize, 1,
+        "italic" => STYLE_FLAG_ITALIC.trailing_zeros() as usize, 1,
+        "faint" => STYLE_FLAG_FAINT.trailing_zeros() as usize, 1,
+        "inverse" => STYLE_FLAG_INVERSE.trailing_zeros() as usize, 1,
+        "invisible" => STYLE_FLAG_INVISIBLE.trailing_zeros() as usize, 1,
+        "strikethrough" => STYLE_FLAG_STRIKETHROUGH.trailing_zeros() as usize, 1,
+        "underline" => STYLE_UNDERLINE_SHIFT as usize, 3,
     );
     layout!(GhosttyPointCoordinate, "GhosttyPointCoordinate", x, y);
     layout!(GhosttyPointValue, "GhosttyPointValue",);
     layout!(GhosttyPoint, "GhosttyPoint", tag, value);
-    layout!(GhosttyGridRef, "GhosttyGridRef", size, node, x, y);
-    layout!(
-        GhosttySelection,
-        "GhosttySelection",
-        size,
-        start,
-        end,
-        rectangle
-    );
+    layout!(GhosttyGridRef, "GhosttyGridRef", node, x, y);
+    layout!(GhosttySelection, "GhosttySelection", start, end, rectangle);
     layout!(
         GhosttySelectionBuffer,
         "GhosttySelectionBuffer",
         ptr,
         cap,
         len
-    );
-    layout!(
-        GhosttySelectionFormatOptions,
-        "GhosttyTerminalSelectionFormatOptions",
-        size,
-        emit,
-        unwrap,
-        trim,
-        selection
     );
     layout!(
         GhosttyTerminalModeConfig,
@@ -150,7 +152,6 @@ fn validate(manifest: &Value) -> Result<(), String> {
     layout!(
         GhosttyClipboardWrite,
         "GhosttyClipboardWrite",
-        size,
         location,
         contents,
         contents_len,
@@ -245,12 +246,18 @@ fn validate(manifest: &Value) -> Result<(), String> {
     values!("GhosttyTerminalData", "ACTIVE_SCREEN" => TERMINAL_DATA_ACTIVE_SCREEN, "SCROLLBAR" => TERMINAL_DATA_SCROLLBAR,
         "TITLE" => TERMINAL_DATA_TITLE, "TOTAL_ROWS" => TERMINAL_DATA_TOTAL_ROWS, "SCROLLBACK_ROWS" => TERMINAL_DATA_SCROLLBACK_ROWS,
         "COLOR_CURSOR" => TERMINAL_DATA_COLOR_CURSOR, "KITTY_GRAPHICS" => TERMINAL_DATA_KITTY_GRAPHICS, "MODE" => TERMINAL_DATA_MODE);
-    values!("GhosttySearchOption", "NEEDLE" => 0);
-    values!("GhosttySearchData", "MATCHES" => 5);
+    values!("GhosttySearchOption", "NEEDLE" => SEARCH_OPT_NEEDLE);
+    values!("GhosttySearchData", "MATCHES" => SEARCH_DATA_MATCHES);
+    values!("GhosttySysOption", "DECODE_PNG" => SYS_OPT_DECODE_PNG);
     values!("GhosttyPasteSource", "CLIPBOARD" => 0);
     values!("GhosttyClipboardLocation", "STANDARD" => 0);
     values!("GhosttyPointTag", "VIEWPORT" => POINT_TAG_VIEWPORT, "SCREEN" => POINT_TAG_SCREEN);
     values!("GhosttyFormatterFormat", "PLAIN" => FORMATTER_FORMAT_PLAIN);
+    values!("GhosttyFormatterOption", "EMIT" => FORMATTER_OPT_EMIT, "UNWRAP" => FORMATTER_OPT_UNWRAP,
+        "TRIM" => FORMATTER_OPT_TRIM, "SELECTION" => FORMATTER_OPT_SELECTION);
+    values!("GhosttyCursorStyle", "BAR" => 0, "BLOCK" => 1, "UNDERLINE" => 2, "BLOCK_HOLLOW" => 3);
+    values!("GhosttySgrUnderline", "NONE" => 0, "SINGLE" => SGR_UNDERLINE_SINGLE, "DOUBLE" => SGR_UNDERLINE_DOUBLE,
+        "CURLY" => SGR_UNDERLINE_CURLY, "DOTTED" => SGR_UNDERLINE_DOTTED, "DASHED" => SGR_UNDERLINE_DASHED);
     values!("GhosttyTerminalScrollViewportTag", "BOTTOM" => SCROLL_VIEWPORT_BOTTOM, "DELTA" => SCROLL_VIEWPORT_DELTA, "ROW" => SCROLL_VIEWPORT_ROW);
     values!("GhosttyRenderStateData", "COLS" => RENDER_DATA_COLS, "ROWS" => RENDER_DATA_ROWS,
         "ROW_ITERATOR" => RENDER_DATA_ROW_ITERATOR, "CURSOR_VISUAL_STYLE" => RENDER_DATA_CURSOR_VISUAL_STYLE,
@@ -271,7 +278,46 @@ fn validate(manifest: &Value) -> Result<(), String> {
     values!("GhosttyKittyGraphicsPlacementData", "IMAGE_ID" => KITTY_PLACEMENT_DATA_IMAGE_ID, "PLACEMENT_ID" => KITTY_PLACEMENT_DATA_PLACEMENT_ID,
         "IS_VIRTUAL" => KITTY_PLACEMENT_DATA_IS_VIRTUAL, "COLUMNS" => KITTY_PLACEMENT_DATA_COLUMNS, "ROWS" => KITTY_PLACEMENT_DATA_ROWS, "Z" => KITTY_PLACEMENT_DATA_Z);
     values!("GhosttyKittyGraphicsImageData", "WIDTH" => KITTY_IMAGE_DATA_WIDTH, "HEIGHT" => KITTY_IMAGE_DATA_HEIGHT,
-        "FORMAT" => KITTY_IMAGE_DATA_FORMAT, "DATA_PTR" => KITTY_IMAGE_DATA_DATA_PTR, "DATA_LEN" => KITTY_IMAGE_DATA_DATA_LEN, "GENERATION" => KITTY_IMAGE_DATA_GENERATION);
+        "FORMAT" => KITTY_IMAGE_DATA_FORMAT, "PIXELS" => KITTY_IMAGE_DATA_PIXELS, "GENERATION" => KITTY_IMAGE_DATA_GENERATION);
+
+    // A stable numeric key alone does not guarantee that its void* payload
+    // still has the same type. PIXELS replaced a bare pointer at key 7 in 1.0.
+    for (owner, member, direction, value_type) in [
+        (
+            "GhosttyKittyGraphicsImageData",
+            "PIXELS",
+            "out",
+            "GhosttyString",
+        ),
+        (
+            "GhosttyRenderStateRowCellsData",
+            "STYLE",
+            "out",
+            "GhosttyStyle",
+        ),
+        (
+            "GhosttyFormatterOption",
+            "EMIT",
+            "in",
+            "GhosttyFormatterFormat",
+        ),
+        ("GhosttyFormatterOption", "UNWRAP", "in", "bool"),
+        ("GhosttyFormatterOption", "TRIM", "in", "bool"),
+        (
+            "GhosttyFormatterOption",
+            "SELECTION",
+            "in",
+            "GhosttySelection",
+        ),
+    ] {
+        let key = &types[owner]["keys"][member];
+        if key["direction"].as_str() != Some(direction) || key["type"].as_str() != Some(value_type)
+        {
+            return Err(format!(
+                "Ghostty ABI mismatch for {owner}.{member} payload type"
+            ));
+        }
+    }
     Ok(())
 }
 
@@ -285,7 +331,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_changed_layout_enum_and_schema() {
+    fn rejects_changed_layout_enum_bitfield_payload_and_schema() {
         for (path, replacement) in [
             (vec!["schema"], 999),
             (
@@ -294,6 +340,20 @@ mod tests {
             ),
             (
                 vec!["types", "GhosttyTerminalOption", "values", "WRITE_PTY"],
+                999,
+            ),
+            (
+                vec!["types", "GhosttyStyleFlags", "bits", "underline", "lsb"],
+                999,
+            ),
+            (
+                vec![
+                    "types",
+                    "GhosttyKittyGraphicsImageData",
+                    "keys",
+                    "PIXELS",
+                    "type",
+                ],
                 999,
             ),
         ] {
