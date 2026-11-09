@@ -1313,6 +1313,169 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
     }
   }
 
+  Future<void> _openEphemeralConnect(EphemeralConnectRequest request) async {
+    if (!mounted) {
+      return;
+    }
+    switch (request.protocol) {
+      case EphemeralConnectProtocol.ssh:
+        final username = request.username?.trim();
+        if (username == null || username.isEmpty) {
+          _showWorkspaceMessage('SSH username is required.');
+          return;
+        }
+        String? privateKey;
+        final identityPath = _emptyToNull(request.identityPath);
+        if (identityPath != null) {
+          try {
+            final file = io.File(identityPath);
+            if (!await file.exists()) {
+              _showWorkspaceMessage('SSH identity file was not found.');
+              return;
+            }
+            privateKey = _emptyToNull(await file.readAsString());
+            if (privateKey == null) {
+              _showWorkspaceMessage('SSH identity file is empty.');
+              return;
+            }
+          } on Object {
+            _showWorkspaceMessage('Unable to read SSH identity file.');
+            return;
+          }
+        }
+        if (!mounted) {
+          return;
+        }
+        final secret = request.password;
+        final encrypted =
+            privateKey != null && sshPrivateKeyRequiresPassphrase(privateKey);
+        _openEphemeralSshTab(
+          host: request.host,
+          port: request.port,
+          username: username,
+          title: request.resolvedTitle,
+          password: privateKey == null
+              ? secret
+              : encrypted
+              ? null
+              : secret,
+          privateKey: privateKey,
+          passphrase: privateKey != null && encrypted ? secret : null,
+        );
+      case EphemeralConnectProtocol.telnet:
+        _openEphemeralTelnetTab(
+          host: request.host,
+          port: request.port,
+          title: request.resolvedTitle,
+        );
+    }
+  }
+
+  void _openEphemeralSshTab({
+    required String host,
+    required int port,
+    required String username,
+    required String title,
+    String? password,
+    String? privateKey,
+    String? passphrase,
+  }) {
+    final theme = _defaultThemeForSettings();
+    _setWorkspaceState(() {
+      _tab = _WorkspaceTab.sessions;
+      _workspaceOverviewActive = false;
+      final id = _nextTerminalId++;
+      late final TerminalController controller;
+      controller = TerminalController.ssh(
+        host: host,
+        port: port,
+        username: username,
+        knownHostsPath: NautermPaths.resolve().knownHostsFile.path,
+        label: title,
+        password: password,
+        privateKey: privateKey,
+        passphrase: passphrase,
+        environment: _terminalEnvironmentForTheme(theme),
+        theme: theme,
+        recorder: _createTerminalRecorder(
+          title: title,
+          target: '$username@$host:$port',
+          host: host,
+          port: port,
+          username: username,
+          cwdResolver: () => _sshWorkingDirectories[id],
+          awaitConnection: true,
+        ),
+        config: currentTerminalConfig(),
+        onInputSent: (data) => _trackSshPaneInput(id, data),
+        onExit: () {
+          if (controller.shouldCloseOnExit) {
+            _closeTerminalViewTab(id, id, id);
+          }
+        },
+      );
+      _terminalTabs.add(
+        _TerminalTab(
+          id: id,
+          title: title,
+          theme: theme,
+          controller: controller,
+        ),
+      );
+      _sshWorkingDirectories[id] = '~';
+      _selectedTerminalId = id;
+      _selectedTerminalViewId = id;
+      _editorRequest = null;
+    });
+    widget.controller?._notifyTabsChanged();
+  }
+
+  void _openEphemeralTelnetTab({
+    required String host,
+    required int port,
+    required String title,
+  }) {
+    final theme = _defaultThemeForSettings();
+    _setWorkspaceState(() {
+      _tab = _WorkspaceTab.sessions;
+      _workspaceOverviewActive = false;
+      final id = _nextTerminalId++;
+      late final TerminalController controller;
+      controller = TerminalController.telnet(
+        host: host,
+        port: port,
+        label: title,
+        environment: _terminalEnvironmentForTheme(theme),
+        theme: theme,
+        recorder: _createTerminalRecorder(
+          title: title,
+          target: 'telnet $host:$port',
+          host: host,
+          port: port,
+          awaitConnection: true,
+        ),
+        config: currentTerminalConfig(),
+        onExit: () {
+          if (controller.shouldCloseOnExit) {
+            _closeTerminalViewTab(id, id, id);
+          }
+        },
+      );
+      _terminalTabs.add(
+        _TerminalTab(
+          id: id,
+          title: title,
+          theme: theme,
+          controller: controller,
+        ),
+      );
+      _selectedTerminalId = id;
+      _selectedTerminalViewId = id;
+      _editorRequest = null;
+    });
+    widget.controller?._notifyTabsChanged();
+  }
+
   void _showWorkspaceMessage(
     String message, {
     _WorkspaceNotificationType type = _WorkspaceNotificationType.info,

@@ -576,7 +576,6 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
                 'Connection'
           : _remoteConnectionDisplayTitle(
               host: profile.host,
-              hostId: profile.hostId,
               label: profile.label,
             ),
       subtitle: serialProfile != null

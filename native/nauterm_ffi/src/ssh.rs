@@ -57,6 +57,8 @@ use crate::{mosh::MoshBootstrap, mosh::MoshServerCommand};
 const SSH_COMMAND_POLL_INTERVAL: Duration = Duration::from_millis(8);
 const SSH_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 const SSH_SHUTDOWN_TIMEOUT: Duration = Duration::from_millis(250);
+const SSH_CHANNEL_IO_TIMEOUT: Duration = Duration::from_millis(250);
+const SSH_JOIN_TIMEOUT: Duration = Duration::from_millis(750);
 const SSH_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(20);
 const SSH_KEEPALIVE_MISSES: usize = 3;
 const SUDO_SFTP_SESSION_LIFETIME: Duration = Duration::from_secs(15 * 60);
@@ -1654,7 +1656,7 @@ impl Drop for SshTransport {
         }
         self.shutdown.store(true, Ordering::Release);
         let _ = self.sender.send(SshCommand::Shutdown);
-        crate::pty::join_worker(&mut self.worker, "SSH");
+        crate::pty::join_worker_with_timeout(&mut self.worker, "SSH", Some(SSH_JOIN_TIMEOUT));
     }
 }
 
@@ -2125,7 +2127,7 @@ async fn run_ssh_session(
         }
         return Ok(());
     }
-    let _ = channel.close().await;
+    let _ = tokio::time::timeout(SSH_CHANNEL_IO_TIMEOUT, channel.close()).await;
     if exit_status_seen {
         push_event(
             &events,
@@ -2185,19 +2187,25 @@ async fn drain_ssh_commands(
 ) -> Result<bool, String> {
     loop {
         match receiver.try_recv() {
-            Ok(SshCommand::Input(bytes)) => channel
-                .data(&encode_ssh_input(&bytes, encoding)[..])
-                .await
-                .map_err(|error| format!("failed to send input: {error}"))?,
-            Ok(SshCommand::Resize(geometry)) => channel
-                .window_change(
-                    geometry.columns as u32,
-                    geometry.rows as u32,
-                    geometry.columns as u32 * CELL_WIDTH_PIXELS,
-                    geometry.rows as u32 * CELL_HEIGHT_PIXELS,
+            Ok(SshCommand::Input(bytes)) => {
+                ssh_channel_io(
+                    channel.data(&encode_ssh_input(&bytes, encoding)[..]),
+                    "send input",
                 )
-                .await
-                .map_err(|error| format!("failed to resize remote PTY: {error}"))?,
+                .await?;
+            }
+            Ok(SshCommand::Resize(geometry)) => {
+                ssh_channel_io(
+                    channel.window_change(
+                        geometry.columns as u32,
+                        geometry.rows as u32,
+                        geometry.columns as u32 * CELL_WIDTH_PIXELS,
+                        geometry.rows as u32 * CELL_HEIGHT_PIXELS,
+                    ),
+                    "resize remote PTY",
+                )
+                .await?;
+            }
             Ok(SshCommand::ReadShellHistory(reply)) => {
                 // Keep servicing the interactive PTY while probing history.
                 // Network appliances often hang on the exec channel; without
@@ -2221,6 +2229,18 @@ async fn drain_ssh_commands(
             Ok(SshCommand::Shutdown) | Err(TryRecvError::Disconnected) => return Ok(false),
             Err(TryRecvError::Empty) => return Ok(true),
         }
+    }
+}
+
+async fn ssh_channel_io<T, E, F>(future: F, action: &str) -> Result<T, String>
+where
+    F: Future<Output = Result<T, E>>,
+    E: std::fmt::Display,
+{
+    match tokio::time::timeout(SSH_CHANNEL_IO_TIMEOUT, future).await {
+        Ok(Ok(value)) => Ok(value),
+        Ok(Err(error)) => Err(format!("failed to {action}: {error}")),
+        Err(_) => Err(format!("failed to {action}: timed out")),
     }
 }
 
@@ -2266,19 +2286,25 @@ async fn collect_shell_history_while_servicing_pty(
             _ = tokio::time::sleep(SSH_COMMAND_POLL_INTERVAL) => {
                 loop {
                     match receiver.try_recv() {
-                        Ok(SshCommand::Input(bytes)) => channel
-                            .data(&encode_ssh_input(&bytes, encoding)[..])
-                            .await
-                            .map_err(|error| format!("failed to send input: {error}"))?,
-                        Ok(SshCommand::Resize(geometry)) => channel
-                            .window_change(
-                                geometry.columns as u32,
-                                geometry.rows as u32,
-                                geometry.columns as u32 * CELL_WIDTH_PIXELS,
-                                geometry.rows as u32 * CELL_HEIGHT_PIXELS,
+                        Ok(SshCommand::Input(bytes)) => {
+                            ssh_channel_io(
+                                channel.data(&encode_ssh_input(&bytes, encoding)[..]),
+                                "send input",
                             )
-                            .await
-                            .map_err(|error| format!("failed to resize remote PTY: {error}"))?,
+                            .await?;
+                        }
+                        Ok(SshCommand::Resize(geometry)) => {
+                            ssh_channel_io(
+                                channel.window_change(
+                                    geometry.columns as u32,
+                                    geometry.rows as u32,
+                                    geometry.columns as u32 * CELL_WIDTH_PIXELS,
+                                    geometry.rows as u32 * CELL_HEIGHT_PIXELS,
+                                ),
+                                "resize remote PTY",
+                            )
+                            .await?;
+                        }
                         Ok(SshCommand::ReadShellHistory(reply)) => {
                             let _ = reply.send(Err(
                                 "remote shell history probe already in progress.".to_owned(),

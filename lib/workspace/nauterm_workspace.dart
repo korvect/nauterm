@@ -30,6 +30,7 @@ import '../ai/ai_attachment.dart';
 import '../ai/ai_config.dart';
 import '../ai/ai_conversation.dart';
 import '../ai/ai_context.dart';
+import '../cli/ephemeral_connect_request.dart';
 import '../data/ai_conversation_repository.dart';
 import '../data/ai_provider_store.dart';
 import '../data/known_hosts_store.dart';
@@ -156,6 +157,12 @@ class NautermWorkspaceController extends ChangeNotifier {
     if (identical(_state, state) && state.mounted) {
       state._openLocalTerminalTab();
     }
+  }
+
+  /// Opens a temporary Telnet/SSH tab without creating a saved host.
+  Future<void> openEphemeralConnect(EphemeralConnectRequest request) async {
+    await initialDataReady;
+    await _state?._openEphemeralConnect(request);
   }
 
   Future<bool> confirmQuitIfNeeded() async {
