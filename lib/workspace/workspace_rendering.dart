@@ -975,6 +975,9 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
         TerminalConnectionPhase.connected) {
       return;
     }
+    if (!force && _shellHistoryUnsupported.contains(controller)) {
+      return;
+    }
     final now = DateTime.now();
     final lastRead = _shellHistoryLastRead[controller];
     if (_shellHistoryLoading.contains(controller) ||
@@ -994,6 +997,7 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
               sessionId,
             );
         if (result.error != null) {
+          _shellHistoryUnsupported.add(controller);
           NautermLog.warning(
             'shell_history',
             'Unable to read remote shell history.',
@@ -1003,6 +1007,7 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
         final shellPath = (profile.shellPath ?? result.shell)?.trim();
         final format = ShellHistoryReader.formatForShell(shellPath);
         if (format == null) {
+          _shellHistoryUnsupported.add(controller);
           NautermLog.warning(
             'shell_history',
             'Remote shell history format is unsupported.',

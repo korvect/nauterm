@@ -2238,6 +2238,10 @@ class TerminalController extends ChangeNotifier {
       case TerminalConnectionEventKind.authPasswordStart:
       case TerminalConnectionEventKind.authPasswordRejected:
       case TerminalConnectionEventKind.authPasswordFailed:
+      case TerminalConnectionEventKind.authKeyboardInteractiveStart:
+      case TerminalConnectionEventKind.authKeyboardInteractivePrompt:
+      case TerminalConnectionEventKind.authKeyboardInteractiveRejected:
+      case TerminalConnectionEventKind.authKeyboardInteractiveFailed:
       case TerminalConnectionEventKind.authKeyStart:
       case TerminalConnectionEventKind.authKeyRejected:
       case TerminalConnectionEventKind.authKeyFailed:
@@ -2429,6 +2433,7 @@ class TerminalController extends ChangeNotifier {
         case TerminalConnectionEventKind.authFailed:
         case TerminalConnectionEventKind.authPassphraseRequired:
         case TerminalConnectionEventKind.authPasswordRejected:
+        case TerminalConnectionEventKind.authKeyboardInteractiveRejected:
         case TerminalConnectionEventKind.authKeyRejected:
         case TerminalConnectionEventKind.authAgentUnavailable:
           return true;

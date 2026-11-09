@@ -1156,6 +1156,7 @@ fn ssh_client_config_for_sftp(transfer_concurrency: usize) -> Arc<client::Config
         keepalive_max: SSH_KEEPALIVE_MISSES,
         ..client::Config::default()
     };
+    apply_responsive_ssh_crypto(&mut config);
     let desired_window = transfer_concurrency
         .clamp(1, 32)
         .saturating_mul(2 * 256 * 1024)
@@ -1165,13 +1166,43 @@ fn ssh_client_config_for_sftp(transfer_concurrency: usize) -> Arc<client::Config
 }
 
 fn ssh_client_config_with_keepalive(interval_seconds: u32) -> Arc<client::Config> {
-    Arc::new(client::Config {
+    let mut config = client::Config {
         nodelay: true,
         keepalive_interval: (interval_seconds > 0)
             .then(|| Duration::from_secs(u64::from(interval_seconds))),
         keepalive_max: SSH_KEEPALIVE_MISSES,
         ..client::Config::default()
-    })
+    };
+    apply_responsive_ssh_crypto(&mut config);
+    Arc::new(config)
+}
+
+/// Prefer fixed 2048-bit groups and smaller GEX bounds.
+///
+/// russh defaults prefer DH-GEX with an 8192-bit target. Many switches and
+/// firewalls only offer classical DH and spend seconds generating large
+/// groups; negotiating `diffie-hellman-group14-sha256` first keeps modern
+/// Curve25519 hosts unchanged while making appliance logins much faster.
+fn apply_responsive_ssh_crypto(config: &mut client::Config) {
+    use russh::kex;
+    use russh::Preferred;
+    use std::borrow::Cow;
+
+    config.preferred = Preferred {
+        kex: Cow::Borrowed(&[
+            kex::CURVE25519,
+            kex::CURVE25519_PRE_RFC_8731,
+            kex::DH_G14_SHA256,
+            kex::DH_G14_SHA1,
+            kex::DH_GEX_SHA256,
+            kex::DH_GEX_SHA1,
+            kex::EXTENSION_SUPPORT_AS_CLIENT,
+            kex::EXTENSION_OPENSSH_STRICT_KEX_AS_CLIENT,
+        ]),
+        ..Preferred::DEFAULT
+    };
+    config.gex = client::GexParams::new(2048, 2048, 4096)
+        .expect("2048/2048/4096 is a valid client GEX configuration");
 }
 
 #[allow(dead_code, clippy::too_many_arguments)]
@@ -1930,18 +1961,10 @@ async fn run_ssh_session(
         Err(error) => return Err(format!("authentication failed: {error}")),
     }
 
-    let remote_shell = match cancel_on_ssh_shutdown(
-        &receiver,
-        &shutdown,
-        detect_remote_interactive_shell(&mut handle),
-    )
-    .await
-    {
-        Ok(shell) => shell,
-        Err(error) if error == SSH_SESSION_CANCELLED => return Err(error),
-        Err(_) => None,
-    };
-
+    // Open a single session channel for the interactive PTY. A prior
+    // `exec` probe for `$SHELL` (second channel) disconnects many
+    // network-device SSH servers after password auth succeeds, and the
+    // subsequent open then fails with "Channel send error".
     let mut channel = cancel_on_ssh_shutdown(&receiver, &shutdown, async {
         handle
             .channel_open_session()
@@ -1994,24 +2017,13 @@ async fn run_ssh_session(
         })
         .await?;
     }
-    if let Some(shell) = remote_shell {
-        let command = remote_interactive_shell_command(&shell);
-        cancel_on_ssh_shutdown(&receiver, &shutdown, async {
-            channel
-                .exec(false, command)
-                .await
-                .map_err(|error| format!("failed to start integrated remote shell: {error}"))
-        })
-        .await?;
-    } else {
-        cancel_on_ssh_shutdown(&receiver, &shutdown, async {
-            channel
-                .request_shell(false)
-                .await
-                .map_err(|error| format!("failed to start remote shell: {error}"))
-        })
-        .await?;
-    }
+    cancel_on_ssh_shutdown(&receiver, &shutdown, async {
+        channel
+            .request_shell(false)
+            .await
+            .map_err(|error| format!("failed to start remote shell: {error}"))
+    })
+    .await?;
 
     push_event(
         &events,
@@ -2059,7 +2071,17 @@ async fn run_ssh_session(
                 }
             }
             _ = command_tick.tick() => {
-                if !drain_ssh_commands(&receiver, &mut channel, &mut handle, encoding).await? {
+                if !drain_ssh_commands(
+                    &receiver,
+                    &mut channel,
+                    &mut handle,
+                    encoding,
+                    &mut decoder,
+                    &output,
+                    &wakeup,
+                )
+                .await?
+                {
                     shutdown_requested = true;
                     break;
                 }
@@ -2130,61 +2152,7 @@ async fn run_ssh_session(
     Ok(())
 }
 
-async fn detect_remote_interactive_shell(
-    handle: &mut client::Handle<SshClientHandler>,
-) -> Result<Option<String>, String> {
-    const MARKER: &str = "__NAUTERM_SHELL__";
-    let mut channel = handle
-        .channel_open_session()
-        .await
-        .map_err(|error| format!("failed to open shell detection channel: {error}"))?;
-    channel
-        .exec(false, format!("printf '{MARKER}%s' \"$SHELL\""))
-        .await
-        .map_err(|error| format!("failed to detect remote shell: {error}"))?;
-
-    let mut bytes = Vec::new();
-    let mut exit_status = None;
-    while let Some(message) = channel.wait().await {
-        match message {
-            ChannelMsg::Data { data } => {
-                if bytes.len() < 4096 {
-                    bytes.extend_from_slice(&data[..data.len().min(4096 - bytes.len())]);
-                }
-            }
-            ChannelMsg::ExitStatus {
-                exit_status: status,
-            } => exit_status = Some(status),
-            ChannelMsg::Eof | ChannelMsg::Close => break,
-            _ => {}
-        }
-    }
-    let _ = channel.close().await;
-    if exit_status.is_some_and(|status| status != 0) {
-        return Ok(None);
-    }
-
-    let output = String::from_utf8_lossy(&bytes);
-    let Some(shell) = output
-        .split(MARKER)
-        .nth(1)
-        .map(str::trim)
-        .filter(|shell| !shell.is_empty())
-    else {
-        return Ok(None);
-    };
-    let name = Path::new(shell)
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or_default()
-        .to_ascii_lowercase();
-    Ok(matches!(
-        name.as_str(),
-        "zsh" | "bash" | "fish" | "ksh" | "ksh93" | "tcsh" | "csh" | "sh" | "dash" | "ash"
-    )
-    .then(|| shell.to_owned()))
-}
-
+#[cfg(test)]
 fn remote_interactive_shell_command(shell: &str) -> String {
     let quoted = shell_quote(shell);
     let announce = format!("printf '\\033]4545;Shell;%s\\007' {quoted}; ");
@@ -2211,6 +2179,9 @@ async fn drain_ssh_commands(
     channel: &mut russh::Channel<client::Msg>,
     handle: &mut client::Handle<SshClientHandler>,
     encoding: &'static Encoding,
+    decoder: &mut Decoder,
+    output: &Arc<Mutex<Vec<u8>>>,
+    wakeup: &Arc<Mutex<Option<WakeupCallback>>>,
 ) -> Result<bool, String> {
     loop {
         match receiver.try_recv() {
@@ -2228,9 +2199,19 @@ async fn drain_ssh_commands(
                 .await
                 .map_err(|error| format!("failed to resize remote PTY: {error}"))?,
             Ok(SshCommand::ReadShellHistory(reply)) => {
-                let result = run_ssh_exec_command(handle, &shell_history_command())
-                    .await
-                    .and_then(|command| parse_shell_history_output(&command.stdout));
+                // Keep servicing the interactive PTY while probing history.
+                // Network appliances often hang on the exec channel; without
+                // interleaving, typing/output freeze for the full probe timeout.
+                let result = collect_shell_history_while_servicing_pty(
+                    handle,
+                    channel,
+                    encoding,
+                    decoder,
+                    receiver,
+                    output,
+                    wakeup,
+                )
+                .await;
                 let _ = reply.send(result);
             }
             Ok(SshCommand::ExportPublicKey(request, reply)) => {
@@ -2239,6 +2220,82 @@ async fn drain_ssh_commands(
             }
             Ok(SshCommand::Shutdown) | Err(TryRecvError::Disconnected) => return Ok(false),
             Err(TryRecvError::Empty) => return Ok(true),
+        }
+    }
+}
+
+async fn collect_shell_history_while_servicing_pty(
+    handle: &mut client::Handle<SshClientHandler>,
+    channel: &mut russh::Channel<client::Msg>,
+    encoding: &'static Encoding,
+    decoder: &mut Decoder,
+    receiver: &Receiver<SshCommand>,
+    output: &Arc<Mutex<Vec<u8>>>,
+    wakeup: &Arc<Mutex<Option<WakeupCallback>>>,
+) -> ShellHistoryResult {
+    const HISTORY_TIMEOUT: Duration = Duration::from_secs(2);
+    let history = async {
+        run_ssh_exec_command(handle, &shell_history_command())
+            .await
+            .and_then(|command| parse_shell_history_output(&command.stdout))
+    };
+    tokio::pin!(history);
+    let deadline = tokio::time::sleep(HISTORY_TIMEOUT);
+    tokio::pin!(deadline);
+
+    loop {
+        tokio::select! {
+            result = &mut history => return result,
+            _ = &mut deadline => {
+                return Err("SSH command timed out.".to_owned());
+            }
+            message = channel.wait() => {
+                match message {
+                    Some(ChannelMsg::Data { data })
+                    | Some(ChannelMsg::ExtendedData { data, .. }) => {
+                        let decoded = decode_ssh_output(decoder, &data);
+                        push_output(output, wakeup, &decoded);
+                    }
+                    Some(ChannelMsg::ExitStatus { .. }) => {}
+                    Some(ChannelMsg::Eof) | Some(ChannelMsg::Close) | None => {
+                        return Err("SSH session closed during shell history probe.".to_owned());
+                    }
+                    Some(_) => {}
+                }
+            }
+            _ = tokio::time::sleep(SSH_COMMAND_POLL_INTERVAL) => {
+                loop {
+                    match receiver.try_recv() {
+                        Ok(SshCommand::Input(bytes)) => channel
+                            .data(&encode_ssh_input(&bytes, encoding)[..])
+                            .await
+                            .map_err(|error| format!("failed to send input: {error}"))?,
+                        Ok(SshCommand::Resize(geometry)) => channel
+                            .window_change(
+                                geometry.columns as u32,
+                                geometry.rows as u32,
+                                geometry.columns as u32 * CELL_WIDTH_PIXELS,
+                                geometry.rows as u32 * CELL_HEIGHT_PIXELS,
+                            )
+                            .await
+                            .map_err(|error| format!("failed to resize remote PTY: {error}"))?,
+                        Ok(SshCommand::ReadShellHistory(reply)) => {
+                            let _ = reply.send(Err(
+                                "remote shell history probe already in progress.".to_owned(),
+                            ));
+                        }
+                        Ok(SshCommand::ExportPublicKey(_, reply)) => {
+                            let _ = reply.send(Err(
+                                "SSH session is busy collecting shell history.".to_owned(),
+                            ));
+                        }
+                        Ok(SshCommand::Shutdown) | Err(TryRecvError::Disconnected) => {
+                            return Err(SSH_SESSION_CANCELLED.to_owned());
+                        }
+                        Err(TryRecvError::Empty) => break,
+                    }
+                }
+            }
         }
     }
 }
@@ -2587,6 +2644,27 @@ mod tests {
         assert_eq!(config.keepalive_interval, Some(SSH_KEEPALIVE_INTERVAL));
         assert_eq!(config.keepalive_max, SSH_KEEPALIVE_MISSES);
         assert!(config.nodelay);
+    }
+
+    #[test]
+    fn ssh_client_config_prefers_fast_dh_before_large_gex() {
+        use russh::kex;
+
+        let config = ssh_client_config();
+        let kex = config.preferred.kex.as_ref();
+
+        let group14 = kex
+            .iter()
+            .position(|name| *name == kex::DH_G14_SHA256)
+            .expect("group14-sha256 should be offered");
+        let gex = kex
+            .iter()
+            .position(|name| *name == kex::DH_GEX_SHA256)
+            .expect("dh-gex-sha256 should remain as fallback");
+        assert!(group14 < gex);
+        assert_eq!(config.gex.min_group_size(), 2048);
+        assert_eq!(config.gex.preferred_group_size(), 2048);
+        assert_eq!(config.gex.max_group_size(), 4096);
     }
 
     #[test]

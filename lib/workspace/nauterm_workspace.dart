@@ -275,6 +275,8 @@ class _NautermWorkspaceModel extends ChangeNotifier {
   shellHistoryByController = {};
   final Set<TerminalController> shellHistoryLoading = {};
   final Map<TerminalController, DateTime> shellHistoryLastRead = {};
+  /// Remote hosts that rejected/timed out shell-history exec (e.g. network gear).
+  final Set<TerminalController> shellHistoryUnsupported = {};
   Future<void> shellHistoryPersistence = Future<void>.value();
   String? selectedLogId;
   final List<_WorkspaceRuntimeState> workspaces = [
@@ -586,6 +588,8 @@ class _NautermWorkspaceState extends ConsumerState<NautermWorkspace>
 
   Map<TerminalController, DateTime> get _shellHistoryLastRead =>
       _workspaceModel.shellHistoryLastRead;
+  Set<TerminalController> get _shellHistoryUnsupported =>
+      _workspaceModel.shellHistoryUnsupported;
 
   Future<void> get _shellHistoryPersistence =>
       _workspaceModel.shellHistoryPersistence;
