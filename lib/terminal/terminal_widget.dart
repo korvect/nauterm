@@ -2770,8 +2770,8 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
     }
     if (anchor != null &&
         (_config.copyOnSelect || terminalCopyOnSelect) &&
-        _effectiveSelection != null &&
-        !_effectiveSelection!.isCollapsed) {
+        _selection != null &&
+        !_selection!.isCollapsed) {
       _copySelection();
     }
   }

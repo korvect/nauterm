@@ -838,6 +838,34 @@ void main() {
     expect(_terminalPainter(tester).commandBlockSelection, isNull);
   });
 
+  testWidgets('copy on select ignores command block selection', (tester) async {
+    final previousCopyOnSelect = terminalCopyOnSelect;
+    terminalCopyOnSelect = true;
+    addTearDown(() => terminalCopyOnSelect = previousCopyOnSelect);
+    final driver = MemoryTerminalDriver(columns: 80, rows: 8);
+    final controller = TerminalController(driver: driver);
+    addTearDown(controller.dispose);
+    await _pumpTerminal(tester, controller, autofocusTerminal: true);
+    controller.write('user@host:~\$ ls\r\noutput');
+    await tester.pump();
+    await Clipboard.setData(const ClipboardData(text: 'preserve clipboard'));
+
+    final metrics = TerminalMetrics.measure(
+      defaultTerminalConfig.font.textStyle(),
+    );
+    await tester.tapAt(
+      _cellCenter(metrics, column: 2, row: 1),
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pump();
+
+    expect(_terminalPainter(tester).commandBlockSelection, isNotNull);
+    expect(
+      (await Clipboard.getData(Clipboard.kTextPlain))?.text,
+      'preserve clipboard',
+    );
+  });
+
   testWidgets('selecting a command block on click can be disabled', (
     tester,
   ) async {
