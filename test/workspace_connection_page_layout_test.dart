@@ -84,7 +84,7 @@ void main() {
           await tester.tap(find.text('Test key 20'));
           await tester.pump();
           final continueButton = find.ancestor(
-            of: find.text('Continue & Save'),
+            of: find.text('Continue'),
             matching: find.byType(InkWell),
           );
           expect(tester.widget<InkWell>(continueButton).onTap, isNotNull);
@@ -286,7 +286,17 @@ void main() {
     ) async {
       final controller = _controller(kind);
       addTearDown(controller.dispose);
-      final page = buildTerminalConnectionPageForTesting(controller);
+      final page = buildTerminalConnectionPageForTesting(
+        controller,
+        keys: List.generate(
+          5,
+          (index) => TerminalConnectionKeyOption(
+            id: index + 1,
+            name: 'Test key ${index + 1}',
+            privateKey: 'test-private-key-${index + 1}',
+          ),
+        ),
+      );
       await _pumpPage(tester, page, height: 280);
       _expectChromeInsideViewport(tester);
 

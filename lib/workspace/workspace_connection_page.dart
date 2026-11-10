@@ -48,6 +48,7 @@ class TerminalConnectionIdentityOption {
 
 typedef TerminalConnectionAuthSaver = Future<void> Function(
   SshConnectionProfile profile, {
+  String? username,
   String? password,
   TerminalConnectionKeyOption? key,
 });
@@ -426,13 +427,15 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
   ({String privateKey, String passphrase})? _sessionKeyUnlock;
   ({String host, int port, int? identityId, String value})? _sessionUsername;
   bool _obscureFido2Pin = true;
+  bool _saveAuthenticationChoice = false;
   _ConnectionAuthTab _authTab = _ConnectionAuthTab.password;
   int? _selectedKeyIndex;
   int? _selectedIdentityId;
   SshHostKeyTrustMode _sessionHostKeyTrustMode = SshHostKeyTrustMode.strict;
   final List<_ConnectionIntervention> _interventions =
       <_ConnectionIntervention>[];
-  ({_ConnectionIntervention stage, int? challengeId})? _lastProgressPage;
+  ({_ConnectionIntervention stage, int? challengeId, int? requestId})?
+  _lastProgressPage;
   DateTime _connectionSegmentStartedAt = DateTime.now();
   _ConnectionPageMode? _lastActualMode;
   Timer? _connectedRevealTimer;
@@ -667,8 +670,23 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
     // Connection activity between forms stays on the last visible step.
     // Background key/agent attempts never create steps of their own.
     if (stage == null) return;
-    final page = (stage: stage, challengeId: challenge?.id);
-    if (page == _lastProgressPage) return;
+    final requestId = widget.controller.authenticationRequestId;
+    final page = (
+      stage: stage,
+      challengeId: challenge?.id,
+      requestId: requestId,
+    );
+    final previousPage = _lastProgressPage;
+    if (page == previousPage) return;
+    if (mode == _ConnectionPageMode.authentication &&
+        _showAuthTabs &&
+        requestId != null &&
+        _interventions.isNotEmpty &&
+        previousPage?.requestId == requestId) {
+      _interventions[_interventions.length - 1] = stage;
+      _lastProgressPage = page;
+      return;
+    }
     _lastProgressPage = page;
     _interventions.add(stage);
   }
@@ -955,7 +973,8 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
           size: _WorkspaceControlSize.large,
           autofocus: true,
           textInputAction: TextInputAction.go,
-          onSubmitted: (_) => _continueWithUsername(),
+          onSubmitted: (_) =>
+              _continueWithUsername(save: _saveAuthenticationChoice),
         ),
       ],
     );
@@ -1038,6 +1057,7 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
         selectedKeyIndex >= 0 &&
         selectedKeyIndex < widget.keys.length;
     final hasSshProfile = widget.controller.sshProfile != null;
+    final hasSavedSshHost = widget.controller.sshProfile?.hostId != null;
     final requiresFido2Pin = _requiresFido2Pin;
     final canContinue = mode == _ConnectionPageMode.username
         ? _usernameController.text.trim().isNotEmpty
@@ -1078,10 +1098,29 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
     final primaryActions = <Widget>[
       if (mode == _ConnectionPageMode.username) ...[
         _ConnectionButton(
-          label: tr('common.action.continue', fallback: 'Continue'),
+          label: _saveAuthenticationChoice
+              ? tr('workspace.label.continueSave', fallback: 'Continue & Save')
+              : tr('common.action.continue', fallback: 'Continue'),
           primary: true,
-          onPressed: canContinue ? _continueWithUsername : null,
+          shape: hasSavedSshHost
+              ? const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.horizontal(
+                    left: Radius.circular(8),
+                  ),
+                )
+              : null,
+          onPressed: canContinue
+              ? () => _continueWithUsername(save: _saveAuthenticationChoice)
+              : null,
         ),
+        if (hasSavedSshHost) ...[
+          SizedBox(width: 2),
+          _AuthenticationContinueMenuButton(
+            enabled: canContinue,
+            saveIsSelected: _saveAuthenticationChoice,
+            onSelected: (save) => _continueWithUsername(save: save),
+          ),
+        ],
       ] else if (mode == _ConnectionPageMode.hostKey) ...[
         _ConnectionButton(
           label: tr('common.action.continue', fallback: 'Continue'),
@@ -1124,23 +1163,29 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
         ),
       ] else if (mode == _ConnectionPageMode.authentication) ...[
         _ConnectionButton(
-          label: tr(
-            'workspace.label.continueSave',
-            fallback: 'Continue & Save',
-          ),
+          label: _saveAuthenticationChoice
+              ? tr('workspace.label.continueSave', fallback: 'Continue & Save')
+              : tr('common.action.continue', fallback: 'Continue'),
           primary: true,
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.horizontal(left: Radius.circular(8)),
-          ),
+          shape: hasSavedSshHost
+              ? const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.horizontal(
+                    left: Radius.circular(8),
+                  ),
+                )
+              : null,
           onPressed: canContinue
-              ? () => _continueAuthentication(save: true)
+              ? () => _continueAuthentication(save: _saveAuthenticationChoice)
               : null,
         ),
-        SizedBox(width: 2),
-        _AuthenticationContinueMenuButton(
-          enabled: canContinue,
-          onContinue: () => _continueAuthentication(save: false),
-        ),
+        if (hasSavedSshHost) ...[
+          SizedBox(width: 2),
+          _AuthenticationContinueMenuButton(
+            enabled: canContinue,
+            saveIsSelected: _saveAuthenticationChoice,
+            onSelected: (save) => _continueAuthentication(save: save),
+          ),
+        ],
       ] else if (_showLogs &&
           status.phase == TerminalConnectionPhase.connecting &&
           hasSshProfile) ...[
@@ -1212,6 +1257,9 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
   }
 
   Future<void> _continueAuthentication({required bool save}) async {
+    if (_saveAuthenticationChoice != save) {
+      setState(() => _saveAuthenticationChoice = save);
+    }
     final profile = widget.controller.sshProfile;
     if (profile == null) {
       return;
@@ -1315,10 +1363,16 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
     _fido2PinController.clear();
   }
 
-  void _continueWithUsername() {
+  Future<void> _continueWithUsername({required bool save}) async {
+    if (_saveAuthenticationChoice != save) {
+      setState(() => _saveAuthenticationChoice = save);
+    }
     final profile = widget.controller.sshProfile;
     final username = _usernameController.text.trim();
     if (profile == null || username.isEmpty) return;
+    if (save) {
+      await widget.onSaveAuth?.call(profile, username: username);
+    }
     _sessionUsername = (
       host: profile.host,
       port: profile.port,
@@ -2763,11 +2817,13 @@ class _ConnectionButton extends StatelessWidget {
 class _AuthenticationContinueMenuButton extends StatefulWidget {
   const _AuthenticationContinueMenuButton({
     required this.enabled,
-    required this.onContinue,
+    required this.saveIsSelected,
+    required this.onSelected,
   });
 
   final bool enabled;
-  final VoidCallback onContinue;
+  final bool saveIsSelected;
+  final ValueChanged<bool> onSelected;
 
   @override
   State<_AuthenticationContinueMenuButton> createState() =>
@@ -2786,19 +2842,22 @@ class _AuthenticationContinueMenuButtonState
     final anchor =
         buttonBox.localToGlobal(Offset.zero, ancestor: overlayBox) &
         buttonBox.size;
+    final save = !widget.saveIsSelected;
     final action = await showNautermDropdownMenu<bool>(
       context: context,
       anchor: anchor,
-      width: 150,
-      entries: const [
+      width: 190,
+      entries: [
         NautermContextMenuAction<bool>(
-          value: true,
-          label: 'Continue',
-          icon: Icons.arrow_forward_rounded,
+          value: save,
+          label: save
+              ? tr('workspace.label.continueSave', fallback: 'Continue & Save')
+              : tr('common.action.continue', fallback: 'Continue'),
+          icon: save ? Icons.save_rounded : Icons.arrow_forward_rounded,
         ),
       ],
     );
-    if (action == true && mounted) widget.onContinue();
+    if (action != null && mounted) widget.onSelected(action);
   }
 
   @override

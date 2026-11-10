@@ -734,8 +734,8 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
         await _connectHost(host, protocol: _HostConnectProtocol.telnet);
       case _QuickConnectHostSftp(:final host):
         _connectSftpHost(host);
-      case _QuickConnectDirectSsh(:final query):
-        _connectHostQuery(query.label);
+      case _QuickConnectDirect(:final query):
+        await _connectParsedHostQuery(query);
     }
     if (keepWorkspaceOverview &&
         mounted &&
@@ -755,7 +755,7 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
       _QuickConnectHostSsh() ||
       _QuickConnectHostMosh() ||
       _QuickConnectHostTelnet() ||
-      _QuickConnectDirectSsh() => true,
+      _QuickConnectDirect() => true,
       _QuickConnectHostSftp() => false,
     };
   }
@@ -768,7 +768,7 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
       _QuickConnectHostMosh(:final host) => host.name,
       _QuickConnectHostTelnet(:final host) => host.name,
       _QuickConnectHostSftp(:final host) => host.name,
-      _QuickConnectDirectSsh(:final query) => query.host,
+      _QuickConnectDirect(:final query) => query.host,
     };
   }
 
@@ -1277,57 +1277,40 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
     widget.controller?._notifyTabsChanged();
   }
 
-  void _connectHostQuery(String input) {
-    final query = _DirectHostQuery.parse(input);
-    if (query == null) {
-      _showWorkspaceMessage('Use username@host or username@host:port.');
+  Future<void> _connectHostQuery(String input) async {
+    final query = HostConnectionQuery.parse(input);
+    if (query == null ||
+        !HostConnectionQuery.isExplicitConnectionQuery(input)) {
       return;
     }
+    await _connectParsedHostQuery(query);
+  }
 
-    _setWorkspaceState(() {
-      _tab = _WorkspaceTab.sessions;
-      _workspaceOverviewActive = false;
-      final id = _nextTerminalId++;
-      late final TerminalController controller;
-      controller = TerminalController.ssh(
-        host: query.host,
-        port: query.port,
-        username: query.username,
-        knownHostsPath: NautermPaths.resolve().knownHostsFile.path,
-        label: query.label,
-        environment: _terminalEnvironmentForTheme(_defaultThemeForSettings()),
-        theme: _defaultThemeForSettings(),
-        recorder: _createTerminalRecorder(
-          title: query.label,
-          target: '${query.username}@${query.host}:${query.port}',
-          host: query.host,
-          port: query.port,
-          username: query.username,
-          cwdResolver: () => _sshWorkingDirectories[id],
-          awaitConnection: true,
-        ),
-        config: currentTerminalConfig(),
-        onInputSent: (data) => _trackSshPaneInput(id, data),
-        onExit: () {
-          if (controller.shouldCloseOnExit) {
-            _closeTerminalViewTab(id, id, id);
-          }
-        },
-      );
-      _terminalTabs.add(
-        _TerminalTab(
-          id: id,
-          title: query.label,
-          theme: _defaultThemeForSettings(),
-          controller: controller,
-        ),
-      );
-      _sshWorkingDirectories[id] = '~';
-      _selectedTerminalId = id;
-      _selectedTerminalViewId = id;
-      _editorRequest = null;
-    });
-    widget.controller?._notifyTabsChanged();
+  Future<void> _connectParsedHostQuery(HostConnectionQuery query) async {
+    // This host only supplies the existing connection flow; it is never saved.
+    final host = HostEntry(
+      name: query.host,
+      type: NautermHostType.remote,
+      host: query.host,
+      username: query.username,
+      port: query.port,
+      sshEnabled: true,
+      moshEnabled: true,
+      telnetEnabled: true,
+      telnetUsername: _emptyToNull(query.username),
+      telnetPort: query.port,
+    );
+    switch (query.command) {
+      case HostConnectionCommand.ssh:
+        await _connectSshHost(host);
+      case HostConnectionCommand.telnet:
+        await _connectTelnetHost(host);
+      case null:
+        await _openHostProtocolConnection(
+          host,
+          _mapHost(host, const [], const {}),
+        );
+    }
   }
 
   void _showWorkspaceMessage(

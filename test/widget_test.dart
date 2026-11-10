@@ -2464,7 +2464,10 @@ void main() {
 
     await tester.tap(find.byTooltip('Quick Connect'));
     await tester.pump(const Duration(milliseconds: 200));
-    await tester.enterText(find.byType(TextField).last, 'demo@example.invalid');
+    await tester.enterText(
+      find.byType(TextField).last,
+      'ssh demo@example.invalid',
+    );
     await tester.pump();
 
     await tester.testTextInput.receiveAction(TextInputAction.done);

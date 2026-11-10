@@ -65,7 +65,7 @@ void main() {
       await _pump(tester, controller);
       await tester.tap(find.text('Test key'));
       await tester.pump();
-      await tester.tap(find.text('Continue & Save'));
+      await tester.tap(find.text('Continue'));
       await tester.pump();
       expect(driver.credentials.single.method, 'publickey');
       expect(controller.sshProfile!.privateKey, 'test-private-key');
@@ -106,7 +106,7 @@ void main() {
       expect(find.text('Public Key'), findsNothing);
       await tester.enterText(find.byType(TextField), 'password-secret');
       await tester.pump();
-      await tester.tap(find.text('Continue & Save'));
+      await tester.tap(find.text('Continue'));
       await tester.pump();
       expect(driver.credentials.last.method, 'password');
       expect(driver.credentials.last.password, 'password-secret');
@@ -188,7 +188,7 @@ void main() {
           await tester.tap(find.text('Test key'));
         }
         await tester.pump();
-        await tester.tap(find.text('Continue & Save'));
+        await tester.tap(find.text('Continue'));
         await tester.pump();
         driver.events.add(
           TerminalConnectionEvent(
@@ -261,7 +261,7 @@ void main() {
         await _pump(tester, controller, inDrawer: inDrawer);
         await tester.tap(find.text('Test key'));
         await tester.pump();
-        await tester.tap(find.text('Continue & Save'));
+        await tester.tap(find.text('Continue'));
         await tester.pump();
         driver.events.addAll([
           const TerminalConnectionEvent(

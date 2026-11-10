@@ -560,7 +560,9 @@ class _HostSearchBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final query = controller.text.trim();
-    final canConnect = query.contains('@');
+    final canConnect =
+        HostConnectionQuery.parse(query) != null &&
+        HostConnectionQuery.isExplicitConnectionQuery(query);
 
     return Container(
       height: _WorkspaceControlSize.medium.inputHeight + 16,
@@ -757,61 +759,4 @@ Map<String, String> _tagNamesByUuid(Iterable<TagEntry> tags) {
     if (uuid != null) names[uuid] = tag.name;
   }
   return names;
-}
-
-class _DirectHostQuery {
-  const _DirectHostQuery({
-    required this.username,
-    required this.host,
-    required this.port,
-  });
-
-  final String username;
-  final String host;
-  final int port;
-
-  String get label => port == 22 ? '$username@$host' : '$username@$host:$port';
-
-  static _DirectHostQuery? parse(String input) {
-    final value = input.trim();
-    final at = value.indexOf('@');
-    if (at <= 0 || at == value.length - 1) {
-      return null;
-    }
-
-    final username = value.substring(0, at).trim();
-    final destination = value.substring(at + 1).trim();
-    if (username.isEmpty || destination.isEmpty) {
-      return null;
-    }
-
-    if (destination.startsWith('[')) {
-      final closeBracket = destination.indexOf(']');
-      if (closeBracket <= 1) {
-        return null;
-      }
-      final host = destination.substring(1, closeBracket);
-      final rest = destination.substring(closeBracket + 1);
-      final port = rest.isEmpty
-          ? 22
-          : rest.startsWith(':')
-          ? int.tryParse(rest.substring(1))
-          : null;
-      if (port == null || !_isValidPort(port)) {
-        return null;
-      }
-      return _DirectHostQuery(username: username, host: host, port: port);
-    }
-
-    final colon = destination.lastIndexOf(':');
-    final hasPort = colon > 0 && destination.indexOf(':') == colon;
-    final host = hasPort ? destination.substring(0, colon) : destination;
-    final port = hasPort ? int.tryParse(destination.substring(colon + 1)) : 22;
-    if (host.isEmpty || port == null || !_isValidPort(port)) {
-      return null;
-    }
-    return _DirectHostQuery(username: username, host: host, port: port);
-  }
-
-  static bool _isValidPort(int port) => port >= 1 && port <= 65535;
 }

@@ -68,6 +68,7 @@ import '../update/startup_update.dart';
 import '../terminal/terminal_widget.dart';
 import '../window/file_drop_channel.dart';
 import '../window/native_windowing.dart';
+import 'host_connection_query.dart';
 import 'workspace_composer_completion.dart';
 import 'terminal_lifecycle_service.dart';
 import 'workspace_state_store.dart';

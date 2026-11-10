@@ -121,10 +121,10 @@ class _QuickConnectHostSftp extends _QuickConnectResult {
   final _HostItem host;
 }
 
-class _QuickConnectDirectSsh extends _QuickConnectResult {
-  const _QuickConnectDirectSsh(this.query);
+class _QuickConnectDirect extends _QuickConnectResult {
+  const _QuickConnectDirect(this.query);
 
-  final _DirectHostQuery query;
+  final HostConnectionQuery query;
 }
 
 class _QuickConnectDialog extends StatefulWidget {
@@ -168,7 +168,7 @@ class _QuickConnectDialogState extends State<_QuickConnectDialog> {
   void _submitSearch() {
     final directQuery = _directQuery;
     if (directQuery != null) {
-      _close(_QuickConnectDirectSsh(directQuery));
+      _close(_QuickConnectDirect(directQuery));
       return;
     }
 
@@ -199,9 +199,12 @@ class _QuickConnectDialogState extends State<_QuickConnectDialog> {
     for (final group in widget.groups) group.id: group.name,
   };
 
-  _DirectHostQuery? get _directQuery {
+  HostConnectionQuery? get _directQuery {
     final text = _searchController.text.trim();
-    return text.contains('@') ? _DirectHostQuery.parse(text) : null;
+    final query = HostConnectionQuery.parse(text);
+    return query != null && HostConnectionQuery.isExplicitConnectionQuery(text)
+        ? query
+        : null;
   }
 
   List<_HostItem> get _filteredHosts {
@@ -325,7 +328,7 @@ class _QuickConnectDialogState extends State<_QuickConnectDialog> {
                               _QuickConnectDirectRow(
                                 query: directQuery,
                                 onConnect: () =>
-                                    _close(_QuickConnectDirectSsh(directQuery)),
+                                    _close(_QuickConnectDirect(directQuery)),
                               ),
                               SizedBox(height: 6),
                             ],
@@ -887,7 +890,7 @@ class _QuickConnectHostIcon extends StatelessWidget {
 class _QuickConnectDirectRow extends StatelessWidget {
   const _QuickConnectDirectRow({required this.query, required this.onConnect});
 
-  final _DirectHostQuery query;
+  final HostConnectionQuery query;
   final VoidCallback onConnect;
 
   @override
@@ -927,7 +930,11 @@ class _QuickConnectDirectRow extends StatelessWidget {
             ),
             SizedBox(width: 8),
             _WorkspaceButton(
-              label: 'SSH',
+              label: switch (query.command) {
+                HostConnectionCommand.ssh => 'SSH',
+                HostConnectionCommand.telnet => 'Telnet',
+                null => 'Connect',
+              },
               variant: _WorkspaceButtonVariant.solid,
               type: _WorkspaceButtonType.primary,
               size: _WorkspaceControlSize.tiny,

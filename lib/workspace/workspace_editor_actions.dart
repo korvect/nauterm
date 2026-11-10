@@ -1270,6 +1270,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
 
   Future<void> _saveTerminalAuth(
     SshConnectionProfile profile, {
+    String? username,
     String? password,
     TerminalConnectionKeyOption? key,
   }) async {
@@ -1287,9 +1288,9 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
           IdentityEntry(
             id: identity.id,
             name: identity.name,
-            username: identity.username,
-            password: password,
-            keyId: key?.id,
+            username: username ?? identity.username,
+            password: password ?? identity.password,
+            keyId: key?.id ?? identity.keyId,
           ),
         );
         final saved = store.getIdentity(identityId);
@@ -1333,8 +1334,8 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
         proxyId: host.proxyId,
         host: host.host,
         port: host.port,
-        username: host.username,
-        password: password,
+        username: username ?? host.username,
+        password: password ?? host.password,
         themeId: host.themeId,
         darkThemeId: host.darkThemeId,
         startupSnippetId: host.startupSnippetId,
@@ -1353,7 +1354,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
         encoding: host.encodingOverride,
         telnetEncoding: host.telnetEncodingOverride,
         type: host.type,
-        keyId: key?.id,
+        keyId: key?.id ?? host.keyId,
         shellPath: host.shellPath,
         workDir: host.workDir,
         os: host.os,
