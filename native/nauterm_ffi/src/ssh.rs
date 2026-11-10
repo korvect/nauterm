@@ -57,7 +57,7 @@ use crate::{mosh::MoshBootstrap, mosh::MoshServerCommand};
 const SSH_COMMAND_POLL_INTERVAL: Duration = Duration::from_millis(8);
 const SSH_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 const SSH_SHUTDOWN_TIMEOUT: Duration = Duration::from_millis(250);
-const SSH_CHANNEL_IO_TIMEOUT: Duration = Duration::from_millis(250);
+const SSH_SHELL_DETECT_TIMEOUT: Duration = Duration::from_secs(3);
 const SSH_JOIN_TIMEOUT: Duration = Duration::from_millis(750);
 const SSH_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(20);
 const SSH_KEEPALIVE_MISSES: usize = 3;
@@ -1158,7 +1158,6 @@ fn ssh_client_config_for_sftp(transfer_concurrency: usize) -> Arc<client::Config
         keepalive_max: SSH_KEEPALIVE_MISSES,
         ..client::Config::default()
     };
-    apply_responsive_ssh_crypto(&mut config);
     let desired_window = transfer_concurrency
         .clamp(1, 32)
         .saturating_mul(2 * 256 * 1024)
@@ -1168,43 +1167,13 @@ fn ssh_client_config_for_sftp(transfer_concurrency: usize) -> Arc<client::Config
 }
 
 fn ssh_client_config_with_keepalive(interval_seconds: u32) -> Arc<client::Config> {
-    let mut config = client::Config {
+    Arc::new(client::Config {
         nodelay: true,
         keepalive_interval: (interval_seconds > 0)
             .then(|| Duration::from_secs(u64::from(interval_seconds))),
         keepalive_max: SSH_KEEPALIVE_MISSES,
         ..client::Config::default()
-    };
-    apply_responsive_ssh_crypto(&mut config);
-    Arc::new(config)
-}
-
-/// Prefer fixed 2048-bit groups and smaller GEX bounds.
-///
-/// russh defaults prefer DH-GEX with an 8192-bit target. Many switches and
-/// firewalls only offer classical DH and spend seconds generating large
-/// groups; negotiating `diffie-hellman-group14-sha256` first keeps modern
-/// Curve25519 hosts unchanged while making appliance logins much faster.
-fn apply_responsive_ssh_crypto(config: &mut client::Config) {
-    use russh::kex;
-    use russh::Preferred;
-    use std::borrow::Cow;
-
-    config.preferred = Preferred {
-        kex: Cow::Borrowed(&[
-            kex::CURVE25519,
-            kex::CURVE25519_PRE_RFC_8731,
-            kex::DH_G14_SHA256,
-            kex::DH_G14_SHA1,
-            kex::DH_GEX_SHA256,
-            kex::DH_GEX_SHA1,
-            kex::EXTENSION_SUPPORT_AS_CLIENT,
-            kex::EXTENSION_OPENSSH_STRICT_KEX_AS_CLIENT,
-        ]),
-        ..Preferred::DEFAULT
-    };
-    config.gex = client::GexParams::new(2048, 2048, 4096)
-        .expect("2048/2048/4096 is a valid client GEX configuration");
+    })
 }
 
 #[allow(dead_code, clippy::too_many_arguments)]
@@ -1914,118 +1883,36 @@ async fn run_ssh_session(
         .with_host_port(&target.host, target.port)
         .with_username(&target.username),
     );
-    let private_key = prepare_private_key(target.private_key.as_deref(), &events, &wakeup)?;
-    let config = ssh_client_config_with_keepalive(target.ssh_keepalive_interval_seconds);
-    let host_key_verification =
-        HostKeyVerification::with_interaction(target.authentication.clone());
-    let handler = SshClientHandler {
-        host_key_verification: host_key_verification.clone(),
-        host: target.host.clone(),
-        port: target.port,
-        known_hosts_path: target.known_hosts_path.clone(),
-        host_key_trust_mode: target.host_key_trust_mode,
-        output: output.clone(),
-        events: events.clone(),
-        wakeup: wakeup.clone(),
-    };
-    let mut handle = cancel_on_ssh_shutdown(
+    // Keep the upstream shell-detection / integration path for normal hosts.
+    // Some network appliances disconnect when a second `exec` channel opens;
+    // if that probe poisons the session, reconnect once without probing and
+    // fall back to a plain `request_shell`.
+    let (mut handle, mut channel) = match open_ssh_interactive_channel(
+        &target,
         &receiver,
+        &output,
+        &events,
+        &wakeup,
         &shutdown,
-        connect_ssh_with_timeout(
-            config,
-            target.host.as_str(),
-            target.port,
-            target.proxy.as_ref(),
-            handler,
-        ),
-    )
-    .await?;
-
-    match cancel_on_ssh_shutdown(
-        &receiver,
-        &shutdown,
-        authenticate(
-            &mut handle,
-            &target.username,
-            private_key,
-            target.certificate.as_deref(),
-            target.passphrase.as_deref(),
-            target.password.as_deref(),
-            &events,
-            &wakeup,
-            &host_key_verification,
-        ),
+        true,
     )
     .await
     {
-        Ok(()) => {}
+        Ok(pair) => pair,
         Err(error) if error == SSH_SESSION_CANCELLED => return Err(error),
-        Err(error) => return Err(format!("authentication failed: {error}")),
-    }
-
-    // Open a single session channel for the interactive PTY. A prior
-    // `exec` probe for `$SHELL` (second channel) disconnects many
-    // network-device SSH servers after password auth succeeds, and the
-    // subsequent open then fails with "Channel send error".
-    let mut channel = cancel_on_ssh_shutdown(&receiver, &shutdown, async {
-        handle
-            .channel_open_session()
-            .await
-            .map_err(|error| format!("failed to open session channel: {error}"))
-    })
-    .await?;
-    let geometry = target.geometry;
-    cancel_on_ssh_shutdown(&receiver, &shutdown, async {
-        channel
-            .request_pty(
+        Err(_) => {
+            open_ssh_interactive_channel(
+                &target,
+                &receiver,
+                &output,
+                &events,
+                &wakeup,
+                &shutdown,
                 false,
-                target.terminal_options.terminal_type.term(),
-                geometry.columns as u32,
-                geometry.rows as u32,
-                geometry.columns as u32 * CELL_WIDTH_PIXELS,
-                geometry.rows as u32 * CELL_HEIGHT_PIXELS,
-                &[],
             )
-            .await
-            .map_err(|error| format!("failed to request remote PTY: {error}"))
-    })
-    .await?;
-    cancel_on_ssh_shutdown(&receiver, &shutdown, async {
-        channel
-            .set_env(false, "TERM", target.terminal_options.terminal_type.term())
-            .await
-            .map_err(|error| format!("failed to set TERM: {error}"))
-    })
-    .await?;
-    if let Some(color_term) = target.terminal_options.color_term.env_value() {
-        cancel_on_ssh_shutdown(&receiver, &shutdown, async {
-            channel
-                .set_env(false, "COLORTERM", color_term)
-                .await
-                .map_err(|error| format!("failed to set COLORTERM: {error}"))
-        })
-        .await?;
-    }
-    for entry in &target.terminal_options.environment {
-        let variable = entry.variable.trim();
-        if variable.is_empty() || variable.contains('=') {
-            continue;
+            .await?
         }
-        cancel_on_ssh_shutdown(&receiver, &shutdown, async {
-            channel
-                .set_env(false, variable, &entry.value)
-                .await
-                .map_err(|error| format!("failed to set {variable}: {error}"))
-        })
-        .await?;
-    }
-    cancel_on_ssh_shutdown(&receiver, &shutdown, async {
-        channel
-            .request_shell(false)
-            .await
-            .map_err(|error| format!("failed to start remote shell: {error}"))
-    })
-    .await?;
+    };
 
     push_event(
         &events,
@@ -2127,7 +2014,7 @@ async fn run_ssh_session(
         }
         return Ok(());
     }
-    let _ = tokio::time::timeout(SSH_CHANNEL_IO_TIMEOUT, channel.close()).await;
+    let _ = channel.close().await;
     if exit_status_seen {
         push_event(
             &events,
@@ -2154,7 +2041,218 @@ async fn run_ssh_session(
     Ok(())
 }
 
-#[cfg(test)]
+async fn open_ssh_interactive_channel(
+    target: &SshTarget,
+    receiver: &Receiver<SshCommand>,
+    output: &Arc<Mutex<Vec<u8>>>,
+    events: &Arc<Mutex<Vec<SessionEvent>>>,
+    wakeup: &Arc<Mutex<Option<WakeupCallback>>>,
+    shutdown: &Arc<AtomicBool>,
+    probe_shell: bool,
+) -> Result<(client::Handle<SshClientHandler>, russh::Channel<client::Msg>), String> {
+    let private_key = prepare_private_key(target.private_key.as_deref(), events, wakeup)?;
+    let config = ssh_client_config_with_keepalive(target.ssh_keepalive_interval_seconds);
+    let host_key_verification = HostKeyVerification::default();
+    let handler = SshClientHandler {
+        host_key_verification: host_key_verification.clone(),
+        host: target.host.clone(),
+        port: target.port,
+        known_hosts_path: target.known_hosts_path.clone(),
+        host_key_trust_mode: target.host_key_trust_mode,
+        output: output.clone(),
+        events: events.clone(),
+        wakeup: wakeup.clone(),
+    };
+    let mut handle = cancel_on_ssh_shutdown(
+        receiver,
+        shutdown,
+        connect_ssh_with_timeout(
+            config,
+            target.host.as_str(),
+            target.port,
+            target.proxy.as_ref(),
+            handler,
+        ),
+    )
+    .await?;
+
+    match cancel_on_ssh_shutdown(
+        receiver,
+        shutdown,
+        authenticate(
+            &mut handle,
+            &target.username,
+            private_key,
+            target.certificate.as_deref(),
+            target.passphrase.as_deref(),
+            target.password.as_deref(),
+            events,
+            wakeup,
+            &host_key_verification,
+        ),
+    )
+    .await
+    {
+        Ok(()) => {}
+        Err(error) if error == SSH_SESSION_CANCELLED => return Err(error),
+        Err(error) => return Err(format!("authentication failed: {error}")),
+    }
+
+    let remote_shell = if probe_shell {
+        match cancel_on_ssh_shutdown(receiver, shutdown, async {
+            match tokio::time::timeout(
+                SSH_SHELL_DETECT_TIMEOUT,
+                detect_remote_interactive_shell(&mut handle),
+            )
+            .await
+            {
+                Ok(result) => result,
+                // Bound only the probe; a hung appliance exec must not block forever.
+                Err(_) => Err("remote shell detection timed out".to_owned()),
+            }
+        })
+        .await
+        {
+            Ok(shell) => shell,
+            Err(error) if error == SSH_SESSION_CANCELLED => return Err(error),
+            // Match upstream: soft-fail the probe and continue with request_shell.
+            // If the probe poisoned the session, channel open below fails and the
+            // caller reconnects once without probing.
+            Err(_) => None,
+        }
+    } else {
+        None
+    };
+
+    let mut channel = cancel_on_ssh_shutdown(receiver, shutdown, async {
+        handle
+            .channel_open_session()
+            .await
+            .map_err(|error| format!("failed to open session channel: {error}"))
+    })
+    .await?;
+    let geometry = target.geometry;
+    cancel_on_ssh_shutdown(receiver, shutdown, async {
+        channel
+            .request_pty(
+                false,
+                target.terminal_options.terminal_type.term(),
+                geometry.columns as u32,
+                geometry.rows as u32,
+                geometry.columns as u32 * CELL_WIDTH_PIXELS,
+                geometry.rows as u32 * CELL_HEIGHT_PIXELS,
+                &[],
+            )
+            .await
+            .map_err(|error| format!("failed to request remote PTY: {error}"))
+    })
+    .await?;
+    cancel_on_ssh_shutdown(receiver, shutdown, async {
+        channel
+            .set_env(false, "TERM", target.terminal_options.terminal_type.term())
+            .await
+            .map_err(|error| format!("failed to set TERM: {error}"))
+    })
+    .await?;
+    if let Some(color_term) = target.terminal_options.color_term.env_value() {
+        cancel_on_ssh_shutdown(receiver, shutdown, async {
+            channel
+                .set_env(false, "COLORTERM", color_term)
+                .await
+                .map_err(|error| format!("failed to set COLORTERM: {error}"))
+        })
+        .await?;
+    }
+    for entry in &target.terminal_options.environment {
+        let variable = entry.variable.trim();
+        if variable.is_empty() || variable.contains('=') {
+            continue;
+        }
+        cancel_on_ssh_shutdown(receiver, shutdown, async {
+            channel
+                .set_env(false, variable, &entry.value)
+                .await
+                .map_err(|error| format!("failed to set {variable}: {error}"))
+        })
+        .await?;
+    }
+    if let Some(shell) = remote_shell {
+        let command = remote_interactive_shell_command(&shell);
+        cancel_on_ssh_shutdown(receiver, shutdown, async {
+            channel
+                .exec(false, command)
+                .await
+                .map_err(|error| format!("failed to start integrated remote shell: {error}"))
+        })
+        .await?;
+    } else {
+        cancel_on_ssh_shutdown(receiver, shutdown, async {
+            channel
+                .request_shell(false)
+                .await
+                .map_err(|error| format!("failed to start remote shell: {error}"))
+        })
+        .await?;
+    }
+
+    Ok((handle, channel))
+}
+
+async fn detect_remote_interactive_shell(
+    handle: &mut client::Handle<SshClientHandler>,
+) -> Result<Option<String>, String> {
+    const MARKER: &str = "__NAUTERM_SHELL__";
+    let mut channel = handle
+        .channel_open_session()
+        .await
+        .map_err(|error| format!("failed to open shell detection channel: {error}"))?;
+    channel
+        .exec(false, format!("printf '{MARKER}%s' \"$SHELL\""))
+        .await
+        .map_err(|error| format!("failed to detect remote shell: {error}"))?;
+
+    let mut bytes = Vec::new();
+    let mut exit_status = None;
+    while let Some(message) = channel.wait().await {
+        match message {
+            ChannelMsg::Data { data } => {
+                if bytes.len() < 4096 {
+                    bytes.extend_from_slice(&data[..data.len().min(4096 - bytes.len())]);
+                }
+            }
+            ChannelMsg::ExitStatus {
+                exit_status: status,
+            } => exit_status = Some(status),
+            ChannelMsg::Eof | ChannelMsg::Close => break,
+            _ => {}
+        }
+    }
+    let _ = channel.close().await;
+    if exit_status.is_some_and(|status| status != 0) {
+        return Ok(None);
+    }
+
+    let output = String::from_utf8_lossy(&bytes);
+    let Some(shell) = output
+        .split(MARKER)
+        .nth(1)
+        .map(str::trim)
+        .filter(|shell| !shell.is_empty())
+    else {
+        return Ok(None);
+    };
+    let name = Path::new(shell)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    Ok(matches!(
+        name.as_str(),
+        "zsh" | "bash" | "fish" | "ksh" | "ksh93" | "tcsh" | "csh" | "sh" | "dash" | "ash"
+    )
+    .then(|| shell.to_owned()))
+}
+
 fn remote_interactive_shell_command(shell: &str) -> String {
     let quoted = shell_quote(shell);
     let announce = format!("printf '\\033]4545;Shell;%s\\007' {quoted}; ");
@@ -2187,25 +2285,19 @@ async fn drain_ssh_commands(
 ) -> Result<bool, String> {
     loop {
         match receiver.try_recv() {
-            Ok(SshCommand::Input(bytes)) => {
-                ssh_channel_io(
-                    channel.data(&encode_ssh_input(&bytes, encoding)[..]),
-                    "send input",
+            Ok(SshCommand::Input(bytes)) => channel
+                .data(&encode_ssh_input(&bytes, encoding)[..])
+                .await
+                .map_err(|error| format!("failed to send input: {error}"))?,
+            Ok(SshCommand::Resize(geometry)) => channel
+                .window_change(
+                    geometry.columns as u32,
+                    geometry.rows as u32,
+                    geometry.columns as u32 * CELL_WIDTH_PIXELS,
+                    geometry.rows as u32 * CELL_HEIGHT_PIXELS,
                 )
-                .await?;
-            }
-            Ok(SshCommand::Resize(geometry)) => {
-                ssh_channel_io(
-                    channel.window_change(
-                        geometry.columns as u32,
-                        geometry.rows as u32,
-                        geometry.columns as u32 * CELL_WIDTH_PIXELS,
-                        geometry.rows as u32 * CELL_HEIGHT_PIXELS,
-                    ),
-                    "resize remote PTY",
-                )
-                .await?;
-            }
+                .await
+                .map_err(|error| format!("failed to resize remote PTY: {error}"))?,
             Ok(SshCommand::ReadShellHistory(reply)) => {
                 // Keep servicing the interactive PTY while probing history.
                 // Network appliances often hang on the exec channel; without
@@ -2229,18 +2321,6 @@ async fn drain_ssh_commands(
             Ok(SshCommand::Shutdown) | Err(TryRecvError::Disconnected) => return Ok(false),
             Err(TryRecvError::Empty) => return Ok(true),
         }
-    }
-}
-
-async fn ssh_channel_io<T, E, F>(future: F, action: &str) -> Result<T, String>
-where
-    F: Future<Output = Result<T, E>>,
-    E: std::fmt::Display,
-{
-    match tokio::time::timeout(SSH_CHANNEL_IO_TIMEOUT, future).await {
-        Ok(Ok(value)) => Ok(value),
-        Ok(Err(error)) => Err(format!("failed to {action}: {error}")),
-        Err(_) => Err(format!("failed to {action}: timed out")),
     }
 }
 
@@ -2287,23 +2367,23 @@ async fn collect_shell_history_while_servicing_pty(
                 loop {
                     match receiver.try_recv() {
                         Ok(SshCommand::Input(bytes)) => {
-                            ssh_channel_io(
-                                channel.data(&encode_ssh_input(&bytes, encoding)[..]),
-                                "send input",
-                            )
-                            .await?;
+                            channel
+                                .data(&encode_ssh_input(&bytes, encoding)[..])
+                                .await
+                                .map_err(|error| format!("failed to send input: {error}"))?;
                         }
                         Ok(SshCommand::Resize(geometry)) => {
-                            ssh_channel_io(
-                                channel.window_change(
+                            channel
+                                .window_change(
                                     geometry.columns as u32,
                                     geometry.rows as u32,
                                     geometry.columns as u32 * CELL_WIDTH_PIXELS,
                                     geometry.rows as u32 * CELL_HEIGHT_PIXELS,
-                                ),
-                                "resize remote PTY",
-                            )
-                            .await?;
+                                )
+                                .await
+                                .map_err(|error| {
+                                    format!("failed to resize remote PTY: {error}")
+                                })?;
                         }
                         Ok(SshCommand::ReadShellHistory(reply)) => {
                             let _ = reply.send(Err(
@@ -2670,27 +2750,6 @@ mod tests {
         assert_eq!(config.keepalive_interval, Some(SSH_KEEPALIVE_INTERVAL));
         assert_eq!(config.keepalive_max, SSH_KEEPALIVE_MISSES);
         assert!(config.nodelay);
-    }
-
-    #[test]
-    fn ssh_client_config_prefers_fast_dh_before_large_gex() {
-        use russh::kex;
-
-        let config = ssh_client_config();
-        let kex = config.preferred.kex.as_ref();
-
-        let group14 = kex
-            .iter()
-            .position(|name| *name == kex::DH_G14_SHA256)
-            .expect("group14-sha256 should be offered");
-        let gex = kex
-            .iter()
-            .position(|name| *name == kex::DH_GEX_SHA256)
-            .expect("dh-gex-sha256 should remain as fallback");
-        assert!(group14 < gex);
-        assert_eq!(config.gex.min_group_size(), 2048);
-        assert_eq!(config.gex.preferred_group_size(), 2048);
-        assert_eq!(config.gex.max_group_size(), 4096);
     }
 
     #[test]

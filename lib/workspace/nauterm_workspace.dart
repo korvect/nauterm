@@ -162,7 +162,42 @@ class NautermWorkspaceController extends ChangeNotifier {
   /// Opens a temporary Telnet/SSH tab without creating a saved host.
   Future<void> openEphemeralConnect(EphemeralConnectRequest request) async {
     await initialDataReady;
-    await _state?._openEphemeralConnect(request);
+    final state = await _waitForAttachedState();
+    if (state == null) {
+      return;
+    }
+    await state._openEphemeralConnect(request);
+  }
+
+  Future<_NautermWorkspaceState?> _waitForAttachedState({
+    Duration timeout = const Duration(seconds: 5),
+  }) async {
+    final existing = _state;
+    if (existing != null) {
+      return existing;
+    }
+
+    final completer = Completer<_NautermWorkspaceState?>();
+    late VoidCallback listener;
+    final timer = Timer(timeout, () {
+      if (!completer.isCompleted) {
+        completer.complete(_state);
+      }
+    });
+    listener = () {
+      final state = _state;
+      if (state != null && !completer.isCompleted) {
+        completer.complete(state);
+      }
+    };
+    addListener(listener);
+    listener();
+    try {
+      return await completer.future;
+    } finally {
+      timer.cancel();
+      removeListener(listener);
+    }
   }
 
   Future<bool> confirmQuitIfNeeded() async {
