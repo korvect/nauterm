@@ -517,6 +517,19 @@ pub extern "C" fn nauterm_session_encode_paste(
 }
 
 #[no_mangle]
+pub extern "C" fn nauterm_session_set_cursor_style(
+    session_id: SessionId,
+    shape: u32,
+    blinking: bool,
+) -> bool {
+    guard(false, || {
+        with_session_manager(false, |manager| {
+            manager.set_cursor_style(session_id, shape, blinking)
+        })
+    })
+}
+
+#[no_mangle]
 pub extern "C" fn nauterm_session_resize(
     session_id: SessionId,
     columns: u32,

@@ -288,8 +288,11 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
     _composerController.addListener(_handleComposerChanged);
     _composerFocusNode.addListener(_handleComposerFocusChanged);
     _syncTerminalController();
+    aiProviderCatalogChanges.addListener(_handleProvidersChanged);
     _loadProviders();
   }
+
+  void _handleProvidersChanged() => unawaited(_loadProviders());
 
   Future<void> _loadProviders() async {
     try {
@@ -325,6 +328,9 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
         });
         if (provider != null && model != null) {
           _updateConversationProvider(provider, model, notify: false);
+        } else {
+          widget.conversation.updateProvider(null, null);
+          widget.conversation.updateConfig(aiAssistantConfig);
         }
       }
     } catch (_) {
@@ -349,6 +355,7 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
 
   @override
   void dispose() {
+    aiProviderCatalogChanges.removeListener(_handleProvidersChanged);
     widget.conversation.removeListener(_handleConversationChanged);
     _boundTerminalController?.removeListener(_handleTerminalChanged);
     _composerController.removeListener(_handleComposerChanged);
@@ -404,14 +411,9 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
         selectedProvider ?? activeProvider ?? _providers.firstOrNull;
 
     final providerUuid = provider?.uuid;
-    if (provider == null || providerUuid == null) {
-      return const Spacer();
-    }
-
-    final currentModel = _resolveProviderModel(
-      provider,
-      preferred: _selectedModel,
-    );
+    final currentModel = provider == null
+        ? ''
+        : _resolveProviderModel(provider, preferred: _selectedModel);
     final options = [
       for (final item in _providers)
         if (item.uuid case final uuid?)
@@ -431,8 +433,10 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
       child: Align(
         alignment: Alignment.centerRight,
         child: _AiProviderModelSelector(
-          value: (providerUuid: providerUuid, model: currentModel),
-          providerName: provider.name,
+          value: (providerUuid: providerUuid ?? '', model: currentModel),
+          providerName:
+              provider?.name ??
+              tr('ai.label.selectProvider', fallback: 'Select Provider'),
           model: currentModel,
           options: options,
           colors: widget.colors,
@@ -1350,11 +1354,8 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
                                   color: muted,
                                 ),
                               const SizedBox(width: 4),
-                              if (_providers.isNotEmpty) ...[
-                                _buildProviderSelector(),
-                                const SizedBox(width: 8),
-                              ] else
-                                const Spacer(),
+                              _buildProviderSelector(),
+                              const SizedBox(width: 8),
                               _AiComposerIconButton(
                                 tooltip: widget.conversation.sending
                                     ? 'Stop generating'

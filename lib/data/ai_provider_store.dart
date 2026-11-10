@@ -1,8 +1,11 @@
+import 'package:flutter/foundation.dart';
+
 import '../ai/ai_config.dart';
 import 'nauterm_data_store.dart';
 import 'nauterm_paths.dart';
 
 final Map<String, List<AiProviderEntry>> _providerCatalogCache = {};
+final ValueNotifier<int> aiProviderCatalogChanges = ValueNotifier(0);
 
 class LoadedAiProvider {
   const LoadedAiProvider({required this.config, this.entry});
@@ -69,6 +72,7 @@ class AiProviderStore {
         ),
       );
       _providerCatalogCache[paths.databasePath] = store.listAiProviders();
+      aiProviderCatalogChanges.value++;
       return saved;
     } finally {
       store.dispose();
@@ -99,6 +103,7 @@ class AiProviderStore {
     try {
       store.deleteAiProvider(id);
       _providerCatalogCache[paths.databasePath] = store.listAiProviders();
+      aiProviderCatalogChanges.value++;
     } finally {
       store.dispose();
     }

@@ -139,6 +139,7 @@ enum _SettingsPage { general, terminal, sftp, ai, sync, shortcuts, about }
 _SettingsPage? _takeRequestedSettingsPage() =>
     switch (takeRequestedSettingsPage()) {
       NautermSettingsPage.terminal => _SettingsPage.terminal,
+      NautermSettingsPage.ai => _SettingsPage.ai,
       NautermSettingsPage.about => _SettingsPage.about,
       null => null,
     };
@@ -415,9 +416,14 @@ Future<void> _preloadNautermSettingsSecureData() async {
 }
 
 class SettingsPanel extends StatefulWidget {
-  const SettingsPanel({super.key, this.detectExternalEditors = true});
+  const SettingsPanel({
+    super.key,
+    this.detectExternalEditors = true,
+    this.aiProviderStore,
+  });
 
   final bool detectExternalEditors;
+  final AiProviderStore? aiProviderStore;
 
   @override
   State<SettingsPanel> createState() => _SettingsPanelState();
@@ -523,9 +529,6 @@ class _SettingsPanelState extends State<SettingsPanel> {
   late TextEditingController _settingsSearchController;
   final Map<String, GlobalKey> _settingsSectionKeys = {};
   late TextEditingController _sshEditorController;
-  late TextEditingController _aiBaseUrlController;
-  late TextEditingController _aiModelController;
-  late TextEditingController _aiApiKeyController;
   late TextEditingController _scrollbackLinesController;
   late TextEditingController _wordBoundariesController;
   late TextEditingController _sshKeepaliveIntervalSecondsController;
@@ -556,12 +559,11 @@ class _SettingsPanelState extends State<SettingsPanel> {
   final ScrollController _contentScrollController = ScrollController();
   Timer? _windowSizeUpdateTimer;
   bool _windowSizeDirty = false;
-  Timer? _aiProviderSaveTimer;
   Timer? _syncPreferencesSaveTimer;
-  bool _aiProviderDirty = false;
-  AiProviderEntry? _aiProviderEntry;
   List<AiProviderEntry> _aiProviders = [];
-  int _selectedAiProviderIndex = -1;
+  AiProviderStore get _providerStore =>
+      widget.aiProviderStore ?? AiProviderStore(NautermPaths.resolve());
+  String? _aiProvidersError;
   List<_EditorEntry> _externalEditors = const [];
   SftpExternalEditorCommand? _externalEditor;
   Map<String, AiProviderPreset> _aiPresets = {};
@@ -593,6 +595,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
   @override
   void initState() {
     super.initState();
+    _aiProviders = widget.aiProviderStore?.listProviders() ?? [];
     nautermSyncStatusRevision.addListener(_reloadSyncStatus);
     final requestedPage = _takeRequestedSettingsPage();
     if (requestedPage != null) {
@@ -601,11 +604,6 @@ class _SettingsPanelState extends State<SettingsPanel> {
     _settingsSearchController = TextEditingController();
     settingsPageRequestRevision.addListener(_handleSettingsPageRequest);
     _sshEditorController = TextEditingController(text: sftpSshEditor);
-    _aiBaseUrlController = TextEditingController(
-      text: aiAssistantConfig.baseUrl,
-    );
-    _aiModelController = TextEditingController(text: aiAssistantConfig.model);
-    _aiApiKeyController = TextEditingController(text: aiAssistantConfig.apiKey);
     _shellPaths = discoverSystemShells(current: _shellPath);
     _scrollbackLinesController = TextEditingController(text: _scrollbackLines);
     _wordBoundariesController = TextEditingController(
@@ -723,23 +721,24 @@ class _SettingsPanelState extends State<SettingsPanel> {
       final configStore = NautermConfigStore(paths);
       final settings = await configStore.loadRuntimeSettings();
       final catalog =
-          _cachedSettingsAiProvidersDatabasePath == paths.databasePath
+          _cachedSettingsAiProvidersDatabasePath ==
+              _providerStore.paths.databasePath
           ? _cachedSettingsAiProviders
           : null;
       final providers =
-          catalog ?? AiProviderStore(paths).loadCatalog(settings.aiAssistant);
+          widget.aiProviderStore?.loadCatalog(settings.aiAssistant) ??
+          catalog ??
+          _providerStore.loadCatalog(settings.aiAssistant);
       _cachedSettingsAiProviders = providers;
-      _cachedSettingsAiProvidersDatabasePath = paths.databasePath;
+      _cachedSettingsAiProvidersDatabasePath =
+          _providerStore.paths.databasePath;
       final provider = providers.active;
       applyNautermRuntimeSettings(settings);
       setAiAssistantConfig(provider.config);
-      _aiProviderEntry = provider.entry;
       final allProviders = providers.providers;
-      final activeIndex = allProviders.indexWhere((p) => p.active);
       if (!mounted) return;
       setState(() {
         _aiProviders = allProviders;
-        _selectedAiProviderIndex = activeIndex >= 0 ? activeIndex : 0;
         _copyOnSelect = settings.copyOnSelect;
         _selectCommandBlockOnClick = settings.selectCommandBlockOnClick;
         _applicationLanguage = settings.appLanguage;
@@ -791,9 +790,6 @@ class _SettingsPanelState extends State<SettingsPanel> {
         _sftpTransferThreads = settings.sftp.transferThreads;
         _workspacePageEnabled = settings.workspacePageEnabled;
         _workspaceRestoreBehavior = settings.workspaceRestoreBehavior;
-        _aiBaseUrlController.text = provider.config.baseUrl;
-        _aiModelController.text = provider.config.model;
-        _aiApiKeyController.text = provider.config.apiKey;
         _includeTerminalSelection = provider.config.includeTerminalSelection;
         _includeRecentTerminalOutput =
             provider.config.includeRecentTerminalOutput;
@@ -1006,49 +1002,13 @@ class _SettingsPanelState extends State<SettingsPanel> {
     _persistRuntimeSettings();
   }
 
-  void _updateAiSettings(
-    AiAssistantConfig config, {
-    bool providerChanged = true,
-  }) {
+  void _updateAiSettings(AiAssistantConfig config) {
     setAiAssistantConfig(config);
-    if (providerChanged) {
-      _aiProviderDirty = true;
-      _aiProviderSaveTimer?.cancel();
-      _aiProviderSaveTimer = Timer(
-        const Duration(milliseconds: 350),
-        _saveAiProvider,
-      );
-    }
     _persistRuntimeSettings();
   }
 
-  void _saveAiProvider() {
-    _aiProviderSaveTimer?.cancel();
-    _aiProviderSaveTimer = null;
-    if (!_aiProviderDirty) {
-      return;
-    }
-    try {
-      final saved = AiProviderStore(NautermPaths.resolve())
-          .save(aiAssistantConfig, existing: _aiProviderEntry);
-      _aiProviderEntry = saved;
-      final index = _aiProviders.indexWhere((entry) => entry.id == saved.id);
-      if (index >= 0) {
-        _aiProviders = [
-          ..._aiProviders.take(index),
-          saved,
-          ..._aiProviders.skip(index + 1),
-        ];
-      }
-      _aiProviderDirty = false;
-      _cacheAiProviderState();
-    } on Object {
-      // Keep the in-memory provider usable if the database is unavailable.
-    }
-  }
-
   void _cacheAiProviderState() {
-    final paths = NautermPaths.resolve();
+    final paths = _providerStore.paths;
     final activeEntry = _aiProviders.where((entry) => entry.active).firstOrNull;
     final preferences = aiAssistantConfig;
     final activeConfig = activeEntry == null
@@ -1260,12 +1220,8 @@ class _SettingsPanelState extends State<SettingsPanel> {
   void dispose() {
     nautermSyncStatusRevision.removeListener(_reloadSyncStatus);
     settingsPageRequestRevision.removeListener(_handleSettingsPageRequest);
-    _saveAiProvider();
     _applyWindowSizeSettings();
     _sshEditorController.dispose();
-    _aiBaseUrlController.dispose();
-    _aiModelController.dispose();
-    _aiApiKeyController.dispose();
     _scrollbackLinesController.dispose();
     _wordBoundariesController.dispose();
     _sshKeepaliveIntervalSecondsController.dispose();
@@ -1724,172 +1680,178 @@ class _SettingsPanelState extends State<SettingsPanel> {
 
   void _selectAiProvider(int index) {
     if (index < 0 || index >= _aiProviders.length) return;
-    final entry = _aiProviders[index];
-    setState(() {
-      _selectedAiProviderIndex = index;
-      _aiBaseUrlController.text = entry.baseUrl;
-      _aiModelController.text = entry.model;
-      _aiApiKeyController.text = entry.apiKey;
-      _aiProviderDirty = false;
-    });
+    unawaited(_showAiProviderEditor(_aiProviders[index]));
+  }
+
+  Future<void> _showAiProviderEditor(AiProviderEntry entry) {
+    return showNautermDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _AiProviderEditor(
+        provider: entry,
+        onSave: (name, config) {
+          final store = _providerStore;
+          store.save(
+            config,
+            existing: entry,
+            name: name,
+            active: entry.id == null
+                ? !_aiProviders.any((p) => p.active)
+                : entry.active,
+          );
+          _refreshAiProviderState(store);
+        },
+      ),
+    );
   }
 
   void _addAiProvider() {
     if (_aiPresets.isEmpty) {
       _createAiProviderFromPreset(null);
-      return;
+    } else {
+      unawaited(_showAddAiProviderDialog());
     }
-
-    unawaited(_showAddAiProviderDialog());
   }
 
   Future<void> _showAddAiProviderDialog() async {
     final result = await showNautermDialog<_AiPresetDialogResult>(
       context: context,
-      builder: (context) => _AiPresetDialog(presets: _aiPresets),
+      builder: (_) => _AiPresetDialog(presets: _aiPresets),
     );
-    if (!mounted || result == null) {
-      return;
-    }
+    if (!mounted || result == null) return;
     _createAiProviderFromPreset(result.preset);
   }
 
   void _createAiProviderFromPreset(AiProviderPreset? preset) {
-    final store = AiProviderStore(NautermPaths.resolve());
-    final hasActive = _aiProviders.any((p) => p.active);
-    final protocol = preset == null
-        ? AiApiProtocol.openAi
-        : AiApiProtocol.fromString(preset.protocol);
-    final baseUrl = preset?.baseUrl ?? protocol.defaultBaseUrl;
-    final newEntry = store.save(
-      AiAssistantConfig(
-        protocol: protocol,
-        baseUrl: baseUrl,
-        model: preset?.defaultModels.firstOrNull ?? '',
-      ),
-      existing: AiProviderEntry(
-        name: preset?.name ?? 'New Provider',
-        protocol: protocol.storageValue,
-        baseUrl: baseUrl,
-        model: preset?.defaultModels.firstOrNull ?? '',
-        apiKey: '',
-        config: const <String, Object?>{},
-        active: !hasActive,
+    final protocol = AiApiProtocol.fromString(preset?.protocol);
+    unawaited(
+      _showAiProviderEditor(
+        AiProviderEntry(
+          name:
+              preset?.name ??
+              tr(
+                'settings.ai.provider.defaultName',
+                fallback: 'Custom Provider',
+              ),
+          protocol: protocol.storageValue,
+          baseUrl: preset?.baseUrl ?? protocol.defaultBaseUrl,
+          model: preset?.defaultModels.join(', ') ?? '',
+          apiKey: '',
+          config: const {},
+          active: false,
+        ),
       ),
     );
-    setState(() {
-      _aiProviders = store.listProviders();
-      _selectedAiProviderIndex = _aiProviders.indexWhere(
-        (p) => p.id == newEntry.id,
-      );
-    });
-    _selectAiProvider(_selectedAiProviderIndex);
-    if (!hasActive) {
-      setAiAssistantConfig(
-        AiAssistantConfig(
-          protocol: protocol,
-          baseUrl: baseUrl,
-          model: preset?.defaultModels.firstOrNull ?? '',
-        ),
-      );
-      _persistRuntimeSettings();
-    }
-    _cacheAiProviderState();
   }
 
-  void _deleteAiProvider(int index) {
+  Future<void> _deleteAiProvider(int index) async {
     if (index < 0 || index >= _aiProviders.length) return;
     final entry = _aiProviders[index];
-    final wasActive = entry.active;
-    final store = AiProviderStore(NautermPaths.resolve());
-    store.deleteProvider(entry);
-    setState(() {
-      _aiProviders = store.listProviders();
-      if (_selectedAiProviderIndex >= _aiProviders.length) {
-        _selectedAiProviderIndex = _aiProviders.length - 1;
+    final confirmed = await showNautermDialog<bool>(
+      context: context,
+      builder: (context) => _AiProviderDialogFrame(
+        width: 320,
+        title: tr(
+          'settings.ai.provider.deleteTitle',
+          fallback: 'Delete Provider',
+        ),
+        actions: [
+          const Spacer(),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            style: TextButton.styleFrom(shape: _aiProviderButtonShape),
+            child: Text(tr('common.action.cancel', fallback: 'Cancel')),
+          ),
+          const SizedBox(width: 8),
+          FilledButton(
+            key: const ValueKey('settings-ai-confirm-delete'),
+            onPressed: () => Navigator.of(context).pop(true),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xffef4444),
+              shape: _aiProviderButtonShape,
+            ),
+            child: Text(tr('common.action.delete', fallback: 'Delete')),
+          ),
+        ],
+        child: Text(
+          tr(
+            'settings.ai.provider.deleteConfirmation',
+            fallback: 'Delete {name}?',
+            args: {'name': entry.name},
+          ),
+          style: TextStyle(color: _text, fontSize: 13),
+        ),
+      ),
+    );
+    if (!mounted || confirmed != true) return;
+    try {
+      final store = _providerStore;
+      store.deleteProvider(entry);
+      final remaining = store.listProviders();
+      if (remaining.isNotEmpty && !remaining.any((p) => p.active)) {
+        final next = remaining.first;
+        store.save(_configForAiProvider(next), existing: next, active: true);
       }
-    });
-    // If we deleted the active provider, activate the first remaining one
-    if (wasActive && _aiProviders.isNotEmpty) {
-      _setActiveAiProvider(0);
-    } else if (_aiProviders.isNotEmpty) {
-      _selectAiProvider(_selectedAiProviderIndex);
+      _refreshAiProviderState(store);
+    } on Object {
+      setState(
+        () => _aiProvidersError = tr(
+          'settings.ai.provider.error.delete',
+          fallback: 'Unable to delete the AI provider.',
+        ),
+      );
     }
+  }
+
+  AiAssistantConfig _configForAiProvider(AiProviderEntry entry) =>
+      AiAssistantConfig(
+        protocol: AiApiProtocol.fromString(entry.protocol),
+        baseUrl: entry.baseUrl,
+        model: entry.model,
+        apiKey: entry.apiKey,
+        maxTokens: entry.maxTokens,
+        temperature: entry.temperature,
+        includeTerminalSelection: aiAssistantConfig.includeTerminalSelection,
+        includeRecentTerminalOutput:
+            aiAssistantConfig.includeRecentTerminalOutput,
+      );
+
+  void _refreshAiProviderState(AiProviderStore store) {
+    final providers = store.listProviders();
+    setState(() {
+      _aiProviders = providers;
+      _aiProvidersError = null;
+    });
+    final active = providers.where((p) => p.active).firstOrNull;
+    setAiAssistantConfig(
+      active == null
+          ? AiAssistantConfig(
+              includeTerminalSelection:
+                  aiAssistantConfig.includeTerminalSelection,
+              includeRecentTerminalOutput:
+                  aiAssistantConfig.includeRecentTerminalOutput,
+            )
+          : _configForAiProvider(active),
+    );
     _cacheAiProviderState();
+    _persistRuntimeSettings();
   }
 
   void _setActiveAiProvider(int index) {
     if (index < 0 || index >= _aiProviders.length) return;
     final entry = _aiProviders[index];
-    final store = AiProviderStore(NautermPaths.resolve());
-    final config = AiAssistantConfig(
-      protocol: AiApiProtocol.fromString(entry.protocol),
-      baseUrl: entry.baseUrl,
-      model: entry.model,
-      apiKey: entry.apiKey,
-      maxTokens: entry.maxTokens,
-      temperature: entry.temperature,
-    );
-    store.save(config, existing: entry, active: true);
-    setAiAssistantConfig(config);
-    _persistRuntimeSettings();
-    setState(() {
-      _aiProviders = store.listProviders();
-      _selectedAiProviderIndex = index;
-    });
-    _cacheAiProviderState();
-  }
-
-  void _updateSelectedAiProviderField({
-    String? name,
-    String? protocol,
-    String? baseUrl,
-    String? model,
-    String? apiKey,
-    int? maxTokens,
-    bool clearMaxTokens = false,
-    double? temperature,
-    bool clearTemperature = false,
-  }) {
-    if (_selectedAiProviderIndex < 0 ||
-        _selectedAiProviderIndex >= _aiProviders.length) {
-      return;
-    }
-    final entry = _aiProviders[_selectedAiProviderIndex];
-    final store = AiProviderStore(NautermPaths.resolve());
-    final previousProtocol = AiApiProtocol.fromString(entry.protocol);
-    final nextProtocol = AiApiProtocol.fromString(protocol ?? entry.protocol);
-    final nextBaseUrl =
-        baseUrl ??
-        (protocol != null &&
-                _usesDefaultAiBaseUrl(entry.baseUrl, previousProtocol)
-            ? nextProtocol.defaultBaseUrl
-            : entry.baseUrl);
-    final config = AiAssistantConfig(
-      protocol: nextProtocol,
-      baseUrl: nextBaseUrl,
-      model: model ?? entry.model,
-      apiKey: apiKey ?? entry.apiKey,
-      maxTokens: clearMaxTokens ? null : maxTokens ?? entry.maxTokens,
-      temperature: clearTemperature ? null : temperature ?? entry.temperature,
-    );
-    store.save(
-      config,
-      existing: entry,
-      name: name ?? entry.name,
-      active: entry.active,
-    );
-    if (entry.active) {
-      setAiAssistantConfig(config);
-      _persistRuntimeSettings();
-    }
-    setState(() {
-      _aiProviders = store.listProviders();
-      _selectedAiProviderIndex = _aiProviders.indexWhere(
-        (p) => p.id == entry.id,
+    try {
+      final store = _providerStore;
+      store.save(_configForAiProvider(entry), existing: entry, active: true);
+      _refreshAiProviderState(store);
+    } on Object {
+      setState(
+        () => _aiProvidersError = tr(
+          'settings.ai.provider.error.save',
+          fallback: 'Unable to save the AI provider.',
+        ),
       );
-    });
-    _cacheAiProviderState();
+    }
   }
 }
 

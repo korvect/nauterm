@@ -634,6 +634,7 @@ impl TerminalSearchResult {
 /// and every borrowed handle derived from it are owned by one session actor
 /// thread for their full lifetime.
 pub trait TerminalEmulator {
+    fn set_cursor_style(&mut self, shape: u32, blinking: bool) -> bool;
     /// Prepare a user-initiated text paste for the existing input transport.
     fn encode_paste(&mut self, text: &str) -> Result<String, String> {
         let text = text
@@ -1748,6 +1749,27 @@ impl TerminalEngine {
 }
 
 impl TerminalEmulator for TerminalEngine {
+    fn set_cursor_style(&mut self, shape: u32, blinking: bool) -> bool {
+        self.options.cursor_shape = match shape {
+            0 => CursorShape::Block,
+            1 => CursorShape::Underline,
+            2 => CursorShape::Beam,
+            3 => CursorShape::HollowBlock,
+            _ => return false,
+        };
+        self.options.cursor_blinking = blinking;
+        self.term.set_options(Config {
+            scrolling_history: self.options.scrollback_lines,
+            osc52: self.options.osc52.to_alacritty(),
+            default_cursor_style: CursorStyle {
+                shape: self.options.cursor_shape,
+                blinking,
+            },
+            ..Config::default()
+        });
+        true
+    }
+
     fn resize(&mut self, columns: usize, rows: usize, _cell_width_px: u32, _cell_height_px: u32) {
         TerminalEngine::resize(self, columns, rows);
     }
@@ -2536,6 +2558,27 @@ mod tests {
     use std::thread;
     #[cfg(feature = "integration-tests")]
     use std::time::{Duration, Instant};
+
+    #[test]
+    fn changing_cursor_defaults_preserves_application_overrides() {
+        let mut terminal = TerminalEngine::new(16, 3);
+        terminal.write_bytes(b"hello");
+        assert!(terminal.set_cursor_style(2, false));
+        assert_eq!(terminal.snapshot().cursor_shape, 2);
+        assert!(!terminal.snapshot().cursor_blinking);
+
+        terminal.write_bytes(b"\x1b[4 q");
+        assert!(terminal.set_cursor_style(0, true));
+        assert_eq!(terminal.snapshot().cursor_shape, 1);
+        assert!(!terminal.snapshot().cursor_blinking);
+
+        terminal.write_bytes(b"\x1b[0 q");
+        assert_eq!(terminal.snapshot().cursor_shape, 0);
+        assert!(terminal.snapshot().cursor_blinking);
+        assert!(terminal.plain_text().contains("hello"));
+        assert!(!terminal.set_cursor_style(99, false));
+        assert_eq!(terminal.snapshot().cursor_shape, 0);
+    }
 
     #[test]
     fn writes_plain_text_to_the_grid() {

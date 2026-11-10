@@ -1,7 +1,7 @@
 part of 'terminal_ffi.dart';
 
 class _TerminalBindings {
-  static const _expectedAbiVersion = 7;
+  static const _expectedAbiVersion = 8;
 
   _TerminalBindings(this.library)
     : createLocalSessionConfigured = library
@@ -435,6 +435,10 @@ class _TerminalBindings {
   final _CaptureReaderCloseDart captureReaderClose;
   final _DestroyTerminalDart destroyTerminal;
   final _ResizeSessionDart resize;
+  late final _SetCursorStyleDart setCursorStyle = library
+      .lookupFunction<_SetCursorStyleNative, _SetCursorStyleDart>(
+        'nauterm_session_set_cursor_style',
+      );
   final _NotifyNetworkChangedDart notifyNetworkChanged;
   final _ExitAlternateScreenDart exitAlternateScreen;
   final _BellCountDart bellCount;

@@ -62,6 +62,40 @@ void main() {
     expect(loaded.temperature, 0.5);
   });
 
+  test(
+    'provider catalog notifications expose fresh saved and deleted entries',
+    () {
+      final directory = Directory.systemTemp.createTempSync(
+        'nauterm_ai_notify_test_',
+      );
+      addTearDown(() => directory.deleteSync(recursive: true));
+      final store = AiProviderStore(
+        NautermPaths(configDirectory: directory, dataDirectory: directory),
+      );
+      final observed = <List<String>>[];
+      void listener() =>
+          observed.add(store.listProviders().map((p) => p.name).toList());
+      aiProviderCatalogChanges.addListener(listener);
+      addTearDown(() => aiProviderCatalogChanges.removeListener(listener));
+      final first = store.save(
+        const AiAssistantConfig(model: 'first'),
+        name: 'First',
+      );
+      final second = store.save(
+        const AiAssistantConfig(model: 'second'),
+        existing: first,
+        name: 'Second',
+      );
+      store.deleteProvider(second);
+      expect(observed, [
+        ['First'],
+        ['Second'],
+        <String>[],
+      ]);
+      expect(store.loadCatalog(const AiAssistantConfig()).providers, isEmpty);
+    },
+  );
+
   test('database can reopen immediately after the previous handle closes', () {
     final directory = Directory.systemTemp.createTempSync(
       'nauterm_data_reopen_test_',

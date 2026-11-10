@@ -78,7 +78,11 @@ class _NetworkInterfaceChangeMonitor {
 }
 
 class NativeTerminalDriver
-    implements TerminalDriver, TerminalPasteEncoder, TerminalWordSelector {
+    implements
+        TerminalDriver,
+        TerminalPasteEncoder,
+        TerminalWordSelector,
+        TerminalCursorUpdater {
   @override
   String encodePaste(String text) => _encodeNativePaste(
     _bindings,
@@ -690,6 +694,17 @@ class NativeTerminalDriver
   final _TerminalBindings _bindings;
   int _sessionId;
   int get sessionId => _sessionId;
+
+  @override
+  void updateCursorConfig(TerminalCursorConfig cursor) {
+    if (_sessionId == 0) return;
+    _bindings.setCursorStyle(
+      _sessionId,
+      _cursorShapeToNative(cursor.shape),
+      cursor.blink,
+    );
+  }
+
   bool _networkMonitorRegistered = false;
 
   @override

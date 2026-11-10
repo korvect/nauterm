@@ -331,6 +331,7 @@ class _NautermWorkspaceState extends ConsumerState<NautermWorkspace>
   TerminalThemeCatalog? _terminalThemeCatalog;
   int? _lastTerminalThemeSignature;
   int _terminalThemeRevision = 0;
+  TerminalFontConfig _lastTerminalFontConfig = terminalFontConfig;
   TerminalLogCaptureStore? _terminalLogCaptureStore;
   int _terminalCaptureDiskUsage = 0;
   NautermRecordingConfig _lastRecordingConfig = terminalRecordingConfig;
@@ -882,6 +883,7 @@ class _NautermWorkspaceState extends ConsumerState<NautermWorkspace>
       _handleWorkspacePageEnabledChanged,
     );
     aiAssistantConfigListenable.addListener(_handleAiConfigChanged);
+    aiProviderCatalogChanges.addListener(_handleAiConfigChanged);
     terminalConfigNotifier.addListener(_handleTerminalConfigChanged);
     appThemeModeListenable.addListener(_handleTerminalAppearanceChanged);
     WidgetsBinding.instance.addObserver(this);
@@ -956,12 +958,47 @@ class _NautermWorkspaceState extends ConsumerState<NautermWorkspace>
   }
 
   void _handleAiConfigChanged() {
-    final config = aiAssistantConfig;
-    for (final tab in _allTerminalTabs) {
-      tab.aiConversation.updateConfig(config);
+    final preferences = aiAssistantConfig;
+    List<AiProviderEntry> providers;
+    try {
+      providers = AiProviderStore(NautermPaths.resolve()).listProviders();
+    } on Object {
+      providers = const [];
     }
-    for (final workspace in _workspaces) {
-      workspace.aiConversation.updateConfig(config);
+    final conversations = {
+      for (final tab in _allTerminalTabs) tab.aiConversation,
+      for (final workspace in _workspaces) workspace.aiConversation,
+    };
+    for (final conversation in conversations) {
+      final provider =
+          providers
+              .where((entry) => entry.uuid == conversation.providerUuid)
+              .firstOrNull ??
+          providers.where((entry) => entry.active).firstOrNull ??
+          providers.firstOrNull;
+      if (provider == null) {
+        conversation.updateProvider(null, null);
+        conversation.updateConfig(preferences);
+        continue;
+      }
+      final models = provider.models;
+      final previousModel = conversation.currentModel;
+      final model = previousModel != null && models.contains(previousModel)
+          ? previousModel
+          : models.firstOrNull ?? '';
+      conversation.updateConfig(
+        AiAssistantConfig(
+          protocol: AiApiProtocol.fromString(provider.protocol),
+          baseUrl: provider.baseUrl,
+          apiKey: provider.apiKey,
+          model: model,
+          maxTokens: provider.maxTokens,
+          temperature: provider.temperature,
+          includeTerminalSelection: preferences.includeTerminalSelection,
+          includeRecentTerminalOutput: preferences.includeRecentTerminalOutput,
+        ),
+      );
+      conversation.updateProvider(provider.uuid, model);
     }
   }
 
@@ -970,6 +1007,19 @@ class _NautermWorkspaceState extends ConsumerState<NautermWorkspace>
 
   void _handleTerminalConfigChanged() {
     _handleTerminalAppearanceChanged();
+    if (!identical(_lastTerminalFontConfig, terminalFontConfig)) {
+      _lastTerminalFontConfig = terminalFontConfig;
+      for (final tab in _allTerminalTabs) {
+        tab.font = terminalFontConfig;
+      }
+    }
+    final cursor = currentTerminalConfig().cursor;
+    for (final tab in _allTerminalTabs) {
+      if (tab.replay) continue;
+      for (final controller in tab.controllers) {
+        controller.updateCursorConfig(cursor);
+      }
+    }
     if (mounted) {
       setState(() {
         if (!terminalBellConfig.tabIndicator) {
@@ -1127,6 +1177,7 @@ class _NautermWorkspaceState extends ConsumerState<NautermWorkspace>
       _handleWorkspacePageEnabledChanged,
     );
     aiAssistantConfigListenable.removeListener(_handleAiConfigChanged);
+    aiProviderCatalogChanges.removeListener(_handleAiConfigChanged);
     terminalConfigNotifier.removeListener(_handleTerminalConfigChanged);
     appThemeModeListenable.removeListener(_handleTerminalAppearanceChanged);
     WidgetsBinding.instance.removeObserver(this);

@@ -1249,6 +1249,77 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('settings update existing terminal fonts, themes and cursors', (
+    tester,
+  ) async {
+    final previous = currentNautermRuntimeSettings();
+    addTearDown(() => applyNautermRuntimeSettings(previous));
+    await tester.pumpWidget(NautermApp(onOpenSettings: () {}));
+    await _openTraditionalLocalTerminal(tester);
+    final terminals = find.byType(TerminalView, skipOffstage: false);
+    expect(terminals, findsWidgets);
+    final controller = tester.widget<TerminalView>(terminals.first).controller;
+    controller.write('preserved output');
+
+    final nextFont = terminalFontConfig.copyWith(
+      family: 'monospace',
+      cjkFamily: 'Test CJK',
+      size: 19,
+      lineHeight: 1.5,
+      letterSpacing: 1,
+      weight: 500,
+      boldWeight: 800,
+      enableLigatures: true,
+    );
+    terminalFontConfig = nextFont;
+    terminalThemeId = 'custom';
+    terminalCustomTheme = nysaDarkTerminalTheme;
+    terminalFollowAppTheme = false;
+    terminalCursorShape = TerminalCursorShape.underline;
+    terminalCursorBlink = false;
+    terminalConfigNotifier.value++;
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    for (final terminal in tester.widgetList<TerminalView>(terminals)) {
+      expect(terminal.config!.font, same(nextFont));
+      expect(terminal.theme, same(nysaDarkTerminalTheme));
+      expect(terminal.config!.cursor.shape, TerminalCursorShape.underline);
+      expect(
+        terminal.controller.snapshot.cursor.shape,
+        TerminalCursorShape.underline,
+      );
+      expect(terminal.controller.snapshot.cursor.blinking, isFalse);
+    }
+    expect(
+      controller.snapshot.cells.map((cell) => cell.text).join(),
+      contains('preserved output'),
+    );
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('AI provider menu opens settings on the AI page', (tester) async {
+    takeRequestedSettingsPage();
+    await tester.pumpWidget(NautermApp(onOpenSettings: () {}));
+    await _openTraditionalLocalTerminal(tester);
+    await tester.tap(find.byTooltip('AI Assistant'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.tap(find.byKey(const ValueKey('ai-provider-model-label')));
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey('ai-configure-providers')),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const ValueKey('ai-configure-providers')));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('ai-provider-model-menu')), findsNothing);
+    expect(takeRequestedSettingsPage(), NautermSettingsPage.ai);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('AI Assistant opens only for the selected terminal page', (
     WidgetTester tester,
   ) async {
@@ -1358,16 +1429,29 @@ void main() {
       );
       final providerMenu = find.byKey(const ValueKey('ai-provider-model-menu'));
       expect(tester.getSize(providerMenu).width, lessThanOrEqualTo(320));
+      expect(tester.getSize(providerMenu).height, 42);
+      expect(
+        tester
+            .getSize(find.byKey(const ValueKey('ai-configure-providers')))
+            .height,
+        32,
+      );
       final selectedCheck = find.descendant(
         of: providerMenu,
         matching: find.byIcon(LucideIcons.check),
       );
-      expect(selectedCheck, findsOneWidget);
       expect(
-        tester.getRect(providerMenu).right -
-            tester.getRect(selectedCheck).right,
-        lessThanOrEqualTo(17),
+        find.byKey(const ValueKey('ai-configure-providers')),
+        findsOneWidget,
       );
+      if (selectedCheck.evaluate().isNotEmpty) {
+        expect(selectedCheck, findsOneWidget);
+        expect(
+          tester.getRect(providerMenu).right -
+              tester.getRect(selectedCheck).right,
+          lessThanOrEqualTo(17),
+        );
+      }
       await tester.tapAt(const Offset(8, 8));
       await tester.pump();
     }

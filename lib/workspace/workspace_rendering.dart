@@ -1394,6 +1394,7 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
         terminalCustomTheme = theme;
       }
     });
+    terminalConfigNotifier.value++;
     try {
       await NautermConfigStore(NautermPaths.resolve()).saveTerminalTheme(
         themeId: terminalFollowAppTheme && _workspaceDark

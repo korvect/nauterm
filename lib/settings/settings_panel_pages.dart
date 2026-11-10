@@ -1686,15 +1686,15 @@ Widget _buildSettingsAiContent(_SettingsPanelState state) {
             ),
             child: _AiProvidersEditor(
               providers: state._aiProviders,
-              selectedIndex: state._selectedAiProviderIndex,
               onProviderSelected: state._selectAiProvider,
               onProviderAdded: state._addAiProvider,
-              onProviderDeleted: state._deleteAiProvider,
+              onProviderDeleted: (index) =>
+                  unawaited(state._deleteAiProvider(index)),
               onProviderSetActive: state._setActiveAiProvider,
-              onFieldChanged: state._updateSelectedAiProviderField,
               onPresetsRefresh: state._refreshAiPresets,
               presetsRefreshing: state._aiPresetsRefreshing,
               presetsStatus: state._aiPresetsStatus,
+              error: state._aiProvidersError,
             ),
           ),
         ),
@@ -1723,7 +1723,6 @@ Widget _buildSettingsAiContent(_SettingsPanelState state) {
                         aiAssistantConfig.copyWith(
                           includeTerminalSelection: value,
                         ),
-                        providerChanged: false,
                       );
                     },
                   ),
@@ -1743,7 +1742,6 @@ Widget _buildSettingsAiContent(_SettingsPanelState state) {
                         aiAssistantConfig.copyWith(
                           includeRecentTerminalOutput: value,
                         ),
-                        providerChanged: false,
                       );
                     },
                   ),

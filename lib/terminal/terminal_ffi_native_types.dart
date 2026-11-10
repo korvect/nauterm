@@ -556,6 +556,9 @@ typedef _ResizeSessionNative = Bool Function(
   Uint32 cellWidth,
   Uint32 cellHeight,
 );
+
+typedef _SetCursorStyleNative = Bool Function(Uint64, Uint32, Bool);
+typedef _SetCursorStyleDart = bool Function(int, int, bool);
 typedef _ResizeSessionDart = bool Function(
   int sessionId,
   int columns,

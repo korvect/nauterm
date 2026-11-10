@@ -604,6 +604,22 @@ class TerminalController extends ChangeNotifier {
 
   late TerminalDriver _driver;
   final TerminalConfig config;
+  TerminalCursorConfig? _appliedCursorConfig;
+
+  void updateCursorConfig(TerminalCursorConfig cursor) {
+    if (_disposed) return;
+    final previous = _appliedCursorConfig ?? config.cursor;
+    if (previous.shape == cursor.shape && previous.blink == cursor.blink) {
+      return;
+    }
+    _appliedCursorConfig = cursor;
+    if (_driver case final TerminalCursorUpdater driver) {
+      driver.updateCursorConfig(cursor);
+      _refreshSnapshot();
+      notifyListeners();
+    }
+  }
+
   final TerminalInputSink? _onInput;
   final TerminalInputSink? _onInputSent;
   final VoidCallback? _onExit;

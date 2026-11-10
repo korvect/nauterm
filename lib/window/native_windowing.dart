@@ -48,7 +48,7 @@ final Map<Object, Rect> _mainWindowTitleBarInteractiveRegions =
     <Object, Rect>{};
 bool _mainWindowTitleBarRegionsUpdateScheduled = false;
 
-enum NautermSettingsPage { terminal, about }
+enum NautermSettingsPage { terminal, ai, about }
 
 NautermSettingsPage? takeRequestedSettingsPage() {
   final page = _requestedSettingsPage;

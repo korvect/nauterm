@@ -954,6 +954,15 @@ impl SessionManager {
         true
     }
 
+    pub fn set_cursor_style(&mut self, id: SessionId, shape: u32, blinking: bool) -> bool {
+        self.sessions
+            .get(&id)
+            .and_then(|actor| {
+                actor.call(move |session| session.engine.set_cursor_style(shape, blinking))
+            })
+            .unwrap_or(false)
+    }
+
     pub fn resize(
         &mut self,
         id: SessionId,

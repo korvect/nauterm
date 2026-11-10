@@ -1323,6 +1323,7 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
 
   void _handleConfigChanged() {
     if (!mounted) return;
+    _configureCursorBlink();
     if (!terminalPointerConfig.commandClickOpensFilenameOrUrl) {
       _hoveredOpenTarget = null;
     }

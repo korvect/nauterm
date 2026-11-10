@@ -18,6 +18,7 @@ use crate::terminal::{
     TerminalGeometry, TerminalGraphicImage, TerminalGraphicPlacement, TerminalOptions,
     TerminalPromptClickMove, TerminalSearchDirection, TerminalSearchResult, TerminalSnapshot,
 };
+use alacritty_terminal::vte::ansi::CursorShape;
 use base64::Engine as _;
 
 mod abi;
@@ -1710,6 +1711,38 @@ impl Drop for GhosttyTerminalEngine {
 }
 
 impl TerminalEmulator for GhosttyTerminalEngine {
+    fn set_cursor_style(&mut self, shape: u32, blinking: bool) -> bool {
+        let style: c_int = match shape {
+            0 => 1,
+            1 => 2,
+            2 => 0,
+            3 => 3,
+            _ => return false,
+        };
+        for (option, value) in [
+            (
+                TERMINAL_OPT_DEFAULT_CURSOR_STYLE,
+                &style as *const _ as *const c_void,
+            ),
+            (
+                TERMINAL_OPT_DEFAULT_CURSOR_BLINK,
+                &blinking as *const _ as *const c_void,
+            ),
+        ] {
+            if unsafe { ghostty_terminal_set(self.terminal, option, value) } != GHOSTTY_SUCCESS {
+                return false;
+            }
+        }
+        self.options.cursor_blinking = blinking;
+        self.options.cursor_shape = match shape {
+            1 => CursorShape::Underline,
+            2 => CursorShape::Beam,
+            3 => CursorShape::HollowBlock,
+            _ => CursorShape::Block,
+        };
+        true
+    }
+
     fn encode_paste(&mut self, text: &str) -> Result<String, String> {
         // Normalize OS clipboard newlines before Ghostty applies terminal modes.
         let text = text.replace("\r\n", "\n").replace('\r', "\n");
@@ -3187,6 +3220,27 @@ mod tests {
     use std::{thread, time::Duration, time::Instant};
 
     use super::*;
+
+    #[test]
+    fn changing_cursor_defaults_preserves_application_overrides() {
+        let mut terminal = GhosttyTerminalEngine::new(16, 3, TerminalOptions::default()).unwrap();
+        terminal.write_bytes(b"hello");
+        assert!(terminal.set_cursor_style(2, false));
+        assert_eq!(terminal.snapshot().cursor_shape, 2);
+        assert!(!terminal.snapshot().cursor_blinking);
+
+        terminal.write_bytes(b"\x1b[4 q");
+        assert!(terminal.set_cursor_style(0, true));
+        assert_eq!(terminal.snapshot().cursor_shape, 1);
+        assert!(!terminal.snapshot().cursor_blinking);
+
+        terminal.write_bytes(b"\x1b[0 q");
+        assert_eq!(terminal.snapshot().cursor_shape, 0);
+        assert!(terminal.snapshot().cursor_blinking);
+        assert!(terminal.plain_text().contains("hello"));
+        assert!(!terminal.set_cursor_style(99, false));
+        assert_eq!(terminal.snapshot().cursor_shape, 0);
+    }
 
     #[test]
     fn word_selection_matches_alacritty_boundaries_and_wrapping() {

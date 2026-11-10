@@ -41,7 +41,7 @@ class _AiProviderModelSelectorState extends State<_AiProviderModelSelector> {
   bool _open = false;
 
   Future<void> _showMenu() async {
-    if (_open || widget.options.isEmpty) {
+    if (_open) {
       return;
     }
     final anchorBox =
@@ -84,7 +84,9 @@ class _AiProviderModelSelectorState extends State<_AiProviderModelSelector> {
       letterSpacing: 0,
       decoration: TextDecoration.none,
     );
-    final fullLabel = '${widget.providerName} / ${widget.model}';
+    final fullLabel = widget.model.isEmpty
+        ? widget.providerName
+        : '${widget.providerName} / ${widget.model}';
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,
@@ -113,6 +115,8 @@ class _AiProviderModelSelectorState extends State<_AiProviderModelSelector> {
                             constraints.maxWidth &&
                         constraints.maxWidth.isFinite
                     ? fullLabel
+                    : widget.model.isEmpty
+                    ? widget.providerName
                     : widget.model;
                 return Align(
                   alignment: Alignment.centerRight,
@@ -249,7 +253,14 @@ class _AiProviderModelMenuOverlay extends StatelessWidget {
     final menuWidth = (longestOptionWidth + menuChromeWidth)
         .clamp(minimumMenuWidth, maximumMenuWidth)
         .toDouble();
-    final contentHeight = menuChromeHeight + options.length * 44.0;
+    const footerActionHeight = 40.0;
+    const footerDividerHeight = 1.0;
+    final contentHeight = options.isEmpty
+        ? footerActionHeight + 2
+        : menuChromeHeight +
+              options.length * 44.0 +
+              footerDividerHeight +
+              footerActionHeight;
     final desiredHeight = math.min(280.0, contentHeight);
     final availableAbove = anchor.top - safePadding.top - margin - gap;
     final availableBelow =
@@ -261,7 +272,6 @@ class _AiProviderModelMenuOverlay extends StatelessWidget {
       openAbove ? availableAbove : availableBelow,
     );
     final menuHeight = math.min(desiredHeight, availableHeight);
-    final scrollable = menuHeight < contentHeight;
     final minLeft = safePadding.left + margin;
     final maxLeft = math.max(
       minLeft,
@@ -337,34 +347,18 @@ class _AiProviderModelMenuOverlay extends StatelessWidget {
                 clipBehavior: Clip.antiAlias,
                 child: Material(
                   type: MaterialType.transparency,
-                  child: scrollable
-                      ? Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (options.isNotEmpty)
+                        Flexible(
                           child: ListView(
                             key: const ValueKey(
                               'ai-provider-model-menu-scroll',
                             ),
-                            padding: EdgeInsets.zero,
-                            children: [
-                              for (final option in options)
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                  ),
-                                  child: _AiProviderModelMenuItem(
-                                    option: option,
-                                    selected: option.value == value,
-                                    colors: colors,
-                                    onPressed: () => onSelected(option.value),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        )
-                      : Padding(
-                          padding: const EdgeInsets.all(6),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
+                            shrinkWrap: true,
+                            padding: const EdgeInsets.all(6),
                             children: [
                               for (final option in options)
                                 _AiProviderModelMenuItem(
@@ -376,6 +370,44 @@ class _AiProviderModelMenuOverlay extends StatelessWidget {
                             ],
                           ),
                         ),
+                      if (options.isNotEmpty)
+                        Divider(height: 1, color: colors.border),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 4,
+                        ),
+                        child: TextButton.icon(
+                          key: const ValueKey('ai-configure-providers'),
+                          onPressed: () {
+                            onDismissed();
+                            showSettingsWindow(page: NautermSettingsPage.ai);
+                          },
+                          icon: const Icon(LucideIcons.settings, size: 14),
+                          label: Text(
+                            tr(
+                              'ai.action.configureProviders',
+                              fallback: 'Configure Providers…',
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          style: TextButton.styleFrom(
+                            alignment: Alignment.centerLeft,
+                            foregroundColor: colors.foreground,
+                            minimumSize: const Size(0, 40),
+                            padding: const EdgeInsets.symmetric(horizontal: 9),
+                            textStyle: const TextStyle(fontSize: 11.5),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            visualDensity: VisualDensity.compact,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

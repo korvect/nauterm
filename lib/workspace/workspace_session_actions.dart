@@ -1369,9 +1369,10 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
     String? darkThemeId,
   }) async {
     final dark = terminalFollowAppTheme && _workspaceDark;
-    final selected =
-        (dark ? darkThemeId : themeId) ??
-        (dark ? terminalDarkThemeId : terminalThemeId);
+    final selected = dark ? darkThemeId : themeId;
+    if (selected == null || selected == 'default') {
+      return _defaultThemeForSettings();
+    }
     return await _terminalThemeCatalog?.loadTheme(selected) ??
         _defaultThemeForSettings();
   }

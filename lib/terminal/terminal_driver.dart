@@ -60,6 +60,11 @@ abstract interface class TerminalWordSelector {
   });
 }
 
+/// Updates terminal defaults while preserving application cursor overrides.
+abstract interface class TerminalCursorUpdater {
+  void updateCursorConfig(TerminalCursorConfig cursor);
+}
+
 abstract interface class TerminalDriver {
   TerminalSnapshot get snapshot;
 
@@ -110,7 +115,7 @@ abstract interface class TerminalDriver {
   void dispose();
 }
 
-class MemoryTerminalDriver implements TerminalDriver {
+class MemoryTerminalDriver implements TerminalDriver, TerminalCursorUpdater {
   MemoryTerminalDriver({
     required int columns,
     required int rows,
@@ -120,7 +125,13 @@ class MemoryTerminalDriver implements TerminalDriver {
     _cells = _emptyCells();
   }
 
-  final TerminalConfig config;
+  TerminalConfig config;
+
+  @override
+  void updateCursorConfig(TerminalCursorConfig cursor) {
+    config = config.copyWith(cursor: cursor);
+  }
+
   late List<TerminalCell> _cells;
   int _columns;
   int _rows;
