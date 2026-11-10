@@ -768,6 +768,145 @@ class TerminalController extends ChangeNotifier {
   TerminalSessionRecording? get sessionRecording => _recorder?.snapshot();
   List<TerminalConnectionEvent> get connectionEvents =>
       List.unmodifiable(_connectionEvents);
+  List<String>? get authenticationMethods {
+    for (final event in connectionEvents.reversed) {
+      if (event.authenticationMethods != null) {
+        return event.authenticationMethods;
+      }
+      if (event.kind == TerminalConnectionEventKind.connectStart ||
+          event.kind == TerminalConnectionEventKind.retry) {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  int? get authenticationRequestId {
+    for (final event in connectionEvents.reversed) {
+      if (event.kind == TerminalConnectionEventKind.authCredentialsRequired ||
+          event.kind == TerminalConnectionEventKind.authPassphraseRequired) {
+        return event.authenticationRequestId;
+      }
+      if (event.kind == TerminalConnectionEventKind.authCredentialsSubmitted ||
+          event.kind == TerminalConnectionEventKind.authPartialSuccess ||
+          event.kind == TerminalConnectionEventKind.authInteractiveStart ||
+          event.kind == TerminalConnectionEventKind.authSuccess ||
+          event.kind == TerminalConnectionEventKind.connectStart ||
+          event.kind == TerminalConnectionEventKind.retry ||
+          event.kind == TerminalConnectionEventKind.error) {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  bool respondToAuthenticationCredentials(
+    int requestId,
+    SshAuthenticationCredentials credentials, {
+    String? fido2Pin,
+  }) {
+    final driver = _driver;
+    if (_disposed ||
+        authenticationRequestId != requestId ||
+        authenticationMethods?.contains(credentials.method) != true ||
+        driver is! TerminalAuthenticationResponder) {
+      return false;
+    }
+    if (!(driver as TerminalAuthenticationResponder)
+        .respondToAuthenticationCredentials(requestId, credentials)) {
+      return false;
+    }
+    _sshProfile = credentials.method == 'password'
+        ? _sshProfile?.copyWith(password: credentials.password)
+        : _sshProfile?.copyWith(
+            privateKey: credentials.privateKey,
+            certificate: credentials.certificate,
+            passphrase: fido2Pin != null
+                ? _sshProfile?.passphrase
+                : credentials.passphrase,
+            fido2Pin: fido2Pin,
+          );
+    _addConnectionEvent(
+      TerminalConnectionEvent(
+        kind: TerminalConnectionEventKind.authCredentialsSubmitted,
+        message: 'SSH authentication credentials submitted.',
+        method: credentials.method,
+      ),
+    );
+    notifyListeners();
+    return true;
+  }
+
+  void cancelAuthenticationRequest() {
+    final requestId = authenticationRequestId;
+    final driver = _driver;
+    if (requestId == null || driver is! TerminalAuthenticationResponder) return;
+    if ((driver as TerminalAuthenticationResponder).respondToAuthentication(
+      requestId,
+      null,
+    )) {
+      _addConnectionEvent(
+        const TerminalConnectionEvent(
+          kind: TerminalConnectionEventKind.error,
+          message: 'SSH authentication cancelled.',
+        ),
+      );
+      notifyListeners();
+    }
+  }
+
+  SshAuthenticationChallenge? get authenticationChallenge {
+    for (final event in connectionEvents.reversed) {
+      switch (event.kind) {
+        case TerminalConnectionEventKind.authInteractiveRequest:
+          return event.challenge;
+        case TerminalConnectionEventKind.authInteractiveSubmitted:
+        case TerminalConnectionEventKind.authInteractiveFailed:
+        case TerminalConnectionEventKind.authSuccess:
+        case TerminalConnectionEventKind.connectStart:
+        case TerminalConnectionEventKind.retry:
+        case TerminalConnectionEventKind.connected:
+        case TerminalConnectionEventKind.error:
+        case TerminalConnectionEventKind.connectionLost:
+        case TerminalConnectionEventKind.sessionClosed:
+          return null;
+        default:
+          break;
+      }
+    }
+    return null;
+  }
+
+  bool respondToAuthentication(int challengeId, List<String>? responses) {
+    final challenge = authenticationChallenge;
+    final driver = _driver;
+    if (_disposed ||
+        challenge?.id != challengeId ||
+        (responses != null && responses.length != challenge!.prompts.length) ||
+        driver is! TerminalAuthenticationResponder) {
+      return false;
+    }
+    if (!(driver as TerminalAuthenticationResponder).respondToAuthentication(
+      challengeId,
+      responses,
+    )) {
+      return false;
+    }
+    _addConnectionEvent(
+      TerminalConnectionEvent(
+        kind: responses == null
+            ? TerminalConnectionEventKind.authInteractiveFailed
+            : TerminalConnectionEventKind.authInteractiveSubmitted,
+        message: responses == null
+            ? 'SSH keyboard-interactive authentication cancelled.'
+            : 'SSH keyboard-interactive response submitted.',
+        method: 'keyboard-interactive',
+      ),
+    );
+    notifyListeners();
+    return true;
+  }
+
   double? get sshLatencyMs => _sshLatencyMs;
   int? get nativeSessionId {
     final driver = _driver;
@@ -2087,6 +2226,12 @@ class TerminalController extends ChangeNotifier {
           phase: TerminalConnectionPhase.hostKey,
           message: event.message,
         );
+      case TerminalConnectionEventKind.authCredentialsRequired:
+      case TerminalConnectionEventKind.authCredentialsSubmitted:
+      case TerminalConnectionEventKind.authPartialSuccess:
+      case TerminalConnectionEventKind.authInteractiveStart:
+      case TerminalConnectionEventKind.authInteractiveRequest:
+      case TerminalConnectionEventKind.authInteractiveSubmitted:
       case TerminalConnectionEventKind.authNoneStart:
       case TerminalConnectionEventKind.authNoneRejected:
       case TerminalConnectionEventKind.authNoneFailed:
@@ -2103,9 +2248,20 @@ class TerminalController extends ChangeNotifier {
       case TerminalConnectionEventKind.authAgentIdentityRejected:
       case TerminalConnectionEventKind.authAgentUnavailable:
       case TerminalConnectionEventKind.authAgentFailed:
-      case TerminalConnectionEventKind.authFailed:
         _connectionStatus = TerminalConnectionStatus(
           phase: TerminalConnectionPhase.authentication,
+          message: event.message,
+        );
+      case TerminalConnectionEventKind.authFailed:
+        final methods = event.authenticationMethods;
+        _connectionStatus = TerminalConnectionStatus(
+          phase:
+              methods != null &&
+                  !methods.any(
+                    (method) => method == 'password' || method == 'publickey',
+                  )
+              ? TerminalConnectionPhase.failed
+              : TerminalConnectionPhase.authentication,
           message: event.message,
         );
       case TerminalConnectionEventKind.connected:
@@ -2213,6 +2369,7 @@ class TerminalController extends ChangeNotifier {
           phase: TerminalConnectionPhase.failed,
           message: event.message.isEmpty ? 'Connection lost.' : event.message,
         );
+      case TerminalConnectionEventKind.authInteractiveFailed:
       case TerminalConnectionEventKind.hostKeyChanged:
       case TerminalConnectionEventKind.hostKeyRejected:
       case TerminalConnectionEventKind.hostKeySaveFailed:
@@ -2259,6 +2416,13 @@ class TerminalController extends ChangeNotifier {
   bool get _hasActionableAuthEvent {
     for (final event in _connectionEvents.reversed) {
       switch (event.kind) {
+        case TerminalConnectionEventKind.authCredentialsRequired:
+        case TerminalConnectionEventKind.authCredentialsSubmitted:
+        case TerminalConnectionEventKind.authInteractiveStart:
+        case TerminalConnectionEventKind.authPartialSuccess:
+        case TerminalConnectionEventKind.authInteractiveSubmitted:
+        case TerminalConnectionEventKind.authInteractiveRequest:
+        case TerminalConnectionEventKind.authInteractiveFailed:
         case TerminalConnectionEventKind.authSuccess:
         case TerminalConnectionEventKind.connected:
           return false;

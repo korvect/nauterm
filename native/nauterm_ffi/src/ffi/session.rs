@@ -10,6 +10,7 @@ use crate::serial::{SerialConfig, SerialFlowControl, SerialParity};
 use crate::session::{SessionId, SessionManager};
 use crate::ssh::{self, HostKeyTrustMode};
 use crate::terminal::{TerminalCommand, TerminalSearchDirection};
+use zeroize::Zeroize;
 
 use super::common::{
     guard, hex_encode, string_from_ptr, string_list_from_ptr, string_to_c_ptr,
@@ -762,6 +763,43 @@ pub extern "C" fn nauterm_session_poll(session_id: SessionId) -> bool {
 pub extern "C" fn nauterm_session_is_exited(session_id: SessionId) -> bool {
     guard(true, || {
         with_session_manager(true, |manager| manager.is_exited(session_id))
+    })
+}
+
+/// Submit responses to the pending SSH keyboard-interactive challenge.
+///
+/// # Safety
+/// `responses_json` must point to a readable, NUL-terminated UTF-8 JSON array, credential object, or `null` to cancel
+/// for the duration of the call.
+#[no_mangle]
+pub unsafe extern "C" fn nauterm_session_authentication_respond(
+    session_id: SessionId,
+    challenge_id: u64,
+    responses_json: *const c_char,
+) -> bool {
+    guard(false, || {
+        let Some(mut json) = string_from_ptr(responses_json) else {
+            return false;
+        };
+        #[derive(serde::Deserialize)]
+        #[serde(untagged)]
+        enum Response {
+            Prompts(Option<Vec<String>>),
+            Credentials(ssh::AuthenticationCredentials),
+        }
+        let responses = serde_json::from_str::<Response>(&json);
+        json.zeroize();
+        let Ok(responses) = responses else {
+            return false;
+        };
+        with_session_manager(false, |manager| match responses {
+            Response::Prompts(responses) => {
+                manager.respond_to_authentication(session_id, challenge_id, responses)
+            }
+            Response::Credentials(credentials) => {
+                manager.respond_to_authentication_credentials(session_id, challenge_id, credentials)
+            }
+        })
     })
 }
 

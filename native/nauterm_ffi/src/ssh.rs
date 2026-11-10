@@ -27,6 +27,7 @@ use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use zeroize::Zeroize;
 
 mod auth;
+mod auth_interactive;
 mod probe;
 mod proxy;
 mod sftp;
@@ -34,6 +35,9 @@ mod sftp;
 pub(crate) use auth::{
     authenticate, openssh_certificate_type, prepare_private_key, HostKeyVerification,
 };
+pub(crate) use auth_interactive::AuthenticationCredentials;
+use auth_interactive::AuthenticationInteraction;
+pub use auth_interactive::KeyboardInteractiveChallenge;
 use probe::*;
 pub(crate) use proxy::connect_ssh_tcp_stream;
 #[cfg(test)]
@@ -76,6 +80,7 @@ const CELL_HEIGHT_PIXELS: u32 = 16;
 
 pub struct SshTransport {
     sender: Sender<SshCommand>,
+    authentication: AuthenticationInteraction,
     exited: Arc<AtomicBool>,
     output: Arc<Mutex<Vec<u8>>>,
     events: Arc<Mutex<Vec<SessionEvent>>>,
@@ -1436,6 +1441,7 @@ enum SshCommand {
 }
 
 struct SshTarget {
+    authentication: AuthenticationInteraction,
     host: String,
     port: u16,
     username: String,
@@ -1487,7 +1493,9 @@ impl SshTransport {
         let events = Arc::new(Mutex::new(Vec::new()));
         let wakeup = Arc::new(Mutex::new(None));
         let shutdown = Arc::new(AtomicBool::new(false));
+        let authentication = AuthenticationInteraction::default();
         let target = SshTarget {
+            authentication: authentication.clone(),
             host: host.to_owned(),
             port,
             username: username.to_owned(),
@@ -1515,6 +1523,7 @@ impl SshTransport {
 
         Ok(Self {
             sender,
+            authentication,
             exited,
             output,
             events,
@@ -1536,6 +1545,18 @@ impl SshTransport {
             return false;
         }
         self.sender.send(SshCommand::Input(bytes.to_vec())).is_ok()
+    }
+
+    pub fn respond_to_authentication(&self, id: u64, responses: Option<Vec<String>>) -> bool {
+        self.authentication.respond(id, responses)
+    }
+
+    pub fn respond_to_authentication_credentials(
+        &self,
+        id: u64,
+        credentials: AuthenticationCredentials,
+    ) -> bool {
+        self.authentication.respond_credentials(id, credentials)
     }
 
     pub fn request_shell_history(&self) -> Result<ShellHistoryReceiver, String> {
@@ -1862,7 +1883,8 @@ async fn run_ssh_session(
     );
     let private_key = prepare_private_key(target.private_key.as_deref(), &events, &wakeup)?;
     let config = ssh_client_config_with_keepalive(target.ssh_keepalive_interval_seconds);
-    let host_key_verification = HostKeyVerification::default();
+    let host_key_verification =
+        HostKeyVerification::with_interaction(target.authentication.clone());
     let handler = SshClientHandler {
         host_key_verification: host_key_verification.clone(),
         host: target.host.clone(),

@@ -65,6 +65,16 @@ abstract interface class TerminalCursorUpdater {
   void updateCursorConfig(TerminalCursorConfig cursor);
 }
 
+/// Authentication responses bypass terminal input, capture, and persistence.
+abstract interface class TerminalAuthenticationResponder {
+  bool respondToAuthentication(int challengeId, List<String>? responses);
+
+  bool respondToAuthenticationCredentials(
+    int requestId,
+    SshAuthenticationCredentials credentials,
+  );
+}
+
 abstract interface class TerminalDriver {
   TerminalSnapshot get snapshot;
 

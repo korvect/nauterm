@@ -19,6 +19,24 @@ fn push_auth_event(
     );
 }
 
+fn push_auth_method_event(
+    events: &Arc<Mutex<Vec<SessionEvent>>>,
+    wakeup: &Arc<Mutex<Option<WakeupCallback>>>,
+    kind: &str,
+    method: &str,
+    message: impl Into<String>,
+    methods: &russh::MethodSet,
+) {
+    let mut event = SessionEvent::new(kind, message).with_method(method);
+    event.authentication_methods = Some(
+        methods
+            .iter()
+            .map(|method| <&str>::from(method).to_owned())
+            .collect(),
+    );
+    push_event(events, wakeup, event);
+}
+
 type DynamicAgentClient = AgentClient<Box<dyn AgentStream + Send + Unpin + 'static>>;
 
 const OPENSSH_CERTIFICATE_SUFFIX: &str = "-cert-v01@openssh.com";
@@ -75,9 +93,17 @@ fn authentication_secrets(passphrase: Option<&str>) -> AuthenticationSecrets {
 pub(crate) struct HostKeyVerification {
     pending: Arc<Mutex<Option<SessionEvent>>>,
     host_key_seen: Arc<AtomicBool>,
+    interaction: Option<AuthenticationInteraction>,
 }
 
 impl HostKeyVerification {
+    pub(super) fn with_interaction(interaction: AuthenticationInteraction) -> Self {
+        Self {
+            interaction: Some(interaction),
+            ..Self::default()
+        }
+    }
+
     pub(super) fn begin_host_key_check(&self) -> bool {
         !self.host_key_seen.swap(true, Ordering::AcqRel)
     }
@@ -297,6 +323,35 @@ struct ConfiguredKeySigner<'a> {
     host_key_verification: &'a HostKeyVerification,
 }
 
+impl ConfiguredKeySigner<'_> {
+    async fn request_unlock(&mut self, message: String) -> Result<(), KeySignError> {
+        let Some(interaction) = &self.host_key_verification.interaction else {
+            return Err(KeySignError::Intervention(message));
+        };
+        let intervention = self
+            .events
+            .lock()
+            .unwrap()
+            .last()
+            .filter(|event| event.kind == "auth_passphrase_required")
+            .cloned()
+            .ok_or(KeySignError::Failed(message))?;
+        // Keep the pending signing request alive: restarting authentication here
+        // would discard a previously accepted password or public-key factor.
+        let credentials = interaction
+            .request_key_unlock(intervention, self.events, self.wakeup)
+            .await
+            .map_err(KeySignError::Failed)?;
+        if credentials.private_key.as_deref() != Some(self.key.encoded) {
+            return Err(KeySignError::Failed(
+                "Cannot change a key while its signature is pending.".to_owned(),
+            ));
+        }
+        self.secrets = authentication_secrets(credentials.passphrase.as_deref());
+        Ok(())
+    }
+}
+
 impl russh::Signer for ConfiguredKeySigner<'_> {
     type Error = KeySignError;
 
@@ -310,15 +365,20 @@ impl russh::Signer for ConfiguredKeySigner<'_> {
 
         // russh calls this only after USERAUTH_PK_OK. A rejected public key
         // never prompts for its passphrase or accesses a security key.
-        let key = match self.unlocked.take() {
-            Some(key) => key,
-            None => unlock_private_key(
-                self.key.encoded,
-                self.secrets.key_passphrase.as_deref(),
-                self.events,
-                self.wakeup,
-            )
-            .map_err(KeySignError::Intervention)?,
+        let key = if let Some(key) = self.unlocked.take() {
+            key
+        } else {
+            loop {
+                match unlock_private_key(
+                    self.key.encoded,
+                    self.secrets.key_passphrase.as_deref(),
+                    self.events,
+                    self.wakeup,
+                ) {
+                    Ok(key) => break key,
+                    Err(message) => self.request_unlock(message).await?,
+                }
+            }
         };
         if key.public_key().key_data() != self.public_key.key_data() {
             return Err(KeySignError::Failed(
@@ -351,12 +411,13 @@ impl russh::Signer for ConfiguredKeySigner<'_> {
                 })
             });
         if let Some((application, key_handle, flags, algorithm)) = descriptor {
-            let pin = if self.secrets.packed {
-                self.secrets.fido2_pin.as_deref()
-            } else {
-                self.secrets.key_passphrase.as_deref()
-            };
-            if flags & SSH_SK_USER_VERIFICATION_REQUIRED != 0 && pin.is_none() {
+            while flags & SSH_SK_USER_VERIFICATION_REQUIRED != 0
+                && if self.secrets.packed {
+                    self.secrets.fido2_pin.is_none()
+                } else {
+                    self.secrets.key_passphrase.is_none()
+                }
+            {
                 let message = "FIDO2 security key requires its PIN.";
                 push_auth_event(
                     self.events,
@@ -365,8 +426,13 @@ impl russh::Signer for ConfiguredKeySigner<'_> {
                     "fido2",
                     message,
                 );
-                return Err(KeySignError::Intervention(message.to_owned()));
+                self.request_unlock(message.to_owned()).await?;
             }
+            let pin = if self.secrets.packed {
+                self.secrets.fido2_pin.as_deref()
+            } else {
+                self.secrets.key_passphrase.as_deref()
+            };
             let require_user_presence = flags & SSH_SK_USER_PRESENCE_REQUIRED != 0;
             push_auth_event(
                 self.events,
@@ -545,7 +611,6 @@ pub(crate) async fn authenticate<H: client::Handler>(
     wakeup: &Arc<Mutex<Option<WakeupCallback>>>,
     host_key_verification: &HostKeyVerification,
 ) -> Result<(), String> {
-    let secrets = authentication_secrets(passphrase);
     push_auth_event(
         events,
         wakeup,
@@ -553,37 +618,7 @@ pub(crate) async fn authenticate<H: client::Handler>(
         "none",
         "Trying SSH none authentication.",
     );
-    match handle.authenticate_none(username.to_owned()).await {
-        Ok(result) if result.success() => {
-            host_key_verification.require_trusted(events, wakeup)?;
-            push_auth_event(
-                events,
-                wakeup,
-                "auth_success",
-                "none",
-                "SSH none authentication succeeded.",
-            );
-            return Ok(());
-        }
-        Ok(AuthResult::Failure { .. }) => {
-            push_auth_event(
-                events,
-                wakeup,
-                "auth_none_rejected",
-                "none",
-                "SSH none authentication was rejected.",
-            );
-        }
-        Err(error) => {
-            push_auth_event(
-                events,
-                wakeup,
-                "auth_none_failed",
-                "none",
-                format!("SSH none authentication failed: {error}"),
-            );
-            return Err(error.to_string());
-        }
+    let mut remaining_methods = match handle.authenticate_none(username.to_owned()).await {
         Ok(AuthResult::Success) => {
             host_key_verification.require_trusted(events, wakeup)?;
             push_auth_event(
@@ -595,157 +630,31 @@ pub(crate) async fn authenticate<H: client::Handler>(
             );
             return Ok(());
         }
-    }
-
-    let has_private_key = private_key.is_some();
-    if let Some(private_key) = private_key {
-        let auth_method = if certificate.is_some() {
-            "certificate"
-        } else {
-            "public_key"
-        };
-        let certificate_value = certificate
-            .map(decode_openssh_certificate)
-            .transpose()
-            .inspect_err(|error| {
-                push_auth_event(
-                    events,
-                    wakeup,
-                    "auth_certificate_failed",
-                    "certificate",
-                    error.clone(),
-                );
-            })?;
-        let mut unlocked = None;
-        let public_key = match private_key.public_key.clone().or_else(|| {
-            certificate_value
-                .as_ref()
-                .map(|certificate| PublicKey::new(certificate.public_key().clone(), ""))
-        }) {
-            Some(key) => key,
-            None => {
-                // Legacy encrypted PEM formats hide the public key as well.
-                let key = unlock_private_key(
-                    private_key.encoded,
-                    secrets.key_passphrase.as_deref(),
-                    events,
-                    wakeup,
-                )?;
-                let public_key = key.public_key().clone();
-                unlocked = Some(key);
-                public_key
-            }
-        };
-        if let Some(encoded) = certificate {
-            decode_openssh_certificate_for_key(encoded, &public_key).inspect_err(|error| {
-                push_auth_event(
-                    events,
-                    wakeup,
-                    "auth_certificate_failed",
-                    "certificate",
-                    error.clone(),
-                );
-            })?;
+        Ok(AuthResult::Failure {
+            remaining_methods, ..
+        }) => {
+            push_auth_method_event(
+                events,
+                wakeup,
+                "auth_none_rejected",
+                "none",
+                "SSH none authentication was rejected.",
+                &remaining_methods,
+            );
+            remaining_methods
         }
-        push_auth_event(
-            events,
-            wakeup,
-            if certificate.is_some() {
-                "auth_certificate_start"
-            } else {
-                "auth_key_start"
-            },
-            auth_method,
-            "Checking whether the server accepts the configured public key.",
-        );
-        let hash_alg = if public_key.algorithm().is_rsa() {
-            handle
-                .best_supported_rsa_hash()
-                .await
-                .map_err(|error| error.to_string())?
-                .flatten()
-        } else {
-            None
-        };
-        let hardware_key = matches!(
-            public_key.algorithm(),
-            russh::keys::ssh_key::Algorithm::SkEcdsaSha2NistP256
-                | russh::keys::ssh_key::Algorithm::SkEd25519
-        );
-        let mut signer = ConfiguredKeySigner {
-            key: private_key,
-            public_key: public_key.clone(),
-            unlocked,
-            secrets,
-            events,
-            wakeup,
-            host_key_verification,
-        };
-        let result = if let Some(certificate) = certificate_value {
-            handle
-                .authenticate_certificate_with(
-                    username.to_owned(),
-                    certificate,
-                    hash_alg,
-                    &mut signer,
-                )
-                .await
-        } else {
-            handle
-                .authenticate_publickey_with(username.to_owned(), public_key, hash_alg, &mut signer)
-                .await
-        };
-        match result {
-            Ok(AuthResult::Success) => {
-                // Also gate a server that replies SUCCESS to an unsigned probe.
-                host_key_verification.require_trusted(events, wakeup)?;
-                push_auth_event(
-                    events,
-                    wakeup,
-                    "auth_success",
-                    if hardware_key { "fido2" } else { auth_method },
-                    "Configured key authentication succeeded.",
-                );
-                return Ok(());
-            }
-            Err(KeySignError::Intervention(message)) => return Err(message),
-            Err(error) => {
-                push_auth_event(
-                    events,
-                    wakeup,
-                    if certificate.is_some() {
-                        "auth_certificate_failed"
-                    } else {
-                        "auth_key_failed"
-                    },
-                    auth_method,
-                    format!("Configured key authentication failed: {error}"),
-                );
-                return Err(error.to_string());
-            }
-            Ok(AuthResult::Failure { .. }) => {
-                push_auth_event(
-                    events,
-                    wakeup,
-                    if certificate.is_some() {
-                        "auth_certificate_rejected"
-                    } else {
-                        "auth_key_rejected"
-                    },
-                    auth_method,
-                    "Server rejected the configured public key.",
-                );
-            }
+        Err(error) => {
+            push_auth_event(
+                events,
+                wakeup,
+                "auth_none_failed",
+                "none",
+                format!("SSH none authentication failed: {error}"),
+            );
+            return Err(error.to_string());
         }
-        host_key_verification.require_trusted(events, wakeup)?;
-        if password.is_none() {
-            let message = "Server rejected configured key authentication.";
-            push_auth_event(events, wakeup, "auth_failed", auth_method, message);
-            return Err(message.to_owned());
-        }
-    }
-
-    if certificate.is_some() && !has_private_key {
+    };
+    if certificate.is_some() && private_key.is_none() {
         let error = "OpenSSH certificate authentication requires a private key".to_owned();
         push_auth_event(
             events,
@@ -756,63 +665,349 @@ pub(crate) async fn authenticate<H: client::Handler>(
         );
         return Err(error);
     }
-
-    host_key_verification.require_trusted(events, wakeup)?;
-
-    if let Some(password) = password {
-        push_auth_event(
-            events,
-            wakeup,
-            "auth_password_start",
-            "password",
-            "Trying password authentication.",
-        );
-        match handle
-            .authenticate_password(username.to_owned(), password.to_owned())
-            .await
-        {
-            Ok(result) if result.success() => {
-                push_auth_event(
+    let mut credentials = AuthenticationCredentials {
+        method: String::new(),
+        private_key: private_key.map(|key| key.encoded.to_owned()),
+        certificate: certificate.map(str::to_owned),
+        passphrase: passphrase.map(str::to_owned),
+        password: password.map(str::to_owned),
+    };
+    let mut agent_attempted = false;
+    let mut partially_authenticated = false;
+    loop {
+        if remaining_methods.contains(&russh::MethodKind::PublicKey) {
+            if let Some(encoded) = credentials.private_key.take() {
+                let prepared = prepare_private_key(Some(&encoded), events, wakeup)?.unwrap();
+                let result = authenticate_configured_key(
+                    handle,
+                    username,
+                    prepared,
+                    credentials.certificate.as_deref(),
+                    credentials.passphrase.as_deref(),
                     events,
                     wakeup,
-                    "auth_success",
-                    "password",
-                    "Password authentication succeeded.",
-                );
-                return Ok(());
-            }
-            Ok(AuthResult::Failure { .. }) => {
-                push_auth_event(
-                    events,
-                    wakeup,
-                    "auth_password_rejected",
-                    "password",
-                    "Password authentication was rejected.",
-                );
-            }
-            Err(error) => {
-                push_auth_event(
-                    events,
-                    wakeup,
-                    "auth_password_failed",
-                    "password",
-                    format!("Password authentication failed: {error}"),
-                );
-                return Err(error.to_string());
-            }
-            Ok(AuthResult::Success) => {
-                push_auth_event(
-                    events,
-                    wakeup,
-                    "auth_success",
-                    "password",
-                    "Password authentication succeeded.",
-                );
-                return Ok(());
+                    host_key_verification,
+                )
+                .await;
+                match result {
+                    Ok(AuthResult::Success) => return Ok(()),
+                    Ok(AuthResult::Failure {
+                        remaining_methods: methods,
+                        partial_success,
+                    }) => {
+                        remaining_methods = methods;
+                        partially_authenticated |= partial_success;
+                    }
+                    Err(error) => {
+                        let intervention = events
+                            .lock()
+                            .unwrap()
+                            .last()
+                            .filter(|event| event.kind == "auth_passphrase_required")
+                            .cloned();
+                        if let (Some(interaction), Some(intervention)) =
+                            (&host_key_verification.interaction, intervention)
+                        {
+                            credentials = interaction
+                                .request_credentials(
+                                    handle,
+                                    &remaining_methods,
+                                    Some(intervention),
+                                    events,
+                                    wakeup,
+                                )
+                                .await?;
+                        } else {
+                            return Err(error);
+                        }
+                    }
+                }
+                continue;
             }
         }
+        host_key_verification.require_trusted(events, wakeup)?;
+        if remaining_methods.contains(&russh::MethodKind::Password) {
+            if let Some(password) = credentials.password.take() {
+                push_auth_event(
+                    events,
+                    wakeup,
+                    "auth_password_start",
+                    "password",
+                    "Trying password authentication.",
+                );
+                match handle
+                    .authenticate_password(username.to_owned(), password)
+                    .await
+                {
+                    Ok(AuthResult::Success) => {
+                        push_auth_event(
+                            events,
+                            wakeup,
+                            "auth_success",
+                            "password",
+                            "Password authentication succeeded.",
+                        );
+                        return Ok(());
+                    }
+                    Ok(AuthResult::Failure {
+                        remaining_methods: methods,
+                        partial_success,
+                    }) => {
+                        push_auth_method_event(
+                            events,
+                            wakeup,
+                            if partial_success {
+                                "auth_partial_success"
+                            } else {
+                                "auth_password_rejected"
+                            },
+                            "password",
+                            if partial_success {
+                                "Password accepted; further authentication is required."
+                            } else {
+                                "Password authentication was rejected."
+                            },
+                            &methods,
+                        );
+                        remaining_methods = methods;
+                        partially_authenticated |= partial_success;
+                    }
+                    Err(error) => {
+                        push_auth_event(
+                            events,
+                            wakeup,
+                            "auth_password_failed",
+                            "password",
+                            format!("Password authentication failed: {error}"),
+                        );
+                        return Err(error.to_string());
+                    }
+                }
+                continue;
+            }
+        }
+        if !agent_attempted && remaining_methods.contains(&russh::MethodKind::PublicKey) {
+            agent_attempted = true;
+            match authenticate_with_agent(handle, username, events, wakeup).await {
+                Ok(Some(AuthResult::Success)) => return Ok(()),
+                Ok(Some(AuthResult::Failure {
+                    remaining_methods: methods,
+                    partial_success,
+                })) => {
+                    remaining_methods = methods;
+                    partially_authenticated |= partial_success;
+                }
+                Ok(None) => {}
+                Err(error)
+                    if host_key_verification.interaction.is_none()
+                        && !remaining_methods.contains(&russh::MethodKind::KeyboardInteractive) =>
+                {
+                    return Err(error)
+                }
+                Err(_) => {}
+            }
+            continue;
+        }
+        let needs_credentials = remaining_methods.contains(&russh::MethodKind::Password)
+            || remaining_methods.contains(&russh::MethodKind::PublicKey);
+        if remaining_methods.contains(&russh::MethodKind::KeyboardInteractive)
+            && !(partially_authenticated && needs_credentials)
+        {
+            return authenticate_keyboard_interactive(
+                handle,
+                username,
+                events,
+                wakeup,
+                host_key_verification,
+            )
+            .await;
+        }
+        if needs_credentials {
+            if let Some(interaction) = &host_key_verification.interaction {
+                credentials = interaction
+                    .request_credentials(handle, &remaining_methods, None, events, wakeup)
+                    .await?;
+                continue;
+            }
+        }
+        push_auth_method_event(
+            events,
+            wakeup,
+            "auth_failed",
+            "ssh",
+            "Server rejected all available SSH authentication methods.",
+            &remaining_methods,
+        );
+        return Err("Server rejected all available SSH authentication methods.".to_owned());
     }
+}
 
+async fn authenticate_configured_key<H: client::Handler>(
+    handle: &mut client::Handle<H>,
+    username: &str,
+    private_key: PreparedPrivateKey<'_>,
+    certificate: Option<&str>,
+    passphrase: Option<&str>,
+    events: &Arc<Mutex<Vec<SessionEvent>>>,
+    wakeup: &Arc<Mutex<Option<WakeupCallback>>>,
+    host_key_verification: &HostKeyVerification,
+) -> Result<AuthResult, String> {
+    let secrets = authentication_secrets(passphrase);
+    let auth_method = if certificate.is_some() {
+        "certificate"
+    } else {
+        "public_key"
+    };
+    let certificate_value = certificate
+        .map(decode_openssh_certificate)
+        .transpose()
+        .inspect_err(|error| {
+            push_auth_event(
+                events,
+                wakeup,
+                "auth_certificate_failed",
+                "certificate",
+                error.clone(),
+            );
+        })?;
+    let mut unlocked = None;
+    let public_key = match private_key.public_key.clone().or_else(|| {
+        certificate_value
+            .as_ref()
+            .map(|certificate| PublicKey::new(certificate.public_key().clone(), ""))
+    }) {
+        Some(key) => key,
+        None => {
+            // Legacy encrypted PEM formats hide the public key as well.
+            let key = unlock_private_key(
+                private_key.encoded,
+                secrets.key_passphrase.as_deref(),
+                events,
+                wakeup,
+            )?;
+            let public_key = key.public_key().clone();
+            unlocked = Some(key);
+            public_key
+        }
+    };
+    if let Some(encoded) = certificate {
+        decode_openssh_certificate_for_key(encoded, &public_key).inspect_err(|error| {
+            push_auth_event(
+                events,
+                wakeup,
+                "auth_certificate_failed",
+                "certificate",
+                error.clone(),
+            );
+        })?;
+    }
+    push_auth_event(
+        events,
+        wakeup,
+        if certificate.is_some() {
+            "auth_certificate_start"
+        } else {
+            "auth_key_start"
+        },
+        auth_method,
+        "Checking whether the server accepts the configured public key.",
+    );
+    let hash_alg = if public_key.algorithm().is_rsa() {
+        handle
+            .best_supported_rsa_hash()
+            .await
+            .map_err(|error| error.to_string())?
+            .flatten()
+    } else {
+        None
+    };
+    let hardware_key = matches!(
+        public_key.algorithm(),
+        russh::keys::ssh_key::Algorithm::SkEcdsaSha2NistP256
+            | russh::keys::ssh_key::Algorithm::SkEd25519
+    );
+    let mut signer = ConfiguredKeySigner {
+        key: private_key,
+        public_key: public_key.clone(),
+        unlocked,
+        secrets,
+        events,
+        wakeup,
+        host_key_verification,
+    };
+    let result = if let Some(certificate) = certificate_value {
+        handle
+            .authenticate_certificate_with(username.to_owned(), certificate, hash_alg, &mut signer)
+            .await
+    } else {
+        handle
+            .authenticate_publickey_with(username.to_owned(), public_key, hash_alg, &mut signer)
+            .await
+    };
+    match result {
+        Ok(AuthResult::Success) => {
+            // Also gate a server that replies SUCCESS to an unsigned probe.
+            host_key_verification.require_trusted(events, wakeup)?;
+            push_auth_event(
+                events,
+                wakeup,
+                "auth_success",
+                if hardware_key { "fido2" } else { auth_method },
+                "Configured key authentication succeeded.",
+            );
+            Ok(AuthResult::Success)
+        }
+        Err(KeySignError::Intervention(message)) => Err(message),
+        Err(error) => {
+            push_auth_event(
+                events,
+                wakeup,
+                if certificate.is_some() {
+                    "auth_certificate_failed"
+                } else {
+                    "auth_key_failed"
+                },
+                auth_method,
+                format!("Configured key authentication failed: {error}"),
+            );
+            Err(error.to_string())
+        }
+        Ok(AuthResult::Failure {
+            remaining_methods: methods,
+            partial_success,
+        }) => {
+            push_auth_method_event(
+                events,
+                wakeup,
+                if partial_success {
+                    "auth_partial_success"
+                } else if certificate.is_some() {
+                    "auth_certificate_rejected"
+                } else {
+                    "auth_key_rejected"
+                },
+                auth_method,
+                if partial_success {
+                    "Configured key accepted; further authentication is required."
+                } else {
+                    "Server rejected the configured public key."
+                },
+                &methods,
+            );
+            Ok(AuthResult::Failure {
+                remaining_methods: methods,
+                partial_success,
+            })
+        }
+    }
+}
+
+async fn authenticate_with_agent<H: client::Handler>(
+    handle: &mut client::Handle<H>,
+    username: &str,
+    events: &Arc<Mutex<Vec<SessionEvent>>>,
+    wakeup: &Arc<Mutex<Option<WakeupCallback>>>,
+) -> Result<Option<AuthResult>, String> {
     push_auth_event(
         events,
         wakeup,
@@ -847,6 +1042,7 @@ pub(crate) async fn authenticate<H: client::Handler>(
         "agent",
         format!("SSH agent returned {} identities.", identities.len()),
     );
+    let mut last_result = None;
     for (index, identity) in identities.into_iter().enumerate() {
         let key = identity.public_key().into_owned();
         push_auth_event(
@@ -860,7 +1056,7 @@ pub(crate) async fn authenticate<H: client::Handler>(
             .authenticate_publickey_with(username.to_owned(), key, None, &mut agent)
             .await
         {
-            Ok(result) if result.success() => {
+            Ok(AuthResult::Success) => {
                 push_auth_event(
                     events,
                     wakeup,
@@ -868,16 +1064,38 @@ pub(crate) async fn authenticate<H: client::Handler>(
                     "agent",
                     format!("SSH agent identity {} succeeded.", index + 1),
                 );
-                return Ok(());
+                return Ok(Some(AuthResult::Success));
             }
-            Ok(_) => {
-                push_auth_event(
+            Ok(AuthResult::Failure {
+                partial_success,
+                remaining_methods,
+            }) => {
+                push_auth_method_event(
                     events,
                     wakeup,
-                    "auth_agent_identity_rejected",
+                    if partial_success {
+                        "auth_partial_success"
+                    } else {
+                        "auth_agent_identity_rejected"
+                    },
                     "agent",
-                    format!("SSH agent identity {} was rejected.", index + 1),
+                    if partial_success {
+                        "SSH agent key accepted; further authentication is required.".to_owned()
+                    } else {
+                        format!("SSH agent identity {} was rejected.", index + 1)
+                    },
+                    &remaining_methods,
                 );
+                let stop =
+                    partial_success || !remaining_methods.contains(&russh::MethodKind::PublicKey);
+                let result = AuthResult::Failure {
+                    partial_success,
+                    remaining_methods,
+                };
+                if stop {
+                    return Ok(Some(result));
+                }
+                last_result = Some(result);
             }
             Err(error) => {
                 push_auth_event(
@@ -892,14 +1110,70 @@ pub(crate) async fn authenticate<H: client::Handler>(
         }
     }
 
-    push_auth_event(
-        events,
-        wakeup,
-        "auth_failed",
-        "agent",
-        "Server rejected none/password/agent authentication.",
-    );
-    Err("server rejected none/password/agent authentication".to_owned())
+    Ok(last_result)
+}
+
+async fn authenticate_keyboard_interactive<H: client::Handler>(
+    handle: &mut client::Handle<H>,
+    username: &str,
+    events: &Arc<Mutex<Vec<SessionEvent>>>,
+    wakeup: &Arc<Mutex<Option<WakeupCallback>>>,
+    verification: &HostKeyVerification,
+) -> Result<(), String> {
+    verification.require_trusted(events, wakeup)?;
+    let result = async {
+        let interaction = verification.interaction.as_ref().ok_or_else(|| {
+            "This SSH operation requires keyboard-interactive authentication, but cannot display interactive prompts.".to_owned()
+        })?;
+        push_auth_event(
+            events, wakeup, "auth_interactive_start", "keyboard-interactive",
+            "Trying SSH keyboard-interactive authentication.",
+        );
+        let mut response = handle
+            .authenticate_keyboard_interactive_start(username, None)
+            .await
+            .map_err(|error| error.to_string())?;
+        loop {
+            match response {
+                client::KeyboardInteractiveAuthResponse::Success => {
+                    push_auth_event(
+                        events, wakeup, "auth_success", "keyboard-interactive",
+                        "SSH keyboard-interactive authentication succeeded.",
+                    );
+                    return Ok(());
+                }
+                client::KeyboardInteractiveAuthResponse::Failure { .. } => {
+                    return Err("Server rejected SSH keyboard-interactive authentication.".to_owned());
+                }
+                client::KeyboardInteractiveAuthResponse::InfoRequest { name, instructions, prompts } => {
+                    // Empty information requests still require an empty response.
+                    let responses = if prompts.is_empty() && name.is_empty() && instructions.is_empty() {
+                        Vec::new()
+                    } else {
+                        interaction.request(handle, name, instructions, prompts, events, wakeup).await?
+                    };
+                    push_auth_event(
+                        events, wakeup, "auth_interactive_submitted", "keyboard-interactive",
+                        "SSH keyboard-interactive response submitted.",
+                    );
+                    response = handle
+                        .authenticate_keyboard_interactive_respond(responses)
+                        .await
+                        .map_err(|error| error.to_string())?;
+                }
+            }
+        }
+    }.await;
+    if let Err(error) = &result {
+        push_auth_event(
+            events,
+            wakeup,
+            "auth_interactive_failed",
+            "keyboard-interactive",
+            error.clone(),
+        );
+    }
+    result
 }
 
 #[cfg(test)]
@@ -1256,3 +1530,11 @@ mod tests {
         });
     }
 }
+
+#[cfg(test)]
+#[path = "auth_interactive_tests.rs"]
+mod interactive_tests;
+
+#[cfg(test)]
+#[path = "auth_stages_tests.rs"]
+mod stages_tests;
