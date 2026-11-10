@@ -42,11 +42,14 @@ struct Observations {
     probes: AtomicUsize,
     signatures: AtomicUsize,
     passwords: AtomicUsize,
+    keyboard_interactive: AtomicUsize,
 }
 
 struct TestServer {
     observations: Arc<Observations>,
     accept_none: bool,
+    /// Mimic FreeBSD defaults: reject SSH `password`, accept PAM via kbd-interactive.
+    reject_password: bool,
 }
 
 fn accepted(value: bool) -> russh::server::Auth {
@@ -106,7 +109,35 @@ impl russh::server::Handler for TestServer {
         password: &str,
     ) -> Result<russh::server::Auth, Self::Error> {
         self.observations.passwords.fetch_add(1, Ordering::SeqCst);
+        if self.reject_password {
+            return Ok(accepted(false));
+        }
         Ok(accepted(password == "test-password"))
+    }
+
+    async fn auth_keyboard_interactive<'a>(
+        &'a mut self,
+        _user: &str,
+        _submethods: &str,
+        response: Option<russh::server::Response<'a>>,
+    ) -> Result<russh::server::Auth, Self::Error> {
+        self.observations
+            .keyboard_interactive
+            .fetch_add(1, Ordering::SeqCst);
+        match response {
+            None => Ok(russh::server::Auth::Partial {
+                name: "".into(),
+                instructions: "".into(),
+                prompts: std::borrow::Cow::Borrowed(&[(
+                    std::borrow::Cow::Borrowed("Password:"),
+                    false,
+                )]),
+            }),
+            Some(mut answers) => {
+                let answer = answers.next().unwrap_or_default();
+                Ok(accepted(answer.as_ref() == b"test-password"))
+            }
+        }
     }
 }
 
@@ -119,6 +150,10 @@ struct Fixture {
 
 impl Fixture {
     async fn new(accept_none: bool) -> Self {
+        Self::with_options(accept_none, false).await
+    }
+
+    async fn with_options(accept_none: bool, reject_password: bool) -> Self {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
         let known_hosts = std::env::temp_dir().join(format!(
@@ -146,6 +181,7 @@ impl Fixture {
                         TestServer {
                             observations,
                             accept_none,
+                            reject_password,
                         },
                     )
                     .await
@@ -337,6 +373,41 @@ fn accepted_keys_unlock_before_host_confirmation_but_never_sign_before_trust() {
             assert!(has(&events, "auth_success"));
             assert_eq!(fixture.observations.signatures.load(Ordering::SeqCst), 1);
         }
+    });
+}
+
+#[test]
+fn keyboard_interactive_succeeds_when_password_method_is_rejected() {
+    runtime().block_on(async {
+        let fixture = Fixture::with_options(false, true).await;
+        let (result, events) = fixture
+            .attempt(
+                None,
+                None,
+                None,
+                Some("test-password"),
+                "testuser",
+                HostKeyTrustMode::AcceptOnce,
+            )
+            .await;
+        assert!(result.is_ok(), "{result:?} events={events:?}");
+        assert!(has(&events, "auth_password_rejected"));
+        assert!(has(&events, "auth_interactive_start"));
+        // Saved password auto-answers the single echo=false kbd-int prompt;
+        // no UI challenge is emitted.
+        assert!(!has(&events, "auth_interactive_request"));
+        assert!(events.iter().any(|event| {
+            event.kind == "auth_success"
+                && event.method.as_deref() == Some("keyboard-interactive")
+        }));
+        assert_eq!(fixture.observations.passwords.load(Ordering::SeqCst), 1);
+        assert!(
+            fixture
+                .observations
+                .keyboard_interactive
+                .load(Ordering::SeqCst)
+                >= 1
+        );
     });
 }
 
