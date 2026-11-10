@@ -82,7 +82,8 @@ class NativeTerminalDriver
         TerminalDriver,
         TerminalPasteEncoder,
         TerminalWordSelector,
-        TerminalCursorUpdater {
+        TerminalCursorUpdater,
+        TerminalAuthenticationResponder {
   @override
   String encodePaste(String text) => _encodeNativePaste(
     _bindings,
@@ -957,6 +958,34 @@ class NativeTerminalDriver
     _withNativeBytes(bytes, (pointer, length) {
       _bindings.writeSessionBytes(_sessionId, pointer, length);
     });
+  }
+
+  @override
+  bool respondToAuthentication(int challengeId, List<String>? responses) =>
+      _respondToAuthentication(challengeId, responses);
+
+  @override
+  bool respondToAuthenticationCredentials(
+    int requestId,
+    SshAuthenticationCredentials credentials,
+  ) => _respondToAuthentication(requestId, credentials.toJson());
+
+  bool _respondToAuthentication(int challengeId, Object? response) {
+    if (_sessionId == 0) return false;
+    final encoded = jsonEncode(response).toNativeUtf8();
+    try {
+      return _bindings.respondToAuthentication(
+        _sessionId,
+        challengeId,
+        encoded,
+      );
+    } finally {
+      encoded
+          .cast<Uint8>()
+          .asTypedList(encoded.length)
+          .fillRange(0, encoded.length, 0);
+      malloc.free(encoded);
+    }
   }
 
   @override

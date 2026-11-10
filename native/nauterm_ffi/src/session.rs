@@ -39,6 +39,12 @@ pub struct SessionEvent {
     pub exit_status: Option<u32>,
     pub latency_ms: Option<u32>,
     pub state_num: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub challenge: Option<crate::ssh::KeyboardInteractiveChallenge>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub authentication_methods: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub authentication_request_id: Option<u64>,
 }
 
 #[allow(dead_code)]
@@ -57,6 +63,9 @@ impl SessionEvent {
             exit_status: None,
             latency_ms: None,
             state_num: None,
+            challenge: None,
+            authentication_methods: None,
+            authentication_request_id: None,
         }
     }
 
@@ -1209,6 +1218,44 @@ impl SessionManager {
 
     pub fn send_input_bytes(&mut self, id: SessionId, bytes: &[u8]) -> bool {
         self.send_input_bytes_status(id, bytes) == INPUT_STATUS_ACCEPTED
+    }
+
+    pub fn respond_to_authentication(
+        &self,
+        id: SessionId,
+        challenge_id: u64,
+        responses: Option<Vec<String>>,
+    ) -> bool {
+        let Some(actor) = self.sessions.get(&id) else {
+            return false;
+        };
+        actor
+            .call(move |session| match &session.transport {
+                SessionTransport::Ssh(ssh) => {
+                    ssh.respond_to_authentication(challenge_id, responses)
+                }
+                _ => false,
+            })
+            .unwrap_or(false)
+    }
+
+    pub fn respond_to_authentication_credentials(
+        &self,
+        id: SessionId,
+        request_id: u64,
+        credentials: crate::ssh::AuthenticationCredentials,
+    ) -> bool {
+        let Some(actor) = self.sessions.get(&id) else {
+            return false;
+        };
+        actor
+            .call(move |session| match &session.transport {
+                SessionTransport::Ssh(ssh) => {
+                    ssh.respond_to_authentication_credentials(request_id, credentials)
+                }
+                _ => false,
+            })
+            .unwrap_or(false)
     }
 
     pub fn send_input_bytes_status(&mut self, id: SessionId, bytes: &[u8]) -> u32 {

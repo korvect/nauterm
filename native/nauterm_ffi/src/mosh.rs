@@ -402,6 +402,9 @@ impl MoshSessionTransport {
                     exit_status: None,
                     latency_ms: None,
                     state_num: None,
+                    challenge: None,
+                    authentication_methods: None,
+                    authentication_request_id: None,
                 }],
                 exited: true,
                 has_more: false,
@@ -441,6 +444,9 @@ impl MoshSessionTransport {
                         exit_status: None,
                         latency_ms: None,
                         state_num: Some(result.state_num),
+                        challenge: None,
+                        authentication_methods: None,
+                        authentication_request_id: None,
                     });
                     None
                 } else {
@@ -464,6 +470,9 @@ impl MoshSessionTransport {
                     exit_status: None,
                     latency_ms: None,
                     state_num: Some(result.state_num),
+                    challenge: None,
+                    authentication_methods: None,
+                    authentication_request_id: None,
                 });
                 None
             } else {
@@ -499,6 +508,9 @@ impl MoshSessionTransport {
                 exit_status: None,
                 latency_ms: None,
                 state_num: None,
+                challenge: None,
+                authentication_methods: None,
+                authentication_request_id: None,
             });
             None
         } else {
@@ -725,6 +737,9 @@ fn session_event_from_external(event: ExternalSessionEvent) -> SessionEvent {
         exit_status: event.exit_status,
         latency_ms: event.latency_ms,
         state_num: event.state_num,
+        challenge: None,
+        authentication_methods: None,
+        authentication_request_id: None,
     }
 }
 

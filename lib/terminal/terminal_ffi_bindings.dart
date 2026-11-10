@@ -239,6 +239,11 @@ class _TerminalBindings {
           .lookupFunction<_IsExitedSessionNative, _IsExitedSessionDart>(
             'nauterm_session_is_exited',
           ),
+      respondToAuthentication = library
+          .lookupFunction<
+            _AuthenticationRespondNative,
+            _AuthenticationRespondDart
+          >('nauterm_session_authentication_respond'),
       writeCodepoint = library
           .lookupFunction<_WriteCodepointNative, _WriteCodepointDart>(
             'nauterm_session_write_codepoint',
@@ -467,6 +472,7 @@ class _TerminalBindings {
   final _SetWakeupDart setWakeupCallback;
   final _PollSessionDart poll;
   final _IsExitedSessionDart isExited;
+  final _AuthenticationRespondDart respondToAuthentication;
   final _WriteCodepointDart writeCodepoint;
   final _WriteSessionBytesDart writeSessionBytes;
   final _TerminalWriteCodepointDart terminalWriteCodepoint;

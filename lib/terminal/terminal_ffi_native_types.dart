@@ -1121,3 +1121,14 @@ typedef _Fido2GenerateNative = Pointer<Utf8> Function(
   Pointer<Utf8> requestJson,
 );
 typedef _Fido2GenerateDart = Pointer<Utf8> Function(Pointer<Utf8> requestJson);
+
+typedef _AuthenticationRespondNative = Bool Function(
+  Uint64 sessionId,
+  Uint64 challengeId,
+  Pointer<Utf8> responsesJson,
+);
+typedef _AuthenticationRespondDart = bool Function(
+  int sessionId,
+  int challengeId,
+  Pointer<Utf8> responsesJson,
+);

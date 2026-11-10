@@ -697,6 +697,19 @@ String _terminalConnectionEventKindToWire(TerminalConnectionEventKind kind) {
     TerminalConnectionEventKind.authAgentUnavailable =>
       'auth_agent_unavailable',
     TerminalConnectionEventKind.authAgentFailed => 'auth_agent_failed',
+    TerminalConnectionEventKind.authCredentialsRequired =>
+      'auth_credentials_required',
+    TerminalConnectionEventKind.authCredentialsSubmitted =>
+      'auth_credentials_submitted',
+    TerminalConnectionEventKind.authPartialSuccess => 'auth_partial_success',
+    TerminalConnectionEventKind.authInteractiveStart =>
+      'auth_interactive_start',
+    TerminalConnectionEventKind.authInteractiveRequest =>
+      'auth_interactive_request',
+    TerminalConnectionEventKind.authInteractiveSubmitted =>
+      'auth_interactive_submitted',
+    TerminalConnectionEventKind.authInteractiveFailed =>
+      'auth_interactive_failed',
     TerminalConnectionEventKind.authSuccess => 'auth_success',
     TerminalConnectionEventKind.authFailed => 'auth_failed',
     TerminalConnectionEventKind.connected => 'connected',

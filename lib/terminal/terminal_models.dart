@@ -149,6 +149,13 @@ enum TerminalConnectionEventKind {
   authKeyRejected,
   authKeyFailed,
   authPassphraseRequired,
+  authPartialSuccess,
+  authCredentialsRequired,
+  authCredentialsSubmitted,
+  authInteractiveStart,
+  authInteractiveRequest,
+  authInteractiveSubmitted,
+  authInteractiveFailed,
   authAgentStart,
   authAgentIdentities,
   authAgentIdentityStart,
@@ -196,6 +203,75 @@ enum SshHostKeyTrustMode {
 }
 
 @immutable
+class SshAuthenticationCredentials {
+  const SshAuthenticationCredentials.password(String value)
+    : method = 'password',
+      password = value,
+      privateKey = null,
+      certificate = null,
+      passphrase = null;
+
+  const SshAuthenticationCredentials.publicKey({
+    required this.privateKey,
+    this.certificate,
+    this.passphrase,
+  }) : method = 'publickey',
+       password = null;
+
+  final String method;
+  final String? password;
+  final String? privateKey;
+  final String? certificate;
+  final String? passphrase;
+
+  Map<String, Object?> toJson() => {
+    'method': method,
+    if (password != null) 'password': password,
+    if (privateKey != null) 'privateKey': privateKey,
+    if (certificate != null) 'certificate': certificate,
+    if (passphrase != null) 'passphrase': passphrase,
+  };
+}
+
+@immutable
+class SshAuthenticationPrompt {
+  const SshAuthenticationPrompt({required this.prompt, required this.echo});
+
+  final String prompt;
+  final bool echo;
+}
+
+@immutable
+class SshAuthenticationChallenge {
+  const SshAuthenticationChallenge({
+    required this.id,
+    required this.name,
+    required this.instructions,
+    required this.prompts,
+  });
+
+  factory SshAuthenticationChallenge.fromJson(Map<String, Object?> json) {
+    return SshAuthenticationChallenge(
+      id: json['id'] as int,
+      name: json['name'] as String? ?? '',
+      instructions: json['instructions'] as String? ?? '',
+      prompts: List.unmodifiable([
+        for (final prompt in json['prompts'] as List<Object?>)
+          SshAuthenticationPrompt(
+            prompt: (prompt as Map)['prompt'] as String? ?? '',
+            echo: prompt['echo'] == true,
+          ),
+      ]),
+    );
+  }
+
+  final int id;
+  final String name;
+  final String instructions;
+  final List<SshAuthenticationPrompt> prompts;
+}
+
+@immutable
 class TerminalConnectionEvent {
   const TerminalConnectionEvent({
     required this.kind,
@@ -211,6 +287,9 @@ class TerminalConnectionEvent {
     this.exitStatus,
     this.latencyMs,
     this.stateNum,
+    this.challenge,
+    this.authenticationMethods,
+    this.authenticationRequestId,
   });
 
   factory TerminalConnectionEvent.fromJson(Map<String, Object?> json) {
@@ -228,6 +307,15 @@ class TerminalConnectionEvent {
       exitStatus: json['exit_status'] as int?,
       latencyMs: (json['latency_ms'] as num?)?.toDouble(),
       stateNum: json['state_num'] as int?,
+      authenticationMethods: (json['authentication_methods'] as List<Object?>?)
+          ?.cast<String>()
+          .toList(growable: false),
+      authenticationRequestId: json['authentication_request_id'] as int?,
+      challenge: json['challenge'] is Map
+          ? SshAuthenticationChallenge.fromJson(
+              (json['challenge'] as Map).cast<String, Object?>(),
+            )
+          : null,
     );
   }
 
@@ -244,6 +332,9 @@ class TerminalConnectionEvent {
   final int? exitStatus;
   final double? latencyMs;
   final int? stateNum;
+  final SshAuthenticationChallenge? challenge;
+  final List<String>? authenticationMethods;
+  final int? authenticationRequestId;
 
   String get logLine {
     final methodSuffix = method == null ? '' : ' [$method]';
@@ -266,6 +357,9 @@ class TerminalConnectionEvent {
     Object? stateNum = _preserveConnectionEventValue,
   }) {
     return TerminalConnectionEvent(
+      challenge: challenge,
+      authenticationMethods: authenticationMethods,
+      authenticationRequestId: authenticationRequestId,
       kind: kind ?? this.kind,
       message: message ?? this.message,
       timestamp: identical(timestamp, _preserveConnectionEventTimestamp)
@@ -574,9 +668,12 @@ TerminalConnectionEventKind _connectionEventKindFromWire(String? value) {
     'auth_password_rejected' =>
       TerminalConnectionEventKind.authPasswordRejected,
     'auth_password_failed' => TerminalConnectionEventKind.authPasswordFailed,
-    'auth_key_start' => TerminalConnectionEventKind.authKeyStart,
-    'auth_key_rejected' => TerminalConnectionEventKind.authKeyRejected,
-    'auth_key_failed' => TerminalConnectionEventKind.authKeyFailed,
+    'auth_key_start' ||
+    'auth_certificate_start' => TerminalConnectionEventKind.authKeyStart,
+    'auth_key_rejected' ||
+    'auth_certificate_rejected' => TerminalConnectionEventKind.authKeyRejected,
+    'auth_key_failed' ||
+    'auth_certificate_failed' => TerminalConnectionEventKind.authKeyFailed,
     'auth_passphrase_required' =>
       TerminalConnectionEventKind.authPassphraseRequired,
     'auth_agent_start' => TerminalConnectionEventKind.authAgentStart,
@@ -588,6 +685,19 @@ TerminalConnectionEventKind _connectionEventKindFromWire(String? value) {
     'auth_agent_unavailable' =>
       TerminalConnectionEventKind.authAgentUnavailable,
     'auth_agent_failed' => TerminalConnectionEventKind.authAgentFailed,
+    'auth_credentials_required' =>
+      TerminalConnectionEventKind.authCredentialsRequired,
+    'auth_credentials_submitted' =>
+      TerminalConnectionEventKind.authCredentialsSubmitted,
+    'auth_partial_success' => TerminalConnectionEventKind.authPartialSuccess,
+    'auth_interactive_start' =>
+      TerminalConnectionEventKind.authInteractiveStart,
+    'auth_interactive_request' =>
+      TerminalConnectionEventKind.authInteractiveRequest,
+    'auth_interactive_submitted' =>
+      TerminalConnectionEventKind.authInteractiveSubmitted,
+    'auth_interactive_failed' =>
+      TerminalConnectionEventKind.authInteractiveFailed,
     'auth_success' => TerminalConnectionEventKind.authSuccess,
     'auth_failed' => TerminalConnectionEventKind.authFailed,
     'connected' => TerminalConnectionEventKind.connected,
