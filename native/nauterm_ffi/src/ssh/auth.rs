@@ -819,6 +819,10 @@ pub(crate) async fn authenticate<H: client::Handler>(
                 events,
                 wakeup,
                 host_key_verification,
+                // Keep a copy even if the SSH `password` method already consumed
+                // credentials.password — FreeBSD often rejects password then
+                // challenges via keyboard-interactive.
+                password,
             )
             .await;
         }
@@ -1113,18 +1117,28 @@ async fn authenticate_with_agent<H: client::Handler>(
     Ok(last_result)
 }
 
+fn is_saved_password_keyboard_prompt(prompt: &client::Prompt) -> bool {
+    if prompt.echo {
+        return false;
+    }
+    let lower = prompt.prompt.to_ascii_lowercase();
+    // Match FreeBSD/PAM "Password for user@host:" without claiming OTP/2FA
+    // ("Verification code") or password-change prompts.
+    lower.contains("password")
+        && !lower.contains("new password")
+        && !lower.contains("passphrase")
+}
+
 async fn authenticate_keyboard_interactive<H: client::Handler>(
     handle: &mut client::Handle<H>,
     username: &str,
     events: &Arc<Mutex<Vec<SessionEvent>>>,
     wakeup: &Arc<Mutex<Option<WakeupCallback>>>,
     verification: &HostKeyVerification,
+    saved_password: Option<&str>,
 ) -> Result<(), String> {
     verification.require_trusted(events, wakeup)?;
     let result = async {
-        let interaction = verification.interaction.as_ref().ok_or_else(|| {
-            "This SSH operation requires keyboard-interactive authentication, but cannot display interactive prompts.".to_owned()
-        })?;
         push_auth_event(
             events, wakeup, "auth_interactive_start", "keyboard-interactive",
             "Trying SSH keyboard-interactive authentication.",
@@ -1147,9 +1161,22 @@ async fn authenticate_keyboard_interactive<H: client::Handler>(
                 }
                 client::KeyboardInteractiveAuthResponse::InfoRequest { name, instructions, prompts } => {
                     // Empty information requests still require an empty response.
-                    let responses = if prompts.is_empty() && name.is_empty() && instructions.is_empty() {
+                    let auto_password = saved_password.filter(|value| {
+                        !value.is_empty()
+                            && prompts.len() == 1
+                            && is_saved_password_keyboard_prompt(&prompts[0])
+                    });
+                    let responses = if prompts.is_empty() && name.is_empty() && instructions.is_empty()
+                    {
                         Vec::new()
+                    } else if let Some(password) = auto_password {
+                        // Single PAM-style password prompt: reuse the host's saved
+                        // password without opening UI. OTP/2FA prompts stay interactive.
+                        vec![password.to_owned()]
                     } else {
+                        let interaction = verification.interaction.as_ref().ok_or_else(|| {
+                            "This SSH operation requires keyboard-interactive authentication, but cannot display interactive prompts.".to_owned()
+                        })?;
                         interaction.request(handle, name, instructions, prompts, events, wakeup).await?
                     };
                     push_auth_event(
