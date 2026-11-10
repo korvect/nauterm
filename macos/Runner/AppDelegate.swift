@@ -37,6 +37,9 @@ private func installFlutterHotRestartWorkaround() {
 @main
 class AppDelegate: FlutterAppDelegate {
   private var appMenuChannel: FlutterMethodChannel?
+  @IBOutlet weak var newLocalTerminalMenuItem: NSMenuItem?
+  @IBOutlet weak var settingsMenuItem: NSMenuItem?
+  @IBOutlet weak var closeTabMenuItem: NSMenuItem?
   private var systemFontsChannel: FlutterMethodChannel?
   private var externalEditorsChannel: FlutterMethodChannel?
   private var sparkleChannel: FlutterMethodChannel?
@@ -64,6 +67,15 @@ class AppDelegate: FlutterAppDelegate {
         name: "com.korvect.nauterm/app_menu",
         binaryMessenger: engine.binaryMessenger
       )
+      appMenuChannel?.setMethodCallHandler { [weak self] call, result in
+        guard call.method == "setMenuShortcuts",
+              let shortcuts = call.arguments as? [String: String] else {
+          result(FlutterMethodNotImplemented)
+          return
+        }
+        self?.setMenuShortcuts(shortcuts)
+        result(nil)
+      }
       systemFontsChannel = FlutterMethodChannel(
         name: "com.korvect.nauterm/system_fonts",
         binaryMessenger: engine.binaryMessenger
@@ -285,6 +297,57 @@ class AppDelegate: FlutterAppDelegate {
 
   @IBAction func showAbout(_ sender: Any?) {
     appMenuChannel?.invokeMethod("showAbout", arguments: nil)
+  }
+
+  @IBAction func newLocalTerminal(_ sender: Any?) {
+    appMenuChannel?.invokeMethod("newLocalTerminal", arguments: nil)
+  }
+
+  private func setMenuShortcuts(_ shortcuts: [String: String]) {
+    setMenuShortcut(newLocalTerminalMenuItem, shortcuts["newLocalTerminal"] ?? "")
+    setMenuShortcut(settingsMenuItem, shortcuts["openSettings"] ?? "")
+    setMenuShortcut(closeTabMenuItem, shortcuts["closeTab"] ?? "")
+  }
+
+  private func setMenuShortcut(_ menuItem: NSMenuItem?, _ shortcut: String) {
+    let parts = shortcut.lowercased().split(separator: "+").map(String.init)
+    let modifiers = Set(parts.dropLast())
+    guard let keyName = parts.last,
+          let keyEquivalent = Self.menuKeyEquivalent(for: keyName) else {
+      menuItem?.keyEquivalent = ""
+      menuItem?.keyEquivalentModifierMask = []
+      return
+    }
+
+    var modifierMask: NSEvent.ModifierFlags = [.command]
+    if modifiers.contains("alt") { modifierMask.insert(.option) }
+    if modifiers.contains("shift") { modifierMask.insert(.shift) }
+    menuItem?.keyEquivalent = keyEquivalent
+    menuItem?.keyEquivalentModifierMask = modifierMask
+  }
+
+  private static func menuKeyEquivalent(for key: String) -> String? {
+    switch key {
+    case "up": return "\u{F700}"
+    case "down": return "\u{F701}"
+    case "left": return "\u{F702}"
+    case "right": return "\u{F703}"
+    case "f1"..."f12":
+      guard let number = Int(key.dropFirst()) else { return nil }
+      return String(UnicodeScalar(0xF703 + UInt32(number))!)
+    case "home": return "\u{F729}"
+    case "end": return "\u{F72B}"
+    case "pageup": return "\u{F72C}"
+    case "pagedown": return "\u{F72D}"
+    case "space": return " "
+    case "enter": return "\r"
+    case "tab": return "\t"
+    case "backspace": return "\u{0008}"
+    case "delete": return "\u{007F}"
+    default:
+      guard key.count == 1 else { return nil }
+      return key
+    }
   }
 
   @IBAction func checkForUpdates(_ sender: Any?) {

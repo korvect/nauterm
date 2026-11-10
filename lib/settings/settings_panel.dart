@@ -734,6 +734,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
           _providerStore.paths.databasePath;
       final provider = providers.active;
       applyNautermRuntimeSettings(settings);
+      syncNativeMenuShortcuts();
       setAiAssistantConfig(provider.config);
       final allProviders = providers.providers;
       if (!mounted) return;
@@ -890,6 +891,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
                 .saveRuntimeSettings(settings),
     );
     terminalConfigNotifier.value++;
+    syncNativeMenuShortcuts();
   }
 
   void _setRawTerminalCaptureEnabled(bool enabled) {

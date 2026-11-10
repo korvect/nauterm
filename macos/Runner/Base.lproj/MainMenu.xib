@@ -16,6 +16,9 @@
         <customObject id="Voe-Tx-rLC" customClass="AppDelegate" customModule="Runner" customModuleProvider="target">
             <connections>
                 <outlet property="applicationMenu" destination="uQy-DD-JDr" id="XBo-yE-nKs"/>
+                <outlet property="newLocalTerminalMenuItem" destination="Nau-NL-Terminal" id="Nau-NL-Outlet"/>
+                <outlet property="settingsMenuItem" destination="BOF-NM-1cW" id="Nau-Settings-Outlet"/>
+                <outlet property="closeTabMenuItem" destination="Nau-Close-Tab" id="Nau-Close-Tab-Outlet"/>
             </connections>
         </customObject>
         <customObject id="YLy-65-1bz" customClass="NSFontManager"/>
@@ -70,6 +73,18 @@
                             <menuItem title="Quit APP_NAME" keyEquivalent="q" id="4sb-4s-VLi">
                                 <connections>
                                     <action selector="terminate:" target="-1" id="Te7-pn-YzF"/>
+                                </connections>
+                            </menuItem>
+                        </items>
+                    </menu>
+                </menuItem>
+                <menuItem title="File" id="3Lr-6F-vQ2">
+                    <modifierMask key="keyEquivalentModifierMask"/>
+                    <menu key="submenu" title="File" id="h7P-zC-1mN">
+                        <items>
+                            <menuItem title="New Local Terminal" keyEquivalent="l" id="Nau-NL-Terminal">
+                                <connections>
+                                    <action selector="newLocalTerminal:" target="Voe-Tx-rLC" id="Nau-NL-Action"/>
                                 </connections>
                             </menuItem>
                         </items>
@@ -311,9 +326,9 @@
                     <modifierMask key="keyEquivalentModifierMask"/>
                     <menu key="submenu" title="Window" systemMenu="window" id="Td7-aD-5lo">
                         <items>
-                            <menuItem title="Close Tab" keyEquivalent="w" id="pza-cls-tab">
+                            <menuItem title="Close Tab" keyEquivalent="w" id="Nau-Close-Tab">
                                 <connections>
-                                    <action selector="closeSelectedTerminalTab:" target="Voe-Tx-rLC" id="pza-cls-act"/>
+                                    <action selector="closeSelectedTerminalTab:" target="Voe-Tx-rLC" id="Nau-Close-Tab-Act"/>
                                 </connections>
                             </menuItem>
                             <menuItem isSeparatorItem="YES" id="pza-cls-sep"/>

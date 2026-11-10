@@ -26,6 +26,8 @@ abstract interface class NautermRootController {
 
   void closeSelectedTerminalTab();
 
+  Future<void> openNewLocalTerminal();
+
   Future<bool> requestQuit();
 }
 
@@ -38,6 +40,7 @@ NautermRootController? _rootController;
 final Set<int> _positionedWindowIds = <int>{};
 Timer? _windowGeometryPersistTimer;
 bool _mainWindowMaximized = false;
+List<String>? _lastNativeMenuShortcuts;
 const MethodChannel _appMenuChannel = MethodChannel(
   'com.korvect.nauterm/app_menu',
 );
@@ -80,6 +83,7 @@ void configureNativeWindowing() {
   }
   _configured = true;
   _appMenuChannel.setMethodCallHandler(_handleAppMenuMethodCall);
+  syncNativeMenuShortcuts();
 
   final primaryDisplay = DisplayManager.instance.getPrimary();
 
@@ -142,6 +146,30 @@ void configureNativeWindowing() {
   });
 }
 
+void syncNativeMenuShortcuts() {
+  if (!io.Platform.isMacOS) return;
+  final shortcuts = <String>[
+    terminalShortcutConfig.newLocalTerminal,
+    terminalShortcutConfig.openSettings,
+    terminalShortcutConfig.closeTab,
+  ];
+  if (listEquals(shortcuts, _lastNativeMenuShortcuts)) return;
+  _lastNativeMenuShortcuts = List<String>.unmodifiable(shortcuts);
+  unawaited(
+    _appMenuChannel
+        .invokeMethod<void>('setMenuShortcuts', <String, String>{
+          'newLocalTerminal': shortcuts[0],
+          'openSettings': shortcuts[1],
+          'closeTab': shortcuts[2],
+        })
+        .catchError((Object _) {
+          if (listEquals(shortcuts, _lastNativeMenuShortcuts)) {
+            _lastNativeMenuShortcuts = null;
+          }
+        }),
+  );
+}
+
 // Flutter can show a new native window before assigning its title. Call these
 // after controller creation as well as from the show hook, which only recognizes
 // titled windows. Restore geometry once, but reapply constraints on every show.
@@ -179,6 +207,9 @@ Future<Object?> _handleAppMenuMethodCall(MethodCall call) async {
       return null;
     case 'closeSelectedTerminalTab':
       _rootController?.closeSelectedTerminalTab();
+      return null;
+    case 'newLocalTerminal':
+      await _rootController?.openNewLocalTerminal();
       return null;
     case 'requestQuit':
       final shouldQuit =

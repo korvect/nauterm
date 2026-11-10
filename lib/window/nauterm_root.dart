@@ -270,6 +270,13 @@ class _NautermRootState extends State<NautermRoot>
   }
 
   @override
+  Future<void> openNewLocalTerminal() async {
+    showMainWindow();
+    await WidgetsBinding.instance.endOfFrame;
+    await _workspaceController.openNewLocalTerminal();
+  }
+
+  @override
   Future<bool> requestQuit() async {
     final shouldQuit = await _workspaceController.confirmQuitIfNeeded();
     if (!shouldQuit) {

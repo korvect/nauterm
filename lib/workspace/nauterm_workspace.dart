@@ -148,6 +148,15 @@ class NautermWorkspaceController extends ChangeNotifier {
     _state?._closeSelectedTerminalTab();
   }
 
+  Future<void> openNewLocalTerminal() async {
+    final state = _state;
+    if (state == null) return;
+    await state._workspaceDataReady.future;
+    if (identical(_state, state) && state.mounted) {
+      state._openLocalTerminalTab();
+    }
+  }
+
   Future<bool> confirmQuitIfNeeded() async {
     return _state?._confirmQuitIfNeeded() ?? true;
   }
@@ -312,6 +321,7 @@ class NautermWorkspace extends ConsumerStatefulWidget {
 
 class _NautermWorkspaceState extends ConsumerState<NautermWorkspace>
     with WidgetsBindingObserver {
+  final Completer<void> _workspaceDataReady = Completer<void>();
   late final Object _workspaceModelKey;
   late final _NautermWorkspaceModel _workspaceModel;
   late final AiConversationRepository _aiConversationRepository;
@@ -900,6 +910,9 @@ class _NautermWorkspaceState extends ConsumerState<NautermWorkspace>
         await _loadWorkspaceData();
       }
     } finally {
+      if (!_workspaceDataReady.isCompleted) {
+        _workspaceDataReady.complete();
+      }
       widget.controller?._markInitialDataReady();
     }
   }
@@ -1170,6 +1183,9 @@ class _NautermWorkspaceState extends ConsumerState<NautermWorkspace>
   @override
   void dispose() {
     _hostsSearchController.dispose();
+    if (!_workspaceDataReady.isCompleted) {
+      _workspaceDataReady.complete();
+    }
     widget.controller?._markInitialDataReady();
     HardwareKeyboard.instance.removeHandler(_handleGlobalWorkspaceKeyEvent);
     sftpTabEnabledListenable.removeListener(_handleSftpTabEnabledChanged);
