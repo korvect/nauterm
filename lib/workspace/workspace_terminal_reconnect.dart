@@ -221,7 +221,14 @@ class _TerminalReconnectOverlayState extends State<_TerminalReconnectOverlay> {
                         padding: EdgeInsets.zero,
                         iconSize: 17,
                         color: muted,
-                        onPressed: () => setState(() => _dismissed = true),
+                        onPressed: () {
+                          _countdownTimer?.cancel();
+                          _countdownTimer = null;
+                          setState(() {
+                            _dismissed = true;
+                            _remainingSeconds = null;
+                          });
+                        },
                         icon: const Icon(Icons.close_rounded),
                       ),
                     ],

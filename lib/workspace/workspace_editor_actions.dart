@@ -1075,6 +1075,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       certificate: auth.certificate,
       passphrase: auth.passphrase,
       proxy: auth.proxy,
+      networkDevice: host.networkDevice,
       config: currentTerminalConfig(),
     );
   }

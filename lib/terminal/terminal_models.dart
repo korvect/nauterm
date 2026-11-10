@@ -138,6 +138,8 @@ enum TerminalConnectionEventKind {
   moshNetworkSwitching,
   moshNetworkDegraded,
   moshNetworkRestored,
+  sshShellProbeSkipped,
+  hostOsInferred,
   retry,
   exitStatus,
   sessionClosed,
@@ -663,6 +665,9 @@ TerminalConnectionEventKind _connectionEventKindFromWire(String? value) {
     'auth_success' => TerminalConnectionEventKind.authSuccess,
     'auth_failed' => TerminalConnectionEventKind.authFailed,
     'connected' => TerminalConnectionEventKind.connected,
+    'ssh_shell_probe_skipped' =>
+      TerminalConnectionEventKind.sshShellProbeSkipped,
+    'host_os_inferred' => TerminalConnectionEventKind.hostOsInferred,
     'ssh_latency_updated' => TerminalConnectionEventKind.sshLatencyUpdated,
     'mosh_echo_enabled' => TerminalConnectionEventKind.moshEchoEnabled,
     'mosh_echo_disabled' => TerminalConnectionEventKind.moshEchoDisabled,

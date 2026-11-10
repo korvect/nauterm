@@ -2058,6 +2058,24 @@ class _BrandIcon extends StatelessWidget {
     if (text.contains('mikrotik') || text.contains('routeros')) {
       return 'mikrotik';
     }
+    if (text.contains('vyos')) return 'vyos';
+    if (text.contains('cisco')) return 'cisco';
+    if (text.contains('huawei')) return 'huawei';
+    if (text.contains('fortinet') || text.contains('fortigate')) {
+      return 'fortinet';
+    }
+    if (text.contains('h3c') || text.contains('comware')) return 'h3c';
+    if (text.contains('ruijie') || text.contains('rgos')) return 'ruijie';
+    if (text.contains('zte')) return 'zte';
+    // Vendors without a dedicated brand asset yet share the generic network mark.
+    // Empty SSH software versions (e.g. "SSH-2.0--") also land here — do NOT
+    // map them to a specific vendor like Huawei; that false-positives widely.
+    if (text.contains('juniper') ||
+        text.contains('junos') ||
+        text.contains('aruba') ||
+        text.contains('network')) {
+      return 'network';
+    }
 
     // Mobile / Embedded
     if (text.contains('android')) return 'android';
@@ -2140,6 +2158,14 @@ class _BrandIcon extends StatelessWidget {
       'opnsense' => const Color(0xffE44A20),
       'pfsense' => const Color(0xff212121),
       'mikrotik' => const Color(0xff293239),
+      'vyos' => const Color(0xffFF9000),
+      'cisco' => const Color(0xff049FD9),
+      'huawei' => const Color(0xffFF0000),
+      'fortinet' => const Color(0xffEE3124),
+      'h3c' => const Color(0xffED1C24),
+      'ruijie' => const Color(0xffE31E24),
+      'zte' => const Color(0xff00BFFE),
+      'network' => const Color(0xff0F766E),
 
       // Mobile / Embedded
       'android' => const Color(0xff3DDC84),

@@ -1219,6 +1219,9 @@ class _HostEditorContentState extends State<_HostEditorContent> {
   String _encoding = defaultHostEncoding;
   String _telnetEncoding = defaultHostEncoding;
   late Set<String> _tagUuids;
+  late bool _networkDevice;
+  late String _networkVendor;
+  late final bool _initialNetworkDevice;
   StoredTerminalTheme? _selectedTheme;
   StoredTerminalTheme? _selectedDarkTheme;
   StoredTerminalTheme? _selectedTelnetTheme;
@@ -1262,6 +1265,9 @@ class _HostEditorContentState extends State<_HostEditorContent> {
     );
     _shellController = TextEditingController(text: initial?.shellPath ?? '');
     _workDirController = TextEditingController(text: initial?.workDir ?? '');
+    _initialNetworkDevice = initial?.networkDevice ?? false;
+    _networkDevice = _initialNetworkDevice;
+    _networkVendor = _networkDeviceVendorSlug(initial?.os);
     _shellOptions = _availableShellOptions(initial?.shellPath);
     _environmentVariables = List<HostEnvironmentVariable>.of(
       initial?.environmentVariables ?? const <HostEnvironmentVariable>[],
@@ -2106,6 +2112,42 @@ class _HostEditorContentState extends State<_HostEditorContent> {
               onChanged: (value) => setState(() => _tagUuids = value),
               onCreate: widget.onCreateTag,
             ),
+            if (!isLocal) ...[
+              SizedBox(height: _workspaceFormFieldGap),
+              _WorkspaceToggleRow(
+                label: '网络设备',
+                description:
+                    '交换机/防火墙等：跳过 Linux shell 探测与系统识别，直接打开交互会话。',
+                value: _networkDevice,
+                onChanged: (value) {
+                  setState(() {
+                    _networkDevice = value;
+                    if (!value) {
+                      _networkVendor = 'network';
+                    }
+                  });
+                },
+              ),
+              if (_networkDevice) ...[
+                SizedBox(height: _workspaceFormFieldGap),
+                _WorkspaceSelect<String>(
+                  label: '厂商图标',
+                  value: _networkVendor,
+                  items: [
+                    for (final vendor in _networkDeviceVendorOptions)
+                      DropdownMenuItem<String>(
+                        value: vendor.$1,
+                        child: Text(vendor.$2),
+                      ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() => _networkVendor = value);
+                    }
+                  },
+                ),
+              ],
+            ],
           ],
         ),
         if (isSerial) ...[
@@ -3058,6 +3100,27 @@ class _AddProtocolControlState extends State<_AddProtocolControl> {
       ),
     );
   }
+}
+
+const List<(String, String)> _networkDeviceVendorOptions = [
+  ('network', '通用网络设备'),
+  ('cisco', 'Cisco'),
+  ('huawei', 'Huawei'),
+  ('fortinet', 'Fortinet'),
+  ('h3c', 'H3C'),
+  ('ruijie', 'Ruijie'),
+  ('zte', 'ZTE'),
+  ('vyos', 'VyOS'),
+];
+
+String _networkDeviceVendorSlug(String? os) {
+  final normalized = os?.trim().toLowerCase() ?? '';
+  for (final vendor in _networkDeviceVendorOptions) {
+    if (vendor.$1 == normalized) {
+      return vendor.$1;
+    }
+  }
+  return 'network';
 }
 
 const List<String> _hostEncodingOptions = [

@@ -170,6 +170,7 @@ class SshConnectionProfile {
     this.shellPath,
     this.environment = const {},
     this.encoding = 'UTF-8',
+    this.networkDevice = false,
   });
 
   final String host;
@@ -188,6 +189,8 @@ class SshConnectionProfile {
   final String? shellPath;
   final Map<String, String> environment;
   final String encoding;
+  /// Explicit appliance mode: skip Linux shell probe in native SSH.
+  final bool networkDevice;
 
   SshConnectionProfile copyWith({
     String? host,
@@ -206,6 +209,7 @@ class SshConnectionProfile {
     Object? shellPath = _preserveSshProfileValue,
     Map<String, String>? environment,
     String? encoding,
+    bool? networkDevice,
   }) {
     return SshConnectionProfile(
       host: host ?? this.host,
@@ -240,7 +244,19 @@ class SshConnectionProfile {
           : shellPath as String?,
       environment: environment ?? this.environment,
       encoding: encoding ?? this.encoding,
+      networkDevice: networkDevice ?? this.networkDevice,
     );
+  }
+
+  /// Environment sent to native SSH, including the network-device marker.
+  Map<String, String> get nativeEnvironment {
+    if (!networkDevice) {
+      return environment;
+    }
+    return <String, String>{
+      ...environment,
+      '__NAUTERM_NETWORK_DEVICE': '1',
+    };
   }
 }
 
@@ -359,6 +375,7 @@ class TerminalController extends ChangeNotifier {
     this._startupSnippet,
     Map<String, String> environment = const {},
     String encoding = 'UTF-8',
+    bool networkDevice = false,
     TerminalTheme theme = defaultTerminalTheme,
     this._recorder,
     this._onExit,
@@ -390,6 +407,7 @@ class TerminalController extends ChangeNotifier {
          shellPath: shellPath,
          environment: environment,
          encoding: encoding,
+         networkDevice: networkDevice,
        ),
        _connectionStatus = TerminalConnectionStatus(
          phase: TerminalConnectionPhase.connecting,
@@ -414,7 +432,7 @@ class TerminalController extends ChangeNotifier {
             fido2Pin: fido2Pin,
           ),
           proxy: proxy,
-          environment: environment,
+          environment: _sshProfile!.nativeEnvironment,
           encoding: encoding,
           theme: theme,
         );
@@ -441,6 +459,7 @@ class TerminalController extends ChangeNotifier {
     String? shellPath,
     this._startupSnippet,
     Map<String, String> environment = const {},
+    bool networkDevice = false,
     String serverCommand = 'mosh-server new -s -l LANG=en_US.UTF-8',
     TerminalTheme theme = defaultTerminalTheme,
     this._recorder,
@@ -472,6 +491,7 @@ class TerminalController extends ChangeNotifier {
          proxy: proxy,
          shellPath: shellPath,
          environment: environment,
+         networkDevice: networkDevice,
        ),
        _connectionStatus = TerminalConnectionStatus(
          phase: TerminalConnectionPhase.connecting,
@@ -496,7 +516,7 @@ class TerminalController extends ChangeNotifier {
             fido2Pin: fido2Pin,
           ),
           proxy: proxy,
-          environment: environment,
+          environment: _sshProfile!.nativeEnvironment,
           serverCommand: serverCommand,
           theme: theme,
         );
@@ -1269,7 +1289,7 @@ class TerminalController extends ChangeNotifier {
         ),
         proxy: nextProfile.proxy,
         hostKeyTrustMode: hostKeyTrustMode,
-        environment: nextProfile.environment,
+        environment: nextProfile.nativeEnvironment,
         serverCommand: _moshServerCommand,
         theme: _theme,
       );
@@ -1292,7 +1312,7 @@ class TerminalController extends ChangeNotifier {
         ),
         proxy: nextProfile.proxy,
         hostKeyTrustMode: hostKeyTrustMode,
-        environment: nextProfile.environment,
+        environment: nextProfile.nativeEnvironment,
         encoding: nextProfile.encoding,
         theme: _theme,
       );
@@ -2340,6 +2360,10 @@ class TerminalController extends ChangeNotifier {
           _onConnected?.call();
         }
         _scheduleStartupSnippetIfNeeded();
+      case TerminalConnectionEventKind.sshShellProbeSkipped:
+      case TerminalConnectionEventKind.hostOsInferred:
+        // Informational appliance events; never demote connection phase.
+        break;
       case TerminalConnectionEventKind.sshLatencyUpdated:
         _updateSshLatency(event.latencyMs);
       case TerminalConnectionEventKind.moshEchoEnabled:
@@ -2424,7 +2448,12 @@ class TerminalController extends ChangeNotifier {
           message: event.message,
         );
       case TerminalConnectionEventKind.unknown:
-        if (event.message.isNotEmpty) {
+        // Forward-compat only: never demote an established/auth/host-key state
+        // (e.g. post-connect MOTD inference must not reopen the reconnect UI).
+        if (event.message.isNotEmpty &&
+            (_connectionStatus.phase == TerminalConnectionPhase.idle ||
+                _connectionStatus.phase ==
+                    TerminalConnectionPhase.connecting)) {
           _connectionStatus = TerminalConnectionStatus(
             phase: TerminalConnectionPhase.connecting,
             message: event.message,
