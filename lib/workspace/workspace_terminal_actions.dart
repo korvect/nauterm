@@ -183,6 +183,7 @@ extension _NautermWorkspaceTerminalActions on _NautermWorkspaceState {
           shellPath: sshProfile.shellPath,
           environment: sshProfile.environment,
           encoding: sshProfile.encoding,
+          networkDevice: sshProfile.networkDevice,
           config: currentTerminalConfig(),
           theme: view.theme,
           recorder: _createTerminalRecorder(
@@ -415,6 +416,7 @@ extension _NautermWorkspaceTerminalActions on _NautermWorkspaceState {
         shellPath: sshProfile.shellPath,
         environment: sshProfile.environment,
         encoding: sshProfile.encoding,
+        networkDevice: sshProfile.networkDevice,
         config: currentTerminalConfig(),
         theme: targetView.theme,
         recorder: _createTerminalRecorder(

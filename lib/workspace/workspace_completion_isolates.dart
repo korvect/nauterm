@@ -713,6 +713,8 @@ String _terminalConnectionEventKindToWire(TerminalConnectionEventKind kind) {
     TerminalConnectionEventKind.authSuccess => 'auth_success',
     TerminalConnectionEventKind.authFailed => 'auth_failed',
     TerminalConnectionEventKind.connected => 'connected',
+    TerminalConnectionEventKind.sshShellProbeSkipped => 'ssh_shell_probe_skipped',
+    TerminalConnectionEventKind.hostOsInferred => 'host_os_inferred',
     TerminalConnectionEventKind.moshEchoEnabled => 'mosh_echo_enabled',
     TerminalConnectionEventKind.moshEchoDisabled => 'mosh_echo_disabled',
     TerminalConnectionEventKind.moshPredictionConfirmed =>

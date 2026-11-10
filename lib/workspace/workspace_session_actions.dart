@@ -196,6 +196,9 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
     _PortForwardSshAuth auth, {
     SshConnectionProfile? profile,
   }) {
+    if (host.networkDevice || profile?.networkDevice == true) {
+      return;
+    }
     if (profile != null) {
       auth = _PortForwardSshAuth(
         host: profile.host,
@@ -233,23 +236,8 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
         final result = await _spawnHostOsDetection(arguments);
         final detectedOs = result.os?.trim();
         final detectedDistro = result.distro?.trim();
-        if (detectedOs == null || detectedOs.isEmpty || !mounted) {
-          return;
-        }
-        final current =
-            _dataStore?.getHost(hostId) ??
-            _hostEntries.where((entry) => entry.id == hostId).firstOrNull;
-        if (current == null ||
-            (current.os == detectedOs && current.distro == detectedDistro)) {
-          return;
-        }
-        final updated = current.withPlatform(
-          os: detectedOs,
-          distro: detectedDistro,
-        );
-        _dataStore?.saveHost(updated);
-        if (mounted) {
-          _upsertHostSummary(updated);
+        if (detectedOs != null && detectedOs.isNotEmpty) {
+          _applyDetectedHostOs(hostId, detectedOs, detectedDistro);
         }
       } catch (_) {
         // Host OS detection is opportunistic and should never disrupt a session.
@@ -257,6 +245,27 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
         _hostOsDetectionRequests.remove(hostId);
       }
     }());
+  }
+
+  void _applyDetectedHostOs(int hostId, String detectedOs, String? detectedDistro) {
+    if (!mounted) {
+      return;
+    }
+    final current =
+        _dataStore?.getHost(hostId) ??
+        _hostEntries.where((entry) => entry.id == hostId).firstOrNull;
+    if (current == null ||
+        (current.os == detectedOs && current.distro == detectedDistro)) {
+      return;
+    }
+    final updated = current.withPlatform(
+      os: detectedOs,
+      distro: detectedDistro,
+    );
+    _dataStore?.saveHost(updated);
+    if (mounted) {
+      _upsertHostSummary(updated);
+    }
   }
 
   void _handleSftpRemoteConnected(_HostItem item, _SftpRemoteAuth auth) {
@@ -1035,6 +1044,7 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
           serverCommand:
               _emptyToNull(moshServerCommand) ?? host.moshServerCommand,
           environment: environment,
+          networkDevice: host.networkDevice,
           theme: theme,
           recorder: recorder,
           config: currentTerminalConfig(),
@@ -1064,6 +1074,7 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
           startupSnippet: _startupSnippetForHost(host),
           environment: environment,
           encoding: host.encoding,
+          networkDevice: host.networkDevice,
           theme: theme,
           recorder: recorder,
           config: currentTerminalConfig(),
@@ -1284,6 +1295,7 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
         startupSnippet: _startupSnippetForHost(host),
         environment: environment,
         encoding: host.encoding,
+        networkDevice: host.networkDevice,
         theme: theme,
         recorder: _createTerminalRecorder(
           title: host.name,

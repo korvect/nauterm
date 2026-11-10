@@ -3107,6 +3107,8 @@ String _connectionEventCategory(TerminalConnectionEventKind kind) {
     TerminalConnectionEventKind.authAgentUnavailable ||
     TerminalConnectionEventKind.authAgentFailed => 'agent',
     TerminalConnectionEventKind.connected ||
+    TerminalConnectionEventKind.sshShellProbeSkipped ||
+    TerminalConnectionEventKind.hostOsInferred ||
     TerminalConnectionEventKind.sshLatencyUpdated ||
     TerminalConnectionEventKind.exitStatus ||
     TerminalConnectionEventKind.sessionClosed => 'session',
@@ -3187,6 +3189,8 @@ _ConnectionLogSeverity _connectionEventSeverity(
     TerminalConnectionEventKind.moshScreenCommitted ||
     TerminalConnectionEventKind.moshLatencyUpdated ||
     TerminalConnectionEventKind.moshUdpPeerConfirmed ||
+    TerminalConnectionEventKind.sshShellProbeSkipped ||
+    TerminalConnectionEventKind.hostOsInferred ||
     TerminalConnectionEventKind.unknown => _ConnectionLogSeverity.info,
   };
 }

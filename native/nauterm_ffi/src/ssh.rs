@@ -1174,6 +1174,29 @@ fn ssh_client_config_with_keepalive(interval_seconds: u32) -> Arc<client::Config
     })
 }
 
+/// Narrow KEX/GEX for explicitly marked network appliances only.
+fn apply_responsive_ssh_crypto(config: &mut client::Config) {
+    use russh::kex;
+    use russh::Preferred;
+    use std::borrow::Cow;
+
+    config.preferred = Preferred {
+        kex: Cow::Borrowed(&[
+            kex::CURVE25519,
+            kex::CURVE25519_PRE_RFC_8731,
+            kex::DH_G14_SHA256,
+            kex::DH_G14_SHA1,
+            kex::DH_GEX_SHA256,
+            kex::DH_GEX_SHA1,
+            kex::EXTENSION_SUPPORT_AS_CLIENT,
+            kex::EXTENSION_OPENSSH_STRICT_KEX_AS_CLIENT,
+        ]),
+        ..Preferred::DEFAULT
+    };
+    config.gex = client::GexParams::new(2048, 2048, 4096)
+        .expect("2048/2048/4096 is a valid client GEX configuration");
+}
+
 #[allow(dead_code, clippy::too_many_arguments)]
 pub(crate) async fn start_mosh_server(
     host: &str,
@@ -1440,6 +1463,8 @@ enum SshCommand {
     Shutdown,
 }
 
+const NETWORK_DEVICE_ENV: &str = "__NAUTERM_NETWORK_DEVICE";
+
 struct SshTarget {
     authentication: AuthenticationInteraction,
     host: String,
@@ -1456,6 +1481,21 @@ struct SshTarget {
     terminal_options: TerminalOptions,
     ssh_keepalive_interval_seconds: u32,
     encoding: String,
+    /// Explicit host setting: skip Linux shell probe / history exec.
+    network_device: bool,
+}
+
+fn extract_network_device_flag(options: &mut TerminalOptions) -> bool {
+    let mut enabled = false;
+    options.environment.retain(|entry| {
+        if entry.variable == NETWORK_DEVICE_ENV {
+            enabled = entry.value == "1" || entry.value.eq_ignore_ascii_case("true");
+            false
+        } else {
+            true
+        }
+    });
+    enabled
 }
 
 #[derive(Clone)]
@@ -1494,6 +1534,8 @@ impl SshTransport {
         let wakeup = Arc::new(Mutex::new(None));
         let shutdown = Arc::new(AtomicBool::new(false));
         let authentication = AuthenticationInteraction::default();
+        let mut terminal_options = terminal_options;
+        let network_device = extract_network_device_flag(&mut terminal_options);
         let target = SshTarget {
             authentication: authentication.clone(),
             host: host.to_owned(),
@@ -1510,6 +1552,7 @@ impl SshTransport {
             terminal_options,
             ssh_keepalive_interval_seconds,
             encoding: encoding.to_owned(),
+            network_device,
         };
         let worker = spawn_ssh_worker(
             target,
@@ -1882,7 +1925,20 @@ async fn run_ssh_session(
         .with_username(&target.username),
     );
     let private_key = prepare_private_key(target.private_key.as_deref(), &events, &wakeup)?;
-    let config = ssh_client_config_with_keepalive(target.ssh_keepalive_interval_seconds);
+    let config = if target.network_device {
+        let base = ssh_client_config_with_keepalive(target.ssh_keepalive_interval_seconds);
+        let mut responsive = client::Config {
+            nodelay: base.nodelay,
+            keepalive_interval: base.keepalive_interval,
+            keepalive_max: base.keepalive_max,
+            window_size: base.window_size,
+            ..client::Config::default()
+        };
+        apply_responsive_ssh_crypto(&mut responsive);
+        Arc::new(responsive)
+    } else {
+        ssh_client_config_with_keepalive(target.ssh_keepalive_interval_seconds)
+    };
     let host_key_verification =
         HostKeyVerification::with_interaction(target.authentication.clone());
     let handler = SshClientHandler {
@@ -1930,16 +1986,22 @@ async fn run_ssh_session(
         Err(error) => return Err(format!("authentication failed: {error}")),
     }
 
-    let remote_shell = match cancel_on_ssh_shutdown(
-        &receiver,
-        &shutdown,
-        detect_remote_interactive_shell(&mut handle),
-    )
-    .await
-    {
-        Ok(shell) => shell,
-        Err(error) if error == SSH_SESSION_CANCELLED => return Err(error),
-        Err(_) => None,
+    // Official path for unmarked hosts. Explicit network devices skip the
+    // Linux $SHELL probe (extra exec channel) and use request_shell only.
+    let remote_shell = if target.network_device {
+        None
+    } else {
+        match cancel_on_ssh_shutdown(
+            &receiver,
+            &shutdown,
+            detect_remote_interactive_shell(&mut handle),
+        )
+        .await
+        {
+            Ok(shell) => shell,
+            Err(error) if error == SSH_SESSION_CANCELLED => return Err(error),
+            Err(_) => None,
+        }
     };
 
     let mut channel = cancel_on_ssh_shutdown(&receiver, &shutdown, async {
@@ -2033,6 +2095,7 @@ async fn run_ssh_session(
     let mut decoder = encoding.new_decoder();
     let mut exit_status_seen = false;
     let mut shutdown_requested = false;
+    let skip_shell_history = target.network_device;
 
     loop {
         tokio::select! {
@@ -2059,7 +2122,15 @@ async fn run_ssh_session(
                 }
             }
             _ = command_tick.tick() => {
-                if !drain_ssh_commands(&receiver, &mut channel, &mut handle, encoding).await? {
+                if !drain_ssh_commands(
+                    &receiver,
+                    &mut channel,
+                    &mut handle,
+                    encoding,
+                    skip_shell_history,
+                )
+                .await?
+                {
                     shutdown_requested = true;
                     break;
                 }
@@ -2211,6 +2282,7 @@ async fn drain_ssh_commands(
     channel: &mut russh::Channel<client::Msg>,
     handle: &mut client::Handle<SshClientHandler>,
     encoding: &'static Encoding,
+    skip_shell_history: bool,
 ) -> Result<bool, String> {
     loop {
         match receiver.try_recv() {
@@ -2228,6 +2300,12 @@ async fn drain_ssh_commands(
                 .await
                 .map_err(|error| format!("failed to resize remote PTY: {error}"))?,
             Ok(SshCommand::ReadShellHistory(reply)) => {
+                if skip_shell_history {
+                    let _ = reply.send(Err(
+                        "Shell history unsupported on this SSH target.".to_owned(),
+                    ));
+                    continue;
+                }
                 let result = run_ssh_exec_command(handle, &shell_history_command())
                     .await
                     .and_then(|command| parse_shell_history_output(&command.stdout));
