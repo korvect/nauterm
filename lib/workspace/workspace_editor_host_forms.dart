@@ -2143,9 +2143,24 @@ class _HostEditorContentState extends State<_HostEditorContent> {
           _WorkspaceFormSection(
             title: 'Theme',
             children: [
+              _GenerateKeyFieldLabel(
+                tr('workspace.host.lightTheme', fallback: 'Light theme'),
+              ),
+              SizedBox(height: 8),
               _HostThemeSelector(
                 selectedTheme: _selectedTheme,
                 onOpenGallery: _openThemeGallery,
+              ),
+              SizedBox(height: _workspaceFormFieldGap),
+              _GenerateKeyFieldLabel(
+                tr('workspace.host.darkTheme', fallback: 'Dark theme'),
+              ),
+              SizedBox(height: 8),
+              _HostThemeSelector(
+                selectedTheme: _selectedDarkTheme,
+                dark: true,
+                onOpenGallery: () =>
+                    _openThemeGalleryFor(_HostThemeTarget.sshDark),
               ),
             ],
           ),
