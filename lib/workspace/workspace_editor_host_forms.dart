@@ -1219,9 +1219,7 @@ class _HostEditorContentState extends State<_HostEditorContent> {
   String _encoding = defaultHostEncoding;
   String _telnetEncoding = defaultHostEncoding;
   late Set<String> _tagUuids;
-  late bool _networkDevice;
-  late String _networkVendor;
-  late final bool _initialNetworkDevice;
+  late bool _sshCompatibilityMode;
   StoredTerminalTheme? _selectedTheme;
   StoredTerminalTheme? _selectedDarkTheme;
   StoredTerminalTheme? _selectedTelnetTheme;
@@ -1265,9 +1263,7 @@ class _HostEditorContentState extends State<_HostEditorContent> {
     );
     _shellController = TextEditingController(text: initial?.shellPath ?? '');
     _workDirController = TextEditingController(text: initial?.workDir ?? '');
-    _initialNetworkDevice = initial?.networkDevice ?? false;
-    _networkDevice = _initialNetworkDevice;
-    _networkVendor = _networkDeviceVendorSlug(initial?.os);
+    _sshCompatibilityMode = initial?.sshCompatibilityMode ?? false;
     _shellOptions = _availableShellOptions(initial?.shellPath);
     _environmentVariables = List<HostEnvironmentVariable>.of(
       initial?.environmentVariables ?? const <HostEnvironmentVariable>[],
@@ -1919,10 +1915,12 @@ class _HostEditorContentState extends State<_HostEditorContent> {
         distro: _type == NautermHostType.serial ? null : initial?.distro,
         serialPort: serialConfig?.serialPort,
         serialBaudRate: serialConfig?.baudRate,
-        config:
-            serialConfig?.mergeHostConfig(initial?.config ?? const {}) ??
-            initial?.config ??
-            const {},
+        config: HostEntry.withSshCompatibilityMode(
+          serialConfig?.mergeHostConfig(initial?.config ?? const {}) ??
+              initial?.config ??
+              const {},
+          enabled: isRemote && _sshCompatibilityMode,
+        ),
         tagUuids: _tagUuids.toList(growable: false),
       ),
     );
@@ -1948,6 +1946,7 @@ class _HostEditorContentState extends State<_HostEditorContent> {
     final initial = widget.request.initial;
     final isLocal = _type == NautermHostType.local;
     final isSerial = _type == NautermHostType.serial;
+    final isRemote = _type == NautermHostType.remote;
 
     final editor = _EditorShell(
       title: initial?.id == null
@@ -2112,41 +2111,17 @@ class _HostEditorContentState extends State<_HostEditorContent> {
               onChanged: (value) => setState(() => _tagUuids = value),
               onCreate: widget.onCreateTag,
             ),
-            if (!isLocal) ...[
+            if (isRemote) ...[
               SizedBox(height: _workspaceFormFieldGap),
               _WorkspaceToggleRow(
-                label: '网络设备',
+                label: 'Compatibility mode',
                 description:
-                    '交换机/防火墙等：跳过 Linux shell 探测与系统识别，直接打开交互会话。',
-                value: _networkDevice,
+                    '跳过 Linux shell 探测，并对兼容性较差的 SSH 目标使用兼容算法。',
+                value: _sshCompatibilityMode,
                 onChanged: (value) {
-                  setState(() {
-                    _networkDevice = value;
-                    if (!value) {
-                      _networkVendor = 'network';
-                    }
-                  });
+                  setState(() => _sshCompatibilityMode = value);
                 },
               ),
-              if (_networkDevice) ...[
-                SizedBox(height: _workspaceFormFieldGap),
-                _WorkspaceSelect<String>(
-                  label: '厂商图标',
-                  value: _networkVendor,
-                  items: [
-                    for (final vendor in _networkDeviceVendorOptions)
-                      DropdownMenuItem<String>(
-                        value: vendor.$1,
-                        child: Text(vendor.$2),
-                      ),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) {
-                      setState(() => _networkVendor = value);
-                    }
-                  },
-                ),
-              ],
             ],
           ],
         ),
@@ -3100,27 +3075,6 @@ class _AddProtocolControlState extends State<_AddProtocolControl> {
       ),
     );
   }
-}
-
-const List<(String, String)> _networkDeviceVendorOptions = [
-  ('network', '通用网络设备'),
-  ('cisco', 'Cisco'),
-  ('huawei', 'Huawei'),
-  ('fortinet', 'Fortinet'),
-  ('h3c', 'H3C'),
-  ('ruijie', 'Ruijie'),
-  ('zte', 'ZTE'),
-  ('vyos', 'VyOS'),
-];
-
-String _networkDeviceVendorSlug(String? os) {
-  final normalized = os?.trim().toLowerCase() ?? '';
-  for (final vendor in _networkDeviceVendorOptions) {
-    if (vendor.$1 == normalized) {
-      return vendor.$1;
-    }
-  }
-  return 'network';
 }
 
 const List<String> _hostEncodingOptions = [

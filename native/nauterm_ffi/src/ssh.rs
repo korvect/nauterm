@@ -1463,7 +1463,7 @@ enum SshCommand {
     Shutdown,
 }
 
-const NETWORK_DEVICE_ENV: &str = "__NAUTERM_NETWORK_DEVICE";
+const SSH_COMPATIBILITY_MODE_ENV: &str = "__NAUTERM_SSH_COMPATIBILITY_MODE";
 
 struct SshTarget {
     authentication: AuthenticationInteraction,
@@ -1482,13 +1482,13 @@ struct SshTarget {
     ssh_keepalive_interval_seconds: u32,
     encoding: String,
     /// Explicit host setting: skip Linux shell probe / history exec.
-    network_device: bool,
+    ssh_compatibility_mode: bool,
 }
 
-fn extract_network_device_flag(options: &mut TerminalOptions) -> bool {
+fn extract_ssh_compatibility_mode_flag(options: &mut TerminalOptions) -> bool {
     let mut enabled = false;
     options.environment.retain(|entry| {
-        if entry.variable == NETWORK_DEVICE_ENV {
+        if entry.variable == SSH_COMPATIBILITY_MODE_ENV {
             enabled = entry.value == "1" || entry.value.eq_ignore_ascii_case("true");
             false
         } else {
@@ -1535,7 +1535,7 @@ impl SshTransport {
         let shutdown = Arc::new(AtomicBool::new(false));
         let authentication = AuthenticationInteraction::default();
         let mut terminal_options = terminal_options;
-        let network_device = extract_network_device_flag(&mut terminal_options);
+        let ssh_compatibility_mode = extract_ssh_compatibility_mode_flag(&mut terminal_options);
         let target = SshTarget {
             authentication: authentication.clone(),
             host: host.to_owned(),
@@ -1552,7 +1552,7 @@ impl SshTransport {
             terminal_options,
             ssh_keepalive_interval_seconds,
             encoding: encoding.to_owned(),
-            network_device,
+            ssh_compatibility_mode,
         };
         let worker = spawn_ssh_worker(
             target,
@@ -1925,7 +1925,7 @@ async fn run_ssh_session(
         .with_username(&target.username),
     );
     let private_key = prepare_private_key(target.private_key.as_deref(), &events, &wakeup)?;
-    let config = if target.network_device {
+    let config = if target.ssh_compatibility_mode {
         let base = ssh_client_config_with_keepalive(target.ssh_keepalive_interval_seconds);
         let mut responsive = client::Config {
             nodelay: base.nodelay,
@@ -1988,7 +1988,7 @@ async fn run_ssh_session(
 
     // Official path for unmarked hosts. Explicit network devices skip the
     // Linux $SHELL probe (extra exec channel) and use request_shell only.
-    let remote_shell = if target.network_device {
+    let remote_shell = if target.ssh_compatibility_mode {
         None
     } else {
         match cancel_on_ssh_shutdown(
@@ -2095,7 +2095,7 @@ async fn run_ssh_session(
     let mut decoder = encoding.new_decoder();
     let mut exit_status_seen = false;
     let mut shutdown_requested = false;
-    let skip_shell_history = target.network_device;
+    let skip_shell_history = target.ssh_compatibility_mode;
 
     loop {
         tokio::select! {
