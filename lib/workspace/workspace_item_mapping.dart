@@ -52,7 +52,11 @@ _HostItem _mapHost(
       : null;
   final tagNames = [for (final uuid in host.tagUuids) ?tagsByUuid[uuid]];
   final protocols = [
-    if (host.type == NautermHostType.local) type,
+    if (host.type != NautermHostType.remote) type,
+    if (host.type == NautermHostType.serial) ...[
+      ?host.serialPort,
+      if (host.serialBaudRate != null) '${host.serialBaudRate} baud',
+    ],
     if (host.sshEnabled && host.type == NautermHostType.remote) 'ssh',
     if (host.moshEnabled && host.type == NautermHostType.remote) 'mosh',
     if (host.telnetEnabled && host.type == NautermHostType.remote) 'telnet',
@@ -68,10 +72,12 @@ _HostItem _mapHost(
     uuid: host.uuid,
     name: host.name,
     subtitle: details.join(', '),
-    icon: host.type == NautermHostType.local
+    icon: host.type == NautermHostType.serial
+        ? Icons.usb_rounded
+        : host.type == NautermHostType.local
         ? LucideIcons.squareTerminal
         : Icons.public_rounded,
-    color: host.type == NautermHostType.local ? _green : _orange,
+    color: host.type != NautermHostType.remote ? _green : _orange,
     createdAt: host.createdAt,
     updatedAt: host.updatedAt,
     type: type,
@@ -81,6 +87,8 @@ _HostItem _mapHost(
     username: username,
     os: host.os,
     distro: host.distro,
+    serialPort: host.serialPort,
+    serialBaudRate: host.serialBaudRate,
     sshEnabled: host.sshEnabled,
     moshEnabled: host.moshEnabled,
     moshServerCommand: host.moshServerCommand,

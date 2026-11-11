@@ -1,4 +1,67 @@
 use super::*;
+use serde_json::json;
+
+#[test]
+fn schemas_one_to_five_upgrade_host_config_without_erasing_local_options() {
+    let uuid = "01979f62-8548-7000-8000-000000000212";
+    for schema in 1..=5 {
+        let mut connection = complete_connection_with_key();
+        connection
+            .execute_batch("CREATE UNIQUE INDEX hosts_uuid ON hosts(uuid);")
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO hosts(uuid, name, type, updated_at, version, config)
+            VALUES (?, 'Local', 'remote', 10, 1, '{\"ssh\":{\"compatibility_mode\":true}}')",
+                [uuid],
+            )
+            .unwrap();
+        let table = SYNC_TABLES
+            .iter()
+            .find(|table| table.name == "hosts")
+            .unwrap();
+        let mut record: SyncRecord = table
+            .columns
+            .iter()
+            .map(|column| ((*column).to_owned(), Value::Null))
+            .collect();
+        for column in ["serial_port", "serial_baud_rate", "config"] {
+            record.remove(column);
+        }
+        if schema < 5 {
+            record.remove("dark_theme_id");
+            record.remove("telnet_dark_theme_id");
+        }
+        record.insert("uuid".into(), json!(uuid));
+        record.insert("name".into(), json!("Remote"));
+        record.insert("type".into(), json!("remote"));
+        record.insert("created_at".into(), json!(1));
+        record.insert("updated_at".into(), json!(20));
+        record.insert("version".into(), json!(2));
+        let payload = SyncPayload {
+            format_version: PAYLOAD_FORMAT_VERSION,
+            exported_at: 42,
+            source_device_id: "01979f62-8548-7000-8000-000000000102".into(),
+            tables: BTreeMap::from([("hosts".into(), vec![record])]),
+        };
+        let envelope =
+            encrypt_payload(payload, Some(MASTER_KEY), schema, None, &[7u8; 32]).unwrap();
+        let bytes = serde_json::to_vec(&envelope).unwrap();
+        inspect_envelope(&bytes, 6).unwrap();
+        let (_, migrated, _) = decrypt_envelope(envelope, Some(MASTER_KEY), None, 6).unwrap();
+        assert_eq!(migrated.tables["hosts"][0]["config"], json!("{}"));
+        merge_payload(&mut connection, &migrated, schema).unwrap();
+        let (name, config): (String, String) = connection
+            .query_row(
+                "SELECT name, config FROM hosts WHERE uuid = ?",
+                [uuid],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(name, "Remote");
+        assert_eq!(config, "{\"ssh\":{\"compatibility_mode\":true}}");
+    }
+}
 
 const MASTER_KEY: &str = "Legacy sync master key 1!";
 const KEY_UUID: &str = "01979f62-8548-7000-8000-000000000101";

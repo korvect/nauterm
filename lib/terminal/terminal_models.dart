@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 
 import 'terminal_theme.dart';
 
+export '../data/serial_connection_config.dart';
+
 const int terminalFlagInverse = 0x0001;
 const int terminalFlagBold = 0x0002;
 const int terminalFlagItalic = 0x0004;
@@ -34,10 +36,6 @@ enum TerminalEmulatorBackend {
   int get nativeValue => index;
 }
 
-enum SerialParity { none, even, odd }
-
-enum SerialFlowControl { none, software, hardware }
-
 @immutable
 class TerminalProxyConfig {
   const TerminalProxyConfig({
@@ -61,42 +59,6 @@ class TerminalProxyConfig {
     'username': username,
     'password': password,
   };
-}
-
-@immutable
-class SerialConnectionConfig {
-  const SerialConnectionConfig({
-    required this.serialPort,
-    required this.baudRate,
-    this.dataBits = 8,
-    this.parity = SerialParity.none,
-    this.stopBits = 1,
-    this.flowControl = SerialFlowControl.none,
-  });
-
-  final String serialPort;
-  final int baudRate;
-  final int dataBits;
-  final SerialParity parity;
-  final int stopBits;
-  final SerialFlowControl flowControl;
-
-  String get framingLabel {
-    final parityLabel = switch (parity) {
-      SerialParity.none => 'N',
-      SerialParity.even => 'E',
-      SerialParity.odd => 'O',
-    };
-    return '$dataBits$parityLabel$stopBits';
-  }
-
-  String get flowControlLabel => switch (flowControl) {
-    SerialFlowControl.none => 'none',
-    SerialFlowControl.software => 'software',
-    SerialFlowControl.hardware => 'hardware',
-  };
-
-  String get summary => '$baudRate baud, $framingLabel, flow $flowControlLabel';
 }
 
 @immutable

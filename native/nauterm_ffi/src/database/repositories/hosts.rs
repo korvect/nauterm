@@ -520,6 +520,11 @@ impl NautermDatabase {
     }
 
     pub fn save_host(&mut self, host: &HostEntry) -> rusqlite::Result<i64> {
+        if host.host_type == HostType::Serial {
+            validate_serial_host(host)?;
+        }
+        let config = serde_json::to_string(&host.config)
+            .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
         let dek = configured_dek(&self.connection)?;
         let password = encrypt_optional_field(dek.as_ref(), host.password.as_deref())?;
         let telnet_password =
@@ -579,7 +584,7 @@ impl NautermDatabase {
                     telnet_password = ?, telnet_port = ?, telnet_theme_id = ?, telnet_dark_theme_id = ?,
 	                    environment_variables = ?, encoding = ?, telnet_encoding = ?, type = ?,
 	                    key_uuid = ?, shell_path = ?, work_dir = ?,
-	                    os = ?, distro = ?,
+	                    os = ?, distro = ?, serial_port = ?, serial_baud_rate = ?, config = ?,
 	                    updated_at = CAST(unixepoch('subsec') * 1000 AS INTEGER),
                     deleted_at = NULL,
                     version = COALESCE(version, 0) + 1
@@ -616,6 +621,9 @@ impl NautermDatabase {
                     host.work_dir,
                     host.os,
                     host.distro,
+                    host.serial_port,
+                    host.serial_baud_rate,
+                    config,
                     id
                 ],
             )?;
@@ -631,11 +639,11 @@ impl NautermDatabase {
               theme_id, dark_theme_id, startup_snippet_uuid, ssh_enabled, mosh_enabled, mosh_server_command, telnet_enabled,
               telnet_identity_uuid, telnet_username, telnet_password,
               telnet_port, telnet_theme_id, telnet_dark_theme_id, environment_variables, encoding, telnet_encoding,
-	              type, key_uuid, shell_path, work_dir, os, distro,
+	              type, key_uuid, shell_path, work_dir, os, distro, serial_port, serial_baud_rate, config,
 	              created_at, updated_at
 	            )
 	            VALUES (
-	              ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+	              ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
 	              CAST(unixepoch('subsec') * 1000 AS INTEGER),
 	              CAST(unixepoch('subsec') * 1000 AS INTEGER)
             )
@@ -671,7 +679,10 @@ impl NautermDatabase {
                 host.shell_path,
                 host.work_dir,
                 host.os,
-                host.distro
+                host.distro,
+                host.serial_port,
+                host.serial_baud_rate,
+                config
             ],
         )?;
         let id = self.connection.last_insert_rowid();
@@ -990,4 +1001,44 @@ impl NautermDatabase {
         transaction.commit()?;
         Ok(deleted)
     }
+}
+
+fn validate_serial_host(host: &HostEntry) -> rusqlite::Result<()> {
+    let invalid = |message: &str| rusqlite::Error::InvalidParameterName(message.to_owned());
+    if host
+        .serial_port
+        .as_deref()
+        .is_none_or(|port| port.trim().is_empty())
+    {
+        return Err(invalid("Serial port is required."));
+    }
+    if host
+        .serial_baud_rate
+        .is_none_or(|rate| !(1..=i64::from(u32::MAX)).contains(&rate))
+    {
+        return Err(invalid(
+            "Serial baud rate must be between 1 and 4294967295.",
+        ));
+    }
+    if let Some(options) = host.config.get("serial") {
+        let options = options
+            .as_object()
+            .ok_or_else(|| invalid("Serial config must be an object."))?;
+        let valid = options
+            .get("data_bits")
+            .is_none_or(|value| value.as_u64().is_some_and(|value| (5..=8).contains(&value)))
+            && options
+                .get("stop_bits")
+                .is_none_or(|value| matches!(value.as_u64(), Some(1 | 2)))
+            && options
+                .get("parity")
+                .is_none_or(|value| matches!(value.as_str(), Some("none" | "even" | "odd")))
+            && options.get("flow_control").is_none_or(|value| {
+                matches!(value.as_str(), Some("none" | "software" | "hardware"))
+            });
+        if !valid {
+            return Err(invalid("Invalid serial framing or flow control."));
+        }
+    }
+    Ok(())
 }

@@ -1180,6 +1180,7 @@ class _HostTagChip extends StatelessWidget {
 }
 
 class _HostEditorContentState extends State<_HostEditorContent> {
+  late final _SerialConnectionFormController _serialForm;
   late final TextEditingController _nameController;
   late final TextEditingController _hostController;
   late final TextEditingController _portController;
@@ -1237,6 +1238,10 @@ class _HostEditorContentState extends State<_HostEditorContent> {
   void initState() {
     super.initState();
     final initial = widget.request.initial;
+    _serialForm = _SerialConnectionFormController(
+      initialConfig: initial?.serialConnectionConfig,
+    );
+    if (initial?.type == NautermHostType.serial) _serialForm.refreshPorts();
     _nameController = TextEditingController(text: initial?.name ?? '');
     _hostController = TextEditingController(text: initial?.host ?? '');
     _portController = TextEditingController(text: '${initial?.port ?? 22}');
@@ -1445,6 +1450,7 @@ class _HostEditorContentState extends State<_HostEditorContent> {
 
   @override
   void dispose() {
+    _serialForm.dispose();
     _nameController.removeListener(_handleNameChanged);
     _hostController.removeListener(_refreshAutomaticName);
     _portController.removeListener(_refreshAutomaticName);
@@ -1809,9 +1815,21 @@ class _HostEditorContentState extends State<_HostEditorContent> {
   }
 
   Future<void> _save() async {
+    final serialConfig = _type == NautermHostType.serial
+        ? _serialForm.readConfig()
+        : null;
+    if (_type == NautermHostType.serial && serialConfig == null) {
+      setState(
+        () => _error = tr(
+          'workspace.serial.invalidSettings',
+          fallback: 'Enter a serial port and a valid positive baud rate.',
+        ),
+      );
+      return;
+    }
     final name = _nameController.text.trim().isNotEmpty
         ? _nameController.text.trim()
-        : _suggestedName();
+        : serialConfig?.serialPort ?? _suggestedName();
     if (name.isEmpty) {
       setState(() {
         _nameError = 'Name is required.';
@@ -1891,8 +1909,14 @@ class _HostEditorContentState extends State<_HostEditorContent> {
         workDir: _type == NautermHostType.local
             ? _emptyToNull(_workDirController.text)
             : null,
-        os: initial?.os,
-        distro: initial?.distro,
+        os: _type == NautermHostType.serial ? null : initial?.os,
+        distro: _type == NautermHostType.serial ? null : initial?.distro,
+        serialPort: serialConfig?.serialPort,
+        serialBaudRate: serialConfig?.baudRate,
+        config:
+            serialConfig?.mergeHostConfig(initial?.config ?? const {}) ??
+            initial?.config ??
+            const {},
         tagUuids: _tagUuids.toList(growable: false),
       ),
     );
@@ -1917,6 +1941,7 @@ class _HostEditorContentState extends State<_HostEditorContent> {
   Widget build(BuildContext context) {
     final initial = widget.request.initial;
     final isLocal = _type == NautermHostType.local;
+    final isSerial = _type == NautermHostType.serial;
 
     final editor = _EditorShell(
       title: initial?.id == null
@@ -1937,7 +1962,11 @@ class _HostEditorContentState extends State<_HostEditorContent> {
             ],
       children: [
         _WorkspaceFormSection(
-          title: isLocal ? 'Shell' : 'Address',
+          title: isLocal
+              ? 'Shell'
+              : isSerial
+              ? tr('workspace.label.serialDevice', fallback: 'Serial device')
+              : 'Address',
           children: [
             LayoutBuilder(
               builder: (context, constraints) {
@@ -1974,11 +2003,15 @@ class _HostEditorContentState extends State<_HostEditorContent> {
                           });
                         },
                       )
+                    : isSerial
+                    ? _SerialPortField(controller: _serialForm)
                     : _WorkspaceInput(
                         controller: _hostController,
                         label: 'Host',
                         autofocus: true,
                       );
+
+                if (isSerial) return input;
 
                 if (compact) {
                   return Column(
@@ -2027,6 +2060,10 @@ class _HostEditorContentState extends State<_HostEditorContent> {
                   value: NautermHostType.local,
                   child: Text(tr('common.label.local', fallback: 'Local')),
                 ),
+                DropdownMenuItem(
+                  value: NautermHostType.serial,
+                  child: Text(tr('common.label.serial', fallback: 'Serial')),
+                ),
               ],
               onChanged: (value) {
                 if (value != null) {
@@ -2037,6 +2074,9 @@ class _HostEditorContentState extends State<_HostEditorContent> {
                       _environmentVariables = [];
                     }
                   });
+                  if (value == NautermHostType.serial) {
+                    _serialForm.refreshPorts();
+                  }
                   _refreshAutomaticName();
                 }
               },
@@ -2068,6 +2108,36 @@ class _HostEditorContentState extends State<_HostEditorContent> {
             ),
           ],
         ),
+        if (isSerial) ...[
+          SizedBox(height: 14),
+          _WorkspaceFormSection(
+            title: tr('common.label.serial', fallback: 'Serial'),
+            children: [
+              _SerialConnectionFields(
+                controller: _serialForm,
+                includePort: false,
+                fieldGap: _workspaceFormFieldGap,
+              ),
+            ],
+          ),
+          SizedBox(height: 14),
+          _WorkspaceFormSection(
+            title: 'Theme',
+            children: [
+              _HostThemeSelector(
+                selectedTheme: _selectedTheme,
+                onOpenGallery: _openThemeGallery,
+              ),
+              SizedBox(height: _workspaceFormFieldGap),
+              _HostThemeSelector(
+                selectedTheme: _selectedDarkTheme,
+                dark: true,
+                onOpenGallery: () =>
+                    _openThemeGalleryFor(_HostThemeTarget.sshDark),
+              ),
+            ],
+          ),
+        ],
         if (isLocal) ...[
           SizedBox(height: 14),
           _WorkspaceFormSection(
@@ -2090,7 +2160,7 @@ class _HostEditorContentState extends State<_HostEditorContent> {
             ],
           ),
         ],
-        if (!isLocal && _sshEnabled) ...[
+        if (_type == NautermHostType.remote && _sshEnabled) ...[
           SizedBox(height: 14),
           _ProtocolFormSection(
             protocol: 'SSH',
@@ -2268,7 +2338,7 @@ class _HostEditorContentState extends State<_HostEditorContent> {
             ],
           ),
         ],
-        if (!isLocal && _telnetEnabled) ...[
+        if (_type == NautermHostType.remote && _telnetEnabled) ...[
           SizedBox(height: 14),
           _ProtocolFormSection(
             protocol: 'Telnet',
@@ -2351,7 +2421,8 @@ class _HostEditorContentState extends State<_HostEditorContent> {
             moreChildren: [],
           ),
         ],
-        if (!isLocal && (!_sshEnabled || !_telnetEnabled)) ...[
+        if (_type == NautermHostType.remote &&
+            (!_sshEnabled || !_telnetEnabled)) ...[
           SizedBox(height: 14),
           _AddProtocolControl(
             sshAvailable: !_sshEnabled,

@@ -1511,6 +1511,9 @@ class _SnippetTargetRow extends StatelessWidget {
 }
 
 String? _snippetHostSubtitle(HostEntry host) {
+  if (host.type == NautermHostType.serial) {
+    return 'Serial ${host.serialPort ?? ''}';
+  }
   if (host.type == NautermHostType.local) {
     return 'Local';
   }

@@ -634,30 +634,59 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
 
   Future<void> _openSerialTerminalDialog() async {
     final draft = await _showWorkspaceDialog<_SerialConnectionDraft>(
-      builder: (context) => const _SerialConnectionDialog(),
+      builder: (context) =>
+          _SerialConnectionDialog(allowSave: _dataStore != null),
     );
     if (draft == null || !mounted) {
       return;
     }
 
-    _openSerialTerminalTab(draft);
+    HostEntry? host;
+    if (draft.saveAsHost) {
+      final store = _dataStore;
+      if (store == null) return;
+      try {
+        final id = store.saveHost(
+          HostEntry(
+            name: draft.serialPort,
+            type: NautermHostType.serial,
+            serialPort: draft.serialPort,
+            serialBaudRate: draft.baudRate,
+            config: draft.config.mergeHostConfig(const {}),
+          ),
+        );
+        host = store.getHost(id);
+        if (host != null) _upsertHostSummary(host);
+      } on Object catch (error) {
+        _showWorkspaceMessage('$error');
+        return;
+      }
+    }
+    _openSerialTerminalTab(draft, host: host);
   }
 
-  void _openSerialTerminalTab(_SerialConnectionDraft draft) {
+  void _openSerialTerminalTab(
+    _SerialConnectionDraft draft, {
+    HostEntry? host,
+    TerminalTheme? theme,
+  }) {
     _setWorkspaceState(() {
       _tab = _WorkspaceTab.sessions;
       _workspaceOverviewActive = false;
       final id = _nextTerminalId++;
-      final tabTitle = draft.serialPort;
+      final tabTitle = host?.name ?? draft.serialPort;
+      final serialTheme = theme ?? _defaultThemeForSettings();
       final serialConfig = draft.config;
       late final TerminalController controller;
       controller = TerminalController.serial(
         serialConfig: serialConfig,
         label: tabTitle,
+        hostId: host?.id,
         config: currentTerminalConfig(),
-        theme: _defaultThemeForSettings(),
+        theme: serialTheme,
         recorder: _createTerminalRecorder(
           title: tabTitle,
+          hostId: host?.id,
           target: '${serialConfig.serialPort} @ ${serialConfig.summary}',
           awaitConnection: true,
         ),
@@ -671,8 +700,9 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
         _TerminalTab(
           id: id,
           title: tabTitle,
-          theme: _defaultThemeForSettings(),
+          theme: serialTheme,
           controller: controller,
+          sourceHostUuid: host?.uuid,
         ),
       );
       _selectedTerminalId = id;
@@ -782,6 +812,29 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
       return;
     }
     final host = rawHost;
+    if (host.type == NautermHostType.serial) {
+      final config = host.serialConnectionConfig;
+      if (config == null) {
+        _showWorkspaceMessage(
+          tr(
+            'workspace.serial.invalidSettings',
+            fallback: 'Enter a serial port and a valid positive baud rate.',
+          ),
+        );
+        return;
+      }
+      final theme = await _themeForId(
+        host.themeId,
+        darkThemeId: host.darkThemeId,
+      );
+      if (!mounted) return;
+      _openSerialTerminalTab(
+        _SerialConnectionDraft(config: config),
+        host: host,
+        theme: theme,
+      );
+      return;
+    }
     if (host.type == NautermHostType.local) {
       final theme = await _themeForId(
         host.themeId,
@@ -1385,7 +1438,8 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
         for (final entry in view.tabs) {
           final id =
               entry.controller.sshProfile?.hostId ??
-              entry.controller.telnetProfile?.hostId;
+              entry.controller.telnetProfile?.hostId ??
+              entry.controller.serialProfile?.hostId;
           final host = id != null
               ? _dataStore?.getHost(id)
               : entry.pendingConnection?.host ??

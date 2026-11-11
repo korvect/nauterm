@@ -11,18 +11,25 @@ pub(super) fn migrate_schema(connection: &mut Connection, version: i32) -> rusql
             migrate_v1_to_v2(connection)?;
             migrate_v2_to_v3(connection)?;
             migrate_v3_to_v4(connection)?;
-            migrate_v4_to_v5(connection)
+            migrate_v4_to_v5(connection)?;
+            migrate_v5_to_v6(connection)
         }
         2 => {
             migrate_v2_to_v3(connection)?;
             migrate_v3_to_v4(connection)?;
-            migrate_v4_to_v5(connection)
+            migrate_v4_to_v5(connection)?;
+            migrate_v5_to_v6(connection)
         }
         3 => {
             migrate_v3_to_v4(connection)?;
-            migrate_v4_to_v5(connection)
+            migrate_v4_to_v5(connection)?;
+            migrate_v5_to_v6(connection)
         }
-        4 => migrate_v4_to_v5(connection),
+        4 => {
+            migrate_v4_to_v5(connection)?;
+            migrate_v5_to_v6(connection)
+        }
+        5 => migrate_v5_to_v6(connection),
         SCHEMA_VERSION => Ok(()),
         _ => Err(rusqlite::Error::InvalidParameterName(format!(
             "database schema version {version} is unsupported; expected {SCHEMA_VERSION}"
@@ -377,5 +384,18 @@ fn migrate_v4_to_v5(connection: &mut Connection) -> rusqlite::Result<()> {
         transaction.execute_batch("ALTER TABLE terminal_logs DROP COLUMN theme_id;")?;
     }
     transaction.pragma_update(None, "user_version", 5)?;
+    transaction.commit()
+}
+
+fn migrate_v5_to_v6(connection: &mut Connection) -> rusqlite::Result<()> {
+    let transaction = connection.transaction()?;
+    transaction.execute_batch(
+        "ALTER TABLE hosts ADD COLUMN serial_port TEXT;
+         ALTER TABLE hosts ADD COLUMN serial_baud_rate INTEGER
+           CHECK (serial_baud_rate IS NULL OR serial_baud_rate BETWEEN 1 AND 4294967295);
+         ALTER TABLE hosts ADD COLUMN config TEXT NOT NULL DEFAULT '{}'
+           CHECK (json_valid(config) AND json_type(config) = 'object');",
+    )?;
+    transaction.pragma_update(None, "user_version", 6)?;
     transaction.commit()
 }

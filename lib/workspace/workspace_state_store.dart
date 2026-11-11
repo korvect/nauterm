@@ -6,7 +6,7 @@ import '../terminal/terminal_config.dart' show WorkspaceRestoreBehavior;
 
 const int workspaceStateSchemaVersion = 1;
 
-enum WorkspaceTerminalProtocol { local, ssh, mosh, telnet }
+enum WorkspaceTerminalProtocol { local, ssh, mosh, telnet, serial }
 
 enum WorkspaceSplitAxis { horizontal, vertical }
 

@@ -5,13 +5,15 @@ import 'dart:io';
 import 'package:ffi/ffi.dart';
 
 import '../app/nauterm_log.dart';
+import 'serial_connection_config.dart';
 
 const String defaultMoshServerCommand =
     'mosh-server new -s -l LANG=en_US.UTF-8';
 
 enum NautermHostType {
   local('local'),
-  remote('remote');
+  remote('remote'),
+  serial('serial');
 
   const NautermHostType(this.storageValue);
 
@@ -21,6 +23,7 @@ enum NautermHostType {
     return switch (value) {
       'local' => NautermHostType.local,
       'remote' => NautermHostType.remote,
+      'serial' => NautermHostType.serial,
       _ => throw FormatException('Unknown host type: $value'),
     };
   }
@@ -471,6 +474,9 @@ class HostEntry {
     this.workDir,
     this.os,
     this.distro,
+    this.serialPort,
+    this.serialBaudRate,
+    this.config = const {},
     this.tagUuids = const [],
     this.createdAt,
     this.updatedAt,
@@ -523,6 +529,25 @@ class HostEntry {
   final String? workDir;
   final String? os;
   final String? distro;
+  final String? serialPort;
+  final int? serialBaudRate;
+
+  /// Extensible, non-secret options. Preserve unknown sections when editing.
+  final Map<String, Object?> config;
+
+  SerialConnectionConfig? get serialConnectionConfig {
+    if (type != NautermHostType.serial ||
+        serialPort == null ||
+        serialBaudRate == null) {
+      return null;
+    }
+    return SerialConnectionConfig.fromHostConfig(
+      serialPort: serialPort!,
+      baudRate: serialBaudRate!,
+      config: config,
+    );
+  }
+
   final List<String> tagUuids;
   final DateTime? createdAt;
   final DateTime? updatedAt;
@@ -586,6 +611,9 @@ class HostEntry {
     'work_dir': workDir,
     'os': os,
     'distro': distro,
+    'serial_port': serialPort,
+    'serial_baud_rate': serialBaudRate,
+    'config': config,
     'tag_uuids': tagUuids,
     'created_at': _dateTimeToJson(createdAt),
     'updated_at': _dateTimeToJson(updatedAt),
@@ -635,6 +663,9 @@ class HostEntry {
       workDir: workDir,
       os: os.trim(),
       distro: distro?.trim(),
+      serialPort: serialPort,
+      serialBaudRate: serialBaudRate,
+      config: config,
       tagUuids: tagUuids,
       createdAt: createdAt,
       updatedAt: updatedAt,
@@ -690,6 +721,11 @@ class HostEntry {
       workDir: _stringOrNull(map['work_dir']),
       os: _stringOrNull(map['os']),
       distro: _stringOrNull(map['distro']),
+      serialPort: _stringOrNull(map['serial_port']),
+      serialBaudRate: _intOrNull(map['serial_baud_rate']),
+      config: map['config'] is Map
+          ? Map<String, Object?>.from(map['config'] as Map)
+          : const {},
       tagUuids: _stringListOrEmpty(map['tag_uuids']),
       createdAt: _dateTimeOrNull(map['created_at']),
       updatedAt: _dateTimeOrNull(map['updated_at']),

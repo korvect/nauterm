@@ -445,7 +445,8 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
   HostEntry? get _resolvedHost {
     final hostId =
         widget.controller.sshProfile?.hostId ??
-        widget.controller.telnetProfile?.hostId;
+        widget.controller.telnetProfile?.hostId ??
+        widget.controller.serialProfile?.hostId;
     if (hostId == null || widget.dataStore == null) return null;
     return widget.dataStore!.getHost(hostId);
   }
@@ -1140,6 +1141,19 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
           label: tr('workspace.label.startOver', fallback: 'Start over'),
           primary: true,
           onPressed: () => _reconnect(resetProgress: true),
+        ),
+      ] else if ((mode == _ConnectionPageMode.failed ||
+              mode == _ConnectionPageMode.exited) &&
+          widget.controller.serialProfile != null) ...[
+        _ConnectionButton(
+          label: tr('workspace.label.startOver', fallback: 'Start over'),
+          primary: true,
+          onPressed: () {
+            final host = _resolvedHost;
+            widget.controller.reconnectSerial(
+              serialConfig: host?.serialConnectionConfig,
+            );
+          },
         ),
       ] else if (mode == _ConnectionPageMode.passphrase) ...[
         _ConnectionButton(

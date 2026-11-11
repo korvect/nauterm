@@ -501,7 +501,7 @@ String buildHostCsv(
   };
   final rows = <List<String>>[headers];
   for (final host in hosts) {
-    if (host.type == NautermHostType.local) continue;
+    if (host.type != NautermHostType.remote) continue;
     final isTelnet = host.telnetEnabled;
     final tagNames = [
       for (final uuid in host.tagUuids)

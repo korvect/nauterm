@@ -246,10 +246,15 @@ class SshConnectionProfile {
 
 @immutable
 class SerialConnectionProfile {
-  const SerialConnectionProfile({required this.config, this.label});
+  const SerialConnectionProfile({
+    required this.config,
+    this.label,
+    this.hostId,
+  });
 
   final SerialConnectionConfig config;
   final String? label;
+  final int? hostId;
 
   String get serialPort => config.serialPort;
   int get baudRate => config.baudRate;
@@ -504,6 +509,7 @@ class TerminalController extends ChangeNotifier {
   TerminalController.serial({
     required SerialConnectionConfig serialConfig,
     String? label,
+    int? hostId,
     this._recorder,
     this._onExit,
     this._onInputSent,
@@ -519,6 +525,7 @@ class TerminalController extends ChangeNotifier {
        _startupSnippet = null,
        _theme = theme,
        _serialProfile = SerialConnectionProfile(
+         hostId: hostId,
          config: serialConfig,
          label: label,
        ),
@@ -1290,6 +1297,36 @@ class TerminalController extends ChangeNotifier {
         theme: _theme,
       );
     }
+    _startDriverWatchdog();
+    _refresh();
+    return true;
+  }
+
+  bool reconnectSerial({SerialConnectionConfig? serialConfig}) {
+    final profile = _serialProfile;
+    if (_disposed || profile == null) return false;
+    final next = serialConfig ?? profile.config;
+    _driver.dispose();
+    _serialProfile = SerialConnectionProfile(
+      config: next,
+      label: profile.label,
+      hostId: profile.hostId,
+    );
+    _exitNotified = false;
+    _activeExitRequested = false;
+    _connectionEvents.clear();
+    _connectionStatus = TerminalConnectionStatus(
+      phase: TerminalConnectionPhase.connecting,
+      message: 'Opening ${next.serialPort} at ${next.summary}...',
+    );
+    _driver = _createSerialDriver(
+      columns: _snapshot.columns,
+      rows: _snapshot.rows,
+      config: config,
+      onWakeup: _handleDriverWakeup,
+      serialConfig: next,
+      theme: _theme,
+    );
     _startDriverWatchdog();
     _refresh();
     return true;

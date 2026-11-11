@@ -972,7 +972,6 @@ class _WorkspaceSelect<T> extends StatefulWidget {
 
 class _WorkspaceSelectState<T> extends State<_WorkspaceSelect<T>> {
   final GlobalKey _fieldKey = GlobalKey();
-  final LayerLink _fieldLayerLink = LayerLink();
   final Object _overlayToken = Object();
   late final TextEditingController _internalInputController;
   late final FocusNode _inputFocusNode;
@@ -1306,6 +1305,15 @@ class _WorkspaceSelectState<T> extends State<_WorkspaceSelect<T>> {
     _overlayEntry?.markNeedsBuild();
   }
 
+  void _scheduleMenuClose() {
+    final overlay = _overlayEntry;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && identical(_overlayEntry, overlay)) {
+        overlay?.dismiss();
+      }
+    });
+  }
+
   List<Widget> _buildDismissBarriers(Size overlaySize, Rect fieldRect) {
     final visibleFieldRect = fieldRect.intersect(Offset.zero & overlaySize);
     if (visibleFieldRect.isEmpty) {
@@ -1363,20 +1371,36 @@ class _WorkspaceSelectState<T> extends State<_WorkspaceSelect<T>> {
         renderBox.attached &&
         renderBox.hasSize &&
         overlayBox != null &&
-        overlayBox.attached;
-    final fieldTopLeft = canMeasureField
-        ? overlayBox.globalToLocal(renderBox.localToGlobal(Offset.zero))
-        : Offset.zero;
-    final fieldTopRight = canMeasureField
-        ? overlayBox.globalToLocal(
-            renderBox.localToGlobal(Offset(renderBox.size.width, 0)),
-          )
-        : const Offset(280, 0);
-    final fieldBottomLeft = canMeasureField
-        ? overlayBox.globalToLocal(
-            renderBox.localToGlobal(Offset(0, renderBox.size.height)),
-          )
-        : Offset(0, _effectiveSize.inputHeight);
+        overlayBox.attached &&
+        overlayBox.hasSize;
+    if (!canMeasureField) {
+      _scheduleMenuClose();
+      return const SizedBox.shrink();
+    }
+    final fieldTopLeft = renderBox.localToGlobal(
+      Offset.zero,
+      ancestor: overlayBox,
+    );
+    final fieldTopRight = renderBox.localToGlobal(
+      Offset(renderBox.size.width, 0),
+      ancestor: overlayBox,
+    );
+    final fieldBottomLeft = renderBox.localToGlobal(
+      Offset(0, renderBox.size.height),
+      ancestor: overlayBox,
+    );
+    final fieldRect = Rect.fromLTRB(
+      fieldTopLeft.dx,
+      fieldTopLeft.dy,
+      fieldTopRight.dx,
+      fieldBottomLeft.dy,
+    );
+    // A focused input can be kept alive outside a sliver's cache. It still has
+    // a size, but its zero paint transform produces non-finite coordinates.
+    if (!fieldRect.isFinite || fieldRect.isEmpty) {
+      _scheduleMenuClose();
+      return const SizedBox.shrink();
+    }
     final fieldWidth = fieldTopRight.dx - fieldTopLeft.dx;
     final fieldTop = fieldTopLeft.dy;
     final fieldBottom = fieldBottomLeft.dy;
@@ -1412,13 +1436,7 @@ class _WorkspaceSelectState<T> extends State<_WorkspaceSelect<T>> {
       if (visibleItems.isEmpty && !showCreateOption)
         _WorkspaceSelectEmptyRow(size: _effectiveSize, colors: colors),
     ];
-    final overlaySize = overlayBox?.size ?? MediaQuery.sizeOf(context);
-    final fieldRect = Rect.fromLTRB(
-      fieldTopLeft.dx,
-      fieldTop,
-      fieldTopRight.dx,
-      fieldBottom,
-    );
+    final overlaySize = overlayBox.size;
     final safePadding = MediaQuery.paddingOf(context);
     const menuGap = 4.0;
     const overlayMargin = 8.0;
@@ -1451,51 +1469,42 @@ class _WorkspaceSelectState<T> extends State<_WorkspaceSelect<T>> {
       math.max(_effectiveSize.optionHeight, availableHeight),
     );
     final needsScroll = contentHeight > menuHeight;
-    final targetHeight = canMeasureField
-        ? renderBox.size.height
-        : _effectiveSize.inputHeight;
 
     return Stack(
       children: [
         ..._buildDismissBarriers(overlaySize, fieldRect),
         Positioned(
-          left: 0,
-          top: 0,
+          // Tooltip resolves its anchor during layout, before follower-layer
+          // paint transforms are available. Position in overlay coordinates.
+          left: fieldTopLeft.dx,
+          top: showAbove
+              ? fieldTop - menuHeight - menuGap
+              : fieldBottom + menuGap,
           width: fieldWidth,
           height: menuHeight,
-          child: CompositedTransformFollower(
-            link: _fieldLayerLink,
-            showWhenUnlinked: false,
-            targetAnchor: Alignment.topLeft,
-            followerAnchor: Alignment.topLeft,
-            offset: Offset(
-              0,
-              showAbove ? -menuHeight - menuGap : targetHeight + menuGap,
-            ),
-            child: TextFieldTapRegion(
-              child: Material(
-                key: ValueKey('workspace-select-menu:${widget.label}'),
-                color: Colors.transparent,
-                child: NautermDropdownSurface(
-                  style: colors == null ? null : _terminalSftpMenuStyle(colors),
-                  child: needsScroll
-                      ? ListView(
-                          padding: const EdgeInsets.symmetric(
-                            vertical: _workspaceMenuVerticalInset,
-                          ),
-                          shrinkWrap: true,
-                          children: rows,
-                        )
-                      : Padding(
-                          padding: const EdgeInsets.symmetric(
-                            vertical: _workspaceMenuVerticalInset,
-                          ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: rows,
-                          ),
+          child: TextFieldTapRegion(
+            child: Material(
+              key: ValueKey('workspace-select-menu:${widget.label}'),
+              color: Colors.transparent,
+              child: NautermDropdownSurface(
+                style: colors == null ? null : _terminalSftpMenuStyle(colors),
+                child: needsScroll
+                    ? ListView(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: _workspaceMenuVerticalInset,
                         ),
-                ),
+                        shrinkWrap: true,
+                        children: rows,
+                      )
+                    : Padding(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: _workspaceMenuVerticalInset,
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: rows,
+                        ),
+                      ),
               ),
             ),
           ),
@@ -1548,76 +1557,73 @@ class _WorkspaceSelectState<T> extends State<_WorkspaceSelect<T>> {
             ),
             child: selected ?? const SizedBox.shrink(),
           );
-    final field = CompositedTransformTarget(
-      link: _fieldLayerLink,
-      child: MouseRegion(
-        onEnter: widget.clearable ? (_) => _handleHoverChanged(true) : null,
-        onExit: widget.clearable ? (_) => _handleHoverChanged(false) : null,
-        child: _WorkspaceFieldFrame(
-          frameKey: _fieldKey,
-          label: widget.label,
-          isRequired: widget.isRequired,
-          size: _effectiveSize,
-          focused: _open || _inputFocusNode.hasFocus,
-          floatingLabel: widget.floatingLabel,
-          hasContent: hasContent,
-          height: _effectiveSize.inputHeight,
-          errorText: widget.errorText,
-          onTap: widget.editable ? _focusEditableField : _toggleMenu,
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final showSuffix =
-                  constraints.maxWidth >=
-                  _workspaceFieldAffixWidth + _workspaceSelectAffixGap;
-              return Row(
-                children: [
-                  if (widget.leading != null) ...[
-                    ConstrainedBox(
-                      constraints: BoxConstraints(
-                        maxWidth: constraints.maxWidth * 0.68,
-                      ),
-                      child: widget.leading!,
+    final field = MouseRegion(
+      onEnter: widget.clearable ? (_) => _handleHoverChanged(true) : null,
+      onExit: widget.clearable ? (_) => _handleHoverChanged(false) : null,
+      child: _WorkspaceFieldFrame(
+        frameKey: _fieldKey,
+        label: widget.label,
+        isRequired: widget.isRequired,
+        size: _effectiveSize,
+        focused: _open || _inputFocusNode.hasFocus,
+        floatingLabel: widget.floatingLabel,
+        hasContent: hasContent,
+        height: _effectiveSize.inputHeight,
+        errorText: widget.errorText,
+        onTap: widget.editable ? _focusEditableField : _toggleMenu,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final showSuffix =
+                constraints.maxWidth >=
+                _workspaceFieldAffixWidth + _workspaceSelectAffixGap;
+            return Row(
+              children: [
+                if (widget.leading != null) ...[
+                  ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: constraints.maxWidth * 0.68,
                     ),
-                    SizedBox(width: _workspaceSelectAffixGap),
-                  ],
-                  Expanded(child: fieldContent),
-                  if (showSuffix) ...[
-                    SizedBox(width: _workspaceSelectAffixGap),
-                    SizedBox(
-                      key: ValueKey('workspace-select-suffix:${widget.label}'),
-                      width: _workspaceFieldAffixWidth,
-                      height: _workspaceFieldAffixWidth,
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
+                    child: widget.leading!,
+                  ),
+                  SizedBox(width: _workspaceSelectAffixGap),
+                ],
+                Expanded(child: fieldContent),
+                if (showSuffix) ...[
+                  SizedBox(width: _workspaceSelectAffixGap),
+                  SizedBox(
+                    key: ValueKey('workspace-select-suffix:${widget.label}'),
+                    width: _workspaceFieldAffixWidth,
+                    height: _workspaceFieldAffixWidth,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        _WorkspaceAffixVisibility(
+                          visible: !showClear,
+                          child: _WorkspaceSelectSuffixButton(
+                            icon: Icons.keyboard_arrow_down_rounded,
+                            expanded: _open,
+                            width: _workspaceFieldAffixWidth,
+                            onPressed: widget.editable
+                                ? _toggleEditableMenu
+                                : _toggleMenu,
+                            colors: colors,
+                          ),
+                        ),
+                        if (widget.clearable)
                           _WorkspaceAffixVisibility(
-                            visible: !showClear,
-                            child: _WorkspaceSelectSuffixButton(
-                              icon: Icons.keyboard_arrow_down_rounded,
-                              expanded: _open,
-                              width: _workspaceFieldAffixWidth,
-                              onPressed: widget.editable
-                                  ? _toggleEditableMenu
-                                  : _toggleMenu,
-                              colors: colors,
+                            visible: showClear,
+                            child: _WorkspaceClearButton(
+                              tooltip: tr('Clear ${widget.label}'),
+                              onPressed: _clearInput,
                             ),
                           ),
-                          if (widget.clearable)
-                            _WorkspaceAffixVisibility(
-                              visible: showClear,
-                              child: _WorkspaceClearButton(
-                                tooltip: tr('Clear ${widget.label}'),
-                                onPressed: _clearInput,
-                              ),
-                            ),
-                        ],
-                      ),
+                      ],
                     ),
-                  ],
+                  ),
                 ],
-              );
-            },
-          ),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -2135,6 +2141,44 @@ String? _plainTextFor(Widget? widget) {
   return null;
 }
 
+class _WorkspaceOverflowTooltipText extends StatelessWidget {
+  const _WorkspaceOverflowTooltipText({required this.text});
+
+  final Text text;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      if (!constraints.hasBoundedWidth) return text;
+      final defaults = DefaultTextStyle.of(context);
+      final style = text.style?.inherit == false
+          ? text.style!
+          : defaults.style.merge(text.style);
+      final painter = TextPainter(
+        text: TextSpan(
+          style: style,
+          text: text.data,
+          children: text.textSpan == null ? null : [text.textSpan!],
+        ),
+        maxLines: text.maxLines ?? defaults.maxLines,
+        ellipsis: '\u2026',
+        textDirection: text.textDirection ?? Directionality.of(context),
+        textScaler: text.textScaler ?? MediaQuery.textScalerOf(context),
+        locale: text.locale ?? Localizations.maybeLocaleOf(context),
+      )..layout(maxWidth: constraints.maxWidth);
+      final overflows = painter.didExceedMaxLines;
+      painter.dispose();
+      if (!overflows) return text;
+      return Tooltip(
+        message: text.data ?? text.textSpan!.toPlainText(),
+        waitDuration: const Duration(milliseconds: 350),
+        constraints: const BoxConstraints(maxWidth: 480),
+        child: text,
+      );
+    },
+  );
+}
+
 class _WorkspaceSelectMenuRow<T> extends StatelessWidget {
   const _WorkspaceSelectMenuRow({
     required this.item,
@@ -2192,7 +2236,9 @@ class _WorkspaceSelectMenuRow<T> extends StatelessWidget {
             fontWeight: NautermFontWeights.regular,
             letterSpacing: 0,
           ),
-          child: localizedChild,
+          child: localizedChild is Text
+              ? _WorkspaceOverflowTooltipText(text: localizedChild)
+              : localizedChild,
         ),
       ),
     );

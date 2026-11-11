@@ -1,9 +1,10 @@
 part of 'nauterm_workspace.dart';
 
 class _SerialConnectionDraft {
-  const _SerialConnectionDraft({required this.config});
+  const _SerialConnectionDraft({required this.config, this.saveAsHost = false});
 
   final SerialConnectionConfig config;
+  final bool saveAsHost;
 
   String get serialPort => config.serialPort;
   int get baudRate => config.baudRate;
@@ -317,7 +318,9 @@ class _WorkspaceTextButton extends StatelessWidget {
 }
 
 class _SerialConnectionDialog extends StatefulWidget {
-  const _SerialConnectionDialog();
+  const _SerialConnectionDialog({this.allowSave = false});
+
+  final bool allowSave;
 
   @override
   State<_SerialConnectionDialog> createState() =>
@@ -325,289 +328,337 @@ class _SerialConnectionDialog extends StatefulWidget {
 }
 
 class _SerialConnectionDialogState extends State<_SerialConnectionDialog> {
-  late final TextEditingController _portController;
-  late final TextEditingController _baudController;
-  List<SerialPortInfo> _serialPorts = const [];
-  bool _loadingPorts = false;
-  String? _portListError;
-  String? _error;
-  int _dataBits = 8;
-  SerialParity _parity = SerialParity.none;
-  int _stopBits = 1;
-  SerialFlowControl _flowControl = SerialFlowControl.none;
+  late final _SerialConnectionFormController _serialForm;
 
   @override
   void initState() {
     super.initState();
-    _portController = TextEditingController(text: _defaultSerialPort());
-    _baudController = TextEditingController(text: '115200');
-    _portController.addListener(_handleInputChanged);
-    _baudController.addListener(_handleInputChanged);
-    _refreshSerialPorts();
+    _serialForm = _SerialConnectionFormController();
+    _serialForm.refreshPorts();
   }
 
   @override
   void dispose() {
-    _portController.removeListener(_handleInputChanged);
-    _baudController.removeListener(_handleInputChanged);
-    _portController.dispose();
-    _baudController.dispose();
+    _serialForm.dispose();
     super.dispose();
   }
 
-  void _handleInputChanged() {
-    if (mounted) {
-      setState(() {});
-    }
-  }
-
-  Future<void> _refreshSerialPorts() async {
-    if (_loadingPorts) {
-      return;
-    }
-
-    setState(() {
-      _loadingPorts = true;
-      _portListError = null;
-    });
-
-    try {
-      final ports = await Future<List<SerialPortInfo>>(
-        NativeTerminalDriver.listSerialPorts,
-      );
-      if (!mounted) {
-        return;
-      }
-
-      final currentPort = _portController.text.trim();
-      final shouldUseDetectedPort =
-          ports.isNotEmpty &&
-          (currentPort.isEmpty || currentPort == _defaultSerialPort());
-      setState(() {
-        _serialPorts = ports;
-        _loadingPorts = false;
-      });
-      if (shouldUseDetectedPort) {
-        _portController.text = ports.first.path;
-      }
-    } on Object catch (error) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _serialPorts = const [];
-        _loadingPorts = false;
-        _portListError = 'Unable to enumerate serial devices: $error';
-      });
-    }
-  }
-
-  void _submit() {
-    final serialPort = _portController.text.trim();
-    final baudRate = int.tryParse(_baudController.text.trim());
-
-    if (serialPort.isEmpty) {
-      setState(() => _error = 'Serial port is required.');
-      return;
-    }
-    if (baudRate == null || baudRate <= 0) {
-      setState(() => _error = 'Baud rate must be a positive number.');
-      return;
-    }
-    if (_dataBits < 5 || _dataBits > 8) {
-      setState(() => _error = 'Data bits must be between 5 and 8.');
-      return;
-    }
-    if (_stopBits != 1 && _stopBits != 2) {
-      setState(() => _error = 'Stop bits must be 1 or 2.');
-      return;
-    }
-
-    Navigator.of(context).pop(
-      _SerialConnectionDraft(
-        config: SerialConnectionConfig(
-          serialPort: serialPort,
-          baudRate: baudRate,
-          dataBits: _dataBits,
-          parity: _parity,
-          stopBits: _stopBits,
-          flowControl: _flowControl,
-        ),
-      ),
-    );
+  void _submit({bool saveAsHost = false}) {
+    final config = _serialForm.readConfig();
+    if (config == null) return;
+    Navigator.of(context)
+        .pop(_SerialConnectionDraft(config: config, saveAsHost: saveAsHost));
   }
 
   @override
-  Widget build(BuildContext context) {
-    return _WorkspaceDialogFrame(
-      width: 560,
-      title: Text(tr('common.label.serial', fallback: 'Serial')),
-      content: Column(
+  Widget build(BuildContext context) => _WorkspaceDialogFrame(
+    width: 560,
+    title: Text(tr('common.label.serial', fallback: 'Serial')),
+    content: _SerialConnectionFields(controller: _serialForm),
+    actions: [
+      _WorkspaceButton(
+        label: tr('common.action.cancel', fallback: 'Cancel'),
+        variant: _WorkspaceButtonVariant.text,
+        onPressed: () => Navigator.of(context).pop(),
+      ),
+      if (widget.allowSave)
+        _WorkspaceButton(
+          label: tr('workspace.label.connectSave', fallback: 'Connect & Save'),
+          onPressed: () => _submit(saveAsHost: true),
+        ),
+      _WorkspaceButton(
+        label: tr('common.action.connect', fallback: 'Connect'),
+        type: _WorkspaceButtonType.primary,
+        variant: _WorkspaceButtonVariant.solid,
+        onPressed: _submit,
+      ),
+    ],
+  );
+}
+
+class _SerialConnectionFormController extends ChangeNotifier {
+  _SerialConnectionFormController({SerialConnectionConfig? initialConfig})
+    : portController = TextEditingController(
+        text: initialConfig?.serialPort ?? _defaultSerialPort(),
+      ),
+      baudController = TextEditingController(
+        text: '${initialConfig?.baudRate ?? 115200}',
+      ),
+      dataBits = initialConfig?.dataBits ?? 8,
+      parity = initialConfig?.parity ?? SerialParity.none,
+      stopBits = initialConfig?.stopBits ?? 1,
+      flowControl = initialConfig?.flowControl ?? SerialFlowControl.none,
+      _hasSavedPort = initialConfig != null {
+    portController.addListener(notifyListeners);
+    baudController.addListener(notifyListeners);
+  }
+
+  final TextEditingController portController;
+  final TextEditingController baudController;
+  final bool _hasSavedPort;
+  List<SerialPortInfo> ports = const [];
+  bool loadingPorts = false;
+  String? portListError;
+  String? error;
+  int dataBits;
+  SerialParity parity;
+  int stopBits;
+  SerialFlowControl flowControl;
+  bool _disposed = false;
+
+  void updateOptions({
+    int? dataBits,
+    SerialParity? parity,
+    int? stopBits,
+    SerialFlowControl? flowControl,
+  }) {
+    this.dataBits = dataBits ?? this.dataBits;
+    this.parity = parity ?? this.parity;
+    this.stopBits = stopBits ?? this.stopBits;
+    this.flowControl = flowControl ?? this.flowControl;
+    notifyListeners();
+  }
+
+  Future<void> refreshPorts() async {
+    if (loadingPorts || _disposed) return;
+    loadingPorts = true;
+    portListError = null;
+    notifyListeners();
+    try {
+      final detected = await Future<List<SerialPortInfo>>(
+        NativeTerminalDriver.listSerialPorts,
+      );
+      if (_disposed) return;
+      ports = detected;
+      loadingPorts = false;
+      final currentPort = portController.text.trim();
+      if (!_hasSavedPort &&
+          detected.isNotEmpty &&
+          (currentPort.isEmpty || currentPort == _defaultSerialPort())) {
+        portController.text = detected.first.path;
+      }
+    } on Object catch (error) {
+      if (_disposed) return;
+      ports = const [];
+      loadingPorts = false;
+      portListError = 'Unable to enumerate serial devices: $error';
+    }
+    notifyListeners();
+  }
+
+  SerialConnectionConfig? readConfig() {
+    try {
+      final config = SerialConnectionConfig.fromHostConfig(
+        serialPort: portController.text.trim(),
+        baudRate: int.tryParse(baudController.text.trim()) ?? 0,
+        config: {
+          'serial': {
+            'data_bits': dataBits,
+            'stop_bits': stopBits,
+            'parity': parity.name,
+            'flow_control': flowControl.name,
+          },
+        },
+      );
+      error = null;
+      notifyListeners();
+      return config;
+    } on FormatException {
+      error = tr(
+        'workspace.serial.invalidSettings',
+        fallback: 'Enter a serial port and a valid positive baud rate.',
+      );
+      notifyListeners();
+      return null;
+    }
+  }
+
+  String get portStatusText {
+    if (loadingPorts) return 'Scanning serial devices...';
+    return portListError ?? 'No serial devices found. Enter a path manually.';
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    portController.removeListener(notifyListeners);
+    baudController.removeListener(notifyListeners);
+    portController.dispose();
+    baudController.dispose();
+    super.dispose();
+  }
+}
+
+class _SerialPortField extends StatelessWidget {
+  const _SerialPortField({required this.controller});
+
+  final _SerialConnectionFormController controller;
+  static const _size = _WorkspaceControlSize.large;
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: controller,
+    builder: (context, _) => Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: _WorkspaceSelect<String>(
+            label: tr('workspace.label.serialPort', fallback: 'Serial Port'),
+            value: controller.portController.text.trim(),
+            size: _size,
+            editable: true,
+            clearable: true,
+            inputController: controller.portController,
+            items: [
+              for (final port in controller.ports)
+                DropdownMenuItem<String>(
+                  value: port.path,
+                  child: Text(port.label),
+                ),
+            ],
+            onChanged: (value) {
+              if (value != null) controller.portController.text = value;
+            },
+          ),
+        ),
+        SizedBox(width: 8),
+        _WorkspaceButton(
+          icon: Icons.refresh_rounded,
+          size: _size,
+          height: _size.inputHeight,
+          minWidth: _size.inputHeight,
+          tooltip: tr(
+            'workspace.label.refreshSerialDevices',
+            fallback: 'Refresh serial devices',
+          ),
+          onPressed: controller.loadingPorts ? null : controller.refreshPorts,
+        ),
+      ],
+    ),
+  );
+}
+
+class _SerialConnectionFields extends StatelessWidget {
+  const _SerialConnectionFields({
+    required this.controller,
+    this.includePort = true,
+    this.fieldGap = 12,
+  });
+
+  final _SerialConnectionFormController controller;
+  final bool includePort;
+  final double fieldGap;
+  static const _size = _WorkspaceControlSize.large;
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: controller,
+    builder: (context, _) {
+      final dataBits = _WorkspaceSelect<int>(
+        label: tr('workspace.label.dataBits', fallback: 'Data Bits'),
+        value: controller.dataBits,
+        size: _size,
+        items: [
+          for (final bits in [5, 6, 7, 8])
+            DropdownMenuItem<int>(value: bits, child: Text('$bits')),
+        ],
+        onChanged: (value) => controller.updateOptions(dataBits: value),
+      );
+      final stopBits = _WorkspaceSelect<int>(
+        label: tr('workspace.label.stopBits', fallback: 'Stop Bits'),
+        value: controller.stopBits,
+        size: _size,
+        items: [
+          for (final bits in [1, 2])
+            DropdownMenuItem<int>(value: bits, child: Text('$bits')),
+        ],
+        onChanged: (value) => controller.updateOptions(stopBits: value),
+      );
+      final parity = _WorkspaceSelect<SerialParity>(
+        label: tr('common.label.parity', fallback: 'Parity'),
+        value: controller.parity,
+        size: _size,
+        items: [
+          for (final value in SerialParity.values)
+            DropdownMenuItem<SerialParity>(
+              value: value,
+              child: Text(tr(_serialParityLabel(value))),
+            ),
+        ],
+        onChanged: (value) => controller.updateOptions(parity: value),
+      );
+      final flowControl = _WorkspaceSelect<SerialFlowControl>(
+        label: tr('workspace.label.flowControl', fallback: 'Flow Control'),
+        value: controller.flowControl,
+        size: _size,
+        items: [
+          for (final value in SerialFlowControl.values)
+            DropdownMenuItem<SerialFlowControl>(
+              value: value,
+              child: Text(tr(_serialFlowControlLabel(value))),
+            ),
+        ],
+        onChanged: (value) => controller.updateOptions(flowControl: value),
+      );
+      return Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: _WorkspaceSelect<String>(
-                  label: 'Serial Port',
-                  value: _portController.text.trim(),
-                  size: _WorkspaceControlSize.large,
-                  editable: true,
-                  clearable: true,
-                  inputController: _portController,
-                  items: [
-                    for (final port in _serialPorts)
-                      DropdownMenuItem<String>(
-                        value: port.path,
-                        child: Text(port.label),
-                      ),
-                  ],
-                  onChanged: (value) {
-                    if (value == null) {
-                      return;
-                    }
-                    _portController.text = value;
-                  },
-                ),
-              ),
-              SizedBox(width: 8),
-              _WorkspaceButton(
-                icon: Icons.refresh_rounded,
-                size: _WorkspaceControlSize.large,
-                height: _WorkspaceControlSize.large.inputHeight,
-                minWidth: _WorkspaceControlSize.large.inputHeight,
-                tooltip: tr(
-                  'workspace.label.refreshSerialDevices',
-                  fallback: 'Refresh serial devices',
-                ),
-                onPressed: _loadingPorts ? null : _refreshSerialPorts,
-              ),
-            ],
-          ),
-          if (_loadingPorts || _portListError != null || _serialPorts.isEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                _serialPortStatusText,
-                style: TextStyle(
-                  color: _portListError == null
-                      ? _mutedText
-                      : const Color(0xffef4444),
-                  fontSize: NautermFontSizes.labelMedium,
-                  fontWeight: NautermFontWeights.medium,
-                  letterSpacing: 0,
-                ),
+          if (includePort) ...[
+            _SerialPortField(controller: controller),
+            SizedBox(height: fieldGap),
+          ],
+          if (controller.loadingPorts ||
+              controller.portListError != null ||
+              controller.ports.isEmpty) ...[
+            Text(
+              controller.portStatusText,
+              style: TextStyle(
+                color: controller.portListError == null
+                    ? _mutedText
+                    : const Color(0xffef4444),
+                fontSize: NautermFontSizes.labelMedium,
+                fontWeight: NautermFontWeights.medium,
+                letterSpacing: 0,
               ),
             ),
-          SizedBox(height: 12),
+            SizedBox(height: fieldGap),
+          ],
           _WorkspaceSelect<int>(
-            label: 'Baud Rate',
-            value: int.tryParse(_baudController.text.trim()) ?? 0,
-            size: _WorkspaceControlSize.large,
+            label: tr('workspace.label.baudRate', fallback: 'Baud Rate'),
+            value: int.tryParse(controller.baudController.text.trim()) ?? 0,
+            size: _size,
             editable: true,
             clearable: true,
-            inputController: _baudController,
+            inputController: controller.baudController,
             items: [
               for (final rate in _commonSerialBaudRates)
-                DropdownMenuItem<int>(value: rate, child: Text(tr('$rate'))),
+                DropdownMenuItem<int>(value: rate, child: Text('$rate')),
             ],
             onChanged: (value) {
-              if (value == null) {
-                return;
-              }
-              _baudController.text = '$value';
+              if (value != null) controller.baudController.text = '$value';
             },
           ),
-          SizedBox(height: 12),
+          SizedBox(height: fieldGap),
           Row(
             children: [
-              Expanded(
-                child: _WorkspaceSelect<int>(
-                  label: 'Data Bits',
-                  value: _dataBits,
-                  size: _WorkspaceControlSize.large,
-                  items: const [
-                    DropdownMenuItem<int>(value: 5, child: Text('5')),
-                    DropdownMenuItem<int>(value: 6, child: Text('6')),
-                    DropdownMenuItem<int>(value: 7, child: Text('7')),
-                    DropdownMenuItem<int>(value: 8, child: Text('8')),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) {
-                      setState(() => _dataBits = value);
-                    }
-                  },
-                ),
-              ),
+              Expanded(child: dataBits),
               SizedBox(width: 10),
-              Expanded(
-                child: _WorkspaceSelect<int>(
-                  label: 'Stop Bits',
-                  value: _stopBits,
-                  size: _WorkspaceControlSize.large,
-                  items: const [
-                    DropdownMenuItem<int>(value: 1, child: Text('1')),
-                    DropdownMenuItem<int>(value: 2, child: Text('2')),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) {
-                      setState(() => _stopBits = value);
-                    }
-                  },
-                ),
-              ),
+              Expanded(child: parity),
             ],
           ),
-          SizedBox(height: 12),
+          SizedBox(height: fieldGap),
           Row(
             children: [
-              Expanded(
-                child: _WorkspaceSelect<SerialParity>(
-                  label: 'Parity',
-                  value: _parity,
-                  size: _WorkspaceControlSize.large,
-                  items: [
-                    for (final parity in SerialParity.values)
-                      DropdownMenuItem<SerialParity>(
-                        value: parity,
-                        child: Text(tr(_serialParityLabel(parity))),
-                      ),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) {
-                      setState(() => _parity = value);
-                    }
-                  },
-                ),
-              ),
+              Expanded(child: stopBits),
               SizedBox(width: 10),
-              Expanded(
-                child: _WorkspaceSelect<SerialFlowControl>(
-                  label: 'Flow Control',
-                  value: _flowControl,
-                  size: _WorkspaceControlSize.large,
-                  items: [
-                    for (final flowControl in SerialFlowControl.values)
-                      DropdownMenuItem<SerialFlowControl>(
-                        value: flowControl,
-                        child: Text(tr(_serialFlowControlLabel(flowControl))),
-                      ),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) {
-                      setState(() => _flowControl = value);
-                    }
-                  },
-                ),
-              ),
+              Expanded(child: flowControl),
             ],
           ),
-          if (_error != null) ...[
-            SizedBox(height: 12),
+          if (controller.error != null) ...[
+            SizedBox(height: fieldGap),
             Text(
-              _error!,
+              controller.error!,
               style: TextStyle(
                 color: Color(0xffef4444),
                 fontSize: NautermFontSizes.labelMedium,
@@ -617,33 +668,9 @@ class _SerialConnectionDialogState extends State<_SerialConnectionDialog> {
             ),
           ],
         ],
-      ),
-      actions: [
-        _WorkspaceButton(
-          label: 'Cancel',
-          variant: _WorkspaceButtonVariant.text,
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        _WorkspaceButton(
-          label: 'Connect',
-          type: _WorkspaceButtonType.primary,
-          variant: _WorkspaceButtonVariant.solid,
-          onPressed: _submit,
-        ),
-      ],
-    );
-  }
-
-  String get _serialPortStatusText {
-    if (_loadingPorts) {
-      return 'Scanning serial devices...';
-    }
-    final error = _portListError;
-    if (error != null) {
-      return error;
-    }
-    return 'No serial devices found. Enter a path manually.';
-  }
+      );
+    },
+  );
 }
 
 const List<int> _commonSerialBaudRates = [

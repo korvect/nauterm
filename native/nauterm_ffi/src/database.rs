@@ -21,7 +21,7 @@ mod schema;
 
 use schema::create_schema;
 
-const SCHEMA_VERSION: i32 = 5;
+const SCHEMA_VERSION: i32 = 6;
 #[cfg(test)]
 const DEFAULT_MOSH_SERVER_COMMAND: &str = "mosh-server new -s -l LANG=en_US.UTF-8";
 const DEVICE_ID_METADATA_KEY: &str = "device_id";
@@ -206,6 +206,8 @@ pub enum HostType {
     Local,
     #[serde(rename = "remote")]
     Remote,
+    #[serde(rename = "serial")]
+    Serial,
 }
 
 impl HostType {
@@ -213,6 +215,7 @@ impl HostType {
         match self {
             HostType::Local => "local",
             HostType::Remote => "remote",
+            HostType::Serial => "serial",
         }
     }
 
@@ -220,6 +223,7 @@ impl HostType {
         match value {
             "local" => Ok(HostType::Local),
             "remote" => Ok(HostType::Remote),
+            "serial" => Ok(HostType::Serial),
             _ => Err(rusqlite::Error::InvalidParameterName(format!(
                 "unknown host type: {value}"
             ))),
@@ -314,6 +318,13 @@ pub struct HostEntry {
     pub os: Option<String>,
     #[serde(default)]
     pub distro: Option<String>,
+    #[serde(default)]
+    pub serial_port: Option<String>,
+    #[serde(default)]
+    pub serial_baud_rate: Option<i64>,
+    /// Extensible, non-secret options; unknown keys survive round trips.
+    #[serde(default)]
+    pub config: Map<String, Value>,
     #[serde(default)]
     pub tag_uuids: Vec<String>,
     #[serde(default)]
@@ -2339,6 +2350,7 @@ fn host_summary_select_sql(where_clause: &str) -> String {
           NULL AS environment_variables, hosts.encoding, hosts.telnet_encoding,
           hosts.type,
           hosts.key_uuid, hosts.shell_path, hosts.work_dir, hosts.os, hosts.distro,
+          hosts.serial_port, hosts.serial_baud_rate, hosts.config,
           COALESCE((
             SELECT json_group_array(tag_uuid)
             FROM (
@@ -2813,6 +2825,11 @@ fn host_from_row(row: &Row<'_>) -> rusqlite::Result<HostEntry> {
         work_dir: row.get("work_dir")?,
         os: row.get("os")?,
         distro: row.get("distro")?,
+        serial_port: row.get("serial_port")?,
+        serial_baud_rate: row.get("serial_baud_rate")?,
+        config: serde_json::from_str(&row.get::<_, String>("config")?).map_err(|error| {
+            rusqlite::Error::FromSqlConversionFailure(0, Type::Text, Box::new(error))
+        })?,
         tag_uuids: tag_uuids_from_json(row.get("tag_uuids")?),
         created_at: row.get("created_at")?,
         updated_at: row.get("updated_at")?,
@@ -3207,12 +3224,15 @@ mod tests {
             ALTER TABLE groups DROP COLUMN telnet_dark_theme_id;
             ALTER TABLE hosts DROP COLUMN dark_theme_id;
             ALTER TABLE hosts DROP COLUMN telnet_dark_theme_id;
+            ALTER TABLE hosts DROP COLUMN serial_port;
+            ALTER TABLE hosts DROP COLUMN serial_baud_rate;
+            ALTER TABLE hosts DROP COLUMN config;
             PRAGMA user_version = 4;",
             )
             .unwrap();
         migrations::migrate_schema(&mut database.connection, 4).unwrap();
         let host = database.get_host(id).unwrap().unwrap();
-        assert_eq!(database.schema_version().unwrap(), 5);
+        assert_eq!(database.schema_version().unwrap(), SCHEMA_VERSION);
         assert_eq!(host.theme_id.as_deref(), Some("ayu-light"));
         assert_eq!(host.telnet_theme_id.as_deref(), Some("nysa-light"));
         assert_eq!(host.dark_theme_id, None);
@@ -3373,6 +3393,9 @@ mod tests {
                  ALTER TABLE groups DROP COLUMN telnet_dark_theme_id;
                  ALTER TABLE hosts DROP COLUMN dark_theme_id;
                  ALTER TABLE hosts DROP COLUMN telnet_dark_theme_id;
+                 ALTER TABLE hosts DROP COLUMN serial_port;
+                 ALTER TABLE hosts DROP COLUMN serial_baud_rate;
+                 ALTER TABLE hosts DROP COLUMN config;
                  PRAGMA user_version = 2;",
             )
             .unwrap();
@@ -4530,6 +4553,9 @@ mod tests {
                 work_dir: None,
                 os: None,
                 distro: None,
+                serial_port: None,
+                serial_baud_rate: None,
+                config: Map::new(),
                 created_at: None,
                 updated_at: None,
                 deleted_at: None,
@@ -4743,6 +4769,9 @@ mod tests {
                 work_dir: None,
                 os: None,
                 distro: None,
+                serial_port: None,
+                serial_baud_rate: None,
+                config: Map::new(),
                 created_at: None,
                 updated_at: None,
                 deleted_at: None,
@@ -5413,3 +5442,7 @@ mod tests {
         assert_eq!(snippets.as_array().unwrap()[0]["target_host_ids"][0], 1);
     }
 }
+
+#[cfg(test)]
+#[path = "database/serial_host_tests.rs"]
+mod serial_host_tests;

@@ -131,6 +131,10 @@ pub(super) fn create_schema(connection: &Connection) -> rusqlite::Result<()> {
           work_dir TEXT,
           os TEXT,
           distro TEXT,
+          serial_port TEXT,
+          serial_baud_rate INTEGER CHECK (serial_baud_rate IS NULL OR serial_baud_rate BETWEEN 1 AND 4294967295),
+          config TEXT NOT NULL DEFAULT '{}'
+            CHECK (json_valid(config) AND json_type(config) = 'object'),
           created_at INTEGER NOT NULL DEFAULT (CAST(unixepoch('subsec') * 1000 AS INTEGER)),
           updated_at INTEGER NOT NULL DEFAULT (CAST(unixepoch('subsec') * 1000 AS INTEGER)),
           deleted_at INTEGER,
