@@ -1766,12 +1766,14 @@ class _WorkspaceToggleRow extends StatefulWidget {
   const _WorkspaceToggleRow({
     required this.label,
     this.description,
+    this.tooltip,
     required this.value,
     required this.onChanged,
   });
 
   final String label;
   final String? description;
+  final String? tooltip;
   final bool value;
   final ValueChanged<bool> onChanged;
 
@@ -1780,6 +1782,7 @@ class _WorkspaceToggleRow extends StatefulWidget {
 }
 
 class _WorkspaceToggleRowState extends State<_WorkspaceToggleRow> {
+  final GlobalKey<TooltipState> _tooltipKey = GlobalKey<TooltipState>();
   bool _pressed = false;
   bool _focused = false;
 
@@ -1789,6 +1792,16 @@ class _WorkspaceToggleRowState extends State<_WorkspaceToggleRow> {
   Widget build(BuildContext context) {
     final trackColor = widget.value ? _blue : _sidebarDivider;
     final description = widget.description;
+    final tooltip = widget.tooltip;
+    final label = Text(
+      tr(widget.label),
+      style: TextStyle(
+        color: _text,
+        fontSize: NautermFontSizes.labelLarge,
+        fontWeight: NautermFontWeights.semibold,
+        letterSpacing: 0,
+      ),
+    );
     return Semantics(
       container: true,
       button: true,
@@ -1823,13 +1836,18 @@ class _WorkspaceToggleRowState extends State<_WorkspaceToggleRow> {
             constraints: BoxConstraints(
               minHeight: description == null ? 36 : 52,
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 8),
+            padding: EdgeInsets.zero,
             decoration: BoxDecoration(
               color: Colors.transparent,
               borderRadius: BorderRadius.circular(8),
-              border: _focused
-                  ? Border.all(color: _blue.withValues(alpha: 0.52))
-                  : null,
+            ),
+            foregroundDecoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: _focused
+                    ? _blue.withValues(alpha: 0.52)
+                    : Colors.transparent,
+              ),
             ),
             child: Row(
               children: [
@@ -1838,15 +1856,46 @@ class _WorkspaceToggleRowState extends State<_WorkspaceToggleRow> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        tr(widget.label),
-                        style: TextStyle(
-                          color: _text,
-                          fontSize: NautermFontSizes.labelLarge,
-                          fontWeight: NautermFontWeights.semibold,
-                          letterSpacing: 0,
+                      if (tooltip == null)
+                        label
+                      else
+                        Row(
+                          children: [
+                            Flexible(child: label),
+                            const SizedBox(width: 4),
+                            Tooltip(
+                              key: _tooltipKey,
+                              message: tr(tooltip),
+                              triggerMode: TooltipTriggerMode.manual,
+                              waitDuration: const Duration(milliseconds: 350),
+                              constraints: const BoxConstraints(maxWidth: 480),
+                              textStyle:
+                                  (TooltipTheme.of(context).textStyle ??
+                                          const TextStyle())
+                                      .copyWith(
+                                        fontSize: NautermFontSizes.labelLarge,
+                                      ),
+                              child: SizedBox.square(
+                                dimension: 20,
+                                child: IconButton(
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints.tightFor(
+                                    width: 20,
+                                    height: 20,
+                                  ),
+                                  visualDensity: VisualDensity.compact,
+                                  icon: Icon(
+                                    Icons.info_outline_rounded,
+                                    size: 16,
+                                    color: _mutedText,
+                                  ),
+                                  onPressed: () => _tooltipKey.currentState
+                                      ?.ensureTooltipVisible(),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
                       if (description != null) ...[
                         const SizedBox(height: 2),
                         Text(
@@ -1860,18 +1909,19 @@ class _WorkspaceToggleRowState extends State<_WorkspaceToggleRow> {
                     ],
                   ),
                 ),
+                const SizedBox(width: 12),
                 AnimatedScale(
                   scale: _pressed ? 0.94 : 1,
                   duration: const Duration(milliseconds: 80),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 150),
                     curve: Curves.easeOutCubic,
-                    width: 32,
-                    height: 18,
+                    width: 40,
+                    height: 24,
                     padding: const EdgeInsets.all(2),
                     decoration: BoxDecoration(
                       color: trackColor,
-                      borderRadius: BorderRadius.circular(9),
+                      borderRadius: BorderRadius.circular(12),
                     ),
                     child: AnimatedAlign(
                       duration: const Duration(milliseconds: 150),
@@ -1883,8 +1933,8 @@ class _WorkspaceToggleRowState extends State<_WorkspaceToggleRow> {
                         key: ValueKey(
                           'workspace-toggle-thumb:${widget.label}:${widget.value ? 'on' : 'off'}',
                         ),
-                        width: 14,
-                        height: 14,
+                        width: 20,
+                        height: 20,
                         decoration: BoxDecoration(
                           color: _card,
                           shape: BoxShape.circle,

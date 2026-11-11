@@ -1946,7 +1946,6 @@ class _HostEditorContentState extends State<_HostEditorContent> {
     final initial = widget.request.initial;
     final isLocal = _type == NautermHostType.local;
     final isSerial = _type == NautermHostType.serial;
-    final isRemote = _type == NautermHostType.remote;
 
     final editor = _EditorShell(
       title: initial?.id == null
@@ -2111,18 +2110,6 @@ class _HostEditorContentState extends State<_HostEditorContent> {
               onChanged: (value) => setState(() => _tagUuids = value),
               onCreate: widget.onCreateTag,
             ),
-            if (isRemote) ...[
-              SizedBox(height: _workspaceFormFieldGap),
-              _WorkspaceToggleRow(
-                label: 'Compatibility mode',
-                description:
-                    '跳过 Linux shell 探测，并对兼容性较差的 SSH 目标使用兼容算法。',
-                value: _sshCompatibilityMode,
-                onChanged: (value) {
-                  setState(() => _sshCompatibilityMode = value);
-                },
-              ),
-            ],
           ],
         ),
         if (isSerial) ...[
@@ -2274,6 +2261,20 @@ class _HostEditorContentState extends State<_HostEditorContent> {
               dark: true,
               onOpenGallery: () =>
                   _openThemeGalleryFor(_HostThemeTarget.sshDark),
+            ),
+            advancedSection: _WorkspaceToggleRow(
+              label: tr(
+                'workspace.host.ssh.compatibilityMode.label',
+                fallback: 'Compatibility mode',
+              ),
+              tooltip: tr(
+                'workspace.host.ssh.compatibilityMode.description',
+                fallback:
+                    'Skip shell detection and use compatible SSH algorithms.',
+              ),
+              value: _sshCompatibilityMode,
+              onChanged: (value) =>
+                  setState(() => _sshCompatibilityMode = value),
             ),
             moreChildren: [
               _WorkspaceSelect<int?>(
@@ -2766,6 +2767,7 @@ class _ProtocolFormSection extends StatelessWidget {
     this.darkTheme,
     this.onCreateGroup,
     this.moreChildren = const [],
+    this.advancedSection,
     this.showMore = false,
     this.onShowMoreChanged,
   });
@@ -2778,11 +2780,14 @@ class _ProtocolFormSection extends StatelessWidget {
   final Widget? darkTheme;
   final VoidCallback? onCreateGroup;
   final List<Widget> moreChildren;
+  final Widget? advancedSection;
   final bool showMore;
   final ValueChanged<bool>? onShowMoreChanged;
 
   @override
   Widget build(BuildContext context) {
+    final hasMore =
+        moreChildren.isNotEmpty || advancedSection != null || darkTheme != null;
     return DecoratedBox(
       decoration: BoxDecoration(
         color: _card,
@@ -2793,7 +2798,7 @@ class _ProtocolFormSection extends StatelessWidget {
           16,
           16,
           16,
-          (moreChildren.isNotEmpty || darkTheme != null) && !showMore ? 12 : 16,
+          hasMore && !showMore ? 12 : 16,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -2898,9 +2903,15 @@ class _ProtocolFormSection extends StatelessWidget {
             Divider(height: 25, color: _sidebarDivider),
             ...credentials,
             Divider(height: 25, color: _sidebarDivider),
-            if ((moreChildren.isNotEmpty || darkTheme != null) && showMore) ...[
+            if (hasMore && showMore) ...[
               if (moreChildren.isNotEmpty) ...[
                 ...moreChildren,
+                SizedBox(height: 12),
+                Divider(height: 1, color: _sidebarDivider),
+                SizedBox(height: 12),
+              ],
+              if (advancedSection != null) ...[
+                advancedSection!,
                 SizedBox(height: 12),
                 Divider(height: 1, color: _sidebarDivider),
                 SizedBox(height: 12),
@@ -2920,7 +2931,7 @@ class _ProtocolFormSection extends StatelessWidget {
               ],
             ] else ...[
               theme,
-              if (moreChildren.isNotEmpty || darkTheme != null) ...[
+              if (hasMore) ...[
                 SizedBox(height: 8),
                 _ProtocolShowMoreButton(
                   onPressed: () => onShowMoreChanged?.call(true),

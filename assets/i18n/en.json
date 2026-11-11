@@ -749,6 +749,8 @@
   "workspace.host.protocol.add": "Add protocol",
   "workspace.host.protocol.remove": "Remove protocol",
   "workspace.host.protocol.showMore": "Show more",
+  "workspace.host.ssh.compatibilityMode.label": "Compatibility mode",
+  "workspace.host.ssh.compatibilityMode.description": "Skip shell detection and use compatible SSH algorithms.",
   "workspace.import.title": "Import to vault",
   "workspace.import.empty": "No supported hosts or keys were found.",
   "workspace.import.chooseAgain": "Choose again",

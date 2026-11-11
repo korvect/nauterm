@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nauterm/app/nauterm_app.dart';
@@ -5,6 +6,82 @@ import 'package:nauterm/data/nauterm_data_store.dart';
 import 'package:nauterm/ui/terminal_theme_preview.dart';
 
 void main() {
+  testWidgets('SSH compatibility help does not change the setting', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(NautermApp(onOpenSettings: () {}));
+    await tester.tap(find.text('New host'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.text('Compatibility mode'), findsNothing);
+    tester
+        .widget<InkWell>(find.byKey(const ValueKey('protocol-show-more')))
+        .onTap!();
+    await tester.pump();
+
+    final toggle = find.byKey(
+      const ValueKey('workspace-toggle:Compatibility mode'),
+    );
+    await tester.ensureVisible(toggle);
+    await tester.pump(const Duration(milliseconds: 200));
+    final sshSection = find
+        .ancestor(
+          of: find.byKey(const ValueKey('protocol-port:SSH')),
+          matching: find.byType(DecoratedBox),
+        )
+        .first;
+    expect(find.descendant(of: sshSection, matching: toggle), findsOneWidget);
+    expect(
+      tester.getTopLeft(toggle).dy,
+      greaterThan(
+        tester
+            .getBottomLeft(
+              find.byKey(const ValueKey('workspace-select-focus:Mosh')),
+            )
+            .dy,
+      ),
+    );
+    expect(
+      tester.getTopLeft(find.text('Light theme')).dy,
+      greaterThan(tester.getBottomLeft(toggle).dy),
+    );
+    final semantics = find.ancestor(
+      of: toggle,
+      matching: find.byWidgetPredicate(
+        (widget) => widget is Semantics && widget.properties.toggled != null,
+      ),
+    );
+    expect(tester.widget<Semantics>(semantics).properties.toggled, isFalse);
+
+    const help = 'Skip shell detection and use compatible SSH algorithms.';
+    final info = find.descendant(
+      of: find.byTooltip(help),
+      matching: find.byType(IconButton),
+    );
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    await mouse.moveTo(tester.getCenter(info));
+    await tester.pump(const Duration(milliseconds: 550));
+    await mouse.down(tester.getCenter(info));
+    await mouse.up();
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.text(help), findsOneWidget);
+    expect(tester.widget<Semantics>(semantics).properties.toggled, isFalse);
+
+    await mouse.moveTo(tester.getCenter(find.text('Compatibility mode')));
+    await mouse.down(tester.getCenter(find.text('Compatibility mode')));
+    await mouse.up();
+    await tester.pump();
+    expect(tester.widget<Semantics>(semantics).properties.toggled, isTrue);
+    await mouse.removePointer();
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('protocol header uses a wrapping layout', (tester) async {
     tester.view.physicalSize = const Size(1440, 900);
     tester.view.devicePixelRatio = 1;

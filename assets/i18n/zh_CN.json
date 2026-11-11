@@ -749,6 +749,8 @@
   "workspace.host.protocol.add": "添加协议",
   "workspace.host.protocol.remove": "移除协议",
   "workspace.host.protocol.showMore": "显示更多",
+  "workspace.host.ssh.compatibilityMode.label": "兼容模式",
+  "workspace.host.ssh.compatibilityMode.description": "跳过 Shell 探测，并使用兼容的 SSH 算法。",
   "workspace.import.title": "导入到保险库",
   "workspace.import.empty": "未找到支持的主机或密钥。",
   "workspace.import.chooseAgain": "重新选择",
