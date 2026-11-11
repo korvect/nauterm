@@ -680,6 +680,13 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
     );
     final previousPage = _lastProgressPage;
     if (page == previousPage) return;
+    // A rejected response can create a new request for the same form. Keep
+    // its node, while still appending each new keyboard-interactive round.
+    if (previousPage?.stage == stage &&
+        previousPage?.challengeId == page.challengeId) {
+      _lastProgressPage = page;
+      return;
+    }
     if (mode == _ConnectionPageMode.authentication &&
         _showAuthTabs &&
         requestId != null &&

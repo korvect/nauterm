@@ -1124,9 +1124,7 @@ fn is_saved_password_keyboard_prompt(prompt: &client::Prompt) -> bool {
     let lower = prompt.prompt.to_ascii_lowercase();
     // Match FreeBSD/PAM "Password for user@host:" without claiming OTP/2FA
     // ("Verification code") or password-change prompts.
-    lower.contains("password")
-        && !lower.contains("new password")
-        && !lower.contains("passphrase")
+    lower.contains("password") && !lower.contains("new password") && !lower.contains("passphrase")
 }
 
 async fn authenticate_keyboard_interactive<H: client::Handler>(

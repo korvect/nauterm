@@ -92,7 +92,6 @@ void main() {
     'ssh host.example -p invalid',
     'ssh -i key admin@host.example',
     'ssh -o Port=2022 admin@host.example',
-    "ssh -l 'admin host.example",
     'ssh host.example command',
     'ssh host.example; whoami',
     'ssh host.example\ntelnet other.example',
@@ -114,12 +113,33 @@ void main() {
     }
   });
 
+  for (final quote in ["'", '"']) {
+    test('an unclosed $quote preserves a separately supplied host', () {
+      for (final input in [
+        'ssh host.example -l ${quote}admin',
+        'ssh -l admin ${quote}host.example',
+      ]) {
+        final query = HostConnectionQuery.parse(input)!;
+        expect(query.host, 'host.example');
+        expect(query.username, 'admin');
+      }
+    });
+  }
+
   test('uses numeric ports as entered without range validation', () {
     expect(HostConnectionQuery.parse('ssh host.example -p 0')!.port, 0);
     expect(HostConnectionQuery.parse('ssh host.example -p 65536')!.port, 65536);
   });
 
-  for (final input in ['', 'ssh', 'telnet', 'ssh -l admin', 'ssh admin@']) {
+  for (final input in [
+    '',
+    'ssh',
+    'telnet',
+    'ssh -l admin',
+    'ssh admin@',
+    "ssh -l 'admin host.example",
+    'ssh -l "admin host.example',
+  ]) {
     test('requires a host address to connect: $input', () {
       expect(HostConnectionQuery.parse(input), isNull);
     });

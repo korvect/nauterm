@@ -37,9 +37,14 @@ void main() {
           if (methods.length == 2) {
             expect(find.text('Password'), findsNWidgets(2));
             expect(find.text('Public Key'), findsOneWidget);
+            _expectProgressLabel(tester, 'Password');
             await tester.tap(find.text('Public Key'));
             await tester.pump();
             expect(find.text('Test key'), findsOneWidget);
+            _expectProgressLabel(tester, 'Public Key');
+            await tester.tap(find.text('Password').first);
+            await tester.pump();
+            _expectProgressLabel(tester, 'Password');
           } else if (methods.single == 'password') {
             expect(find.text('Password'), findsOneWidget);
             expect(find.text('Public Key'), findsNothing);
@@ -144,11 +149,9 @@ void main() {
       expect(find.text('Password'), findsNothing);
       expect(find.text('Public Key'), findsNothing);
       expect(find.text('Verification code:'), findsOneWidget);
-      expect(
-        _progressLabel(
-          'Public Key → Passphrase → Password → Verification code',
-        ),
-        findsOneWidget,
+      _expectProgressLabel(
+        tester,
+        'Public Key → Passphrase → Password → Verification code',
       );
       await tester.enterText(find.byType(TextField), '123456');
       await tester.tap(find.text('Continue'));
@@ -181,7 +184,7 @@ void main() {
       for (var index = 0; index < order.length; index++) {
         final method = order[index];
         labels.add(method == 'password' ? 'Password' : 'Public Key');
-        expect(_progressLabel(labels.join(' → ')), findsOneWidget);
+        _expectProgressLabel(tester, labels.join(' → '));
         if (method == 'password') {
           await tester.enterText(find.byType(TextField), 'phase-secret');
         } else {
@@ -226,7 +229,7 @@ void main() {
         await tester.pump(const Duration(milliseconds: 400));
       }
       labels.add('Verification code');
-      expect(_progressLabel(labels.join(' → ')), findsOneWidget);
+      _expectProgressLabel(tester, labels.join(' → '));
       driver.events.add(
         const TerminalConnectionEvent(
           kind: TerminalConnectionEventKind.authInteractiveRequest,
@@ -245,7 +248,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       labels.add('Verification code');
-      expect(_progressLabel(labels.join(' → ')), findsOneWidget);
+      _expectProgressLabel(tester, labels.join(' → '));
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     });
@@ -296,7 +299,7 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 400));
         await tester.pump(const Duration(milliseconds: 200));
-        expect(_progressLabel('Public Key → Password'), findsOneWidget);
+        _expectProgressLabel(tester, 'Public Key → Password');
         expect(find.text('Password:'), findsOneWidget);
         await tester.enterText(find.byType(TextField), 'round-password');
         await tester.tap(find.text('Continue'));
@@ -328,9 +331,9 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 400));
         await tester.pump(const Duration(milliseconds: 200));
-        expect(
-          _progressLabel('Public Key → Password → Verification code'),
-          findsOneWidget,
+        _expectProgressLabel(
+          tester,
+          'Public Key → Password → Verification code',
         );
         expect(find.text('Verification code:'), findsOneWidget);
         expect(find.text('Password:'), findsNothing);
@@ -355,9 +358,9 @@ void main() {
         controller.poll();
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 400));
-        expect(
-          _progressLabel('Public Key → Password → Verification code'),
-          findsOneWidget,
+        _expectProgressLabel(
+          tester,
+          'Public Key → Password → Verification code',
         );
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
@@ -400,7 +403,7 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 400));
         final prefix = afterPublicKey ? 'Public Key → Password' : 'Password';
-        expect(_progressLabel(prefix), findsOneWidget);
+        _expectProgressLabel(tester, prefix);
         // Retrying this password still uses the current node.
         driver.events.add(
           const TerminalConnectionEvent(
@@ -411,7 +414,7 @@ void main() {
         );
         controller.poll();
         await tester.pump();
-        expect(_progressLabel(prefix), findsOneWidget);
+        _expectProgressLabel(tester, prefix);
         driver.events.addAll([
           const TerminalConnectionEvent(
             kind: TerminalConnectionEventKind.authPasswordRejected,
@@ -444,7 +447,7 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 400));
         await tester.pump(const Duration(milliseconds: 200));
-        expect(_progressLabel('$prefix → Verification code'), findsOneWidget);
+        _expectProgressLabel(tester, '$prefix → Verification code');
         expect(find.text('Verification code:'), findsOneWidget);
         expect(find.text('Password'), findsNothing);
         expect(tester.takeException(), isNull);
@@ -483,7 +486,7 @@ void main() {
       controller.poll();
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
-      expect(_progressLabel('Public Key'), findsNothing);
+      _expectProgressLabel(tester, '');
       expect(_progressFraction(tester), 0);
       driver.events.add(
         const TerminalConnectionEvent(
@@ -500,7 +503,7 @@ void main() {
       // animation finish after the notification has reached the widget.
       await tester.pump(const Duration(milliseconds: 400));
       expect(find.text('Test key'), findsOneWidget);
-      expect(_progressLabel('Public Key'), findsOneWidget);
+      _expectProgressLabel(tester, 'Public Key');
       _expectWaitingAtMiddleStep(tester, Icons.key_rounded);
 
       expect(
@@ -527,7 +530,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 16));
       _expectWaitingAtMiddleStep(tester, Icons.key_rounded);
       await tester.pump(const Duration(milliseconds: 400));
-      expect(_progressLabel('Public Key'), findsOneWidget);
+      _expectProgressLabel(tester, 'Public Key');
       _expectWaitingAtMiddleStep(tester, Icons.key_rounded);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
@@ -561,8 +564,7 @@ void main() {
         addTearDown(controller.dispose);
         await _pump(tester, controller);
         final label = method == 'fido2' ? 'PIN' : 'Passphrase';
-        expect(_progressLabel(label), findsOneWidget);
-        expect(_progressLabel('Public Key'), findsNothing);
+        _expectProgressLabel(tester, label);
         expect(_progressFraction(tester), closeTo(0.5, 0.0001));
         driver.events.add(
           TerminalConnectionEvent(
@@ -576,7 +578,7 @@ void main() {
         controller.poll();
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 400));
-        expect(_progressLabel(label), findsOneWidget);
+        _expectProgressLabel(tester, label);
         expect(_progressFraction(tester), closeTo(0.5, 0.0001));
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
@@ -689,10 +691,12 @@ class _MethodsDriver extends MemoryTerminalDriver
   }
 }
 
-Finder _progressLabel(String label) => find.descendant(
-  of: find.byKey(const ValueKey('connection-page-progress')),
-  matching: find.bySemanticsLabel(label),
-);
+void _expectProgressLabel(WidgetTester tester, String label) {
+  // Flutter can merge this label into an ancestor semantics node. Read the
+  // actual node for the progress widget rather than searching descendants.
+  final progress = find.byKey(const ValueKey('connection-page-progress'));
+  expect(tester.getSemantics(progress).label, label);
+}
 
 Finder _progressDescendant(Finder matching) => find.descendant(
   of: find.byKey(const ValueKey('connection-page-progress')),
