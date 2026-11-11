@@ -779,7 +779,7 @@ class _QuickConnectHostIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final osSlug = _BrandIcon._resolveOsSlug(host.os, host.distro);
+    final osSlug = _resolveHostIconSlug(host.customIcon, host.os, host.distro);
     final mode = hostIconMode;
 
     // Mode: icon — replace the entire icon with the OS icon

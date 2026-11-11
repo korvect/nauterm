@@ -240,6 +240,7 @@ class _PendingHostConnectionPageState
         subtitle: address,
         hostOs: host.os,
         hostDistro: host.distro,
+        hostCustomIcon: host.icon,
         progress: _ConnectionProgress(
           icons: const [Icons.power_rounded, LucideIcons.squareTerminal],
           reachedStep: 0,
@@ -598,6 +599,7 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
           : () => setState(() => _showLogs = !_showLogs),
       hostOs: _resolvedHost?.os,
       hostDistro: _resolvedHost?.distro,
+      hostCustomIcon: _resolvedHost?.icon,
       progress: _ConnectionProgress.forConnection(
         mode: mode,
         interventions: _interventions,
@@ -1555,6 +1557,7 @@ class _ConnectionPageHeader extends StatelessWidget {
     this.onAction,
     this.hostOs,
     this.hostDistro,
+    this.hostCustomIcon,
   });
 
   final String title;
@@ -1563,6 +1566,7 @@ class _ConnectionPageHeader extends StatelessWidget {
   final VoidCallback? onAction;
   final String? hostOs;
   final String? hostDistro;
+  final String? hostCustomIcon;
 
   @override
   Widget build(BuildContext context) {
@@ -1574,6 +1578,7 @@ class _ConnectionPageHeader extends StatelessWidget {
           name: title,
           os: hostOs,
           distro: hostDistro,
+          customIcon: hostCustomIcon,
         ),
         SizedBox(width: 16),
         Expanded(
@@ -1773,6 +1778,7 @@ class _ConnectionPagePanel extends StatelessWidget {
     this.onAction,
     this.hostOs,
     this.hostDistro,
+    this.hostCustomIcon,
   });
 
   final String title;
@@ -1784,6 +1790,7 @@ class _ConnectionPagePanel extends StatelessWidget {
   final VoidCallback? onAction;
   final String? hostOs;
   final String? hostDistro;
+  final String? hostCustomIcon;
 
   @override
   Widget build(BuildContext context) {
@@ -1810,6 +1817,7 @@ class _ConnectionPagePanel extends StatelessWidget {
                   onAction: onAction,
                   hostOs: hostOs,
                   hostDistro: hostDistro,
+                  hostCustomIcon: hostCustomIcon,
                 ),
               ),
               SizedBox(height: short ? 12 : 22),

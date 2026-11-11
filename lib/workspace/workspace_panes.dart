@@ -2009,14 +2009,23 @@ class _LogsHostIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final automaticOs = info.kind == _LogHostKind.remote;
+    final osSlug = _resolveHostIconSlug(
+      info.customIcon,
+      automaticOs ? info.os : null,
+      automaticOs ? info.distro : null,
+    );
+    if (hostIconMode == HostIconMode.osIcon && osSlug != null) {
+      return _compactOsIcon(osSlug);
+    }
+    final Widget initial;
     if (info.kind == _LogHostKind.serial) {
-      return _compactIcon(
+      initial = _compactIcon(
         color: const Color(0xff7456c8),
         child: const Icon(LucideIcons.usb, size: 14, color: Colors.white),
       );
-    }
-    if (info.kind == _LogHostKind.local) {
-      return _compactIcon(
+    } else if (info.kind == _LogHostKind.local) {
+      initial = _compactIcon(
         color: const Color(0xff075e92),
         child: const Icon(
           LucideIcons.squareTerminal,
@@ -2024,14 +2033,9 @@ class _LogsHostIcon extends StatelessWidget {
           color: Colors.white,
         ),
       );
+    } else {
+      initial = _compactInitial(info.title);
     }
-
-    final osSlug = _BrandIcon._resolveOsSlug(info.os, info.distro);
-    if (hostIconMode == HostIconMode.osIcon && osSlug != null) {
-      return _compactOsIcon(osSlug);
-    }
-
-    final initial = _compactInitial(info.title);
     if (hostIconMode != HostIconMode.osBadge || osSlug == null) {
       return initial;
     }
@@ -2193,6 +2197,7 @@ _LogHostInfo _logHostInfo(TerminalLogEntry log, HostEntry? linkedHost) {
       title: log.title,
       subtitle: 'Serial device',
       kind: _LogHostKind.serial,
+      customIcon: linkedHost?.icon,
     );
   }
 
@@ -2205,6 +2210,7 @@ _LogHostInfo _logHostInfo(TerminalLogEntry log, HostEntry? linkedHost) {
       kind: _LogHostKind.remote,
       os: linkedHost?.os,
       distro: linkedHost?.distro,
+      customIcon: linkedHost?.icon,
     );
   }
 
@@ -2218,6 +2224,7 @@ _LogHostInfo _logHostInfo(TerminalLogEntry log, HostEntry? linkedHost) {
         ? shell!
         : 'local',
     kind: _LogHostKind.local,
+    customIcon: linkedHost?.icon,
   );
 }
 
@@ -2278,6 +2285,7 @@ class _LogHostInfo {
     required this.kind,
     this.os,
     this.distro,
+    this.customIcon,
   });
 
   final String title;
@@ -2285,6 +2293,7 @@ class _LogHostInfo {
   final _LogHostKind kind;
   final String? os;
   final String? distro;
+  final String? customIcon;
 }
 
 enum _LogHostKind { remote, local, serial }

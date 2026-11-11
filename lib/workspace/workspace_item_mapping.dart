@@ -87,6 +87,7 @@ _HostItem _mapHost(
     username: username,
     os: host.os,
     distro: host.distro,
+    customIcon: host.icon,
     serialPort: host.serialPort,
     serialBaudRate: host.serialBaudRate,
     sshEnabled: host.sshEnabled,

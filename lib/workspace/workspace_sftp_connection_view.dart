@@ -489,6 +489,7 @@ class _SftpHostRow extends StatelessWidget {
         name: host.name,
         os: host.os,
         distro: host.distro,
+        customIcon: host.customIcon,
       ),
       title: host.name,
       subtitle: subtitle,

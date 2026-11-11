@@ -1220,6 +1220,7 @@ class _HostEditorContentState extends State<_HostEditorContent> {
   String _telnetEncoding = defaultHostEncoding;
   late Set<String> _tagUuids;
   late bool _sshCompatibilityMode;
+  String? _customIcon;
   StoredTerminalTheme? _selectedTheme;
   StoredTerminalTheme? _selectedDarkTheme;
   StoredTerminalTheme? _selectedTelnetTheme;
@@ -1264,6 +1265,7 @@ class _HostEditorContentState extends State<_HostEditorContent> {
     _shellController = TextEditingController(text: initial?.shellPath ?? '');
     _workDirController = TextEditingController(text: initial?.workDir ?? '');
     _sshCompatibilityMode = initial?.sshCompatibilityMode ?? false;
+    _customIcon = initial?.icon;
     _shellOptions = _availableShellOptions(initial?.shellPath);
     _environmentVariables = List<HostEnvironmentVariable>.of(
       initial?.environmentVariables ?? const <HostEnvironmentVariable>[],
@@ -1915,11 +1917,14 @@ class _HostEditorContentState extends State<_HostEditorContent> {
         distro: _type == NautermHostType.serial ? null : initial?.distro,
         serialPort: serialConfig?.serialPort,
         serialBaudRate: serialConfig?.baudRate,
-        config: HostEntry.withSshCompatibilityMode(
-          serialConfig?.mergeHostConfig(initial?.config ?? const {}) ??
-              initial?.config ??
-              const {},
-          enabled: isRemote && _sshCompatibilityMode,
+        config: HostEntry.withIcon(
+          HostEntry.withSshCompatibilityMode(
+            serialConfig?.mergeHostConfig(initial?.config ?? const {}) ??
+                initial?.config ??
+                const {},
+            enabled: isRemote && _sshCompatibilityMode,
+          ),
+          _customIcon,
         ),
         tagUuids: _tagUuids.toList(growable: false),
       ),
@@ -1940,6 +1945,23 @@ class _HostEditorContentState extends State<_HostEditorContent> {
       });
     });
   }
+
+  Widget _buildIconPicker() => ValueListenableBuilder<TextEditingValue>(
+    valueListenable: _nameController,
+    builder: (context, name, _) => _HostIconPickerButton(
+      name: name.text,
+      icon: _type == NautermHostType.serial
+          ? Icons.usb_rounded
+          : _type == NautermHostType.local
+          ? LucideIcons.squareTerminal
+          : Icons.public_rounded,
+      color: _type == NautermHostType.remote ? _orange : _green,
+      value: _customIcon,
+      os: widget.request.initial?.os,
+      distro: widget.request.initial?.distro,
+      onChanged: (value) => setState(() => _customIcon = value),
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -1975,12 +1997,7 @@ class _HostEditorContentState extends State<_HostEditorContent> {
             LayoutBuilder(
               builder: (context, constraints) {
                 final compact = constraints.maxWidth < 120;
-                final icon = _BrandIcon(
-                  icon: isLocal
-                      ? LucideIcons.squareTerminal
-                      : Icons.public_rounded,
-                  color: isLocal ? const Color(0xff075e92) : _orange,
-                );
+                final icon = _buildIconPicker();
                 final input = isLocal
                     ? _WorkspaceSelect<String?>(
                         label: 'Shell',
@@ -2044,12 +2061,23 @@ class _HostEditorContentState extends State<_HostEditorContent> {
         _WorkspaceFormSection(
           title: 'General',
           children: [
-            _WorkspaceInput(
-              controller: _nameController,
-              label: tr('common.label.name', fallback: 'Name'),
-              isRequired: true,
-              errorText: _nameError,
-              autofocus: isLocal,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (isSerial) ...[
+                  _buildIconPicker(),
+                  const SizedBox(width: 12),
+                ],
+                Expanded(
+                  child: _WorkspaceInput(
+                    controller: _nameController,
+                    label: tr('common.label.name', fallback: 'Name'),
+                    isRequired: true,
+                    errorText: _nameError,
+                    autofocus: isLocal,
+                  ),
+                ),
+              ],
             ),
             SizedBox(height: _workspaceFormFieldGap),
             _WorkspaceSelect<NautermHostType>(
