@@ -93,6 +93,7 @@ fn schema_five_hosts_receive_empty_extensible_config() {
         .execute_batch(
             "ALTER TABLE hosts DROP COLUMN serial_port;
         ALTER TABLE hosts DROP COLUMN serial_baud_rate; ALTER TABLE hosts DROP COLUMN config;
+        ALTER TABLE ai_messages DROP COLUMN provider_metadata;
         PRAGMA user_version = 5;",
         )
         .unwrap();

@@ -247,6 +247,16 @@ fn unknown_and_future_schema_versions_remain_unsupported() {
     assert!(inspect_envelope(&serde_json::to_vec(&envelope).unwrap(), 2).is_err());
 }
 
+#[test]
+fn schema_seven_reads_existing_schema_six_sync_files() {
+    let envelope =
+        encrypt_payload(key_payload(None), Some(MASTER_KEY), 6, None, &[7u8; 32]).unwrap();
+    let bytes = serde_json::to_vec(&envelope).unwrap();
+    assert!(inspect_envelope(&bytes, 7).is_ok());
+    let (header, _, _) = decrypt_envelope(envelope, Some(MASTER_KEY), None, 7).unwrap();
+    assert_eq!(header.schema_version, 6);
+}
+
 struct TemporarySyncFile(PathBuf);
 
 impl Drop for TemporarySyncFile {

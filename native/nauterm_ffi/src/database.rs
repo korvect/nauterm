@@ -21,7 +21,7 @@ mod schema;
 
 use schema::create_schema;
 
-const SCHEMA_VERSION: i32 = 6;
+const SCHEMA_VERSION: i32 = 7;
 #[cfg(test)]
 const DEFAULT_MOSH_SERVER_COMMAND: &str = "mosh-server new -s -l LANG=en_US.UTF-8";
 const DEVICE_ID_METADATA_KEY: &str = "device_id";
@@ -725,6 +725,8 @@ pub struct AiMessageEntry {
     pub tool_result: Option<Value>,
     #[serde(default)]
     pub attachments: Vec<Value>,
+    #[serde(default)]
+    pub provider_metadata: Map<String, Value>,
     #[serde(default)]
     pub created_at: Option<i64>,
     #[serde(default)]
@@ -2647,6 +2649,10 @@ fn ai_message_from_row(row: &Row<'_>) -> rusqlite::Result<AiMessageEntry> {
         tool_calls: json_values_from_row(row, "tool_calls")?,
         tool_result: optional_json_value_from_row(row, "tool_result")?,
         attachments: json_values_from_row(row, "attachments")?,
+        provider_metadata: serde_json::from_str(&row.get::<_, String>("provider_metadata")?)
+            .map_err(|error| {
+                rusqlite::Error::FromSqlConversionFailure(0, Type::Text, Box::new(error))
+            })?,
         created_at: row.get("created_at")?,
         updated_at: row.get("updated_at")?,
         version: None,
@@ -3227,6 +3233,7 @@ mod tests {
             ALTER TABLE hosts DROP COLUMN serial_port;
             ALTER TABLE hosts DROP COLUMN serial_baud_rate;
             ALTER TABLE hosts DROP COLUMN config;
+            ALTER TABLE ai_messages DROP COLUMN provider_metadata;
             PRAGMA user_version = 4;",
             )
             .unwrap();
@@ -3396,6 +3403,7 @@ mod tests {
                  ALTER TABLE hosts DROP COLUMN serial_port;
                  ALTER TABLE hosts DROP COLUMN serial_baud_rate;
                  ALTER TABLE hosts DROP COLUMN config;
+                 ALTER TABLE ai_messages DROP COLUMN provider_metadata;
                  PRAGMA user_version = 2;",
             )
             .unwrap();
@@ -5157,6 +5165,7 @@ mod tests {
                 tool_calls: vec![],
                 tool_result: None,
                 attachments: vec![json!({"name": "deploy.log"})],
+                provider_metadata: Map::new(),
                 created_at: None,
                 updated_at: None,
                 version: None,
@@ -5446,3 +5455,6 @@ mod tests {
 #[cfg(test)]
 #[path = "database/serial_host_tests.rs"]
 mod serial_host_tests;
+
+#[cfg(test)]
+mod ai_metadata_tests;

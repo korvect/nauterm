@@ -554,6 +554,12 @@ class AiConversationController extends ChangeNotifier {
               return;
             }
             switch (event) {
+              case AiProviderMetadata(:final metadata):
+                final message = _messages[assistantIndex];
+                _messages[assistantIndex] = message.copyWith(
+                  providerMetadata: {...message.providerMetadata, ...metadata},
+                );
+                notifyListeners();
               case AiTextDelta(:final text):
                 final message = _messages[assistantIndex];
                 _messages[assistantIndex] = message.copyWith(
@@ -621,7 +627,9 @@ class AiConversationController extends ChangeNotifier {
       return;
     }
     final assistant = _messages[assistantIndex];
-    if (assistant.content.isEmpty && assistant.toolCalls.isEmpty) {
+    if (assistant.content.isEmpty &&
+        assistant.toolCalls.isEmpty &&
+        assistant.providerMetadata.isEmpty) {
       _messages.removeAt(assistantIndex);
     }
     _stopping = false;
@@ -725,6 +733,7 @@ class AiConversationController extends ChangeNotifier {
         toolCalls: message.toolCalls,
         toolResult: message.toolResult,
         attachments: message.attachments,
+        providerMetadata: message.providerMetadata,
         createdAt: savedMessage?.createdAt ?? message.createdAt,
         updatedAt: savedMessage?.updatedAt ?? message.updatedAt,
       );
@@ -816,7 +825,8 @@ class AiConversationController extends ChangeNotifier {
         assistant != null &&
         assistant.role == AiChatRole.assistant &&
         assistant.content.isEmpty &&
-        assistant.toolCalls.isEmpty) {
+        assistant.toolCalls.isEmpty &&
+        assistant.providerMetadata.isEmpty) {
       _messages.removeLast();
     }
     _sending = false;
@@ -923,6 +933,7 @@ AiMessageEntry _messageToEntry(AiChatMessage message) {
     role: message.role.name,
     content: message.content,
     context: message.context,
+    providerMetadata: message.providerMetadata,
     sequence: message.sequence,
     toolCalls: [
       for (final call in message.toolCalls)
@@ -961,6 +972,7 @@ AiChatMessage _messageFromEntry(AiMessageEntry entry) {
     role: AiChatRole.values.byName(entry.role),
     content: entry.content,
     context: entry.context,
+    providerMetadata: entry.providerMetadata,
     sequence: entry.sequence,
     toolCalls: [
       for (final call in entry.toolCalls)

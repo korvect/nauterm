@@ -1508,7 +1508,7 @@ fn validate_envelope_header(
             header.format_version
         )));
     }
-    let can_migrate = matches!(current_schema_version, 4..=6)
+    let can_migrate = matches!(current_schema_version, 4..=7)
         && (1..current_schema_version).contains(&header.schema_version);
     if header.schema_version != current_schema_version && !can_migrate {
         return Err(SyncError::new(format!(

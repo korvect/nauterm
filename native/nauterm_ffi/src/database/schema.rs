@@ -589,6 +589,8 @@ pub(super) fn create_ai_conversation_schema(connection: &Connection) -> rusqlite
           tool_result TEXT CHECK (tool_result IS NULL OR json_valid(tool_result)),
           attachments TEXT NOT NULL DEFAULT '[]'
             CHECK (json_valid(attachments) AND json_type(attachments) = 'array'),
+          provider_metadata TEXT NOT NULL DEFAULT '{}'
+            CHECK (json_valid(provider_metadata) AND json_type(provider_metadata) = 'object'),
           created_at INTEGER NOT NULL DEFAULT (CAST(unixepoch('subsec') * 1000 AS INTEGER)),
           updated_at INTEGER NOT NULL DEFAULT (CAST(unixepoch('subsec') * 1000 AS INTEGER)),
           FOREIGN KEY (conversation_uuid) REFERENCES ai_conversations(uuid)

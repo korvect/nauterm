@@ -166,12 +166,14 @@ impl NautermDatabase {
                 .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
             let attachments = serde_json::to_string(&message.attachments)
                 .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
+            let provider_metadata = serde_json::to_string(&message.provider_metadata)
+                .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
             transaction.execute(
                 r#"
                 INSERT INTO ai_messages (
                   uuid, conversation_uuid, role, content, context, sequence,
-                  tool_calls, tool_result, attachments
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  tool_calls, tool_result, attachments, provider_metadata
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(uuid) DO UPDATE SET
                   conversation_uuid = excluded.conversation_uuid,
                   role = excluded.role,
@@ -181,6 +183,7 @@ impl NautermDatabase {
                   tool_calls = excluded.tool_calls,
                   tool_result = excluded.tool_result,
                   attachments = excluded.attachments,
+                  provider_metadata = excluded.provider_metadata,
                   updated_at = CAST(unixepoch('subsec') * 1000 AS INTEGER)
                 "#,
                 params![
@@ -193,6 +196,7 @@ impl NautermDatabase {
                     tool_calls,
                     tool_result,
                     attachments,
+                    provider_metadata,
                 ],
             )?;
             message_uuids.insert(message_uuid);

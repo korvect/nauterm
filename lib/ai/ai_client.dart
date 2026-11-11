@@ -23,6 +23,13 @@ class AiTextDelta extends AiStreamEvent {
   final String text;
 }
 
+/// Provider-specific history to retain alongside the displayed message.
+class AiProviderMetadata extends AiStreamEvent {
+  const AiProviderMetadata(this.metadata);
+
+  final Map<String, Object?> metadata;
+}
+
 class AiToolCall extends AiStreamEvent {
   const AiToolCall({
     required this.id,
@@ -59,6 +66,7 @@ class AiChatMessage {
     this.toolCalls = const [],
     this.toolResult,
     this.attachments = const [],
+    this.providerMetadata = const {},
     this.createdAt,
     this.updatedAt,
   });
@@ -71,6 +79,7 @@ class AiChatMessage {
   final List<AiToolCall> toolCalls;
   final AiToolResult? toolResult;
   final List<AiAttachment> attachments;
+  final Map<String, Object?> providerMetadata;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -87,6 +96,7 @@ class AiChatMessage {
     List<AiToolCall>? toolCalls,
     AiToolResult? toolResult,
     List<AiAttachment>? attachments,
+    Map<String, Object?>? providerMetadata,
     DateTime? updatedAt,
   }) {
     return AiChatMessage(
@@ -98,6 +108,7 @@ class AiChatMessage {
       toolCalls: toolCalls ?? this.toolCalls,
       toolResult: toolResult ?? this.toolResult,
       attachments: attachments ?? this.attachments,
+      providerMetadata: providerMetadata ?? this.providerMetadata,
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -325,24 +336,36 @@ class AiProtocolClient {
         _googleRequest(messages, config, enableTerminalTool),
       );
       var toolIndex = 0;
+      final toolIdPrefix = 'google-${DateTime.now().microsecondsSinceEpoch}';
+      final parts = <Map<String, dynamic>>[];
       await for (final event in sdk.models.streamGenerateContent(
         model: config.model.trim(),
         request: request,
       )) {
-        for (final candidate in event.candidates ?? const []) {
-          for (final part in candidate.content?.parts ?? const []) {
-            final json = part.toJson();
-            final text = _nonEmptyString(json['text']);
-            if (text != null) yield AiTextDelta(text);
-            final call = _nestedMap(json['functionCall']);
-            final name = _nonEmptyString(call?['name']);
-            if (name != null) {
-              yield AiToolCall(
-                id: 'google-${toolIndex++}',
-                name: name,
-                arguments: (_nestedMap(call?['args']) ?? const {}),
-              );
-            }
+        final content = event.candidates?.firstOrNull?.content;
+        if (content == null || content.parts.isEmpty) continue;
+        final chunkParts = [for (final part in content.parts) part.toJson()];
+        // Retain each returned part, including signature-only chunks. Joining
+        // parts can detach a thought signature from its original position.
+        parts.addAll(chunkParts);
+        yield AiProviderMetadata({
+          'google': {'parts': List<Map<String, dynamic>>.unmodifiable(parts)},
+        });
+        for (final json in chunkParts) {
+          final text = json['text'];
+          if (json['thought'] != true && text is String && text.isNotEmpty) {
+            yield AiTextDelta(text);
+          }
+          final call = _nestedMap(json['functionCall']);
+          final name = _nonEmptyString(call?['name']);
+          if (name != null) {
+            yield AiToolCall(
+              id:
+                  _nonEmptyString(call?['id']) ??
+                  '$toolIdPrefix-${toolIndex++}',
+              name: name,
+              arguments: (_nestedMap(call?['args']) ?? const {}),
+            );
           }
         }
       }
@@ -429,10 +452,7 @@ Map<String, dynamic> _googleRequest(
       .where((content) => content.trim().isNotEmpty)
       .join('\n\n');
   return <String, dynamic>{
-    'contents': [
-      for (final message in messages)
-        if (message.role != AiChatRole.system) _googleMessage(message),
-    ],
+    'contents': _googleContents(messages),
     if (system.isNotEmpty)
       'systemInstruction': <String, dynamic>{
         'parts': [
@@ -455,15 +475,62 @@ Map<String, dynamic> _googleRequest(
   };
 }
 
-Map<String, dynamic> _googleMessage(AiChatMessage message) {
+List<Map<String, dynamic>>? _googleParts(AiChatMessage message) {
+  if (message.role != AiChatRole.assistant) return null;
+  final parts = _nestedMap(message.providerMetadata['google'])?['parts'];
+  if (parts is! List || parts.isEmpty || parts.any((part) => part is! Map)) {
+    return null;
+  }
+  return [for (final part in parts) Map<String, dynamic>.from(part as Map)];
+}
+
+List<Map<String, dynamic>> _googleContents(List<AiChatMessage> messages) {
+  final callIds = <String, String?>{};
+  for (final message in messages) {
+    final parts = _googleParts(message);
+    if (parts == null) continue;
+    final calls = [for (final part in parts) ?_nestedMap(part['functionCall'])];
+    for (
+      var index = 0;
+      index < calls.length && index < message.toolCalls.length;
+      index++
+    ) {
+      callIds[message.toolCalls[index].id] = _nonEmptyString(
+        calls[index]['id'],
+      );
+    }
+  }
+  final contents = <Map<String, dynamic>>[];
+  var previousWasToolResult = false;
+  for (final message in messages) {
+    if (message.role == AiChatRole.system) continue;
+    final content = _googleMessage(message, callIds);
+    final isToolResult = message.toolResult != null;
+    if (isToolResult && previousWasToolResult) {
+      (contents.last['parts'] as List).addAll(content['parts'] as List);
+    } else {
+      contents.add(content);
+    }
+    previousWasToolResult = isToolResult;
+  }
+  return contents;
+}
+
+Map<String, dynamic> _googleMessage(
+  AiChatMessage message,
+  Map<String, String?> callIds,
+) {
   final result = message.toolResult;
   if (result != null) {
+    final callId = callIds.containsKey(result.toolCallId)
+        ? callIds[result.toolCallId]
+        : result.toolCallId;
     return <String, dynamic>{
       'role': 'user',
       'parts': [
         <String, dynamic>{
           'functionResponse': <String, dynamic>{
-            'id': result.toolCallId,
+            if (callId != null && callId.isNotEmpty) 'id': callId,
             'name': result.name,
             'response': <String, dynamic>{
               'content': result.content,
@@ -474,6 +541,8 @@ Map<String, dynamic> _googleMessage(AiChatMessage message) {
       ],
     };
   }
+  final parts = _googleParts(message);
+  if (parts != null) return {'role': 'model', 'parts': parts};
   return <String, dynamic>{
     'role': message.role == AiChatRole.assistant ? 'model' : 'user',
     'parts': [
@@ -492,6 +561,7 @@ Map<String, dynamic> _googleMessage(AiChatMessage message) {
       for (final call in message.toolCalls)
         <String, dynamic>{
           'functionCall': <String, dynamic>{
+            if (call.id.isNotEmpty) 'id': call.id,
             'name': call.name,
             'args': call.arguments,
           },

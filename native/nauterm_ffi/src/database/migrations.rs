@@ -12,24 +12,32 @@ pub(super) fn migrate_schema(connection: &mut Connection, version: i32) -> rusql
             migrate_v2_to_v3(connection)?;
             migrate_v3_to_v4(connection)?;
             migrate_v4_to_v5(connection)?;
-            migrate_v5_to_v6(connection)
+            migrate_v5_to_v6(connection)?;
+            migrate_v6_to_v7(connection)
         }
         2 => {
             migrate_v2_to_v3(connection)?;
             migrate_v3_to_v4(connection)?;
             migrate_v4_to_v5(connection)?;
-            migrate_v5_to_v6(connection)
+            migrate_v5_to_v6(connection)?;
+            migrate_v6_to_v7(connection)
         }
         3 => {
             migrate_v3_to_v4(connection)?;
             migrate_v4_to_v5(connection)?;
-            migrate_v5_to_v6(connection)
+            migrate_v5_to_v6(connection)?;
+            migrate_v6_to_v7(connection)
         }
         4 => {
             migrate_v4_to_v5(connection)?;
-            migrate_v5_to_v6(connection)
+            migrate_v5_to_v6(connection)?;
+            migrate_v6_to_v7(connection)
         }
-        5 => migrate_v5_to_v6(connection),
+        5 => {
+            migrate_v5_to_v6(connection)?;
+            migrate_v6_to_v7(connection)
+        }
+        6 => migrate_v6_to_v7(connection),
         SCHEMA_VERSION => Ok(()),
         _ => Err(rusqlite::Error::InvalidParameterName(format!(
             "database schema version {version} is unsupported; expected {SCHEMA_VERSION}"
@@ -397,5 +405,15 @@ fn migrate_v5_to_v6(connection: &mut Connection) -> rusqlite::Result<()> {
            CHECK (json_valid(config) AND json_type(config) = 'object');",
     )?;
     transaction.pragma_update(None, "user_version", 6)?;
+    transaction.commit()
+}
+
+fn migrate_v6_to_v7(connection: &mut Connection) -> rusqlite::Result<()> {
+    let transaction = connection.transaction()?;
+    transaction.execute_batch(
+        "ALTER TABLE ai_messages ADD COLUMN provider_metadata TEXT NOT NULL DEFAULT '{}'
+           CHECK (json_valid(provider_metadata) AND json_type(provider_metadata) = 'object');",
+    )?;
+    transaction.pragma_update(None, "user_version", 7)?;
     transaction.commit()
 }

@@ -1557,6 +1557,7 @@ class AiMessageEntry {
     this.toolCalls = const [],
     this.toolResult,
     this.attachments = const [],
+    this.providerMetadata = const {},
     this.createdAt,
     this.updatedAt,
     this.version,
@@ -1571,6 +1572,7 @@ class AiMessageEntry {
   final List<Map<String, Object?>> toolCalls;
   final Map<String, Object?>? toolResult;
   final List<Map<String, Object?>> attachments;
+  final Map<String, Object?> providerMetadata;
   final DateTime? createdAt;
   final DateTime? updatedAt;
   final int? version;
@@ -1585,6 +1587,7 @@ class AiMessageEntry {
     'tool_calls': toolCalls,
     'tool_result': toolResult,
     'attachments': attachments,
+    'provider_metadata': providerMetadata,
     'created_at': _dateTimeToJson(createdAt),
     'updated_at': _dateTimeToJson(updatedAt),
     'version': version,
@@ -1608,6 +1611,7 @@ class AiMessageEntry {
       attachments: _jsonList(map['attachments'])
           .map(_jsonMap)
           .toList(growable: false),
+      providerMetadata: _jsonMap(map['provider_metadata'] ?? const {}),
       createdAt: _dateTimeOrNull(map['created_at']),
       updatedAt: _dateTimeOrNull(map['updated_at']),
       version: _intOrNull(map['version']),
