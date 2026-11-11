@@ -81,6 +81,7 @@ part 'hosts_pane.dart';
 part 'workspace_toolbar.dart';
 part 'workspace_sorting.dart';
 part 'workspace_item_grid.dart';
+part 'workspace_host_icons.dart';
 part 'workspace_context_menu.dart';
 part 'workspace_form_controls.dart';
 part 'workspace_editor_drawer.dart';

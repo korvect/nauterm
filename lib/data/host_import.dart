@@ -125,6 +125,7 @@ class HostImportCandidate {
     this.groupPath,
     this.tags = const [],
     this.identityFile,
+    this.icon,
   });
 
   final HostImportSource source;
@@ -137,6 +138,7 @@ class HostImportCandidate {
   final String? groupPath;
   final List<String> tags;
   final String? identityFile;
+  final String? icon;
 
   String get address => port == null ? host : '$host:$port';
 }
@@ -168,6 +170,7 @@ List<HostImportCandidate> parseHostCsv(String input) {
           port: int.tryParse(value(row, 'port')),
           username: _nullIfEmpty(value(row, 'username')),
           password: _nullIfEmpty(value(row, 'password')),
+          icon: _nullIfEmpty(value(row, 'icon')),
           groupPath: _nullIfEmpty(value(row, 'groups')),
           tags: value(row, 'tags')
               .split(',')
@@ -490,6 +493,7 @@ String buildHostCsv(
     'Password',
     'Groups',
     'Tags',
+    'Icon',
   ];
   final byId = {
     for (final group in groups)
@@ -516,6 +520,7 @@ String buildHostCsv(
       isTelnet ? host.telnetPassword ?? '' : host.password ?? '',
       _exportGroupPath(byId, host.groupId),
       tagNames.join(','),
+      host.icon ?? '',
     ]);
   }
   return _writeHostCsv(rows);

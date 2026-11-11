@@ -116,7 +116,7 @@ fn extensible_remote_host_config_syncs_and_serial_hosts_remain_local() {
             .as_nanos()
     ));
     let mut source = NautermDatabase::open_in_memory().unwrap();
-    let host: HostEntry = serde_json::from_value(json!({"name": "Remote", "type": "remote", "host": "example.test", "config": {"ssh": {"compatibility_mode": true}, "future": [1,2]}})).unwrap();
+    let host: HostEntry = serde_json::from_value(json!({"name": "Remote", "type": "remote", "host": "example.test", "config": {"icon": "cisco", "ssh": {"compatibility_mode": true}, "future": [1,2]}})).unwrap();
     source.save_host(&host).unwrap();
     source.save_host(&serial_host()).unwrap();
     source

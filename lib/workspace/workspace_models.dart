@@ -685,6 +685,7 @@ class _HostItem extends _WorkspaceItemData {
     this.username,
     this.os,
     this.distro,
+    this.customIcon,
     this.serialPort,
     this.serialBaudRate,
     this.sshEnabled = false,
@@ -703,6 +704,7 @@ class _HostItem extends _WorkspaceItemData {
   final String? username;
   final String? os;
   final String? distro;
+  final String? customIcon;
   final String? serialPort;
   final int? serialBaudRate;
   final bool sshEnabled;

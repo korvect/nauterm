@@ -535,6 +535,26 @@ class HostEntry {
   /// Extensible, non-secret options. Preserve unknown sections when editing.
   final Map<String, Object?> config;
 
+  /// An optional built-in icon name; absent means automatic OS detection.
+  String? get icon {
+    final value = config['icon'];
+    return value is String && value.trim().isNotEmpty ? value.trim() : null;
+  }
+
+  static Map<String, Object?> withIcon(
+    Map<String, Object?> config,
+    String? icon,
+  ) {
+    final result = Map<String, Object?>.of(config);
+    final name = icon?.trim();
+    if (name == null || name.isEmpty) {
+      result.remove('icon');
+    } else {
+      result['icon'] = name;
+    }
+    return result;
+  }
+
   SerialConnectionConfig? get serialConnectionConfig {
     if (type != NautermHostType.serial ||
         serialPort == null ||

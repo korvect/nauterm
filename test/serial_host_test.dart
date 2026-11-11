@@ -177,7 +177,7 @@ void main() {
       expect(tester.getRect(serialPort).left, baudRect.left);
       expect(
         find.descendant(
-          of: find.byKey(const ValueKey('workspace-editor-scroll-view')),
+          of: serialPort,
           matching: find.byIcon(Icons.usb_rounded),
         ),
         findsNothing,

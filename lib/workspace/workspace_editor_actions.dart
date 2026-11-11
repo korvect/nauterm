@@ -301,6 +301,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
             telnetPassword: protocol == 'telnet' ? candidate.password : null,
             telnetPort: protocol == 'telnet' ? candidate.port : null,
             tagUuids: tagUuids,
+            config: HostEntry.withIcon(const {}, candidate.icon),
           ),
         );
         importedHosts++;

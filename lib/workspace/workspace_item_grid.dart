@@ -1548,6 +1548,9 @@ class _WorkspaceItemCardState<T extends _WorkspaceItemData>
                       distro: widget.item is _HostItem
                           ? (widget.item as _HostItem).distro
                           : null,
+                      customIcon: widget.item is _HostItem
+                          ? (widget.item as _HostItem).customIcon
+                          : null,
                     ),
                     SizedBox(width: 10),
                     Expanded(
@@ -1815,6 +1818,9 @@ class _WorkspaceItemListRowState<T extends _WorkspaceItemData>
                       distro: widget.item is _HostItem
                           ? (widget.item as _HostItem).distro
                           : null,
+                      customIcon: widget.item is _HostItem
+                          ? (widget.item as _HostItem).customIcon
+                          : null,
                     ),
                     SizedBox(width: 11),
                     Expanded(
@@ -1894,6 +1900,8 @@ class _BrandIcon extends StatelessWidget {
     this.name,
     this.os,
     this.distro,
+    this.customIcon,
+    this.mode,
   });
 
   final IconData icon;
@@ -1901,11 +1909,13 @@ class _BrandIcon extends StatelessWidget {
   final String? name;
   final String? os;
   final String? distro;
+  final String? customIcon;
+  final HostIconMode? mode;
 
   @override
   Widget build(BuildContext context) {
-    final osSlug = _resolveOsSlug(os, distro);
-    final mode = hostIconMode;
+    final osSlug = _resolveHostIconSlug(customIcon, os, distro);
+    final mode = this.mode ?? hostIconMode;
 
     // Mode: icon — replace the entire icon with the OS icon
     if (mode == HostIconMode.osIcon && osSlug != null) {
@@ -2121,7 +2131,7 @@ class _BrandIcon extends StatelessWidget {
       'arch' => const Color(0xff1793D1),
       'manjaro' => const Color(0xff35BFA4),
       'gentoo' => const Color(0xff54487A),
-      'opensuse' => const Color(0xff73BA25),
+      'opensuse' || 'suse' => const Color(0xff73BA25),
       'linuxmint' => const Color(0xff86BE43),
       'kalilinux' => const Color(0xff557C94),
       'nixos' => const Color(0xff5277C3),
