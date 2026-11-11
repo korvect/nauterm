@@ -196,7 +196,7 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
     _PortForwardSshAuth auth, {
     SshConnectionProfile? profile,
   }) {
-    if (host.networkDevice || profile?.networkDevice == true) {
+    if (host.sshCompatibilityMode || profile?.sshCompatibilityMode == true) {
       return;
     }
     if (profile != null) {
@@ -1044,7 +1044,7 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
           serverCommand:
               _emptyToNull(moshServerCommand) ?? host.moshServerCommand,
           environment: environment,
-          networkDevice: host.networkDevice,
+          sshCompatibilityMode: host.sshCompatibilityMode,
           theme: theme,
           recorder: recorder,
           config: currentTerminalConfig(),
@@ -1074,7 +1074,7 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
           startupSnippet: _startupSnippetForHost(host),
           environment: environment,
           encoding: host.encoding,
-          networkDevice: host.networkDevice,
+          sshCompatibilityMode: host.sshCompatibilityMode,
           theme: theme,
           recorder: recorder,
           config: currentTerminalConfig(),
@@ -1295,7 +1295,7 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
         startupSnippet: _startupSnippetForHost(host),
         environment: environment,
         encoding: host.encoding,
-        networkDevice: host.networkDevice,
+        sshCompatibilityMode: host.sshCompatibilityMode,
         theme: theme,
         recorder: _createTerminalRecorder(
           title: host.name,

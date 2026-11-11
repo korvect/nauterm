@@ -548,6 +548,24 @@ class HostEntry {
     );
   }
 
+  /// From `config.ssh.compatibility_mode` (default false).
+  bool get sshCompatibilityMode {
+    final ssh = config['ssh'];
+    return ssh is Map && ssh['compatibility_mode'] == true;
+  }
+
+  /// Merge `config.ssh.compatibility_mode` while preserving unknown config keys.
+  static Map<String, Object?> withSshCompatibilityMode(
+    Map<String, Object?> config, {
+    required bool enabled,
+  }) {
+    final ssh = config['ssh'] is Map
+        ? Map<String, Object?>.from(config['ssh'] as Map)
+        : <String, Object?>{};
+    ssh['compatibility_mode'] = enabled;
+    return {...config, 'ssh': ssh};
+  }
+
   final List<String> tagUuids;
   final DateTime? createdAt;
   final DateTime? updatedAt;

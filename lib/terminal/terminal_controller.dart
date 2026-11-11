@@ -170,7 +170,7 @@ class SshConnectionProfile {
     this.shellPath,
     this.environment = const {},
     this.encoding = 'UTF-8',
-    this.networkDevice = false,
+    this.sshCompatibilityMode = false,
   });
 
   final String host;
@@ -190,7 +190,7 @@ class SshConnectionProfile {
   final Map<String, String> environment;
   final String encoding;
   /// Explicit appliance mode: skip Linux shell probe in native SSH.
-  final bool networkDevice;
+  final bool sshCompatibilityMode;
 
   SshConnectionProfile copyWith({
     String? host,
@@ -209,7 +209,7 @@ class SshConnectionProfile {
     Object? shellPath = _preserveSshProfileValue,
     Map<String, String>? environment,
     String? encoding,
-    bool? networkDevice,
+    bool? sshCompatibilityMode,
   }) {
     return SshConnectionProfile(
       host: host ?? this.host,
@@ -244,18 +244,18 @@ class SshConnectionProfile {
           : shellPath as String?,
       environment: environment ?? this.environment,
       encoding: encoding ?? this.encoding,
-      networkDevice: networkDevice ?? this.networkDevice,
+      sshCompatibilityMode: sshCompatibilityMode ?? this.sshCompatibilityMode,
     );
   }
 
   /// Environment sent to native SSH, including the network-device marker.
   Map<String, String> get nativeEnvironment {
-    if (!networkDevice) {
+    if (!sshCompatibilityMode) {
       return environment;
     }
     return <String, String>{
       ...environment,
-      '__NAUTERM_NETWORK_DEVICE': '1',
+      '__NAUTERM_SSH_COMPATIBILITY_MODE': '1',
     };
   }
 }
@@ -375,7 +375,7 @@ class TerminalController extends ChangeNotifier {
     this._startupSnippet,
     Map<String, String> environment = const {},
     String encoding = 'UTF-8',
-    bool networkDevice = false,
+    bool sshCompatibilityMode = false,
     TerminalTheme theme = defaultTerminalTheme,
     this._recorder,
     this._onExit,
@@ -407,7 +407,7 @@ class TerminalController extends ChangeNotifier {
          shellPath: shellPath,
          environment: environment,
          encoding: encoding,
-         networkDevice: networkDevice,
+         sshCompatibilityMode: sshCompatibilityMode,
        ),
        _connectionStatus = TerminalConnectionStatus(
          phase: TerminalConnectionPhase.connecting,
@@ -459,7 +459,7 @@ class TerminalController extends ChangeNotifier {
     String? shellPath,
     this._startupSnippet,
     Map<String, String> environment = const {},
-    bool networkDevice = false,
+    bool sshCompatibilityMode = false,
     String serverCommand = 'mosh-server new -s -l LANG=en_US.UTF-8',
     TerminalTheme theme = defaultTerminalTheme,
     this._recorder,
@@ -491,7 +491,7 @@ class TerminalController extends ChangeNotifier {
          proxy: proxy,
          shellPath: shellPath,
          environment: environment,
-         networkDevice: networkDevice,
+         sshCompatibilityMode: sshCompatibilityMode,
        ),
        _connectionStatus = TerminalConnectionStatus(
          phase: TerminalConnectionPhase.connecting,
