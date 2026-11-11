@@ -12,7 +12,7 @@ fn schemas_one_to_five_upgrade_host_config_without_erasing_local_options() {
         connection
             .execute(
                 "INSERT INTO hosts(uuid, name, type, updated_at, version, config)
-            VALUES (?, 'Local', 'remote', 10, 1, '{\"ssh\":{\"compatibility_mode\":true}}')",
+            VALUES (?, 'Local', 'remote', 10, 1, '{\"icon\":\"cisco\",\"ssh\":{\"compatibility_mode\":true}}')",
                 [uuid],
             )
             .unwrap();
@@ -59,7 +59,10 @@ fn schemas_one_to_five_upgrade_host_config_without_erasing_local_options() {
             )
             .unwrap();
         assert_eq!(name, "Remote");
-        assert_eq!(config, "{\"ssh\":{\"compatibility_mode\":true}}");
+        assert_eq!(
+            config,
+            "{\"icon\":\"cisco\",\"ssh\":{\"compatibility_mode\":true}}"
+        );
     }
 }
 
@@ -428,3 +431,6 @@ fn schema_four_dark_theme_defaults_preserve_local_overrides_during_merge() {
         assert_eq!(dark, None);
     }
 }
+
+#[path = "sync_host_compatibility_tests.rs"]
+mod hosts;

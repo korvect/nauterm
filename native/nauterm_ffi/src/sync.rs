@@ -1466,8 +1466,10 @@ fn decrypt_envelope(
 }
 
 // Schemas 1 and 2 changed database constraints without changing sync columns.
-// Schema 4 adds keys.passphrase; preserve the original authenticated header and
-// normalize only the decrypted payload before applying the selected strategy.
+// Schema 4 adds keys.passphrase, schema 5 adds dark themes, and schema 6 adds
+// host config (including SSH compatibility mode and custom icons) and serial
+// columns. Schema 7 changes only local AI data. Preserve the authenticated
+// header and normalize only the decrypted payload before applying a strategy.
 fn migrate_sync_payload(payload: &mut SyncPayload, source_schema_version: i32) {
     if source_schema_version < 6 {
         if let Some(hosts) = payload.tables.get_mut("hosts") {
