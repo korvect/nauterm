@@ -34,7 +34,6 @@ private func installFlutterHotRestartWorkaround() {
 }
 #endif
 
-@main
 class AppDelegate: FlutterAppDelegate {
   private var appMenuChannel: FlutterMethodChannel?
   @IBOutlet weak var newLocalTerminalMenuItem: NSMenuItem?

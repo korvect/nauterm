@@ -102,12 +102,20 @@ for name in \
     dart_define_args+=("--dart-define=${name}=${!name}")
   fi
 done
-flutter build linux \
-  --release \
-  --no-pub \
-  --build-name="$VERSION" \
-  --build-number="$BUILD_NUMBER" \
-  "${dart_define_args[@]}"
+if ((${#dart_define_args[@]} > 0)); then
+  flutter build linux \
+    --release \
+    --no-pub \
+    --build-name="$VERSION" \
+    --build-number="$BUILD_NUMBER" \
+    "${dart_define_args[@]}"
+else
+  flutter build linux \
+    --release \
+    --no-pub \
+    --build-name="$VERSION" \
+    --build-number="$BUILD_NUMBER"
+fi
 
 BUNDLE_DIR="$(find build/linux -path '*/release/bundle' -type d | head -n 1)"
 if [ -z "$BUNDLE_DIR" ] || [ ! -d "$BUNDLE_DIR" ]; then

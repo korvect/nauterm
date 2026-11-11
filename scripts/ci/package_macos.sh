@@ -109,12 +109,20 @@ for name in \
     dart_define_args+=("--dart-define=${name}=${!name}")
   fi
 done
-flutter build macos \
-  --release \
-  --no-pub \
-  --build-name="$VERSION" \
-  --build-number="$BUILD_NUMBER" \
-  "${dart_define_args[@]}"
+if ((${#dart_define_args[@]} > 0)); then
+  flutter build macos \
+    --release \
+    --no-pub \
+    --build-name="$VERSION" \
+    --build-number="$BUILD_NUMBER" \
+    "${dart_define_args[@]}"
+else
+  flutter build macos \
+    --release \
+    --no-pub \
+    --build-name="$VERSION" \
+    --build-number="$BUILD_NUMBER"
+fi
 
 if [ ! -d "$APP_PATH" ]; then
   echo "Expected app bundle not found: $APP_PATH" >&2

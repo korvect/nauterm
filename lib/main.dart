@@ -11,6 +11,9 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'app/nauterm_log.dart';
 import 'app/posthog_analytics.dart';
 import 'app/third_party_licenses.dart';
+import 'cli/ephemeral_connect_bridge.dart';
+import 'cli/ephemeral_connect_ipc.dart';
+import 'cli/slash_connect_args.dart';
 import 'data/nauterm_config_store.dart';
 import 'data/nauterm_data_store.dart';
 import 'data/nauterm_paths.dart';
@@ -24,10 +27,23 @@ const _firstLaunchMetadataKey = 'has_launched_before';
 const _pendingFirstOpenMetadataKey = 'analytics_first_open_pending';
 const _sentFirstOpenMetadataKey = 'analytics_first_open_sent';
 
-Future<void> main() async {
+Future<void> main(List<String> args) async {
+  final paths = NautermPaths.resolve();
+  // Forward before Flutter init so a second launch from an external console
+  // can hand off quickly to the already-running primary instance.
+  final ephemeralConnect = parseSlashConnectArgs(args);
+  if (ephemeralConnect != null) {
+    final forwarded = await tryForwardEphemeralConnect(
+      ephemeralConnect,
+      paths: paths,
+    );
+    if (forwarded) {
+      exit(0);
+    }
+  }
+
   flutter_features.isWindowingEnabled = true;
   WidgetsFlutterBinding.ensureInitialized();
-  final paths = NautermPaths.resolve();
   NautermLog.initialize(paths.runtimeLogsDirectory);
   _installUnhandledErrorLogging();
   NautermLog.info(
@@ -66,8 +82,18 @@ Future<void> main() async {
       );
     }
   }
+  try {
+    await EphemeralConnectBridge.instance.startPrimaryListener(paths);
+  } on Object catch (error, stackTrace) {
+    NautermLog.warning(
+      'cli-ipc',
+      'Unable to start ephemeral connect listener.',
+      error: error,
+      stackTrace: stackTrace,
+    );
+  }
   configureNativeWindowing();
-  runWidget(const NautermRoot());
+  runWidget(NautermRoot(pendingEphemeralConnect: ephemeralConnect));
   NautermLog.info('application', 'Application UI mounted.');
   unawaited(_logApplicationMetadata());
   unawaited(initAnalytics());

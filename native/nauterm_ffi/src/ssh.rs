@@ -57,6 +57,8 @@ use crate::{mosh::MoshBootstrap, mosh::MoshServerCommand};
 const SSH_COMMAND_POLL_INTERVAL: Duration = Duration::from_millis(8);
 const SSH_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 const SSH_SHUTDOWN_TIMEOUT: Duration = Duration::from_millis(250);
+const SSH_SHELL_DETECT_TIMEOUT: Duration = Duration::from_secs(3);
+const SSH_JOIN_TIMEOUT: Duration = Duration::from_millis(750);
 const SSH_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(20);
 const SSH_KEEPALIVE_MISSES: usize = 3;
 const SUDO_SFTP_SESSION_LIFETIME: Duration = Duration::from_secs(15 * 60);
@@ -1623,7 +1625,7 @@ impl Drop for SshTransport {
         }
         self.shutdown.store(true, Ordering::Release);
         let _ = self.sender.send(SshCommand::Shutdown);
-        crate::pty::join_worker(&mut self.worker, "SSH");
+        crate::pty::join_worker_with_timeout(&mut self.worker, "SSH", Some(SSH_JOIN_TIMEOUT));
     }
 }
 
@@ -1881,137 +1883,36 @@ async fn run_ssh_session(
         .with_host_port(&target.host, target.port)
         .with_username(&target.username),
     );
-    let private_key = prepare_private_key(target.private_key.as_deref(), &events, &wakeup)?;
-    let config = ssh_client_config_with_keepalive(target.ssh_keepalive_interval_seconds);
-    let host_key_verification =
-        HostKeyVerification::with_interaction(target.authentication.clone());
-    let handler = SshClientHandler {
-        host_key_verification: host_key_verification.clone(),
-        host: target.host.clone(),
-        port: target.port,
-        known_hosts_path: target.known_hosts_path.clone(),
-        host_key_trust_mode: target.host_key_trust_mode,
-        output: output.clone(),
-        events: events.clone(),
-        wakeup: wakeup.clone(),
-    };
-    let mut handle = cancel_on_ssh_shutdown(
+    // Keep the upstream shell-detection / integration path for normal hosts.
+    // Some network appliances disconnect when a second `exec` channel opens;
+    // if that probe poisons the session, reconnect once without probing and
+    // fall back to a plain `request_shell`.
+    let (mut handle, mut channel) = match open_ssh_interactive_channel(
+        &target,
         &receiver,
+        &output,
+        &events,
+        &wakeup,
         &shutdown,
-        connect_ssh_with_timeout(
-            config,
-            target.host.as_str(),
-            target.port,
-            target.proxy.as_ref(),
-            handler,
-        ),
-    )
-    .await?;
-
-    match cancel_on_ssh_shutdown(
-        &receiver,
-        &shutdown,
-        authenticate(
-            &mut handle,
-            &target.username,
-            private_key,
-            target.certificate.as_deref(),
-            target.passphrase.as_deref(),
-            target.password.as_deref(),
-            &events,
-            &wakeup,
-            &host_key_verification,
-        ),
+        true,
     )
     .await
     {
-        Ok(()) => {}
+        Ok(pair) => pair,
         Err(error) if error == SSH_SESSION_CANCELLED => return Err(error),
-        Err(error) => return Err(format!("authentication failed: {error}")),
-    }
-
-    let remote_shell = match cancel_on_ssh_shutdown(
-        &receiver,
-        &shutdown,
-        detect_remote_interactive_shell(&mut handle),
-    )
-    .await
-    {
-        Ok(shell) => shell,
-        Err(error) if error == SSH_SESSION_CANCELLED => return Err(error),
-        Err(_) => None,
-    };
-
-    let mut channel = cancel_on_ssh_shutdown(&receiver, &shutdown, async {
-        handle
-            .channel_open_session()
-            .await
-            .map_err(|error| format!("failed to open session channel: {error}"))
-    })
-    .await?;
-    let geometry = target.geometry;
-    cancel_on_ssh_shutdown(&receiver, &shutdown, async {
-        channel
-            .request_pty(
+        Err(_) => {
+            open_ssh_interactive_channel(
+                &target,
+                &receiver,
+                &output,
+                &events,
+                &wakeup,
+                &shutdown,
                 false,
-                target.terminal_options.terminal_type.term(),
-                geometry.columns as u32,
-                geometry.rows as u32,
-                geometry.columns as u32 * CELL_WIDTH_PIXELS,
-                geometry.rows as u32 * CELL_HEIGHT_PIXELS,
-                &[],
             )
-            .await
-            .map_err(|error| format!("failed to request remote PTY: {error}"))
-    })
-    .await?;
-    cancel_on_ssh_shutdown(&receiver, &shutdown, async {
-        channel
-            .set_env(false, "TERM", target.terminal_options.terminal_type.term())
-            .await
-            .map_err(|error| format!("failed to set TERM: {error}"))
-    })
-    .await?;
-    if let Some(color_term) = target.terminal_options.color_term.env_value() {
-        cancel_on_ssh_shutdown(&receiver, &shutdown, async {
-            channel
-                .set_env(false, "COLORTERM", color_term)
-                .await
-                .map_err(|error| format!("failed to set COLORTERM: {error}"))
-        })
-        .await?;
-    }
-    for entry in &target.terminal_options.environment {
-        let variable = entry.variable.trim();
-        if variable.is_empty() || variable.contains('=') {
-            continue;
+            .await?
         }
-        cancel_on_ssh_shutdown(&receiver, &shutdown, async {
-            channel
-                .set_env(false, variable, &entry.value)
-                .await
-                .map_err(|error| format!("failed to set {variable}: {error}"))
-        })
-        .await?;
-    }
-    if let Some(shell) = remote_shell {
-        let command = remote_interactive_shell_command(&shell);
-        cancel_on_ssh_shutdown(&receiver, &shutdown, async {
-            channel
-                .exec(false, command)
-                .await
-                .map_err(|error| format!("failed to start integrated remote shell: {error}"))
-        })
-        .await?;
-    } else {
-        cancel_on_ssh_shutdown(&receiver, &shutdown, async {
-            channel
-                .request_shell(false)
-                .await
-                .map_err(|error| format!("failed to start remote shell: {error}"))
-        })
-        .await?;
-    }
+    };
 
     push_event(
         &events,
@@ -2059,7 +1960,17 @@ async fn run_ssh_session(
                 }
             }
             _ = command_tick.tick() => {
-                if !drain_ssh_commands(&receiver, &mut channel, &mut handle, encoding).await? {
+                if !drain_ssh_commands(
+                    &receiver,
+                    &mut channel,
+                    &mut handle,
+                    encoding,
+                    &mut decoder,
+                    &output,
+                    &wakeup,
+                )
+                .await?
+                {
                     shutdown_requested = true;
                     break;
                 }
@@ -2128,6 +2039,163 @@ async fn run_ssh_session(
         );
     }
     Ok(())
+}
+
+async fn open_ssh_interactive_channel(
+    target: &SshTarget,
+    receiver: &Receiver<SshCommand>,
+    output: &Arc<Mutex<Vec<u8>>>,
+    events: &Arc<Mutex<Vec<SessionEvent>>>,
+    wakeup: &Arc<Mutex<Option<WakeupCallback>>>,
+    shutdown: &Arc<AtomicBool>,
+    probe_shell: bool,
+) -> Result<(client::Handle<SshClientHandler>, russh::Channel<client::Msg>), String> {
+    let private_key = prepare_private_key(target.private_key.as_deref(), events, wakeup)?;
+    let config = ssh_client_config_with_keepalive(target.ssh_keepalive_interval_seconds);
+    let host_key_verification = HostKeyVerification::default();
+    let handler = SshClientHandler {
+        host_key_verification: host_key_verification.clone(),
+        host: target.host.clone(),
+        port: target.port,
+        known_hosts_path: target.known_hosts_path.clone(),
+        host_key_trust_mode: target.host_key_trust_mode,
+        output: output.clone(),
+        events: events.clone(),
+        wakeup: wakeup.clone(),
+    };
+    let mut handle = cancel_on_ssh_shutdown(
+        receiver,
+        shutdown,
+        connect_ssh_with_timeout(
+            config,
+            target.host.as_str(),
+            target.port,
+            target.proxy.as_ref(),
+            handler,
+        ),
+    )
+    .await?;
+
+    match cancel_on_ssh_shutdown(
+        receiver,
+        shutdown,
+        authenticate(
+            &mut handle,
+            &target.username,
+            private_key,
+            target.certificate.as_deref(),
+            target.passphrase.as_deref(),
+            target.password.as_deref(),
+            events,
+            wakeup,
+            &host_key_verification,
+        ),
+    )
+    .await
+    {
+        Ok(()) => {}
+        Err(error) if error == SSH_SESSION_CANCELLED => return Err(error),
+        Err(error) => return Err(format!("authentication failed: {error}")),
+    }
+
+    let remote_shell = if probe_shell {
+        match cancel_on_ssh_shutdown(receiver, shutdown, async {
+            match tokio::time::timeout(
+                SSH_SHELL_DETECT_TIMEOUT,
+                detect_remote_interactive_shell(&mut handle),
+            )
+            .await
+            {
+                Ok(result) => result,
+                // Bound only the probe; a hung appliance exec must not block forever.
+                Err(_) => Err("remote shell detection timed out".to_owned()),
+            }
+        })
+        .await
+        {
+            Ok(shell) => shell,
+            Err(error) if error == SSH_SESSION_CANCELLED => return Err(error),
+            // Match upstream: soft-fail the probe and continue with request_shell.
+            // If the probe poisoned the session, channel open below fails and the
+            // caller reconnects once without probing.
+            Err(_) => None,
+        }
+    } else {
+        None
+    };
+
+    let mut channel = cancel_on_ssh_shutdown(receiver, shutdown, async {
+        handle
+            .channel_open_session()
+            .await
+            .map_err(|error| format!("failed to open session channel: {error}"))
+    })
+    .await?;
+    let geometry = target.geometry;
+    cancel_on_ssh_shutdown(receiver, shutdown, async {
+        channel
+            .request_pty(
+                false,
+                target.terminal_options.terminal_type.term(),
+                geometry.columns as u32,
+                geometry.rows as u32,
+                geometry.columns as u32 * CELL_WIDTH_PIXELS,
+                geometry.rows as u32 * CELL_HEIGHT_PIXELS,
+                &[],
+            )
+            .await
+            .map_err(|error| format!("failed to request remote PTY: {error}"))
+    })
+    .await?;
+    cancel_on_ssh_shutdown(receiver, shutdown, async {
+        channel
+            .set_env(false, "TERM", target.terminal_options.terminal_type.term())
+            .await
+            .map_err(|error| format!("failed to set TERM: {error}"))
+    })
+    .await?;
+    if let Some(color_term) = target.terminal_options.color_term.env_value() {
+        cancel_on_ssh_shutdown(receiver, shutdown, async {
+            channel
+                .set_env(false, "COLORTERM", color_term)
+                .await
+                .map_err(|error| format!("failed to set COLORTERM: {error}"))
+        })
+        .await?;
+    }
+    for entry in &target.terminal_options.environment {
+        let variable = entry.variable.trim();
+        if variable.is_empty() || variable.contains('=') {
+            continue;
+        }
+        cancel_on_ssh_shutdown(receiver, shutdown, async {
+            channel
+                .set_env(false, variable, &entry.value)
+                .await
+                .map_err(|error| format!("failed to set {variable}: {error}"))
+        })
+        .await?;
+    }
+    if let Some(shell) = remote_shell {
+        let command = remote_interactive_shell_command(&shell);
+        cancel_on_ssh_shutdown(receiver, shutdown, async {
+            channel
+                .exec(false, command)
+                .await
+                .map_err(|error| format!("failed to start integrated remote shell: {error}"))
+        })
+        .await?;
+    } else {
+        cancel_on_ssh_shutdown(receiver, shutdown, async {
+            channel
+                .request_shell(false)
+                .await
+                .map_err(|error| format!("failed to start remote shell: {error}"))
+        })
+        .await?;
+    }
+
+    Ok((handle, channel))
 }
 
 async fn detect_remote_interactive_shell(
@@ -2211,6 +2279,9 @@ async fn drain_ssh_commands(
     channel: &mut russh::Channel<client::Msg>,
     handle: &mut client::Handle<SshClientHandler>,
     encoding: &'static Encoding,
+    decoder: &mut Decoder,
+    output: &Arc<Mutex<Vec<u8>>>,
+    wakeup: &Arc<Mutex<Option<WakeupCallback>>>,
 ) -> Result<bool, String> {
     loop {
         match receiver.try_recv() {
@@ -2228,9 +2299,19 @@ async fn drain_ssh_commands(
                 .await
                 .map_err(|error| format!("failed to resize remote PTY: {error}"))?,
             Ok(SshCommand::ReadShellHistory(reply)) => {
-                let result = run_ssh_exec_command(handle, &shell_history_command())
-                    .await
-                    .and_then(|command| parse_shell_history_output(&command.stdout));
+                // Keep servicing the interactive PTY while probing history.
+                // Network appliances often hang on the exec channel; without
+                // interleaving, typing/output freeze for the full probe timeout.
+                let result = collect_shell_history_while_servicing_pty(
+                    handle,
+                    channel,
+                    encoding,
+                    decoder,
+                    receiver,
+                    output,
+                    wakeup,
+                )
+                .await;
                 let _ = reply.send(result);
             }
             Ok(SshCommand::ExportPublicKey(request, reply)) => {
@@ -2239,6 +2320,88 @@ async fn drain_ssh_commands(
             }
             Ok(SshCommand::Shutdown) | Err(TryRecvError::Disconnected) => return Ok(false),
             Err(TryRecvError::Empty) => return Ok(true),
+        }
+    }
+}
+
+async fn collect_shell_history_while_servicing_pty(
+    handle: &mut client::Handle<SshClientHandler>,
+    channel: &mut russh::Channel<client::Msg>,
+    encoding: &'static Encoding,
+    decoder: &mut Decoder,
+    receiver: &Receiver<SshCommand>,
+    output: &Arc<Mutex<Vec<u8>>>,
+    wakeup: &Arc<Mutex<Option<WakeupCallback>>>,
+) -> ShellHistoryResult {
+    const HISTORY_TIMEOUT: Duration = Duration::from_secs(2);
+    let history = async {
+        run_ssh_exec_command(handle, &shell_history_command())
+            .await
+            .and_then(|command| parse_shell_history_output(&command.stdout))
+    };
+    tokio::pin!(history);
+    let deadline = tokio::time::sleep(HISTORY_TIMEOUT);
+    tokio::pin!(deadline);
+
+    loop {
+        tokio::select! {
+            result = &mut history => return result,
+            _ = &mut deadline => {
+                return Err("SSH command timed out.".to_owned());
+            }
+            message = channel.wait() => {
+                match message {
+                    Some(ChannelMsg::Data { data })
+                    | Some(ChannelMsg::ExtendedData { data, .. }) => {
+                        let decoded = decode_ssh_output(decoder, &data);
+                        push_output(output, wakeup, &decoded);
+                    }
+                    Some(ChannelMsg::ExitStatus { .. }) => {}
+                    Some(ChannelMsg::Eof) | Some(ChannelMsg::Close) | None => {
+                        return Err("SSH session closed during shell history probe.".to_owned());
+                    }
+                    Some(_) => {}
+                }
+            }
+            _ = tokio::time::sleep(SSH_COMMAND_POLL_INTERVAL) => {
+                loop {
+                    match receiver.try_recv() {
+                        Ok(SshCommand::Input(bytes)) => {
+                            channel
+                                .data(&encode_ssh_input(&bytes, encoding)[..])
+                                .await
+                                .map_err(|error| format!("failed to send input: {error}"))?;
+                        }
+                        Ok(SshCommand::Resize(geometry)) => {
+                            channel
+                                .window_change(
+                                    geometry.columns as u32,
+                                    geometry.rows as u32,
+                                    geometry.columns as u32 * CELL_WIDTH_PIXELS,
+                                    geometry.rows as u32 * CELL_HEIGHT_PIXELS,
+                                )
+                                .await
+                                .map_err(|error| {
+                                    format!("failed to resize remote PTY: {error}")
+                                })?;
+                        }
+                        Ok(SshCommand::ReadShellHistory(reply)) => {
+                            let _ = reply.send(Err(
+                                "remote shell history probe already in progress.".to_owned(),
+                            ));
+                        }
+                        Ok(SshCommand::ExportPublicKey(_, reply)) => {
+                            let _ = reply.send(Err(
+                                "SSH session is busy collecting shell history.".to_owned(),
+                            ));
+                        }
+                        Ok(SshCommand::Shutdown) | Err(TryRecvError::Disconnected) => {
+                            return Err(SSH_SESSION_CANCELLED.to_owned());
+                        }
+                        Err(TryRecvError::Empty) => break,
+                    }
+                }
+            }
         }
     }
 }

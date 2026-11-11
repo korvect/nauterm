@@ -30,6 +30,7 @@ import '../ai/ai_attachment.dart';
 import '../ai/ai_config.dart';
 import '../ai/ai_conversation.dart';
 import '../ai/ai_context.dart';
+import '../cli/ephemeral_connect_request.dart';
 import '../data/ai_conversation_repository.dart';
 import '../data/ai_provider_store.dart';
 import '../data/known_hosts_store.dart';
@@ -158,6 +159,47 @@ class NautermWorkspaceController extends ChangeNotifier {
     }
   }
 
+  /// Opens a temporary Telnet/SSH tab without creating a saved host.
+  Future<void> openEphemeralConnect(EphemeralConnectRequest request) async {
+    await initialDataReady;
+    final state = await _waitForAttachedState();
+    if (state == null) {
+      return;
+    }
+    await state._openEphemeralConnect(request);
+  }
+
+  Future<_NautermWorkspaceState?> _waitForAttachedState({
+    Duration timeout = const Duration(seconds: 5),
+  }) async {
+    final existing = _state;
+    if (existing != null) {
+      return existing;
+    }
+
+    final completer = Completer<_NautermWorkspaceState?>();
+    late VoidCallback listener;
+    final timer = Timer(timeout, () {
+      if (!completer.isCompleted) {
+        completer.complete(_state);
+      }
+    });
+    listener = () {
+      final state = _state;
+      if (state != null && !completer.isCompleted) {
+        completer.complete(state);
+      }
+    };
+    addListener(listener);
+    listener();
+    try {
+      return await completer.future;
+    } finally {
+      timer.cancel();
+      removeListener(listener);
+    }
+  }
+
   Future<bool> confirmQuitIfNeeded() async {
     return _state?._confirmQuitIfNeeded() ?? true;
   }
@@ -275,6 +317,8 @@ class _NautermWorkspaceModel extends ChangeNotifier {
   shellHistoryByController = {};
   final Set<TerminalController> shellHistoryLoading = {};
   final Map<TerminalController, DateTime> shellHistoryLastRead = {};
+  /// Remote hosts that rejected/timed out shell-history exec (e.g. network gear).
+  final Set<TerminalController> shellHistoryUnsupported = {};
   Future<void> shellHistoryPersistence = Future<void>.value();
   String? selectedLogId;
   final List<_WorkspaceRuntimeState> workspaces = [
@@ -586,6 +630,8 @@ class _NautermWorkspaceState extends ConsumerState<NautermWorkspace>
 
   Map<TerminalController, DateTime> get _shellHistoryLastRead =>
       _workspaceModel.shellHistoryLastRead;
+  Set<TerminalController> get _shellHistoryUnsupported =>
+      _workspaceModel.shellHistoryUnsupported;
 
   Future<void> get _shellHistoryPersistence =>
       _workspaceModel.shellHistoryPersistence;

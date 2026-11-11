@@ -6,6 +6,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/src/widgets/_window.dart';
 
+import '../cli/ephemeral_connect_bridge.dart';
+import '../cli/ephemeral_connect_request.dart';
 import '../settings/settings_panel.dart';
 import '../data/nauterm_paths.dart';
 import '../data/sync_service.dart';
@@ -17,7 +19,9 @@ import 'native_windowing.dart';
 import 'settings_window.dart';
 
 class NautermRoot extends StatefulWidget {
-  const NautermRoot({super.key});
+  const NautermRoot({super.key, this.pendingEphemeralConnect});
+
+  final EphemeralConnectRequest? pendingEphemeralConnect;
 
   @override
   State<NautermRoot> createState() => _NautermRootState();
@@ -54,12 +58,26 @@ class _NautermRootState extends State<NautermRoot>
       ),
     );
     registerNautermRoot(this);
+    EphemeralConnectBridge.instance.attachHandler(
+      _handleEphemeralConnectRequest,
+    );
     nautermDatabaseBulkChangeRevision.addListener(_reloadBulkDatabaseChanges);
     nautermSyncPreferencesRevision.addListener(_reloadSyncPreferences);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_preloadSecureDataAfterDatabaseReady());
       unawaited(_checkForUpdatesAfterWorkspaceReady());
+      final pending = widget.pendingEphemeralConnect;
+      if (pending != null) {
+        unawaited(_handleEphemeralConnectRequest(pending));
+      }
     });
+  }
+
+  Future<void> _handleEphemeralConnectRequest(
+    EphemeralConnectRequest request,
+  ) async {
+    showMainWindow();
+    await _workspaceController.openEphemeralConnect(request);
   }
 
   Future<void> _checkForUpdatesAfterWorkspaceReady() async {
@@ -82,6 +100,7 @@ class _NautermRootState extends State<NautermRoot>
     );
     nautermSyncPreferencesRevision.removeListener(_reloadSyncPreferences);
     unregisterNautermRoot(this);
+    unawaited(EphemeralConnectBridge.instance.close());
     unawaited(_syncService.close());
     _updateCoordinator.close();
     final settingsWindowController = _settingsWindowController;
@@ -131,6 +150,7 @@ class _NautermRootState extends State<NautermRoot>
       if (_shouldHideMainWindowOnClose) {
         hideMainWindow();
       } else {
+        await EphemeralConnectBridge.instance.close();
         await _syncService.close();
         await _workspaceController.flushAndClose();
         await quitNautermApplication();
@@ -168,6 +188,7 @@ class _NautermRootState extends State<NautermRoot>
       return;
     }
 
+    await EphemeralConnectBridge.instance.close();
     await _syncService.close();
     await _workspaceController.flushAndClose();
     await quitNautermApplication();
@@ -282,6 +303,7 @@ class _NautermRootState extends State<NautermRoot>
     if (!shouldQuit) {
       return false;
     }
+    await EphemeralConnectBridge.instance.close();
     await _syncService.close();
     await _workspaceController.flushAndClose();
     return true;

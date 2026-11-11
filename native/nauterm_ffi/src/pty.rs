@@ -10,6 +10,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
+use std::time::Duration;
 
 use alacritty_terminal::event::{OnResize, WindowSize};
 use alacritty_terminal::tty::{self, EventedPty, EventedReadWrite, Options, Pty, Shell};
@@ -792,15 +793,55 @@ pub(crate) fn enable_wakeup_callbacks() {
 }
 
 pub(crate) fn join_worker(worker: &mut Option<JoinHandle<()>>, name: &str) {
-    let Some(worker) = worker.take() else {
+    join_worker_with_timeout(worker, name, None);
+}
+
+/// Joins a session worker, optionally abandoning the wait after [timeout].
+///
+/// Network appliances can stall channel close/disconnect; blocking the UI
+/// thread on an unbounded join freezes the app (spinning cursor) on close.
+pub(crate) fn join_worker_with_timeout(
+    worker: &mut Option<JoinHandle<()>>,
+    name: &str,
+    timeout: Option<Duration>,
+) {
+    let Some(handle) = worker.take() else {
         return;
     };
-    if worker.thread().id() == thread::current().id() {
+    if handle.thread().id() == thread::current().id() {
         eprintln!("nauterm: refusing to join {name} worker from itself");
         return;
     }
-    if worker.join().is_err() {
-        eprintln!("nauterm: {name} worker panicked during shutdown");
+
+    let Some(timeout) = timeout else {
+        if handle.join().is_err() {
+            eprintln!("nauterm: {name} worker panicked during shutdown");
+        }
+        return;
+    };
+
+    let (tx, rx) = mpsc::channel();
+    let join_name = format!("nauterm-join-{name}");
+    match thread::Builder::new().name(join_name).spawn(move || {
+        let result = handle.join();
+        let _ = tx.send(result);
+    }) {
+        Ok(_) => match rx.recv_timeout(timeout) {
+            Ok(Err(_)) => {
+                eprintln!("nauterm: {name} worker panicked during shutdown");
+            }
+            Ok(Ok(())) => {}
+            Err(_) => {
+                eprintln!(
+                    "nauterm: {name} worker did not finish within {} ms; abandoning join",
+                    timeout.as_millis()
+                );
+            }
+        },
+        Err(_) => {
+            // JoinHandle is dropped with the failed spawn closure and detaches.
+            eprintln!("nauterm: unable to spawn join helper for {name}");
+        }
     }
 }
 
@@ -1138,7 +1179,10 @@ fn window_size(geometry: TerminalGeometry) -> WindowSize {
 mod shutdown_tests {
     #[cfg(target_os = "macos")]
     use super::LocalPty;
-    use super::{configure_history_filtering, configure_shell_integration, join_worker};
+    use super::{
+        configure_history_filtering, configure_shell_integration, join_worker,
+        join_worker_with_timeout,
+    };
     #[cfg(target_os = "macos")]
     use crate::terminal::{TerminalGeometry, TerminalOptions};
     use alacritty_terminal::tty::Options;
@@ -1181,6 +1225,18 @@ mod shutdown_tests {
 
         assert!(worker.is_none());
         assert!(completed.load(Ordering::Acquire));
+    }
+
+    #[test]
+    fn join_worker_timeout_abandons_a_stuck_worker() {
+        let mut worker = Some(thread::spawn(|| {
+            thread::sleep(Duration::from_secs(2));
+        }));
+
+        let started = std::time::Instant::now();
+        join_worker_with_timeout(&mut worker, "stuck", Some(Duration::from_millis(50)));
+        assert!(worker.is_none());
+        assert!(started.elapsed() < Duration::from_millis(500));
     }
 
     #[test]

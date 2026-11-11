@@ -146,7 +146,11 @@ impl Drop for TelnetTransport {
         }
         self.shutdown.store(true, Ordering::Release);
         let _ = self.sender.send(TelnetCommand::Shutdown);
-        crate::pty::join_worker(&mut self.worker, "Telnet");
+        crate::pty::join_worker_with_timeout(
+            &mut self.worker,
+            "Telnet",
+            Some(Duration::from_millis(750)),
+        );
     }
 }
 

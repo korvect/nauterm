@@ -576,7 +576,6 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
                 'Connection'
           : _remoteConnectionDisplayTitle(
               host: profile.host,
-              hostId: profile.hostId,
               label: profile.label,
             ),
       subtitle: serialProfile != null
@@ -3080,6 +3079,10 @@ String _connectionEventCategory(TerminalConnectionEventKind kind) {
     TerminalConnectionEventKind.authPasswordStart ||
     TerminalConnectionEventKind.authPasswordRejected ||
     TerminalConnectionEventKind.authPasswordFailed ||
+    TerminalConnectionEventKind.authKeyboardInteractiveStart ||
+    TerminalConnectionEventKind.authKeyboardInteractivePrompt ||
+    TerminalConnectionEventKind.authKeyboardInteractiveRejected ||
+    TerminalConnectionEventKind.authKeyboardInteractiveFailed ||
     TerminalConnectionEventKind.authKeyStart ||
     TerminalConnectionEventKind.authKeyRejected ||
     TerminalConnectionEventKind.authKeyFailed ||
@@ -3130,6 +3133,7 @@ _ConnectionLogSeverity _connectionEventSeverity(
     TerminalConnectionEventKind.knownHostStoreMissing ||
     TerminalConnectionEventKind.authNoneRejected ||
     TerminalConnectionEventKind.authPasswordRejected ||
+    TerminalConnectionEventKind.authKeyboardInteractiveRejected ||
     TerminalConnectionEventKind.authKeyRejected ||
     TerminalConnectionEventKind.authPassphraseRequired ||
     TerminalConnectionEventKind.authAgentIdentityRejected ||
@@ -3143,6 +3147,7 @@ _ConnectionLogSeverity _connectionEventSeverity(
     TerminalConnectionEventKind.hostKeySaveFailed ||
     TerminalConnectionEventKind.authNoneFailed ||
     TerminalConnectionEventKind.authPasswordFailed ||
+    TerminalConnectionEventKind.authKeyboardInteractiveFailed ||
     TerminalConnectionEventKind.authKeyFailed ||
     TerminalConnectionEventKind.authAgentFailed ||
     TerminalConnectionEventKind.authFailed ||
@@ -3159,6 +3164,8 @@ _ConnectionLogSeverity _connectionEventSeverity(
     TerminalConnectionEventKind.knownHostCheck ||
     TerminalConnectionEventKind.authNoneStart ||
     TerminalConnectionEventKind.authPasswordStart ||
+    TerminalConnectionEventKind.authKeyboardInteractiveStart ||
+    TerminalConnectionEventKind.authKeyboardInteractivePrompt ||
     TerminalConnectionEventKind.authKeyStart ||
     TerminalConnectionEventKind.authAgentStart ||
     TerminalConnectionEventKind.authAgentIdentities ||
@@ -3234,6 +3241,7 @@ bool _hasLatestActionableAuth(List<TerminalConnectionEvent> events) {
       case TerminalConnectionEventKind.authFailed:
       case TerminalConnectionEventKind.authPassphraseRequired:
       case TerminalConnectionEventKind.authPasswordRejected:
+      case TerminalConnectionEventKind.authKeyboardInteractiveRejected:
       case TerminalConnectionEventKind.authKeyRejected:
       case TerminalConnectionEventKind.authAgentUnavailable:
         return true;

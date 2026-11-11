@@ -683,6 +683,14 @@ String _terminalConnectionEventKindToWire(TerminalConnectionEventKind kind) {
     TerminalConnectionEventKind.authPasswordRejected =>
       'auth_password_rejected',
     TerminalConnectionEventKind.authPasswordFailed => 'auth_password_failed',
+    TerminalConnectionEventKind.authKeyboardInteractiveStart =>
+      'auth_keyboard_interactive_start',
+    TerminalConnectionEventKind.authKeyboardInteractivePrompt =>
+      'auth_keyboard_interactive_prompt',
+    TerminalConnectionEventKind.authKeyboardInteractiveRejected =>
+      'auth_keyboard_interactive_rejected',
+    TerminalConnectionEventKind.authKeyboardInteractiveFailed =>
+      'auth_keyboard_interactive_failed',
     TerminalConnectionEventKind.authKeyStart => 'auth_key_start',
     TerminalConnectionEventKind.authKeyRejected => 'auth_key_rejected',
     TerminalConnectionEventKind.authKeyFailed => 'auth_key_failed',

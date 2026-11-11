@@ -236,7 +236,6 @@ String _terminalControllerDisplayTitle(
   if (sshProfile != null) {
     return _remoteConnectionDisplayTitle(
       host: sshProfile.host,
-      hostId: sshProfile.hostId,
       label: sshProfile.label,
     );
   }
@@ -244,7 +243,6 @@ String _terminalControllerDisplayTitle(
   if (telnetProfile != null) {
     return _remoteConnectionDisplayTitle(
       host: telnetProfile.host,
-      hostId: telnetProfile.hostId,
       label: telnetProfile.label,
     );
   }
@@ -255,11 +253,9 @@ String _terminalControllerDisplayTitle(
 
 String _remoteConnectionDisplayTitle({
   required String host,
-  required int? hostId,
   required String? label,
 }) {
-  final savedHostName = hostId == null ? null : _emptyToNull(label);
-  return savedHostName ?? host;
+  return _emptyToNull(label) ?? host;
 }
 
 sealed class _TerminalViewLayout {

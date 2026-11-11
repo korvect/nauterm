@@ -16,4 +16,8 @@ for name in \
   fi
 done
 
-exec flutter run "${dart_define_args[@]}"
+if ((${#dart_define_args[@]} > 0)); then
+  exec flutter run "${dart_define_args[@]}"
+else
+  exec flutter run
+fi

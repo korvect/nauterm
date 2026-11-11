@@ -2290,6 +2290,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       _setWorkspaceState(() {
         _shellHistory = const [];
         _shellHistoryByController.clear();
+        _shellHistoryUnsupported.clear();
       });
     } catch (error) {
       if (!mounted) {
