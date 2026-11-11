@@ -2076,8 +2076,10 @@ class TerminalController extends ChangeNotifier {
   }
 
   void _refreshSnapshot() {
+    final previousSnapshot = _snapshot;
     final nextSnapshot = _driver.snapshot;
     _snapshot = nextSnapshot;
+    _refreshSelectedCommandBlock(previousSnapshot);
     _workingDirectory.updateSnapshot(nextSnapshot);
     _reconcileSshPrediction(nextSnapshot);
     _reconcileMoshPredictionBatches();
@@ -2087,6 +2089,44 @@ class TerminalController extends ChangeNotifier {
     _recorder?.recordSnapshot(_snapshot);
     _updateFallbackExitStatus();
     _lastSnapshotRefreshAt = _snapshotRefreshClock.elapsed;
+  }
+
+  void _refreshSelectedCommandBlock(TerminalSnapshot previousSnapshot) {
+    final selected = _selectedCommandBlock;
+    if (selected == null) return;
+
+    TerminalCommandBlock? next;
+    if (!_snapshot.alternateScreen &&
+        _snapshot.columns == previousSnapshot.columns) {
+      final scrolledLines =
+          _snapshot.historyLines - previousSnapshot.historyLines;
+      final offset =
+          selected.selection.start - scrolledLines * _snapshot.columns;
+      if (offset >= -_snapshot.historyLines * _snapshot.columns &&
+          offset < _snapshot.rows * _snapshot.columns) {
+        final driver = _driver;
+        if (driver is TerminalCommandBlockResolver) {
+          next = (driver as TerminalCommandBlockResolver).commandBlockAtOffset(
+            offset,
+          );
+        } else {
+          final row = offset ~/ _snapshot.columns + _snapshot.displayOffset;
+          if (row >= 0 && row < _snapshot.rows) {
+            next = driver.commandBlockAt(
+              TerminalCellPosition(row: row, column: 0),
+            );
+          }
+        }
+        // Never move a stale selection onto a different command.
+        if (selected.id != null
+            ? next?.id != selected.id
+            : next?.selection.start != offset) {
+          next = null;
+        }
+      }
+    }
+    _selectedCommandBlock = next;
+    _selectedText = next == null ? '' : _driver.selectionText(next.selection);
   }
 
   void _pruneConfirmedMoshLineState(TerminalCursor cursor) {

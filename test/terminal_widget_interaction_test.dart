@@ -838,6 +838,120 @@ void main() {
     expect(_terminalPainter(tester).commandBlockSelection, isNull);
   });
 
+  testWidgets('selected command block follows output and clears when gone', (
+    tester,
+  ) async {
+    final previousCopyOnSelect = terminalCopyOnSelect;
+    terminalCopyOnSelect = true;
+    addTearDown(() => terminalCopyOnSelect = previousCopyOnSelect);
+    await Clipboard.setData(const ClipboardData(text: 'preserve clipboard'));
+    final driver = _SnapshotDriver(
+      TerminalSnapshot.blank(columns: 80, rows: 12),
+      selectionTextValue: 'first line',
+      commandBlock: const TerminalCommandBlock(
+        id: 1,
+        selection: TerminalSelection(start: 80, end: 80 * 3),
+        shellIntegrated: true,
+      ),
+      preserveSnapshotOnResize: true,
+    );
+    final controller = TerminalController(driver: driver);
+    addTearDown(controller.dispose);
+    await _pumpTerminal(tester, controller, autofocusTerminal: true);
+    final metrics = TerminalMetrics.measure(
+      defaultTerminalConfig.font.textStyle(),
+    );
+    await tester.tapAt(
+      _cellCenter(metrics, column: 2, row: 1),
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pump();
+    final originalFrame = _commandBlockFocusPainter(tester)
+        .focusRectForTesting(const Size(800, 240));
+
+    driver.commandBlock = const TerminalCommandBlock(
+      id: 1,
+      selection: TerminalSelection(start: 80, end: 80 * 6),
+      shellIntegrated: true,
+    );
+    driver.selectionTextValue = 'first line\nnew output';
+    controller.refreshSnapshot();
+    await tester.pump();
+
+    expect(
+      _terminalPainter(tester).commandBlockSelection,
+      driver.commandBlock!.selection,
+    );
+    expect(
+      controller.selectedCommandBlock?.selection,
+      driver.commandBlock!.selection,
+    );
+    expect(controller.selectedText, 'first line\nnew output');
+    expect(
+      (await Clipboard.getData(Clipboard.kTextPlain))?.text,
+      'preserve clipboard',
+    );
+    await _sendShortcut(tester, LogicalKeyboardKey.keyC);
+    await tester.pump();
+    expect(
+      (await Clipboard.getData(Clipboard.kTextPlain))?.text,
+      'first line\nnew output',
+    );
+    expect(
+      _commandBlockFocusPainter(tester)
+          .focusRectForTesting(const Size(800, 240))
+          .height,
+      greaterThan(originalFrame.height),
+    );
+
+    driver._snapshot = TerminalSnapshot.blank(
+      columns: 80,
+      rows: 12,
+      historyLines: 4,
+      displayOffset: 2,
+    );
+    driver.commandBlock = const TerminalCommandBlock(
+      id: 1,
+      selection: TerminalSelection(start: -80 * 3, end: 80 * 2),
+      shellIntegrated: true,
+    );
+    controller.refreshSnapshot();
+    await tester.pump();
+    final pausedFrame = _commandBlockFocusPainter(tester)
+        .focusRectForTesting(const Size(800, 240));
+    controller.scrollLines(2);
+    await tester.pump();
+    expect(
+      _commandBlockFocusPainter(tester)
+          .focusRectForTesting(const Size(800, 240))
+          .top,
+      greaterThan(pausedFrame.top),
+    );
+    expect(
+      _terminalPainter(tester).commandBlockSelection,
+      driver.commandBlock!.selection,
+    );
+
+    driver.commandBlock = const TerminalCommandBlock(
+      id: 2,
+      selection: TerminalSelection(start: -80 * 3, end: 80 * 2),
+      shellIntegrated: true,
+    );
+    controller.refreshSnapshot();
+    await tester.pump();
+    expect(_terminalPainter(tester).commandBlockSelection, isNull);
+    expect(controller.selectedCommandBlock, isNull);
+    expect(controller.selectedText, isEmpty);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is CustomPaint &&
+            widget.painter is TerminalCommandBlockFocusPainter,
+      ),
+      findsNothing,
+    );
+  });
+
   testWidgets('copy on select ignores command block selection', (tester) async {
     final previousCopyOnSelect = terminalCopyOnSelect;
     terminalCopyOnSelect = true;
@@ -2794,7 +2908,7 @@ void main() {
   });
 }
 
-class _SnapshotDriver implements TerminalDriver {
+class _SnapshotDriver implements TerminalDriver, TerminalCommandBlockResolver {
   _SnapshotDriver(
     this._snapshot, {
     this.selectionTextValue,
@@ -2804,8 +2918,8 @@ class _SnapshotDriver implements TerminalDriver {
   });
 
   TerminalSnapshot _snapshot;
-  final String? selectionTextValue;
-  final TerminalCommandBlock? commandBlock;
+  String? selectionTextValue;
+  TerminalCommandBlock? commandBlock;
   final TerminalPromptClickMove? promptClickMovement;
   final bool preserveSnapshotOnResize;
   int scrolledLines = 0;
@@ -2896,16 +3010,23 @@ class _SnapshotDriver implements TerminalDriver {
 
   @override
   TerminalCommandBlock? commandBlockAt(TerminalCellPosition position) {
+    return commandBlockAtOffset(terminalCellOffset(_snapshot, position));
+  }
+
+  @override
+  TerminalCommandBlock? commandBlockAtOffset(int offset) {
     final configured = commandBlock;
     if (configured != null &&
-        configured.selection.containsViewportCell(
-          row: position.row,
-          column: position.column,
-          snapshot: _snapshot,
-        )) {
+        offset >= configured.selection.start &&
+        offset < configured.selection.end) {
       return configured;
     }
-    final selection = terminalCommandBlockAt(_snapshot, position);
+    final row = offset ~/ _snapshot.columns + _snapshot.displayOffset;
+    if (row < 0 || row >= _snapshot.rows) return null;
+    final selection = terminalCommandBlockAt(
+      _snapshot,
+      TerminalCellPosition(row: row, column: 0),
+    );
     return selection == null
         ? null
         : TerminalCommandBlock(selection: selection);
@@ -3031,4 +3152,19 @@ TerminalPainter _terminalPainter(WidgetTester tester) {
     ),
   );
   return customPaint.painter! as TerminalPainter;
+}
+
+TerminalCommandBlockFocusPainter _commandBlockFocusPainter(
+  WidgetTester tester,
+) {
+  return tester
+          .widget<CustomPaint>(
+            find.byWidgetPredicate(
+              (widget) =>
+                  widget is CustomPaint &&
+                  widget.painter is TerminalCommandBlockFocusPainter,
+            ),
+          )
+          .painter!
+      as TerminalCommandBlockFocusPainter;
 }

@@ -60,6 +60,11 @@ abstract interface class TerminalWordSelector {
   });
 }
 
+/// Resolves command blocks in the terminal grid, including offscreen history.
+abstract interface class TerminalCommandBlockResolver {
+  TerminalCommandBlock? commandBlockAtOffset(int offset);
+}
+
 /// Updates terminal defaults while preserving application cursor overrides.
 abstract interface class TerminalCursorUpdater {
   void updateCursorConfig(TerminalCursorConfig cursor);

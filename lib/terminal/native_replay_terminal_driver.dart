@@ -1,7 +1,11 @@
 part of 'terminal_ffi.dart';
 
 class NativeReplayTerminalDriver
-    implements TerminalDriver, TerminalPasteEncoder, TerminalWordSelector {
+    implements
+        TerminalDriver,
+        TerminalPasteEncoder,
+        TerminalWordSelector,
+        TerminalCommandBlockResolver {
   @override
   String encodePaste(String text) => _encodeNativePaste(
     _bindings,
@@ -220,16 +224,17 @@ class NativeReplayTerminalDriver
 
   @override
   TerminalCommandBlock? commandBlockAt(TerminalCellPosition position) {
+    return commandBlockAtOffset(terminalCellOffset(snapshot, position));
+  }
+
+  @override
+  TerminalCommandBlock? commandBlockAtOffset(int offset) {
     if (_handle == nullptr) {
       return null;
     }
-    final currentSnapshot = snapshot;
     return _commandBlockFromNative(
       _bindings,
-      _bindings.terminalCommandBlockAt(
-        _handle,
-        terminalCellOffset(currentSnapshot, position),
-      ),
+      _bindings.terminalCommandBlockAt(_handle, offset),
     );
   }
 

@@ -10,6 +10,74 @@ import 'package:nauterm/terminal/terminal_models.dart';
 import 'package:nauterm/terminal/terminal_selection.dart';
 
 void main() {
+  for (final backend in TerminalEmulatorBackend.values) {
+    test(
+      'selected block tracks output and paused history on ${backend.name}',
+      () {
+        final driver = NativeReplayTerminalDriver.create(
+          columns: 40,
+          rows: 4,
+          config: defaultTerminalConfig.copyWith(
+            emulatorBackend: backend,
+            scrollbackLines: 32,
+          ),
+        );
+        final controller = TerminalController(driver: driver);
+        addTearDown(controller.dispose);
+        controller.write(
+          '\x1b]133;A\x07user@host:~\$ \x1b]133;B\x07running\r\none\r\n',
+        );
+        final selected = controller.commandBlockAt(
+          const TerminalCellPosition(row: 0, column: 0),
+        )!;
+        expect(selected.id, isNotNull);
+        controller.updateSelectedCommandBlock(selected);
+        controller.updateSelectedText(
+          controller.selectionText(selected.selection),
+        );
+        controller.write('two\r\nthree\r\nfour\r\n');
+        expect(controller.selectedCommandBlock?.id, selected.id);
+        expect(controller.selectedCommandBlock!.selection.start, lessThan(0));
+        expect(controller.selectedText, contains('four'));
+
+        controller.scrollLines(controller.snapshot.historyLines);
+        final pausedOffset = controller.snapshot.displayOffset;
+        expect(pausedOffset, greaterThan(0));
+        controller.write('five\r\nsix\r\n');
+        expect(controller.snapshot.displayOffset, greaterThan(0));
+        expect(controller.selectedCommandBlock?.id, selected.id);
+        expect(controller.selectedText, contains('six'));
+        expect(
+          controller.selectedCommandBlock!.selection,
+          driver
+              .commandBlockAtOffset(-controller.snapshot.historyLines * 40)!
+              .selection,
+        );
+
+        controller.write(
+          '\x1b]4545;CommandExited;0\x07\x1b]133;A\x07user@host:~\$ \x1b]133;B\x07next\r\n',
+        );
+        expect(controller.selectedCommandBlock?.id, selected.id);
+        expect(controller.selectedCommandBlock?.completed, isTrue);
+        expect(controller.selectedText, contains('six'));
+        expect(controller.selectedText, isNot(contains('next')));
+        controller.scrollToBottom();
+        expect(controller.selectedCommandBlock?.id, selected.id);
+        expect(controller.selectedText, isNot(contains('next')));
+
+        // Ghostty evicts whole pages, which can exceed a small line limit.
+        controller.writeBytes(
+          Uint8List.fromList(
+            utf8.encode(List.filled(4096, 'later\r\n').join()),
+          ),
+        );
+        expect(driver.plainText, isNot(contains('running')));
+        expect(controller.selectedCommandBlock, isNull);
+        expect(controller.selectedText, isEmpty);
+      },
+    );
+  }
+
   test('custom word boundaries update existing sessions on both backends', () {
     final original = terminalWordBoundaries;
     addTearDown(() => terminalWordBoundaries = original);

@@ -82,6 +82,7 @@ class NativeTerminalDriver
         TerminalDriver,
         TerminalPasteEncoder,
         TerminalWordSelector,
+        TerminalCommandBlockResolver,
         TerminalCursorUpdater,
         TerminalAuthenticationResponder {
   @override
@@ -862,16 +863,17 @@ class NativeTerminalDriver
 
   @override
   TerminalCommandBlock? commandBlockAt(TerminalCellPosition position) {
+    return commandBlockAtOffset(terminalCellOffset(snapshot, position));
+  }
+
+  @override
+  TerminalCommandBlock? commandBlockAtOffset(int offset) {
     if (_sessionId == 0) {
       return null;
     }
-    final currentSnapshot = snapshot;
     return _commandBlockFromNative(
       _bindings,
-      _bindings.commandBlockAt(
-        _sessionId,
-        terminalCellOffset(currentSnapshot, position),
-      ),
+      _bindings.commandBlockAt(_sessionId, offset),
     );
   }
 

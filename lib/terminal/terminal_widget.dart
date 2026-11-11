@@ -1224,7 +1224,8 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
   int _textEntryKeySerial = 0;
   int _lastCommittedImeTextEntrySerial = -1;
   TerminalSelection? _selection;
-  TerminalSelection? _commandBlockSelection;
+  TerminalSelection? get _commandBlockSelection =>
+      widget.controller.selectedCommandBlock?.selection;
   TerminalOpenTarget? _hoveredOpenTarget;
   TerminalOpenTarget? _pressedOpenTarget;
   TerminalSnapshot? _openTargetCacheSnapshot;
@@ -1487,23 +1488,28 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
                                 },
                               ),
                             ),
-                            if (_commandBlockSelection != null)
-                              Positioned.fill(
-                                child: IgnorePointer(
-                                  child: AnimatedBuilder(
-                                    animation: widget.controller,
-                                    builder: (context, _) => CustomPaint(
+                            Positioned.fill(
+                              child: IgnorePointer(
+                                child: AnimatedBuilder(
+                                  animation: widget.controller,
+                                  builder: (context, _) {
+                                    final selection = _commandBlockSelection;
+                                    if (selection == null) {
+                                      return const SizedBox.shrink();
+                                    }
+                                    return CustomPaint(
                                       painter: TerminalCommandBlockFocusPainter(
                                         snapshot: widget.controller.snapshot,
                                         metrics: metrics,
-                                        selection: _commandBlockSelection!,
+                                        selection: selection,
                                         theme: widget.theme,
                                         contentPadding: padding,
                                       ),
-                                    ),
-                                  ),
+                                    );
+                                  },
                                 ),
                               ),
+                            ),
                           ],
                         );
                       },
@@ -3433,7 +3439,6 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
 
     setState(() {
       _selection = selection;
-      _commandBlockSelection = null;
     });
     widget.controller.updateSelectedText(
       selection == null ? '' : widget.controller.selectionText(selection),
@@ -3448,7 +3453,6 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
 
     setState(() {
       _selection = null;
-      _commandBlockSelection = null;
     });
     widget.controller.updateSelectedText(tr(''));
     widget.controller.updateSelectedCommandBlock(null);
@@ -3466,7 +3470,6 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
     }
     setState(() {
       _selection = null;
-      _commandBlockSelection = selection;
     });
     widget.controller.updateSelectedText(
       selection == null ? '' : widget.controller.selectionText(selection),
