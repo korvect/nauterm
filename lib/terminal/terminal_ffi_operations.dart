@@ -325,6 +325,7 @@ class FfiPortForwarding {
     TerminalProxyConfig? proxy,
     String? destinationHost,
     int destinationPort = 0,
+    bool sshCompatibilityMode = false,
   }) {
     final bindings = _TerminalBindings.open();
     final nativeType = type.toNativeUtf8();
@@ -364,6 +365,7 @@ class FfiPortForwarding {
         nativeDestinationHost,
         destinationPort,
         nativeProxy,
+        sshCompatibilityMode,
       );
       return _portForwardStatusFromPointer(statusPointer, id);
     } finally {
@@ -478,6 +480,7 @@ class FfiSshDirectoryListing {
     String? privateKey,
     String? certificate,
     String? passphrase,
+    bool sshCompatibilityMode = false,
   }) {
     final bindings = _TerminalBindings.open();
     final nativeHost = host.toNativeUtf8();
@@ -506,6 +509,7 @@ class FfiSshDirectoryListing {
         nativePassphrase,
         nativeKnownHostsPath,
         nativeDirectory,
+        sshCompatibilityMode,
       );
       if (resultPointer == nullptr) {
         return const FfiSshDirectoryListingResult(
@@ -627,6 +631,7 @@ class FfiSshDirectoryEntryListing {
     String? privateKey,
     String? certificate,
     String? passphrase,
+    bool sshCompatibilityMode = false,
   }) {
     final bindings = _TerminalBindings.open();
     final nativeHost = host.toNativeUtf8();
@@ -655,6 +660,7 @@ class FfiSshDirectoryEntryListing {
         nativePassphrase,
         nativeKnownHostsPath,
         nativeDirectory,
+        sshCompatibilityMode,
       );
       if (resultPointer == nullptr) {
         return const FfiSshDirectoryEntryListingResult(
@@ -783,6 +789,7 @@ class FfiHostOsDetector {
     String? passphrase,
     TerminalProxyConfig? proxy,
     SshHostKeyTrustMode hostKeyTrustMode = SshHostKeyTrustMode.strict,
+    bool sshCompatibilityMode = false,
   }) {
     final bindings = _TerminalBindings.open();
     late final _SshDetectHostOsDart detectHostOs;
@@ -823,6 +830,7 @@ class FfiHostOsDetector {
         nativeKnownHostsPath,
         hostKeyTrustMode.wireValue,
         nativeProxy,
+        sshCompatibilityMode,
       );
       if (resultPointer == nullptr) {
         return const FfiHostOsDetectionResult(
@@ -946,6 +954,7 @@ class FfiSshPublicKeyExporter {
     String? passphrase,
     TerminalProxyConfig? proxy,
     SshHostKeyTrustMode hostKeyTrustMode = SshHostKeyTrustMode.strict,
+    bool sshCompatibilityMode = false,
   }) {
     final bindings = _TerminalBindings.open();
     late final _SshExportPublicKeyDart exportPublicKey;
@@ -996,6 +1005,7 @@ class FfiSshPublicKeyExporter {
         nativeLocation,
         nativeFilename,
         nativeScript,
+        sshCompatibilityMode,
       );
       if (resultPointer == nullptr) {
         return const FfiSshPublicKeyExportResult(
@@ -1310,6 +1320,7 @@ class FfiHostSystemInfoCollector {
     String? passphrase,
     TerminalProxyConfig? proxy,
     SshHostKeyTrustMode hostKeyTrustMode = SshHostKeyTrustMode.strict,
+    bool sshCompatibilityMode = false,
   }) {
     final bindings = _TerminalBindings.open();
     late final _SshCollectSystemInfoDart collectSystemInfo;
@@ -1351,6 +1362,7 @@ class FfiHostSystemInfoCollector {
         nativeKnownHostsPath,
         hostKeyTrustMode.wireValue,
         nativeProxy,
+        sshCompatibilityMode,
       );
       if (resultPointer == nullptr) {
         return const FfiHostSystemInfoResult(
@@ -1495,6 +1507,7 @@ class FfiSftpDirectoryEntryListing {
     String? passphrase,
     TerminalProxyConfig? proxy,
     SshHostKeyTrustMode hostKeyTrustMode = SshHostKeyTrustMode.strict,
+    bool sshCompatibilityMode = false,
   }) {
     final bindings = _TerminalBindings.open();
     final nativeHost = host.toNativeUtf8();
@@ -1527,6 +1540,7 @@ class FfiSftpDirectoryEntryListing {
         nativeDirectory,
         hostKeyTrustMode.wireValue,
         nativeProxy,
+        sshCompatibilityMode,
       );
       if (resultPointer == nullptr) {
         return const FfiSshDirectoryEntryListingResult(
@@ -1622,6 +1636,7 @@ class FfiSftpTaskExecutor {
     TerminalProxyConfig? proxy,
     SshHostKeyTrustMode hostKeyTrustMode = SshHostKeyTrustMode.strict,
     ValueChanged<FfiSftpTaskProgress>? onProgress,
+    bool sshCompatibilityMode = false,
   }) {
     final bindings = _TerminalBindings.open();
     final nativeHost = host.toNativeUtf8();
@@ -1676,6 +1691,7 @@ class FfiSftpTaskExecutor {
         nativeProxy,
         progressCallback?.nativeFunction ?? nullptr,
         nullptr,
+        sshCompatibilityMode,
       );
       if (resultPointer == nullptr) {
         return const FfiSftpTaskResult(

@@ -583,15 +583,8 @@ extension _NautermWorkspaceTerminalActions on _NautermWorkspaceState {
     return _SftpConnectRequest(
       id: requestId,
       host: item,
-      auth: _SftpRemoteAuth(
-        host: auth.host,
-        port: auth.port,
-        username: auth.username,
-        password: auth.password,
-        privateKey: auth.privateKey,
-        certificate: auth.certificate,
-        passphrase: auth.passphrase,
-        proxy: auth.proxy,
+      auth: _SftpRemoteAuth.fromHostAuth(
+        auth,
         knownHostsPath: NautermPaths.resolve().knownHostsFile.path,
       ),
     );
@@ -617,17 +610,7 @@ extension _NautermWorkspaceTerminalActions on _NautermWorkspaceState {
     return _SftpConnectRequest(
       id: ++tab.sftpConnectRequestId,
       host: _sftpHostItemForProfile(profile),
-      auth: _SftpRemoteAuth(
-        host: profile.host,
-        port: profile.port,
-        username: profile.username,
-        password: profile.password,
-        privateKey: profile.privateKey,
-        certificate: profile.certificate,
-        passphrase: profile.passphrase,
-        proxy: profile.proxy,
-        knownHostsPath: profile.knownHostsPath,
-      ),
+      auth: _SftpRemoteAuth.fromSshProfile(profile),
     );
   }
 

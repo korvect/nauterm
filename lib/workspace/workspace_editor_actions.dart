@@ -1700,6 +1700,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       proxy: auth.proxy,
       knownHostsPath: NautermPaths.resolve().knownHostsFile.path,
       bindAddress: entry.bindAddress,
+      sshCompatibilityMode: auth.sshCompatibilityMode,
       bindPort: entry.bindPort,
       destinationHost: destinationHost,
       destinationPort: type == 'dynamic' ? 0 : entry.destinationPort,
@@ -1777,6 +1778,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       certificate: certificate,
       passphrase: passphrase,
       proxy: proxy,
+      sshCompatibilityMode: host.sshCompatibilityMode,
     );
   }
 

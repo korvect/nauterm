@@ -14,6 +14,7 @@ FfiHostOsDetectionResult _runHostOsDetection(Map<String, Object?> arguments) {
     hostKeyTrustMode: SshHostKeyTrustMode.fromWireValue(
       arguments['hostKeyTrustMode'],
     ),
+    sshCompatibilityMode: arguments['sshCompatibilityMode'] == true,
   );
 }
 
@@ -31,6 +32,7 @@ FfiHostSystemInfoResult _runHostSystemInfo(Map<String, Object?> arguments) {
     hostKeyTrustMode: SshHostKeyTrustMode.fromWireValue(
       arguments['hostKeyTrustMode'],
     ),
+    sshCompatibilityMode: arguments['sshCompatibilityMode'] == true,
   );
 }
 
@@ -47,6 +49,7 @@ FfiSshDirectoryListingResult _runSshDirectoryListing(
     privateKey: arguments['privateKey'] as String?,
     certificate: arguments['certificate'] as String?,
     passphrase: arguments['passphrase'] as String?,
+    sshCompatibilityMode: arguments['sshCompatibilityMode'] == true,
   );
 }
 
@@ -63,6 +66,7 @@ FfiSshDirectoryEntryListingResult _runSshDirectoryEntryListing(
     privateKey: arguments['privateKey'] as String?,
     certificate: arguments['certificate'] as String?,
     passphrase: arguments['passphrase'] as String?,
+    sshCompatibilityMode: arguments['sshCompatibilityMode'] == true,
   );
 }
 
@@ -91,6 +95,7 @@ FfiSshDirectoryEntryListingResult _runSftpDirectoryEntryListing(
     hostKeyTrustMode: SshHostKeyTrustMode.fromWireValue(
       arguments['hostKeyTrustMode'],
     ),
+    sshCompatibilityMode: arguments['sshCompatibilityMode'] == true,
   );
 }
 
@@ -713,7 +718,8 @@ String _terminalConnectionEventKindToWire(TerminalConnectionEventKind kind) {
     TerminalConnectionEventKind.authSuccess => 'auth_success',
     TerminalConnectionEventKind.authFailed => 'auth_failed',
     TerminalConnectionEventKind.connected => 'connected',
-    TerminalConnectionEventKind.sshShellProbeSkipped => 'ssh_shell_probe_skipped',
+    TerminalConnectionEventKind.sshShellProbeSkipped =>
+      'ssh_shell_probe_skipped',
     TerminalConnectionEventKind.hostOsInferred => 'host_os_inferred',
     TerminalConnectionEventKind.moshEchoEnabled => 'mosh_echo_enabled',
     TerminalConnectionEventKind.moshEchoDisabled => 'mosh_echo_disabled',

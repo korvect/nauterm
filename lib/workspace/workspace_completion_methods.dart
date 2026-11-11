@@ -549,6 +549,7 @@ extension _NautermWorkspaceCompletionMethods on _NautermWorkspaceState {
       profile.host,
       profile.port,
       profile.username,
+      profile.sshCompatibilityMode,
       directory,
     ].join('\u{1f}');
   }
@@ -602,6 +603,7 @@ extension _NautermWorkspaceCompletionMethods on _NautermWorkspaceState {
       'privateKey': profile.privateKey,
       'certificate': profile.certificate,
       'passphrase': profile.passphrase,
+      'sshCompatibilityMode': profile.sshCompatibilityMode,
     };
     final request = _spawnSshDirectoryListing(arguments)
         .then((result) {
@@ -702,6 +704,7 @@ extension _NautermWorkspaceCompletionMethods on _NautermWorkspaceState {
       'privateKey': profile.privateKey,
       'certificate': profile.certificate,
       'passphrase': profile.passphrase,
+      'sshCompatibilityMode': profile.sshCompatibilityMode,
     };
     final request = _spawnSshDirectoryEntryListing(arguments)
         .then((result) {

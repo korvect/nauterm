@@ -5,6 +5,70 @@ import 'package:nauterm/terminal/terminal_models.dart';
 import 'package:nauterm/workspace/nauterm_workspace.dart';
 
 void main() {
+  for (final enabled in [false, true]) {
+    test(
+      'SFTP arguments retain compatibility mode after changing host trust: $enabled',
+      () {
+        final profile = SshConnectionProfile(
+          host: 'appliance.test',
+          port: 2022,
+          username: 'admin',
+          knownHostsPath: '/tmp/known_hosts',
+          sshCompatibilityMode: enabled,
+        );
+        final arguments = sftpConnectionArgumentsForTesting(
+          profile,
+          directory: '/etc',
+          hostKeyTrustMode: SshHostKeyTrustMode.acceptOnce,
+        );
+        expect(arguments['sshCompatibilityMode'], enabled);
+        expect(arguments['host'], profile.host);
+        expect(arguments['port'], profile.port);
+        expect(arguments['directory'], '/etc');
+        expect(arguments['knownHostsPath'], profile.knownHostsPath);
+        expect(
+          arguments['hostKeyTrustMode'],
+          SshHostKeyTrustMode.acceptOnce.wireValue,
+        );
+      },
+    );
+
+    test('retry reloads saved host compatibility mode: $enabled', () {
+      final current = SshConnectionProfile(
+        host: 'appliance.test',
+        port: 22,
+        username: 'admin',
+        knownHostsPath: '/tmp/known_hosts',
+        hostId: 7,
+        sshCompatibilityMode: !enabled,
+      );
+      final host = HostEntry(
+        id: 7,
+        name: 'Appliance',
+        type: NautermHostType.remote,
+        config: {
+          'ssh': {'compatibility_mode': enabled},
+        },
+      );
+      final refreshed = refreshSavedHostSshProfile(
+        current: current,
+        host: host,
+        address: current.host,
+        port: current.port,
+        username: current.username,
+        environment: const {'TERM_TEST': '1'},
+      );
+      expect(refreshed.sshCompatibilityMode, enabled);
+      expect(
+        refreshed.nativeEnvironment.containsKey(
+          '__NAUTERM_SSH_COMPATIBILITY_MODE',
+        ),
+        enabled,
+      );
+      expect(refreshed.nativeEnvironment['TERM_TEST'], '1');
+    });
+  }
+
   test('saved host changes replace the failed connection profile', () {
     const current = SshConnectionProfile(
       host: 'old.example.com',

@@ -196,7 +196,9 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
     _PortForwardSshAuth auth, {
     SshConnectionProfile? profile,
   }) {
-    if (host.sshCompatibilityMode || profile?.sshCompatibilityMode == true) {
+    if (host.sshCompatibilityMode ||
+        auth.sshCompatibilityMode ||
+        profile?.sshCompatibilityMode == true) {
       return;
     }
     if (profile != null) {
@@ -209,6 +211,7 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
         certificate: profile.certificate,
         passphrase: profile.passphrase,
         proxy: profile.proxy,
+        sshCompatibilityMode: profile.sshCompatibilityMode,
       );
     }
     if (auth.username.trim().isEmpty) return;
@@ -229,6 +232,7 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
       'certificate': auth.certificate,
       'passphrase': auth.passphrase,
       'proxy': auth.proxy?.toJson(),
+      'sshCompatibilityMode': auth.sshCompatibilityMode,
       'hostKeyTrustMode': SshHostKeyTrustMode.acceptOnce.wireValue,
     };
     unawaited(() async {
@@ -247,7 +251,11 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
     }());
   }
 
-  void _applyDetectedHostOs(int hostId, String detectedOs, String? detectedDistro) {
+  void _applyDetectedHostOs(
+    int hostId,
+    String detectedOs,
+    String? detectedDistro,
+  ) {
     if (!mounted) {
       return;
     }
@@ -286,6 +294,7 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
         certificate: auth.certificate,
         passphrase: auth.passphrase,
         proxy: auth.proxy,
+        sshCompatibilityMode: auth.sshCompatibilityMode,
       ),
     );
   }
@@ -1225,15 +1234,8 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
       _sftpConnectRequest = _SftpConnectRequest(
         id: ++_sftpConnectRequestId,
         host: item,
-        auth: _SftpRemoteAuth(
-          host: auth.host,
-          port: auth.port,
-          username: auth.username,
-          password: auth.password,
-          privateKey: auth.privateKey,
-          certificate: auth.certificate,
-          passphrase: auth.passphrase,
-          proxy: auth.proxy,
+        auth: _SftpRemoteAuth.fromHostAuth(
+          auth,
           knownHostsPath: NautermPaths.resolve().knownHostsFile.path,
         ),
       );
@@ -1266,15 +1268,8 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
       final connectRequest = _SftpConnectRequest(
         id: 1,
         host: item,
-        auth: _SftpRemoteAuth(
-          host: auth.host,
-          port: auth.port,
-          username: auth.username,
-          password: auth.password,
-          privateKey: auth.privateKey,
-          certificate: auth.certificate,
-          passphrase: auth.passphrase,
-          proxy: auth.proxy,
+        auth: _SftpRemoteAuth.fromHostAuth(
+          auth,
           knownHostsPath: NautermPaths.resolve().knownHostsFile.path,
         ),
       );

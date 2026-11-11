@@ -223,7 +223,7 @@ impl Fixture {
         };
         let result = tokio::time::timeout(Duration::from_secs(5), async {
             let prepared = prepare_private_key(private_key, &events, &wakeup)?;
-            let mut handle = client::connect(ssh_client_config(), self.address, handler)
+            let mut handle = client::connect(ssh_client_config(false), self.address, handler)
                 .await
                 .map_err(|error| error.to_string())?;
             let result = authenticate(
@@ -397,8 +397,7 @@ fn keyboard_interactive_succeeds_when_password_method_is_rejected() {
         // no UI challenge is emitted.
         assert!(!has(&events, "auth_interactive_request"));
         assert!(events.iter().any(|event| {
-            event.kind == "auth_success"
-                && event.method.as_deref() == Some("keyboard-interactive")
+            event.kind == "auth_success" && event.method.as_deref() == Some("keyboard-interactive")
         }));
         assert_eq!(fixture.observations.passwords.load(Ordering::SeqCst), 1);
         assert!(

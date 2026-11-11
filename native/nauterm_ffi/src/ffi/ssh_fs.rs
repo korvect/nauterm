@@ -23,6 +23,7 @@ pub extern "C" fn nauterm_ssh_list_directories(
     passphrase: *const c_char,
     known_hosts_path: *const c_char,
     directory: *const c_char,
+    ssh_compatibility_mode: bool,
 ) -> *mut c_char {
     guard(ptr::null_mut(), || {
         let host = string_from_ptr(host).unwrap_or_default();
@@ -43,6 +44,7 @@ pub extern "C" fn nauterm_ssh_list_directories(
             passphrase.as_deref(),
             known_hosts_path.as_deref(),
             &directory,
+            ssh_compatibility_mode,
         ) {
             Ok(result) => serde_json::json!({
                 "directory": result.directory,
@@ -74,6 +76,7 @@ pub extern "C" fn nauterm_ssh_list_directory_entries(
     passphrase: *const c_char,
     known_hosts_path: *const c_char,
     directory: *const c_char,
+    ssh_compatibility_mode: bool,
 ) -> *mut c_char {
     guard(ptr::null_mut(), || {
         let host = string_from_ptr(host).unwrap_or_default();
@@ -94,6 +97,7 @@ pub extern "C" fn nauterm_ssh_list_directory_entries(
             passphrase.as_deref(),
             known_hosts_path.as_deref(),
             &directory,
+            ssh_compatibility_mode,
         ) {
             Ok(result) => serde_json::json!({
                 "directory": result.directory,
@@ -121,6 +125,7 @@ pub extern "C" fn nauterm_ssh_detect_host_os(
     known_hosts_path: *const c_char,
     host_key_trust_mode: u32,
     proxy_json: *const c_char,
+    ssh_compatibility_mode: bool,
 ) -> *mut c_char {
     guard(ptr::null_mut(), || {
         let host = string_from_ptr(host).unwrap_or_default();
@@ -142,6 +147,7 @@ pub extern "C" fn nauterm_ssh_detect_host_os(
             known_hosts_path.as_deref(),
             proxy,
             ssh::HostKeyTrustMode::from_u32(host_key_trust_mode),
+            ssh_compatibility_mode,
         );
         json_value_to_c_ptr(serde_json::to_value(result).unwrap_or_else(|error| {
             serde_json::json!({
@@ -166,6 +172,7 @@ pub extern "C" fn nauterm_ssh_collect_system_info(
     known_hosts_path: *const c_char,
     host_key_trust_mode: u32,
     proxy_json: *const c_char,
+    ssh_compatibility_mode: bool,
 ) -> *mut c_char {
     guard(ptr::null_mut(), || {
         let host = string_from_ptr(host).unwrap_or_default();
@@ -187,6 +194,7 @@ pub extern "C" fn nauterm_ssh_collect_system_info(
             known_hosts_path.as_deref(),
             proxy,
             ssh::HostKeyTrustMode::from_u32(host_key_trust_mode),
+            ssh_compatibility_mode,
         );
         json_value_to_c_ptr(serde_json::to_value(result).unwrap_or_else(|error| {
             serde_json::json!({
@@ -213,6 +221,7 @@ pub extern "C" fn nauterm_ssh_export_public_key(
     location: *const c_char,
     filename: *const c_char,
     script: *const c_char,
+    ssh_compatibility_mode: bool,
 ) -> *mut c_char {
     guard(ptr::null_mut(), || {
         let host = string_from_ptr(host).unwrap_or_default();
@@ -242,6 +251,7 @@ pub extern "C" fn nauterm_ssh_export_public_key(
             &filename,
             &script,
             ssh::HostKeyTrustMode::from_u32(host_key_trust_mode),
+            ssh_compatibility_mode,
         );
         json_value_to_c_ptr(serde_json::to_value(result).unwrap_or_else(|error| {
             serde_json::json!({

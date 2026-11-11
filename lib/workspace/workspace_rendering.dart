@@ -1688,6 +1688,7 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
       'privateKey': profile.privateKey,
       'certificate': profile.certificate,
       'passphrase': profile.passphrase,
+      'sshCompatibilityMode': profile.sshCompatibilityMode,
       'proxy': profile.proxy?.toJson(),
       'hostKeyTrustMode': SshHostKeyTrustMode.strict.wireValue,
     });

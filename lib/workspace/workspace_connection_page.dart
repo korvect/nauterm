@@ -93,6 +93,7 @@ SshConnectionProfile refreshSavedHostSshProfile({
     shellPath: _emptyToNull(host.shellPath),
     environment: environment,
     encoding: host.encoding,
+    sshCompatibilityMode: host.sshCompatibilityMode,
   );
 }
 

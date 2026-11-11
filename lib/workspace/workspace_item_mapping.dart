@@ -326,6 +326,7 @@ class _PortForwardSshAuth {
     this.certificate,
     this.passphrase,
     this.proxy,
+    this.sshCompatibilityMode = false,
   });
 
   final String host;
@@ -336,6 +337,7 @@ class _PortForwardSshAuth {
   final String? certificate;
   final String? passphrase;
   final TerminalProxyConfig? proxy;
+  final bool sshCompatibilityMode;
 }
 
 class _CdCompletionQuery {

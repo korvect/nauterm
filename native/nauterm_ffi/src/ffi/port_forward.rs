@@ -32,6 +32,7 @@ pub extern "C" fn nauterm_port_forward_start(
     destination_host: *const c_char,
     destination_port: u16,
     proxy_json: *const c_char,
+    ssh_compatibility_mode: bool,
 ) -> *mut c_char {
     guard(ptr::null_mut(), || {
         let config = PortForwardConfig {
@@ -48,6 +49,7 @@ pub extern "C" fn nauterm_port_forward_start(
             passphrase: optional_string_from_ptr(passphrase),
             known_hosts_path: optional_string_from_ptr(known_hosts_path),
             proxy: ssh::proxy_config_from_json_ptr(proxy_json),
+            ssh_compatibility_mode,
             bind_address: string_from_ptr(bind_address).unwrap_or_else(|| "127.0.0.1".to_owned()),
             bind_port,
             destination_host: optional_string_from_ptr(destination_host),

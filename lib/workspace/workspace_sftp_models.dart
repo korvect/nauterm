@@ -90,8 +90,42 @@ class _SftpRemoteAuth {
     this.certificate,
     this.passphrase,
     this.proxy,
+    this.sshCompatibilityMode = false,
     this.hostKeyTrustMode = SshHostKeyTrustMode.strict,
   });
+
+  factory _SftpRemoteAuth.fromSshProfile(SshConnectionProfile profile) {
+    return _SftpRemoteAuth(
+      host: profile.host,
+      port: profile.port,
+      username: profile.username,
+      knownHostsPath: profile.knownHostsPath,
+      password: profile.password,
+      privateKey: profile.privateKey,
+      certificate: profile.certificate,
+      passphrase: profile.passphrase,
+      proxy: profile.proxy,
+      sshCompatibilityMode: profile.sshCompatibilityMode,
+    );
+  }
+
+  factory _SftpRemoteAuth.fromHostAuth(
+    _PortForwardSshAuth auth, {
+    required String knownHostsPath,
+  }) {
+    return _SftpRemoteAuth(
+      host: auth.host,
+      port: auth.port,
+      username: auth.username,
+      knownHostsPath: knownHostsPath,
+      password: auth.password,
+      privateKey: auth.privateKey,
+      certificate: auth.certificate,
+      passphrase: auth.passphrase,
+      proxy: auth.proxy,
+      sshCompatibilityMode: auth.sshCompatibilityMode,
+    );
+  }
 
   final String host;
   final int port;
@@ -102,6 +136,7 @@ class _SftpRemoteAuth {
   final String? certificate;
   final String? passphrase;
   final TerminalProxyConfig? proxy;
+  final bool sshCompatibilityMode;
   final SshHostKeyTrustMode hostKeyTrustMode;
 
   _SftpRemoteAuth copyWith({SshHostKeyTrustMode? hostKeyTrustMode}) {
@@ -115,6 +150,7 @@ class _SftpRemoteAuth {
       certificate: certificate,
       passphrase: passphrase,
       proxy: proxy,
+      sshCompatibilityMode: sshCompatibilityMode,
       hostKeyTrustMode: hostKeyTrustMode ?? this.hostKeyTrustMode,
     );
   }
@@ -131,10 +167,21 @@ class _SftpRemoteAuth {
       'certificate': certificate,
       'passphrase': passphrase,
       'proxy': proxy?.toJson(),
+      'sshCompatibilityMode': sshCompatibilityMode,
       'hostKeyTrustMode': hostKeyTrustMode.wireValue,
     };
   }
 }
+
+@visibleForTesting
+Map<String, Object?> sftpConnectionArgumentsForTesting(
+  SshConnectionProfile profile, {
+  String directory = '/',
+  SshHostKeyTrustMode hostKeyTrustMode = SshHostKeyTrustMode.strict,
+}) =>
+    _SftpRemoteAuth.fromSshProfile(profile)
+        .copyWith(hostKeyTrustMode: hostKeyTrustMode)
+        .toArguments(directory);
 
 class _SftpRemoteListingException implements Exception {
   const _SftpRemoteListingException(this.message, this.events);

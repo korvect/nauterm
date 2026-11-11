@@ -90,17 +90,7 @@ class _TerminalSftpPanelState extends ConsumerState<_TerminalSftpPanel> {
     return _SftpConnectRequest(
       id: ++_nextRequestId,
       host: host,
-      auth: _SftpRemoteAuth(
-        host: profile.host,
-        port: profile.port,
-        username: profile.username,
-        password: profile.password,
-        privateKey: profile.privateKey,
-        certificate: profile.certificate,
-        passphrase: profile.passphrase,
-        proxy: profile.proxy,
-        knownHostsPath: profile.knownHostsPath,
-      ),
+      auth: _SftpRemoteAuth.fromSshProfile(profile),
     );
   }
 

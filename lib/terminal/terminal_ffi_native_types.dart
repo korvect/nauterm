@@ -878,6 +878,7 @@ typedef _StartPortForwardNative = Pointer<Utf8> Function(
   Pointer<Utf8> destinationHost,
   Uint16 destinationPort,
   Pointer<Utf8> proxyJson,
+  Bool sshCompatibilityMode,
 );
 typedef _StartPortForwardDart = Pointer<Utf8> Function(
   int id,
@@ -895,6 +896,7 @@ typedef _StartPortForwardDart = Pointer<Utf8> Function(
   Pointer<Utf8> destinationHost,
   int destinationPort,
   Pointer<Utf8> proxyJson,
+  bool sshCompatibilityMode,
 );
 
 typedef _StopPortForwardNative = Bool Function(Uint64 id);
@@ -916,6 +918,7 @@ typedef _SshListDirectoriesNative = Pointer<Utf8> Function(
   Pointer<Utf8> passphrase,
   Pointer<Utf8> knownHostsPath,
   Pointer<Utf8> directory,
+  Bool sshCompatibilityMode,
 );
 typedef _SshListDirectoriesDart = Pointer<Utf8> Function(
   Pointer<Utf8> host,
@@ -927,6 +930,7 @@ typedef _SshListDirectoriesDart = Pointer<Utf8> Function(
   Pointer<Utf8> passphrase,
   Pointer<Utf8> knownHostsPath,
   Pointer<Utf8> directory,
+  bool sshCompatibilityMode,
 );
 
 typedef _SshListDirectoryEntriesNative = Pointer<Utf8> Function(
@@ -939,6 +943,7 @@ typedef _SshListDirectoryEntriesNative = Pointer<Utf8> Function(
   Pointer<Utf8> passphrase,
   Pointer<Utf8> knownHostsPath,
   Pointer<Utf8> directory,
+  Bool sshCompatibilityMode,
 );
 typedef _SshListDirectoryEntriesDart = Pointer<Utf8> Function(
   Pointer<Utf8> host,
@@ -950,6 +955,7 @@ typedef _SshListDirectoryEntriesDart = Pointer<Utf8> Function(
   Pointer<Utf8> passphrase,
   Pointer<Utf8> knownHostsPath,
   Pointer<Utf8> directory,
+  bool sshCompatibilityMode,
 );
 
 typedef _SshDetectHostOsNative = Pointer<Utf8> Function(
@@ -963,6 +969,7 @@ typedef _SshDetectHostOsNative = Pointer<Utf8> Function(
   Pointer<Utf8> knownHostsPath,
   Uint32 hostKeyTrustMode,
   Pointer<Utf8> proxyJson,
+  Bool sshCompatibilityMode,
 );
 typedef _SshDetectHostOsDart = Pointer<Utf8> Function(
   Pointer<Utf8> host,
@@ -975,6 +982,7 @@ typedef _SshDetectHostOsDart = Pointer<Utf8> Function(
   Pointer<Utf8> knownHostsPath,
   int hostKeyTrustMode,
   Pointer<Utf8> proxyJson,
+  bool sshCompatibilityMode,
 );
 
 typedef _SshCollectSystemInfoNative = Pointer<Utf8> Function(
@@ -988,6 +996,7 @@ typedef _SshCollectSystemInfoNative = Pointer<Utf8> Function(
   Pointer<Utf8> knownHostsPath,
   Uint32 hostKeyTrustMode,
   Pointer<Utf8> proxyJson,
+  Bool sshCompatibilityMode,
 );
 typedef _SshCollectSystemInfoDart = Pointer<Utf8> Function(
   Pointer<Utf8> host,
@@ -1000,6 +1009,7 @@ typedef _SshCollectSystemInfoDart = Pointer<Utf8> Function(
   Pointer<Utf8> knownHostsPath,
   int hostKeyTrustMode,
   Pointer<Utf8> proxyJson,
+  bool sshCompatibilityMode,
 );
 
 typedef _SshExportPublicKeyNative = Pointer<Utf8> Function(
@@ -1017,6 +1027,7 @@ typedef _SshExportPublicKeyNative = Pointer<Utf8> Function(
   Pointer<Utf8> location,
   Pointer<Utf8> filename,
   Pointer<Utf8> script,
+  Bool sshCompatibilityMode,
 );
 typedef _SshExportPublicKeyDart = Pointer<Utf8> Function(
   Pointer<Utf8> host,
@@ -1033,6 +1044,7 @@ typedef _SshExportPublicKeyDart = Pointer<Utf8> Function(
   Pointer<Utf8> location,
   Pointer<Utf8> filename,
   Pointer<Utf8> script,
+  bool sshCompatibilityMode,
 );
 
 typedef _SftpListDirectoryEntriesNative = Pointer<Utf8> Function(
@@ -1048,6 +1060,7 @@ typedef _SftpListDirectoryEntriesNative = Pointer<Utf8> Function(
   Pointer<Utf8> directory,
   Uint32 hostKeyTrustMode,
   Pointer<Utf8> proxyJson,
+  Bool sshCompatibilityMode,
 );
 typedef _SftpListDirectoryEntriesDart = Pointer<Utf8> Function(
   int requestId,
@@ -1062,6 +1075,7 @@ typedef _SftpListDirectoryEntriesDart = Pointer<Utf8> Function(
   Pointer<Utf8> directory,
   int hostKeyTrustMode,
   Pointer<Utf8> proxyJson,
+  bool sshCompatibilityMode,
 );
 
 typedef _SftpExecuteTaskNative = Pointer<Utf8> Function(
@@ -1079,6 +1093,7 @@ typedef _SftpExecuteTaskNative = Pointer<Utf8> Function(
   Pointer<Utf8> proxyJson,
   Pointer<NativeFunction<_SftpTaskProgressCallbackNative>> progressCallback,
   Pointer<Void> progressUserData,
+  Bool sshCompatibilityMode,
 );
 typedef _SftpExecuteTaskDart = Pointer<Utf8> Function(
   int taskId,
@@ -1095,6 +1110,7 @@ typedef _SftpExecuteTaskDart = Pointer<Utf8> Function(
   Pointer<Utf8> proxyJson,
   Pointer<NativeFunction<_SftpTaskProgressCallbackNative>> progressCallback,
   Pointer<Void> progressUserData,
+  bool sshCompatibilityMode,
 );
 
 typedef _SftpTaskProgressCallbackNative = Void Function(

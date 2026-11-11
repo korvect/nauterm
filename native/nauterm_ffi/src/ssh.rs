@@ -28,6 +28,8 @@ use zeroize::Zeroize;
 
 mod auth;
 mod auth_interactive;
+#[cfg(test)]
+mod compatibility_tests;
 mod probe;
 mod proxy;
 mod sftp;
@@ -500,6 +502,7 @@ pub fn list_directory_entries_blocking(
     passphrase: Option<&str>,
     known_hosts_path: Option<&str>,
     directory: &str,
+    compatibility_mode: bool,
 ) -> Result<SshDirectoryEntries, String> {
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -515,6 +518,7 @@ pub fn list_directory_entries_blocking(
         passphrase,
         known_hosts_path,
         directory,
+        compatibility_mode,
     ))
 }
 
@@ -529,6 +533,7 @@ pub fn detect_host_os_blocking_with_trust(
     known_hosts_path: Option<&str>,
     proxy: Option<SshProxyConfig>,
     host_key_trust_mode: HostKeyTrustMode,
+    compatibility_mode: bool,
 ) -> HostOsDetection {
     let runtime_result = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -555,6 +560,7 @@ pub fn detect_host_os_blocking_with_trust(
         known_hosts_path,
         proxy.as_ref(),
         host_key_trust_mode,
+        compatibility_mode,
     ))
 }
 
@@ -569,6 +575,7 @@ pub fn collect_host_system_info_blocking_with_trust(
     known_hosts_path: Option<&str>,
     proxy: Option<SshProxyConfig>,
     host_key_trust_mode: HostKeyTrustMode,
+    compatibility_mode: bool,
 ) -> HostSystemInfo {
     let runtime_result = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -593,6 +600,7 @@ pub fn collect_host_system_info_blocking_with_trust(
         known_hosts_path,
         proxy.as_ref(),
         host_key_trust_mode,
+        compatibility_mode,
     ))
 }
 
@@ -611,6 +619,7 @@ pub fn export_public_key_blocking_with_trust(
     filename: &str,
     script: &str,
     host_key_trust_mode: HostKeyTrustMode,
+    compatibility_mode: bool,
 ) -> SshPublicKeyExportResult {
     let runtime_result = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -640,6 +649,7 @@ pub fn export_public_key_blocking_with_trust(
         filename,
         script,
         host_key_trust_mode,
+        compatibility_mode,
     ))
 }
 
@@ -656,6 +666,7 @@ pub fn list_sftp_directory_entries_blocking_with_trust(
     proxy: Option<SshProxyConfig>,
     directory: &str,
     host_key_trust_mode: HostKeyTrustMode,
+    compatibility_mode: bool,
 ) -> SftpDirectoryEntries {
     let cancel = sftp_task_cancel_flag(request_id);
     let runtime_result = tokio::runtime::Builder::new_current_thread()
@@ -686,6 +697,7 @@ pub fn list_sftp_directory_entries_blocking_with_trust(
         directory,
         host_key_trust_mode,
         cancel,
+        compatibility_mode,
     ));
     finish_sftp_task(request_id);
     result
@@ -706,6 +718,7 @@ pub fn execute_sftp_task_blocking_with_trust(
     host_key_trust_mode: HostKeyTrustMode,
     progress_callback: SftpTaskProgressCallback,
     progress_user_data: *mut c_void,
+    compatibility_mode: bool,
 ) -> SftpTaskResult {
     let mut request = match serde_json::from_str::<SftpTaskRequest>(operation_json) {
         Ok(request) => request,
@@ -743,6 +756,7 @@ pub fn execute_sftp_task_blocking_with_trust(
                 transferred_bytes: 0,
                 concurrent: None,
             },
+            compatibility_mode,
         );
         finish_sftp_task(task_id);
         return result;
@@ -783,6 +797,7 @@ pub fn execute_sftp_task_blocking_with_trust(
             transferred_bytes: 0,
             concurrent: None,
         },
+        compatibility_mode,
     ));
     finish_sftp_task(task_id);
     result
@@ -803,6 +818,7 @@ fn execute_cached_sudo_sftp_task_blocking(
     sudo_session_id: String,
     mut sudo_password: Option<String>,
     mut progress: SftpTaskProgress,
+    compatibility_mode: bool,
 ) -> SftpTaskResult {
     let transfer_threads = request.transfer_threads();
     let runtime = match sudo_sftp_runtime() {
@@ -882,6 +898,7 @@ fn execute_cached_sudo_sftp_task_blocking(
                     events.clone(),
                     sudo_password_value,
                     transfer_threads,
+                    compatibility_mode,
                 )
                 .await;
                 if let Some(password) = sudo_password.as_mut() {
@@ -1069,6 +1086,7 @@ async fn execute_sftp_task(
     mut request: SftpTaskRequest,
     host_key_trust_mode: HostKeyTrustMode,
     mut progress: SftpTaskProgress,
+    compatibility_mode: bool,
 ) -> SftpTaskResult {
     let events = Arc::new(Mutex::new(Vec::<SessionEvent>::new()));
     let result = async {
@@ -1090,6 +1108,7 @@ async fn execute_sftp_task(
                     events.clone(),
                     sudo_password,
                     transfer_threads,
+                    compatibility_mode,
                 )
                 .await
             }
@@ -1107,6 +1126,7 @@ async fn execute_sftp_task(
                     host_key_trust_mode,
                     events.clone(),
                     transfer_threads,
+                    compatibility_mode,
                 )
                 .await
             }
@@ -1145,17 +1165,21 @@ async fn execute_sftp_task(
     }
 }
 
-fn ssh_client_config() -> Arc<client::Config> {
-    ssh_client_config_with_keepalive(SSH_KEEPALIVE_INTERVAL.as_secs() as u32)
+fn ssh_client_config(compatibility_mode: bool) -> Arc<client::Config> {
+    Arc::new(ssh_client_config_with_keepalive(
+        SSH_KEEPALIVE_INTERVAL.as_secs() as u32,
+        compatibility_mode,
+    ))
 }
 
-fn ssh_client_config_for_sftp(transfer_concurrency: usize) -> Arc<client::Config> {
-    let mut config = client::Config {
-        nodelay: true,
-        keepalive_interval: Some(SSH_KEEPALIVE_INTERVAL),
-        keepalive_max: SSH_KEEPALIVE_MISSES,
-        ..client::Config::default()
-    };
+fn ssh_client_config_for_sftp(
+    transfer_concurrency: usize,
+    compatibility_mode: bool,
+) -> Arc<client::Config> {
+    let mut config = ssh_client_config_with_keepalive(
+        SSH_KEEPALIVE_INTERVAL.as_secs() as u32,
+        compatibility_mode,
+    );
     let desired_window = transfer_concurrency
         .clamp(1, 32)
         .saturating_mul(2 * 256 * 1024)
@@ -1164,18 +1188,25 @@ fn ssh_client_config_for_sftp(transfer_concurrency: usize) -> Arc<client::Config
     Arc::new(config)
 }
 
-fn ssh_client_config_with_keepalive(interval_seconds: u32) -> Arc<client::Config> {
-    Arc::new(client::Config {
+pub(crate) fn ssh_client_config_with_keepalive(
+    interval_seconds: u32,
+    compatibility_mode: bool,
+) -> client::Config {
+    let mut config = client::Config {
         nodelay: true,
         keepalive_interval: (interval_seconds > 0)
             .then(|| Duration::from_secs(u64::from(interval_seconds))),
         keepalive_max: SSH_KEEPALIVE_MISSES,
         ..client::Config::default()
-    })
+    };
+    if compatibility_mode {
+        apply_ssh_compatibility_crypto(&mut config);
+    }
+    config
 }
 
-/// Narrow KEX/GEX for explicitly marked network appliances only.
-fn apply_responsive_ssh_crypto(config: &mut client::Config) {
+/// Apply the opt-in SSH compatibility policy to every SSH connection type.
+fn apply_ssh_compatibility_crypto(config: &mut client::Config) {
     use russh::kex;
     use russh::Preferred;
     use std::borrow::Cow;
@@ -1212,7 +1243,9 @@ pub(crate) async fn start_mosh_server(
     server_command: &MoshServerCommand,
     terminal_options: &TerminalOptions,
 ) -> Result<MoshSshBootstrap, (String, Vec<SessionEvent>)> {
-    let config = ssh_client_config();
+    let mut terminal_options = terminal_options.clone();
+    let compatibility_mode = extract_ssh_compatibility_mode_flag(&mut terminal_options);
+    let config = ssh_client_config(compatibility_mode);
     let events = Arc::new(Mutex::new(vec![SessionEvent::new(
         "connect_start",
         format!("Connecting to {username}@{host}:{port}."),
@@ -1251,7 +1284,7 @@ pub(crate) async fn start_mosh_server(
         .map_err(|error| format!("authentication failed: {error}"))?;
 
         let command = server_command
-            .render_for_terminal(terminal_options)
+            .render_for_terminal(&terminal_options)
             .map_err(|error| error.to_string())?;
         let command_result = run_ssh_exec_command(&mut handle, &command).await;
         let _ = handle
@@ -1326,8 +1359,9 @@ async fn list_directory_entries(
     passphrase: Option<&str>,
     known_hosts_path: Option<&str>,
     directory: &str,
+    compatibility_mode: bool,
 ) -> Result<SshDirectoryEntries, String> {
-    let config = ssh_client_config();
+    let config = ssh_client_config(compatibility_mode);
     let events = Arc::new(Mutex::new(Vec::<SessionEvent>::new()));
     let output = Arc::new(Mutex::new(Vec::new()));
     let wakeup = Arc::new(Mutex::new(None));
@@ -1925,20 +1959,10 @@ async fn run_ssh_session(
         .with_username(&target.username),
     );
     let private_key = prepare_private_key(target.private_key.as_deref(), &events, &wakeup)?;
-    let config = if target.ssh_compatibility_mode {
-        let base = ssh_client_config_with_keepalive(target.ssh_keepalive_interval_seconds);
-        let mut responsive = client::Config {
-            nodelay: base.nodelay,
-            keepalive_interval: base.keepalive_interval,
-            keepalive_max: base.keepalive_max,
-            window_size: base.window_size,
-            ..client::Config::default()
-        };
-        apply_responsive_ssh_crypto(&mut responsive);
-        Arc::new(responsive)
-    } else {
-        ssh_client_config_with_keepalive(target.ssh_keepalive_interval_seconds)
-    };
+    let config = Arc::new(ssh_client_config_with_keepalive(
+        target.ssh_keepalive_interval_seconds,
+        target.ssh_compatibility_mode,
+    ));
     let host_key_verification =
         HostKeyVerification::with_interaction(target.authentication.clone());
     let handler = SshClientHandler {
@@ -1986,8 +2010,8 @@ async fn run_ssh_session(
         Err(error) => return Err(format!("authentication failed: {error}")),
     }
 
-    // Official path for unmarked hosts. Explicit network devices skip the
-    // Linux $SHELL probe (extra exec channel) and use request_shell only.
+    // Compatibility mode skips the extra exec channel for shell detection
+    // and opens the server's interactive shell directly.
     let remote_shell = if target.ssh_compatibility_mode {
         None
     } else {
@@ -2302,7 +2326,7 @@ async fn drain_ssh_commands(
             Ok(SshCommand::ReadShellHistory(reply)) => {
                 if skip_shell_history {
                     let _ = reply.send(Err(
-                        "Shell history unsupported on this SSH target.".to_owned(),
+                        "Shell history unsupported on this SSH target.".to_owned()
                     ));
                     continue;
                 }
@@ -2660,7 +2684,7 @@ mod tests {
 
     #[test]
     fn ssh_client_config_uses_keepalive_policy() {
-        let config = ssh_client_config();
+        let config = ssh_client_config(false);
 
         assert_eq!(config.keepalive_interval, Some(SSH_KEEPALIVE_INTERVAL));
         assert_eq!(config.keepalive_max, SSH_KEEPALIVE_MISSES);
@@ -2669,7 +2693,7 @@ mod tests {
 
     #[test]
     fn ssh_client_config_can_disable_keepalive() {
-        let config = ssh_client_config_with_keepalive(0);
+        let config = ssh_client_config_with_keepalive(0, false);
 
         assert_eq!(config.keepalive_interval, None);
         assert_eq!(config.keepalive_max, SSH_KEEPALIVE_MISSES);
@@ -2677,9 +2701,9 @@ mod tests {
 
     #[test]
     fn sftp_channel_window_scales_with_transfer_concurrency() {
-        let single = ssh_client_config_for_sftp(1);
-        let eight = ssh_client_config_for_sftp(8);
-        let oversized = ssh_client_config_for_sftp(99);
+        let single = ssh_client_config_for_sftp(1, false);
+        let eight = ssh_client_config_for_sftp(8, false);
+        let oversized = ssh_client_config_for_sftp(99, false);
 
         assert_eq!(single.window_size, client::Config::default().window_size);
         assert_eq!(eight.window_size, 4 * 1024 * 1024);

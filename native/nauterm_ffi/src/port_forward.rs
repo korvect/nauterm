@@ -14,7 +14,8 @@ use tokio::net::{TcpListener, TcpStream};
 use crate::pty::WakeupCallback;
 use crate::session::SessionEvent;
 use crate::ssh::{
-    authenticate, connect_ssh_tcp_stream, prepare_private_key, HostKeyVerification, SshProxyConfig,
+    authenticate, connect_ssh_tcp_stream, prepare_private_key, ssh_client_config_with_keepalive,
+    HostKeyVerification, SshProxyConfig,
 };
 
 const FORWARD_POLL_INTERVAL: Duration = Duration::from_millis(80);
@@ -37,6 +38,7 @@ pub struct PortForwardConfig {
     pub passphrase: Option<String>,
     pub known_hosts_path: Option<String>,
     pub proxy: Option<SshProxyConfig>,
+    pub ssh_compatibility_mode: bool,
     pub bind_address: String,
     pub bind_port: u16,
     pub destination_host: Option<String>,
@@ -230,11 +232,10 @@ async fn connect_forward_ssh(
         remote_target,
         status,
     };
-    let ssh_config = Arc::new(client::Config {
-        nodelay: true,
-        keepalive_interval: Some(Duration::from_secs(30)),
-        ..client::Config::default()
-    });
+    let ssh_config = Arc::new(ssh_client_config_with_keepalive(
+        30,
+        config.ssh_compatibility_mode,
+    ));
     let mut handle = tokio::time::timeout(FORWARD_CONNECT_TIMEOUT, async {
         let stream = connect_ssh_tcp_stream(
             config.ssh_host.as_str(),

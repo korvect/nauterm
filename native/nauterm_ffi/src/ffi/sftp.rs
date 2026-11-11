@@ -28,6 +28,7 @@ pub extern "C" fn nauterm_sftp_list_directory_entries(
     directory: *const c_char,
     host_key_trust_mode: u32,
     proxy_json: *const c_char,
+    ssh_compatibility_mode: bool,
 ) -> *mut c_char {
     guard(ptr::null_mut(), || {
         let host = string_from_ptr(host).unwrap_or_default();
@@ -52,6 +53,7 @@ pub extern "C" fn nauterm_sftp_list_directory_entries(
             proxy,
             &directory,
             HostKeyTrustMode::from_u32(host_key_trust_mode),
+            ssh_compatibility_mode,
         );
         json_value_to_c_ptr(serde_json::json!({
             "directory": result.directory,
@@ -78,6 +80,7 @@ pub extern "C" fn nauterm_sftp_execute_task(
     proxy_json: *const c_char,
     progress_callback: FfiSftpTaskProgressCallback,
     progress_user_data: *mut c_void,
+    ssh_compatibility_mode: bool,
 ) -> *mut c_char {
     guard(ptr::null_mut(), || {
         let host = string_from_ptr(host).unwrap_or_default();
@@ -104,6 +107,7 @@ pub extern "C" fn nauterm_sftp_execute_task(
             HostKeyTrustMode::from_u32(host_key_trust_mode),
             progress_callback,
             progress_user_data,
+            ssh_compatibility_mode,
         );
         json_value_to_c_ptr(serde_json::json!({
             "ok": result.ok,

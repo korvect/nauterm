@@ -49,8 +49,9 @@ pub(super) async fn list_sftp_directory_entries(
     directory: &str,
     host_key_trust_mode: HostKeyTrustMode,
     cancel: Arc<AtomicBool>,
+    compatibility_mode: bool,
 ) -> SftpDirectoryEntries {
-    let config = ssh_client_config();
+    let config = ssh_client_config(compatibility_mode);
     let events = Arc::new(Mutex::new(Vec::<SessionEvent>::new()));
     let output = Arc::new(Mutex::new(Vec::new()));
     let wakeup = Arc::new(Mutex::new(None));
@@ -190,8 +191,9 @@ pub(super) async fn open_sftp_session(
     host_key_trust_mode: HostKeyTrustMode,
     events: Arc<Mutex<Vec<SessionEvent>>>,
     transfer_threads: usize,
+    compatibility_mode: bool,
 ) -> Result<(client::Handle<SshClientHandler>, SftpSession), String> {
-    let config = ssh_client_config_for_sftp(transfer_threads);
+    let config = ssh_client_config_for_sftp(transfer_threads, compatibility_mode);
     let output = Arc::new(Mutex::new(Vec::new()));
     let wakeup = Arc::new(Mutex::new(None));
     let host_key_verification = HostKeyVerification::default();
@@ -249,6 +251,7 @@ pub(super) async fn open_sudo_sftp_session(
     events: Arc<Mutex<Vec<SessionEvent>>>,
     sudo_password: &str,
     transfer_threads: usize,
+    compatibility_mode: bool,
 ) -> Result<(client::Handle<SshClientHandler>, SftpSession), String> {
     const SUDO_SFTP_COMMAND: &str = concat!(
         "sudo -k -S -p '' sh -c '",
@@ -262,7 +265,7 @@ pub(super) async fn open_sudo_sftp_session(
         "exit 127'"
     );
 
-    let config = ssh_client_config_for_sftp(transfer_threads);
+    let config = ssh_client_config_for_sftp(transfer_threads, compatibility_mode);
     let output = Arc::new(Mutex::new(Vec::new()));
     let wakeup = Arc::new(Mutex::new(None));
     let host_key_verification = HostKeyVerification::default();

@@ -85,7 +85,7 @@ mod key_export_tests {
                 events: Arc::new(Mutex::new(Vec::new())),
                 wakeup: Arc::new(Mutex::new(None)),
             };
-            let mut handle = client::connect(ssh_client_config(), address, handler)
+            let mut handle = client::connect(ssh_client_config(false), address, handler)
                 .await
                 .unwrap();
             assert!(handle.authenticate_none("test").await.unwrap().success());
@@ -133,8 +133,17 @@ pub(super) async fn detect_host_os(
     known_hosts_path: Option<&str>,
     proxy: Option<&SshProxyConfig>,
     host_key_trust_mode: HostKeyTrustMode,
+    compatibility_mode: bool,
 ) -> HostOsDetection {
-    let config = ssh_client_config();
+    if compatibility_mode {
+        return HostOsDetection {
+            os: None,
+            distro: None,
+            events: Vec::new(),
+            error: Some("Host OS detection is disabled in SSH compatibility mode.".to_owned()),
+        };
+    }
+    let config = ssh_client_config(compatibility_mode);
     let events = Arc::new(Mutex::new(Vec::<SessionEvent>::new()));
     let output = Arc::new(Mutex::new(Vec::new()));
     let wakeup = Arc::new(Mutex::new(None));
@@ -312,8 +321,9 @@ pub(super) async fn collect_host_system_info(
     known_hosts_path: Option<&str>,
     proxy: Option<&SshProxyConfig>,
     host_key_trust_mode: HostKeyTrustMode,
+    compatibility_mode: bool,
 ) -> HostSystemInfo {
-    let config = ssh_client_config();
+    let config = ssh_client_config(compatibility_mode);
     let events = Arc::new(Mutex::new(Vec::<SessionEvent>::new()));
     let output = Arc::new(Mutex::new(Vec::new()));
     let wakeup = Arc::new(Mutex::new(None));
@@ -465,6 +475,7 @@ pub(super) async fn export_public_key(
     filename: &str,
     script: &str,
     host_key_trust_mode: HostKeyTrustMode,
+    compatibility_mode: bool,
 ) -> SshPublicKeyExportResult {
     let events = Arc::new(Mutex::new(Vec::<SessionEvent>::new()));
     let result = async {
@@ -477,7 +488,7 @@ pub(super) async fn export_public_key(
             validate_export_script(script)?
         };
         let command = build_public_key_export_command(&script, &public_key, &location, &filename);
-        let config = ssh_client_config();
+        let config = ssh_client_config(compatibility_mode);
         let output = Arc::new(Mutex::new(Vec::new()));
         let wakeup = Arc::new(Mutex::new(None));
         let host_key_verification = HostKeyVerification::default();

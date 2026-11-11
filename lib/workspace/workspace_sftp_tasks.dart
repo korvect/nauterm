@@ -207,6 +207,7 @@ FfiSftpTaskResult _runSftpTask(
     certificate: arguments['certificate'] as String?,
     passphrase: arguments['passphrase'] as String?,
     proxy: _terminalProxyFromArguments(arguments['proxy']),
+    sshCompatibilityMode: arguments['sshCompatibilityMode'] == true,
     hostKeyTrustMode: SshHostKeyTrustMode.fromWireValue(
       arguments['hostKeyTrustMode'],
     ),

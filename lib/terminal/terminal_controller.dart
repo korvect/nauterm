@@ -189,7 +189,8 @@ class SshConnectionProfile {
   final String? shellPath;
   final Map<String, String> environment;
   final String encoding;
-  /// Explicit appliance mode: skip Linux shell probe in native SSH.
+
+  /// Opt-in compatibility policy for this SSH connection and its auxiliaries.
   final bool sshCompatibilityMode;
 
   SshConnectionProfile copyWith({
@@ -248,7 +249,7 @@ class SshConnectionProfile {
     );
   }
 
-  /// Environment sent to native SSH, including the network-device marker.
+  /// Environment including internal SSH options for native terminal creation.
   Map<String, String> get nativeEnvironment {
     if (!sshCompatibilityMode) {
       return environment;
