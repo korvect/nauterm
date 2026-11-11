@@ -257,7 +257,15 @@ extension _NautermWorkspaceRestore on _NautermWorkspaceState {
   ) {
     if (entry.pendingConnection != null) return null;
     final controller = entry.controller;
-    if (controller.serialProfile != null) return null;
+    final serial = controller.serialProfile;
+    if (serial != null) {
+      final hostUuid = _hostUuidForId(serial.hostId);
+      if (hostUuid == null) return null;
+      return WorkspaceTerminalTargetSnapshot(
+        protocol: WorkspaceTerminalProtocol.serial,
+        hostUuid: hostUuid,
+      );
+    }
 
     final ssh = controller.sshProfile;
     if (ssh != null) {
@@ -543,6 +551,43 @@ extension _NautermWorkspaceRestore on _NautermWorkspaceState {
       );
     }
 
+    if (target.protocol == WorkspaceTerminalProtocol.serial) {
+      if (host == null || host.type != NautermHostType.serial) return null;
+      final serialConfig = host.serialConnectionConfig;
+      if (serialConfig == null) return null;
+      final theme = await _themeForId(
+        host.themeId,
+        darkThemeId: host.darkThemeId,
+      );
+      if (!mounted) return null;
+      late final TerminalController controller;
+      controller = TerminalController.serial(
+        serialConfig: serialConfig,
+        hostId: host.id,
+        label: host.name,
+        theme: theme,
+        config: currentTerminalConfig(),
+        recorder: _createTerminalRecorder(
+          title: session.title,
+          target: '${serialConfig.serialPort} @ ${serialConfig.summary}',
+          hostId: host.id,
+          awaitConnection: true,
+        ),
+        onExit: () {
+          if (controller.shouldCloseOnExit) {
+            _closeTerminalViewTab(terminalTabId, pane.id, session.id);
+          }
+        },
+      );
+      return _TerminalViewTabEntry(
+        id: session.id,
+        title: session.title,
+        controller: controller,
+        theme: theme,
+        sourceHostUuid: host.uuid,
+      );
+    }
+
     if (host == null || host.type != NautermHostType.remote) return null;
     if (!_hostSupportsRestoreProtocol(host, target.protocol)) return null;
     final themeId = target.protocol == WorkspaceTerminalProtocol.telnet
@@ -688,7 +733,7 @@ extension _NautermWorkspaceRestore on _NautermWorkspaceState {
             }
           },
         );
-      case WorkspaceTerminalProtocol.local:
+      case WorkspaceTerminalProtocol.local || WorkspaceTerminalProtocol.serial:
         throw StateError('Local restore was handled before this switch.');
     }
 
@@ -709,6 +754,7 @@ extension _NautermWorkspaceRestore on _NautermWorkspaceState {
     WorkspaceTerminalProtocol.mosh => host.moshEnabled,
     WorkspaceTerminalProtocol.telnet => host.telnetEnabled,
     WorkspaceTerminalProtocol.local => host.type == NautermHostType.local,
+    WorkspaceTerminalProtocol.serial => host.type == NautermHostType.serial,
   };
 
   String? _restoredStartupSnippet(String? configured, String? directory) {

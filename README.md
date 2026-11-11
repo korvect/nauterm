@@ -44,6 +44,7 @@ and is not affiliated with or endorsed by Termius.
 
 - Local shell sessions and saved remote hosts
 - SSH, Mosh, Telnet, and serial connections
+- Saved serial hosts with device path, baud rate, framing, and flow control settings
 - Multiple terminal tabs, split panes, and workspace-oriented navigation
 - Adaptive local predictive echo for high-latency SSH connections
 - SSH host key verification and a managed `known_hosts` file

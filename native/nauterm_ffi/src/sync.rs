@@ -320,6 +320,9 @@ const SYNC_TABLES: &[SyncTable] = &[
             "key_uuid",
             "shell_path",
             "work_dir",
+            "serial_port",
+            "serial_baud_rate",
+            "config",
             "created_at",
             "updated_at",
             "deleted_at",
@@ -1141,6 +1144,9 @@ fn merge_record(
         .filter(|column| {
             **column != "uuid"
                 && !(source_schema_version < 4 && table.name == "keys" && **column == "passphrase")
+                && !(source_schema_version < 6
+                    && table.name == "hosts"
+                    && matches!(**column, "serial_port" | "serial_baud_rate" | "config"))
                 && !(source_schema_version < 5
                     && matches!(table.name, "hosts" | "groups")
                     && matches!(**column, "dark_theme_id" | "telnet_dark_theme_id"))
@@ -1463,6 +1469,16 @@ fn decrypt_envelope(
 // Schema 4 adds keys.passphrase; preserve the original authenticated header and
 // normalize only the decrypted payload before applying the selected strategy.
 fn migrate_sync_payload(payload: &mut SyncPayload, source_schema_version: i32) {
+    if source_schema_version < 6 {
+        if let Some(hosts) = payload.tables.get_mut("hosts") {
+            for host in hosts {
+                host.entry("serial_port").or_insert(Value::Null);
+                host.entry("serial_baud_rate").or_insert(Value::Null);
+                host.entry("config")
+                    .or_insert_with(|| Value::String("{}".to_owned()));
+            }
+        }
+    }
     if matches!(source_schema_version, 1..=3) {
         if let Some(keys) = payload.tables.get_mut("keys") {
             for record in keys {
@@ -1492,7 +1508,7 @@ fn validate_envelope_header(
             header.format_version
         )));
     }
-    let can_migrate = matches!(current_schema_version, 4..=5)
+    let can_migrate = matches!(current_schema_version, 4..=6)
         && (1..current_schema_version).contains(&header.schema_version);
     if header.schema_version != current_schema_version && !can_migrate {
         return Err(SyncError::new(format!(

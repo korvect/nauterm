@@ -685,6 +685,8 @@ class _HostItem extends _WorkspaceItemData {
     this.username,
     this.os,
     this.distro,
+    this.serialPort,
+    this.serialBaudRate,
     this.sshEnabled = false,
     this.moshEnabled = false,
     this.moshServerCommand = defaultMoshServerCommand,
@@ -701,6 +703,8 @@ class _HostItem extends _WorkspaceItemData {
   final String? username;
   final String? os;
   final String? distro;
+  final String? serialPort;
+  final int? serialBaudRate;
   final bool sshEnabled;
   final bool moshEnabled;
   final String moshServerCommand;

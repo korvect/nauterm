@@ -977,6 +977,7 @@ class _QuickConnectEmptyState extends StatelessWidget {
 }
 
 String? _hostAddressLabel(_HostItem host) {
+  if (host.type == NautermHostType.serial.storageValue) return host.serialPort;
   final address = host.host;
   if (address == null || address.isEmpty) {
     return null;

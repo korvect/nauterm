@@ -151,7 +151,7 @@ void main() {
       '${directory.path}${Platform.pathSeparator}nauterm.sqlite',
     );
 
-    expect(store.schemaVersion, 5);
+    expect(store.schemaVersion, 6);
     final deviceId = store.deviceId;
     expect(
       deviceId,

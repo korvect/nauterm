@@ -842,7 +842,8 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
                   : () {
                       final hostId =
                           view.controller.sshProfile?.hostId ??
-                          view.controller.telnetProfile?.hostId;
+                          view.controller.telnetProfile?.hostId ??
+                          view.controller.serialProfile?.hostId;
                       final host = hostId == null
                           ? null
                           : _hosts
