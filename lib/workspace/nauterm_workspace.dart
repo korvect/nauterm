@@ -35,6 +35,7 @@ import '../data/ai_provider_store.dart';
 import '../data/known_hosts_store.dart';
 import '../data/host_import.dart';
 import '../data/nauterm_config_store.dart';
+import '../data/workspace_data_loader.dart';
 import '../data/nauterm_data_store.dart';
 import '../data/ssh_private_key.dart';
 import '../data/nauterm_paths.dart';
@@ -128,10 +129,14 @@ part 'workspace_restore.dart';
 final Set<Future<void> Function()> _workspaceShutdownHooks = {};
 
 class NautermWorkspaceController extends ChangeNotifier {
-  NautermWorkspaceController({WorkspaceStateStore? workspaceStateStore})
-    : _workspaceStateStore =
-          workspaceStateStore ?? WorkspaceStateStore(NautermPaths.resolve());
+  NautermWorkspaceController({
+    WorkspaceStateStore? workspaceStateStore,
+    WorkspaceDataLoader? dataLoader,
+  }) : _dataLoader = dataLoader ?? loadNautermWorkspaceData,
+       _workspaceStateStore =
+           workspaceStateStore ?? WorkspaceStateStore(NautermPaths.resolve());
 
+  final WorkspaceDataLoader _dataLoader;
   final WorkspaceStateStore _workspaceStateStore;
   _NautermWorkspaceState? _state;
   StartupUpdateNotice? _updateNotice;
@@ -973,13 +978,20 @@ class _NautermWorkspaceState extends ConsumerState<NautermWorkspace>
   }
 
   void _handleAiConfigChanged() {
-    final preferences = aiAssistantConfig;
+    unawaited(_refreshAiConfig());
+  }
+
+  Future<void> _refreshAiConfig() async {
     List<AiProviderEntry> providers;
     try {
-      providers = AiProviderStore(NautermPaths.resolve()).listProviders();
+      providers = (await AiProviderStore(
+        NautermPaths.resolve(),
+      ).loadCatalogAsync(aiAssistantConfig)).providers;
     } on Object {
       providers = const [];
     }
+    if (!mounted) return;
+    final preferences = aiAssistantConfig;
     final conversations = {
       for (final tab in _allTerminalTabs) tab.aiConversation,
       for (final workspace in _workspaces) workspace.aiConversation,

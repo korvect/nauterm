@@ -402,8 +402,8 @@ Future<void> _preloadNautermSettingsSecureData() async {
   final paths = NautermPaths.resolve();
   try {
     final settings = await NautermConfigStore(paths).loadRuntimeSettings();
-    _cachedSettingsAiProviders = AiProviderStore(paths)
-        .loadCatalog(settings.aiAssistant);
+    _cachedSettingsAiProviders = await AiProviderStore(paths)
+        .loadCatalogAsync(settings.aiAssistant);
     _cachedSettingsAiProvidersDatabasePath = paths.databasePath;
   } on Object {
     // Settings can retry this read if startup preloading is unavailable.
@@ -725,10 +725,10 @@ class _SettingsPanelState extends State<SettingsPanel> {
               _providerStore.paths.databasePath
           ? _cachedSettingsAiProviders
           : null;
-      final providers =
-          widget.aiProviderStore?.loadCatalog(settings.aiAssistant) ??
-          catalog ??
-          _providerStore.loadCatalog(settings.aiAssistant);
+      final providers = widget.aiProviderStore != null
+          ? await _providerStore.loadCatalogAsync(settings.aiAssistant)
+          : catalog ??
+                await _providerStore.loadCatalogAsync(settings.aiAssistant);
       _cachedSettingsAiProviders = providers;
       _cachedSettingsAiProvidersDatabasePath =
           _providerStore.paths.databasePath;

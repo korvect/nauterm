@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 
 import 'nauterm_data_store.dart';
+import 'terminal_recording_store.dart';
+import '../terminal/terminal_recording_config.dart';
 
 @immutable
 class TerminalRetentionPlan {
@@ -15,6 +17,75 @@ class TerminalRetentionPlan {
   final List<String> capacityLogIds;
 
   Set<String> get deletedLogIds => {...expiredLogIds, ...capacityLogIds};
+}
+
+class TerminalRetentionApplication {
+  const TerminalRetentionApplication({
+    required this.updatedLogs,
+    required this.deletedLogIds,
+  });
+
+  final List<TerminalLogEntry> updatedLogs;
+  final Set<String> deletedLogIds;
+}
+
+Future<TerminalRetentionApplication> applyTerminalRetentionPolicy({
+  required NautermDataStore dataStore,
+  required TerminalLogCaptureStore captureStore,
+  required NautermRecordingConfig config,
+  Set<String> activeLogIds = const {},
+  void Function(String id)? onLogDeleted,
+}) async {
+  final logs = <TerminalLogEntry>[];
+  var offset = 0;
+  while (true) {
+    final page = dataStore.listTerminalLogs(limit: 500, offset: offset);
+    logs.addAll(page);
+    if (page.length < 500) break;
+    offset += page.length;
+  }
+  final plan = planTerminalRetention(
+    logs: logs,
+    now: DateTime.now().toUtc(),
+    retentionDays: config.retentionDays,
+    maxSessionBytes: config.maxSessionBytes,
+    maxTotalBytes: config.maxTotalBytes,
+    activeLogIds: activeLogIds,
+  );
+  final deletedIds = plan.deletedLogIds;
+  final updatedLogs = <TerminalLogEntry>[];
+  for (final log in logs) {
+    if (deletedIds.contains(log.id)) continue;
+    if (!plan.oversizedLogIds.contains(log.id) || log.captureFile.isEmpty) {
+      continue;
+    }
+    final capture = await captureStore.retainTail(
+      logId: log.id,
+      captureFile: log.captureFile,
+      maxBytes: config.maxSessionBytes,
+    );
+    final updated = log.copyWith(
+      captureFile: capture.fileName,
+      captureBytes: capture.bytes,
+      captureSha256: capture.sha256,
+    );
+    dataStore.saveTerminalLog(
+      updated,
+      events: dataStore.listTerminalLogEvents(log.id),
+    );
+    updatedLogs.add(updated);
+  }
+  for (final id in deletedIds) {
+    final captureFile = dataStore.deleteTerminalLog(id);
+    if (captureFile != null && captureFile.isNotEmpty) {
+      await captureStore.deleteCapture(captureFile);
+    }
+    onLogDeleted?.call(id);
+  }
+  return TerminalRetentionApplication(
+    updatedLogs: updatedLogs,
+    deletedLogIds: deletedIds,
+  );
 }
 
 TerminalRetentionPlan planTerminalRetention({

@@ -184,6 +184,11 @@ class _ProviderStore extends AiProviderStore {
       );
 
   @override
+  Future<LoadedAiProviderCatalog> loadCatalogAsync(
+    AiAssistantConfig fallback,
+  ) async => loadCatalog(fallback);
+
+  @override
   AiProviderEntry save(
     AiAssistantConfig config, {
     AiProviderEntry? existing,

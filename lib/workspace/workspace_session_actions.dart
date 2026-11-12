@@ -1,7 +1,7 @@
 part of 'nauterm_workspace.dart';
 
 extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
-  static const int _terminalLogPageSize = 40;
+  static const int _terminalLogPageSize = NautermWorkspaceData.logPageSize;
 
   String? _startupSnippetForHost(HostEntry host) {
     final id = host.startupSnippetId;
@@ -15,73 +15,33 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
       final configStore = NautermConfigStore(paths);
       await configStore.ensureDefaultConfig();
       final settings = await configStore.loadRuntimeSettings();
+      final loader = widget.controller?._dataLoader ?? loadNautermWorkspaceData;
+      final data = await loader(paths, settings.recording);
+      if (!mounted) return;
+
+      final providerStore = AiProviderStore(paths)
+        ..cacheProviders(data.aiProviders);
       applyNautermRuntimeSettings(settings);
       _lastRecordingConfig = terminalRecordingConfig;
-      final provider = AiProviderStore(paths).load(settings.aiAssistant);
-      setAiAssistantConfig(provider.config);
+      setAiAssistantConfig(providerStore.load(settings.aiAssistant).config);
 
+      // Keep a separate UI handle for subsequent edits; initial reads ran in the worker.
       final dataStore = NautermDataStore.openPath(paths.databasePath);
       pendingDataStore = dataStore;
       final captureStore = TerminalLogCaptureStore(paths.terminalLogsDirectory);
-      await captureStore.prepare();
-      for (final log in dataStore.listIncompleteTerminalCaptures()) {
-        try {
-          if (!await captureStore.captureExists(log.captureFile)) {
-            dataStore.clearMissingTerminalCapture(log.id);
-            continue;
-          }
-          final recovered = await captureStore.recover(
-            logId: log.id,
-            captureFile: log.captureFile,
-          );
-          dataStore.finalizeRecoveredTerminalCapture(
-            logId: log.id,
-            captureBytes: recovered.ciphertextBytes,
-            captureSha256: recovered.fileSha256,
-            endedAt: DateTime.now().toUtc(),
-          );
-        } on Object catch (error, stackTrace) {
-          NautermLog.warning(
-            'recording',
-            'Unable to recover terminal capture.',
-            error: error,
-            stackTrace: stackTrace,
-          );
-        }
-      }
-      await captureStore.cleanupOrphans(
-        dataStore.listTerminalCaptureFiles().toSet(),
-        referencedStateFiles: dataStore
-            .listIncompleteTerminalCaptures()
-            .map((log) => log.captureFile)
-            .toSet(),
-      );
-      await _applyTerminalRetentionPolicy(
-        dataStore: dataStore,
-        captureStore: captureStore,
-      );
-      final groups = dataStore.listGroups();
-      final hosts = dataStore.listHosts();
-      final keys = dataStore.listKeys();
-      final identities = dataStore.listIdentities();
-      final tags = dataStore.listTags();
-      final portForwards = dataStore.listPortForwards();
-      final proxies = dataStore.listProxies();
-      final snippetPackages = dataStore.listSnippetPackages();
-      final snippets = dataStore.listSnippets();
-      final knownHostsText = await KnownHostsStore(paths.knownHostsFile)
-          .readText();
-      final terminalLogs = dataStore.listTerminalLogs(
-        limit: _terminalLogPageSize,
-      );
-      final shellHistory = await ShellHistoryFileStore(paths.shellHistoryFile)
-          .read();
-      final terminalCaptureDiskUsage = await captureStore.diskUsage();
-
-      if (!mounted) {
-        dataStore.dispose();
-        pendingDataStore = null;
-        return;
+      final groups = data.groups;
+      final hosts = data.hosts;
+      final keys = data.keys;
+      final identities = data.identities;
+      final tags = data.tags;
+      final portForwards = data.portForwards;
+      final proxies = data.proxies;
+      final snippetPackages = data.snippetPackages;
+      final snippets = data.snippets;
+      final terminalLogs = data.terminalLogs;
+      for (final id in data.deletedLogIds) {
+        _recordingService.ignore(id);
+        _recordingService.removeRecording(id);
       }
 
       _dataStore?.dispose();
@@ -121,17 +81,17 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
             .map((proxy) => _mapProxy(proxy, identities))
             .toList(growable: false);
         _snippets = snippets.map(_mapSnippet).toList(growable: false);
-        _knownHostsText = knownHostsText;
+        _knownHostsText = data.knownHostsText;
         _terminalThemeCatalog = TerminalThemeCatalog(
           paths.themesDirectory,
           additionalDirectories: paths.additionalThemeDirectories,
         );
         _terminalLogCaptureStore = captureStore;
         _terminalLogs = terminalLogs;
-        _terminalCaptureDiskUsage = terminalCaptureDiskUsage;
+        _terminalCaptureDiskUsage = data.captureDiskUsage;
         _terminalLogsHasMore = terminalLogs.length == _terminalLogPageSize;
         _terminalLogsLoading = false;
-        _shellHistory = shellHistory;
+        _shellHistory = data.shellHistory;
         _loadingData = false;
       });
       pendingDataStore = null;
@@ -1796,65 +1756,21 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
     }
   }
 
-  Future<_TerminalRetentionApplication> _applyTerminalRetentionPolicy({
+  Future<TerminalRetentionApplication> _applyTerminalRetentionPolicy({
     required NautermDataStore dataStore,
     required TerminalLogCaptureStore captureStore,
     Set<String> activeLogIds = const {},
   }) async {
-    final logs = <TerminalLogEntry>[];
-    var offset = 0;
-    while (true) {
-      final page = dataStore.listTerminalLogs(limit: 500, offset: offset);
-      logs.addAll(page);
-      if (page.length < 500) break;
-      offset += page.length;
-    }
-    final config = terminalRecordingConfig;
-    final plan = planTerminalRetention(
-      logs: logs,
-      now: DateTime.now().toUtc(),
-      retentionDays: config.retentionDays,
-      maxSessionBytes: config.maxSessionBytes,
-      maxTotalBytes: config.maxTotalBytes,
+    return applyTerminalRetentionPolicy(
+      dataStore: dataStore,
+      captureStore: captureStore,
+      config: terminalRecordingConfig,
       activeLogIds: activeLogIds,
-    );
-    final deletedIds = plan.deletedLogIds;
-    final updatedLogs = <TerminalLogEntry>[];
-
-    for (final log in logs) {
-      if (deletedIds.contains(log.id)) continue;
-      if (!plan.oversizedLogIds.contains(log.id) || log.captureFile.isEmpty) {
-        continue;
-      }
-      final capture = await captureStore.retainTail(
-        logId: log.id,
-        captureFile: log.captureFile,
-        maxBytes: config.maxSessionBytes,
-      );
-      final updated = log.copyWith(
-        captureFile: capture.fileName,
-        captureBytes: capture.bytes,
-        captureSha256: capture.sha256,
-      );
-      dataStore.saveTerminalLog(
-        updated,
-        events: dataStore.listTerminalLogEvents(log.id),
-      );
-      updatedLogs.add(updated);
-    }
-
-    for (final id in deletedIds) {
-      final captureFile = dataStore.deleteTerminalLog(id);
-      if (captureFile != null && captureFile.isNotEmpty) {
-        await captureStore.deleteCapture(captureFile);
-      }
-      if (activeLogIds.contains(id)) continue;
-      _recordingService.ignore(id);
-      _recordingService.removeRecording(id);
-    }
-    return _TerminalRetentionApplication(
-      updatedLogs: updatedLogs,
-      deletedLogIds: deletedIds,
+      onLogDeleted: (id) {
+        if (activeLogIds.contains(id)) return;
+        _recordingService.ignore(id);
+        _recordingService.removeRecording(id);
+      },
     );
   }
 
@@ -1919,16 +1835,6 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
       endedAt: recording.endedAt,
     );
   }
-}
-
-class _TerminalRetentionApplication {
-  const _TerminalRetentionApplication({
-    required this.updatedLogs,
-    required this.deletedLogIds,
-  });
-
-  final List<TerminalLogEntry> updatedLogs;
-  final Set<String> deletedLogIds;
 }
 
 enum _HostConnectProtocol { ssh, mosh, telnet }

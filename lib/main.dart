@@ -67,10 +67,9 @@ Future<void> main() async {
     }
   }
   configureNativeWindowing();
-  runWidget(const NautermRoot());
+  runWidget(NautermRoot(onInitialDataReady: initAnalytics));
   NautermLog.info('application', 'Application UI mounted.');
   unawaited(_logApplicationMetadata());
-  unawaited(initAnalytics());
 }
 
 void _installUnhandledErrorLogging() {
@@ -118,6 +117,8 @@ Future<void> _logApplicationMetadata() async {
 }
 
 Future<void> initAnalytics() async {
+  // Keep database and Keychain access after the base UI is visible.
+  await waitForNautermUiPresentation();
   const posthogKey = String.fromEnvironment('NAUTERM_POSTHOG_API_KEY');
   if (posthogKey.isEmpty) {
     NautermLog.info(

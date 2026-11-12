@@ -1,3 +1,5 @@
+import 'dart:isolate';
+
 import 'package:flutter/foundation.dart';
 
 import '../ai/ai_config.dart';
@@ -28,6 +30,21 @@ class AiProviderStore {
   AiProviderStore(this.paths);
 
   final NautermPaths paths;
+
+  void cacheProviders(List<AiProviderEntry> providers) {
+    _providerCatalogCache[paths.databasePath] = List.unmodifiable(providers);
+  }
+
+  Future<LoadedAiProviderCatalog> loadCatalogAsync(
+    AiAssistantConfig fallback,
+  ) async {
+    final cached = _providerCatalogCache[paths.databasePath];
+    if (cached != null) return _catalogFromProviders(cached, fallback);
+    final loaded = await _loadProvidersInBackground(paths.databasePath);
+    final providers = _providerCatalogCache[paths.databasePath] ?? loaded;
+    cacheProviders(providers);
+    return _catalogFromProviders(providers, fallback);
+  }
 
   LoadedAiProvider load(AiAssistantConfig fallback) {
     return loadCatalog(fallback).active;
@@ -108,6 +125,17 @@ class AiProviderStore {
       store.dispose();
     }
   }
+}
+
+Future<List<AiProviderEntry>> _loadProvidersInBackground(String databasePath) {
+  return Isolate.run(() {
+    final store = NautermDataStore.openPath(databasePath);
+    try {
+      return store.listAiProviders();
+    } finally {
+      store.dispose();
+    }
+  });
 }
 
 LoadedAiProviderCatalog _catalogFromProviders(

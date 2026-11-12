@@ -297,7 +297,9 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
   Future<void> _loadProviders() async {
     try {
       final paths = NautermPaths.resolve();
-      final providers = AiProviderStore(paths).listProviders();
+      final providers = (await AiProviderStore(
+        paths,
+      ).loadCatalogAsync(aiAssistantConfig)).providers;
       if (mounted) {
         AiProviderEntry? provider;
         String? model;

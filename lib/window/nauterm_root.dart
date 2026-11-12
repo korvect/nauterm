@@ -17,7 +17,9 @@ import 'native_windowing.dart';
 import 'settings_window.dart';
 
 class NautermRoot extends StatefulWidget {
-  const NautermRoot({super.key});
+  const NautermRoot({super.key, this.onInitialDataReady});
+
+  final Future<void> Function()? onInitialDataReady;
 
   @override
   State<NautermRoot> createState() => _NautermRootState();
@@ -71,6 +73,9 @@ class _NautermRootState extends State<NautermRoot>
 
   Future<void> _preloadSecureDataAfterDatabaseReady() async {
     await _workspaceController.initialDataReady;
+    if (!mounted) return;
+    final onInitialDataReady = widget.onInitialDataReady;
+    if (onInitialDataReady != null) unawaited(onInitialDataReady());
     await preloadNautermSettingsSecureData();
     _syncService.start();
   }
