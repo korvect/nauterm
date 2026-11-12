@@ -123,10 +123,7 @@ not supported.
 
 ## Roadmap
 
-- [x] Ghostty terminal emulation backend (`libghostty-vt`)
-- [x] SFTP multithreaded, chunked transfer with resume
-- [x] Predictive local echo for SSH
-- [x] Workspace layout and reconnectable session restoration after restart
+- [ ] Rust edition of Nauterm
 - [ ] Unified Capability Registry exposed via MCP to external agents and the built-in AI assistant
 
 ## Installation

@@ -97,10 +97,7 @@ Nauterm 当前仅支持桌面平台，不支持 Android、iOS 和 Web 构建。
 
 ## 路线图
 
-- [x] 基于 libghostty-vt 的终端仿真后端（`libghostty-vt`）
-- [x] SFTP 多线程、分片、可断点续传的传输
-- [x] SSH 本地预测回显
-- [x] 重启后恢复工作区布局与可重连会话
+- [ ] Rust 版 Nauterm
 - [ ] 构建统一的 Capability Registry，通过 MCP 面向外部 Agent 及内部 AI 助手开放
 
 ## 安装
