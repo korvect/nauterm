@@ -11,6 +11,22 @@ class ConnectionUriChannel {
   final Future<void> Function(String uri) onOpen;
   final void Function() onActivate;
   static const channel = MethodChannel('com.korvect.nauterm/connection_uri');
+  static const schemes = ['ssh', 'sftp', 'telnet'];
+
+  static Future<Map<String, bool?>> defaultHandlers() async {
+    final values = await channel.invokeMapMethod<String, bool?>(
+      'getDefaultHandlers',
+    );
+    return {for (final scheme in schemes) scheme: values?[scheme]};
+  }
+
+  static Future<void> setDefaultHandler(String scheme) {
+    if (!schemes.contains(scheme)) {
+      throw ArgumentError.value(scheme, 'scheme', 'Unsupported URI scheme');
+    }
+    return channel.invokeMethod<void>('setDefaultHandler', scheme);
+  }
+
   Future<void> _pending = Future<void>.value();
   bool _disposed = false;
 

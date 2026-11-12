@@ -10,7 +10,11 @@ import 'package:nauterm/data/nauterm_paths.dart';
 import 'package:nauterm/settings/settings_panel.dart';
 import 'package:nauterm/window/native_windowing.dart';
 
+import 'support/connection_uri_defaults.dart';
+
 void main() {
+  setUp(mockConnectionUriDefaults);
+
   setUp(() async {
     final previous = aiAssistantConfig;
     setAppLanguage(AppLanguage.english);

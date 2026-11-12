@@ -1,9 +1,12 @@
 #include "flutter_window.h"
 
 #include <dwrite.h>
+#include <shellapi.h>
+#include <shlwapi.h>
 #include <wrl/client.h>
 
 #include <cwctype>
+#include <filesystem>
 #include <map>
 #include <optional>
 #include <string>
@@ -16,6 +19,35 @@ namespace {
 
 constexpr char kSystemFontsChannelName[] =
     "com.korvect.nauterm/system_fonts";
+
+std::optional<bool> IsDefaultConnectionHandler(const wchar_t* scheme) {
+  DWORD length = 0;
+  HRESULT status = AssocQueryStringW(ASSOCF_IS_PROTOCOL, ASSOCSTR_EXECUTABLE,
+                                   scheme, nullptr, nullptr, &length);
+  if (status == HRESULT_FROM_WIN32(ERROR_NO_ASSOCIATION)) return false;
+  if (status != S_FALSE || length == 0) return std::nullopt;
+  std::vector<wchar_t> handler(length);
+  status = AssocQueryStringW(ASSOCF_IS_PROTOCOL, ASSOCSTR_EXECUTABLE,
+                             scheme, nullptr, handler.data(), &length);
+  if (FAILED(status)) return std::nullopt;
+  std::vector<wchar_t> current(32768);
+  const DWORD current_length = GetModuleFileNameW(
+      nullptr, current.data(), static_cast<DWORD>(current.size()));
+  if (current_length == 0 || current_length >= current.size()) {
+    return std::nullopt;
+  }
+  std::error_code error;
+  const bool matches =
+      std::filesystem::equivalent(handler.data(), current.data(), error);
+  if (error) return std::nullopt;
+  return matches;
+}
+
+bool OpenDefaultApplicationSettings() {
+  return reinterpret_cast<INT_PTR>(
+             ShellExecuteW(nullptr, L"open", L"ms-settings:defaultapps", nullptr,
+                           nullptr, SW_SHOWNORMAL)) > 32;
+}
 
 std::wstring LowercaseFontFamily(std::wstring family) {
   for (wchar_t& character : family) {
@@ -172,6 +204,38 @@ bool FlutterWindow::OnCreate() {
   connection_uri_channel_->SetMethodCallHandler(
       [this](const flutter::MethodCall<flutter::EncodableValue>& call,
              std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+        if (call.method_name() == "getDefaultHandlers") {
+          flutter::EncodableMap handlers;
+          for (const wchar_t* scheme : {L"ssh", L"sftp", L"telnet"}) {
+            const auto is_default = IsDefaultConnectionHandler(scheme);
+            handlers.emplace(flutter::EncodableValue(Utf8FromUtf16(scheme)),
+                             is_default.has_value()
+                                 ? flutter::EncodableValue(*is_default)
+                                 : flutter::EncodableValue());
+          }
+          result->Success(flutter::EncodableValue(handlers));
+          return;
+        }
+        if (call.method_name() == "setDefaultHandler") {
+          const auto* scheme =
+              call.arguments() == nullptr
+                  ? nullptr
+                  : std::get_if<std::string>(call.arguments());
+          if (scheme == nullptr ||
+              (*scheme != "ssh" && *scheme != "sftp" && *scheme != "telnet")) {
+            result->Error("invalid_scheme", "Unsupported URI scheme.");
+            return;
+          }
+          const std::wstring wide_scheme(scheme->begin(), scheme->end());
+          if (IsDefaultConnectionHandler(wide_scheme.c_str()).value_or(false) ||
+              OpenDefaultApplicationSettings()) {
+            result->Success();
+          } else {
+            result->Error("set_default_failed",
+                          "Unable to open default application settings.");
+          }
+          return;
+        }
         if (call.method_name() != "takePendingUris") {
           result->NotImplemented();
           return;

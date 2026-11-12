@@ -5,10 +5,14 @@ import 'package:nauterm/data/nauterm_data_store.dart';
 import 'package:nauterm/data/nauterm_paths.dart';
 import 'package:nauterm/settings/settings_panel.dart';
 
+import 'support/connection_uri_defaults.dart';
+
 const _masterKey = 'Correct-master-key1';
 String _activeProviderId = 's3';
 
 void main() {
+  setUp(mockConnectionUriDefaults);
+
   setUp(() async {
     setAppLanguage(AppLanguage.english);
     NautermLocalizations.current = await NautermLocalizations.load(

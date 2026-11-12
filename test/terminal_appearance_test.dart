@@ -16,8 +16,12 @@ import 'package:nauterm/terminal/terminal_theme.dart';
 import 'package:nauterm/terminal/terminal_widget.dart';
 import 'package:nauterm/ui/terminal_theme_preview.dart';
 
+import 'support/connection_uri_defaults.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(mockConnectionUriDefaults);
+
   setUp(() {
     final previous = currentNautermRuntimeSettings();
     addTearDown(() => applyNautermRuntimeSettings(previous));

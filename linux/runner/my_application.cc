@@ -3,6 +3,7 @@
 #include <flutter_linux/flutter_linux.h>
 #include <pango/pangocairo.h>
 
+#include <cstdlib>
 #include <cstring>
 #include <set>
 #include <string>
@@ -39,10 +40,90 @@ static constexpr char kFileDropWidgetDataKey[] = "nauterm-file-drop-widget";
 static constexpr char kSystemFontsChannelName[] =
     "com.korvect.nauterm/system_fonts";
 
+static gboolean connection_uri_app_matches_current(GAppInfo* app) {
+  const gchar* executable = g_app_info_get_executable(app);
+  if (executable == nullptr) return FALSE;
+  g_autofree gchar* executable_path =
+      g_path_is_absolute(executable) ? g_strdup(executable)
+                                     : g_find_program_in_path(executable);
+  if (executable_path == nullptr) return FALSE;
+  g_autofree gchar* resolved = realpath(executable_path, nullptr);
+  g_autofree gchar* current = g_file_read_link("/proc/self/exe", nullptr);
+  if (resolved == nullptr || current == nullptr) return FALSE;
+  if (g_strcmp0(resolved, current) == 0) return TRUE;
+  const gchar* appimage_path = g_getenv("APPIMAGE");
+  if (appimage_path == nullptr || appimage_path[0] == '\0') return FALSE;
+  g_autofree gchar* appimage = realpath(appimage_path, nullptr);
+  return appimage != nullptr && g_strcmp0(resolved, appimage) == 0;
+}
+
+static void connection_uri_set_default(const gchar* scheme,
+                                       FlMethodCall* method_call) {
+  g_autofree gchar* type = g_strdup_printf("x-scheme-handler/%s", scheme);
+  GList* apps = g_app_info_get_all_for_type(type);
+  gboolean found = FALSE;
+  gboolean success = FALSE;
+  g_autoptr(GError) error = nullptr;
+  for (GList* item = apps; item != nullptr; item = item->next) {
+    GAppInfo* app = G_APP_INFO(item->data);
+    if (!connection_uri_app_matches_current(app)) continue;
+    found = TRUE;
+    success = g_app_info_set_as_default_for_type(app, type, &error);
+    break;
+  }
+  g_list_free_full(apps, g_object_unref);
+  if (!found) {
+    fl_method_call_respond_error(
+        method_call, "not_registered",
+        "The current application has no installed desktop entry.", nullptr,
+        nullptr);
+  } else if (!success) {
+    fl_method_call_respond_error(
+        method_call, "set_default_failed",
+        error == nullptr ? "Unable to set default application." : error->message,
+        nullptr, nullptr);
+  } else {
+    fl_method_call_respond_success(method_call, nullptr, nullptr);
+  }
+}
+
 static void connection_uri_method_call_cb(FlMethodChannel* channel,
                                           FlMethodCall* method_call,
                                           gpointer user_data) {
   MyApplication* self = MY_APPLICATION(user_data);
+  const gchar* method = fl_method_call_get_name(method_call);
+  if (std::strcmp(method, "getDefaultHandlers") == 0) {
+    g_autoptr(FlValue) handlers = fl_value_new_map();
+    for (const gchar* scheme : {"ssh", "sftp", "telnet"}) {
+      g_autoptr(GAppInfo) app = g_app_info_get_default_for_uri_scheme(scheme);
+      fl_value_set_string_take(
+          handlers, scheme,
+          fl_value_new_bool(app != nullptr &&
+                            connection_uri_app_matches_current(app)));
+    }
+    fl_method_call_respond_success(method_call, handlers, nullptr);
+    return;
+  }
+  if (std::strcmp(method, "setDefaultHandler") == 0) {
+    FlValue* args = fl_method_call_get_args(method_call);
+    const gchar* scheme =
+        args != nullptr && fl_value_get_type(args) == FL_VALUE_TYPE_STRING
+            ? fl_value_get_string(args)
+            : nullptr;
+    if (g_strcmp0(scheme, "ssh") != 0 && g_strcmp0(scheme, "sftp") != 0 &&
+        g_strcmp0(scheme, "telnet") != 0) {
+      fl_method_call_respond_error(method_call, "invalid_scheme",
+                                  "Unsupported URI scheme.", nullptr, nullptr);
+      return;
+    }
+    g_autoptr(GAppInfo) current = g_app_info_get_default_for_uri_scheme(scheme);
+    if (current != nullptr && connection_uri_app_matches_current(current)) {
+      fl_method_call_respond_success(method_call, nullptr, nullptr);
+    } else {
+      connection_uri_set_default(scheme, method_call);
+    }
+    return;
+  }
   if (std::strcmp(fl_method_call_get_name(method_call), "takePendingUris") != 0) {
     fl_method_call_respond_not_implemented(method_call, nullptr);
     return;

@@ -177,6 +177,14 @@ Widget _buildSettingsGeneralContent(_SettingsPanelState state) {
         ),
         SizedBox(height: 30),
         _SettingsSection(
+          key: state._settingsSectionKey('general-connection-links'),
+          icon: LucideIcons.link,
+          title: 'Connection Links',
+          localizationKey: 'settings.general.connectionLinks.title',
+          child: const _ConnectionLinkDefaults(),
+        ),
+        SizedBox(height: 30),
+        _SettingsSection(
           key: state._settingsSectionKey('general-behavior'),
           icon: Icons.tune_rounded,
           title: state.context.tr(

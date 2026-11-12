@@ -59,10 +59,11 @@ and host key checks. For example, `ssh://user@example.com:22`,
 SFTP links can include a remote directory; percent-encode spaces and other
 reserved characters. Passwords in user information are discarded; authentication
 uses the normal connection flow. Query parameters and fragments are not accepted.
-Links work on launch and while Nauterm is running. Select Nauterm as the handler
-in your system's default application settings when another client is already
-associated with a scheme. Windows registration is provided by the installer;
-Linux registration is provided by the installed desktop entry.
+Links work on launch and while Nauterm is running. Settings → General →
+Connection Links shows the current default-handler status for each scheme.
+Click its status to set Nauterm as the default application; on Windows this opens
+the system's default application settings. Windows registration is provided by
+the installer; Linux registration is provided by the installed desktop entry.
 
 ### Files and workflows
 

@@ -4,7 +4,8 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:math' as math;
-import 'dart:ui' show BoxHeightStyle, BoxWidthStyle;
+import 'dart:ui'
+    show BoxHeightStyle, BoxWidthStyle, ViewFocusEvent, ViewFocusState;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/cupertino.dart';
@@ -41,6 +42,7 @@ import '../update/desktop_update.dart';
 import '../update/macos_sparkle_updater.dart';
 import '../app/window_config.dart';
 import '../window/native_windowing.dart';
+import '../window/connection_uri_channel.dart';
 import 'github_device_flow.dart';
 import 'cloud_oauth.dart';
 
@@ -52,6 +54,7 @@ part 'settings_panel_ai.dart';
 part 'settings_panel_sync.dart';
 part 'settings_panel_cloud_sync.dart';
 part 'settings_panel_update.dart';
+part 'settings_panel_connection_links.dart';
 
 final ValueNotifier<int> nautermDatabaseBulkChangeRevision = ValueNotifier(0);
 final ValueNotifier<int> nautermSyncPreferencesRevision = ValueNotifier(0);
@@ -170,6 +173,13 @@ class _SettingsSearchEntry {
 }
 
 const _settingsSearchEntries = <_SettingsSearchEntry>[
+  _SettingsSearchEntry(
+    page: _SettingsPage.general,
+    section: 'general-connection-links',
+    title: 'Connection Links',
+    subtitle: 'Use Nauterm as the default application for connection links.',
+    keywords: 'ssh sftp telnet uri url scheme default application',
+  ),
   _SettingsSearchEntry(
     page: _SettingsPage.general,
     section: 'general-appearance',

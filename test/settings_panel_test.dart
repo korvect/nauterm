@@ -18,7 +18,11 @@ import 'package:nauterm/terminal/terminal_models.dart';
 import 'package:nauterm/window/native_windowing.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import 'support/connection_uri_defaults.dart';
+
 void main() {
+  setUp(mockConnectionUriDefaults);
+
   testWidgets('word boundary field decodes tabs and permits an empty set', (
     tester,
   ) async {
@@ -217,9 +221,15 @@ void main() {
     final group = find.byKey(
       const ValueKey('settings-workspace-restore-behavior'),
     );
-    await tester.drag(
-      find.byKey(const ValueKey('settings-general-scroll-view')),
-      const Offset(0, -360),
+    await tester.scrollUntilVisible(
+      group,
+      200,
+      scrollable: find
+          .descendant(
+            of: find.byKey(const ValueKey('settings-general-scroll-view')),
+            matching: find.byType(Scrollable),
+          )
+          .first,
     );
     await tester.pumpAndSettle();
     expect(group, findsOneWidget);

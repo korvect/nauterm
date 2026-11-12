@@ -70,6 +70,38 @@ class AppDelegate: FlutterAppDelegate {
         binaryMessenger: engine.binaryMessenger
       )
       connectionUriChannel?.setMethodCallHandler { [weak self] call, result in
+        if call.method == "getDefaultHandlers" {
+          result(Dictionary(uniqueKeysWithValues: ["ssh", "sftp", "telnet"].map {
+            ($0, Self.isDefaultConnectionHandler($0))
+          }))
+          return
+        }
+        if call.method == "setDefaultHandler" {
+          guard let scheme = call.arguments as? String,
+                ["ssh", "sftp", "telnet"].contains(scheme) else {
+            result(FlutterError(code: "invalid_scheme", message: "Unsupported URI scheme.", details: nil))
+            return
+          }
+          if Self.isDefaultConnectionHandler(scheme) {
+            result(nil)
+            return
+          }
+          NSWorkspace.shared.setDefaultApplication(
+            at: Bundle.main.bundleURL,
+            toOpenURLsWithScheme: scheme
+          ) { error in
+            DispatchQueue.main.async {
+              if let error {
+                result(FlutterError(code: "set_default_failed", message: error.localizedDescription, details: nil))
+              } else if !Self.isDefaultConnectionHandler(scheme) {
+                result(FlutterError(code: "set_default_failed", message: "The default application did not change.", details: nil))
+              } else {
+                result(nil)
+              }
+            }
+          }
+          return
+        }
         guard call.method == "takePendingUris" else {
           result(FlutterMethodNotImplemented)
           return
@@ -288,6 +320,15 @@ class AppDelegate: FlutterAppDelegate {
   override func application(_ application: NSApplication, open urls: [URL]) {
     pendingConnectionUris.append(contentsOf: urls.map(\.absoluteString))
     connectionUriChannel?.invokeMethod("urisAvailable", arguments: nil)
+  }
+
+  private static func isDefaultConnectionHandler(_ scheme: String) -> Bool {
+    guard let url = URL(string: "\(scheme)://example.com"),
+          let application = NSWorkspace.shared.urlForApplication(toOpen: url) else {
+      return false
+    }
+    return application.resolvingSymlinksInPath().standardizedFileURL
+      == Bundle.main.bundleURL.resolvingSymlinksInPath().standardizedFileURL
   }
 
   override func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
