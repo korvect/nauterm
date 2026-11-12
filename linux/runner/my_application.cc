@@ -18,6 +18,8 @@ struct _MyApplication {
   FlMethodChannel* file_drop_channel;
   FlMethodChannel* system_fonts_channel;
   FlMethodChannel* window_channel;
+  FlMethodChannel* connection_uri_channel;
+  GPtrArray* pending_connection_uris;
   gboolean file_drop_enabled;
 };
 
@@ -36,6 +38,33 @@ static constexpr char kFileDropChannelName[] = "com.korvect.nauterm/file_drop";
 static constexpr char kFileDropWidgetDataKey[] = "nauterm-file-drop-widget";
 static constexpr char kSystemFontsChannelName[] =
     "com.korvect.nauterm/system_fonts";
+
+static void connection_uri_method_call_cb(FlMethodChannel* channel,
+                                          FlMethodCall* method_call,
+                                          gpointer user_data) {
+  MyApplication* self = MY_APPLICATION(user_data);
+  if (std::strcmp(fl_method_call_get_name(method_call), "takePendingUris") != 0) {
+    fl_method_call_respond_not_implemented(method_call, nullptr);
+    return;
+  }
+  g_autoptr(FlValue) uris = fl_value_new_list();
+  for (guint i = 0; i < self->pending_connection_uris->len; ++i) {
+    const auto* uri = static_cast<const gchar*>(
+        g_ptr_array_index(self->pending_connection_uris, i));
+    fl_value_append_take(uris, fl_value_new_string(uri));
+  }
+  g_ptr_array_set_size(self->pending_connection_uris, 0);
+  fl_method_call_respond_success(method_call, uris, nullptr);
+}
+
+static void setup_connection_uri_channel(MyApplication* self, FlView* view) {
+  g_autoptr(FlStandardMethodCodec) codec = fl_standard_method_codec_new();
+  self->connection_uri_channel = fl_method_channel_new(
+      fl_engine_get_binary_messenger(fl_view_get_engine(view)),
+      "com.korvect.nauterm/connection_uri", FL_METHOD_CODEC(codec));
+  fl_method_channel_set_method_call_handler(
+      self->connection_uri_channel, connection_uri_method_call_cb, self, nullptr);
+}
 
 static FlValue* system_font_families(gboolean monospace_only) {
   PangoFontMap* font_map = pango_cairo_font_map_get_default();
@@ -518,6 +547,11 @@ static void set_nauterm_window_icon(GtkWindow* window) {
 // Implements GApplication::activate.
 static void my_application_activate(GApplication* application) {
   MyApplication* self = MY_APPLICATION(application);
+  if (self->connection_uri_channel != nullptr) {
+    fl_method_channel_invoke_method(self->connection_uri_channel, "activate",
+                                   nullptr, nullptr, nullptr, nullptr);
+    return;
+  }
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
 
@@ -567,8 +601,21 @@ static void my_application_activate(GApplication* application) {
   setup_file_drop_channel(self, view);
   setup_system_fonts_channel(self, view);
   setup_window_channel(self, view);
+  setup_connection_uri_channel(self, view);
 
   gtk_widget_grab_focus(GTK_WIDGET(view));
+}
+
+// GApplication forwards open requests from later processes to this instance.
+static void my_application_open(GApplication* application, GFile** files,
+                                 gint n_files, const gchar* hint) {
+  my_application_activate(application);
+  MyApplication* self = MY_APPLICATION(application);
+  for (gint i = 0; i < n_files; ++i) {
+    g_ptr_array_add(self->pending_connection_uris, g_file_get_uri(files[i]));
+  }
+  fl_method_channel_invoke_method(self->connection_uri_channel, "urisAvailable",
+                                 nullptr, nullptr, nullptr, nullptr);
 }
 
 // Implements GApplication::local_command_line.
@@ -586,7 +633,19 @@ static gboolean my_application_local_command_line(GApplication* application,
     return TRUE;
   }
 
-  g_application_activate(application);
+  g_autoptr(GPtrArray) files = g_ptr_array_new_with_free_func(g_object_unref);
+  for (gchar** argument = *arguments + 1; *argument != nullptr; ++argument) {
+    g_autofree gchar* scheme = g_uri_parse_scheme(*argument);
+    if (scheme != nullptr) {
+      g_ptr_array_add(files, g_file_new_for_uri(*argument));
+    }
+  }
+  if (files->len > 0) {
+    g_application_open(application, reinterpret_cast<GFile**>(files->pdata),
+                        files->len, "");
+  } else {
+    g_application_activate(application);
+  }
   *exit_status = 0;
 
   return TRUE;
@@ -616,12 +675,15 @@ static void my_application_dispose(GObject* object) {
   g_clear_object(&self->file_drop_channel);
   g_clear_object(&self->system_fonts_channel);
   g_clear_object(&self->window_channel);
+  g_clear_object(&self->connection_uri_channel);
+  g_clear_pointer(&self->pending_connection_uris, g_ptr_array_unref);
   g_clear_pointer(&self->dart_entrypoint_arguments, g_strfreev);
   G_OBJECT_CLASS(my_application_parent_class)->dispose(object);
 }
 
 static void my_application_class_init(MyApplicationClass* klass) {
   G_APPLICATION_CLASS(klass)->activate = my_application_activate;
+  G_APPLICATION_CLASS(klass)->open = my_application_open;
   G_APPLICATION_CLASS(klass)->local_command_line =
       my_application_local_command_line;
   G_APPLICATION_CLASS(klass)->startup = my_application_startup;
@@ -629,7 +691,9 @@ static void my_application_class_init(MyApplicationClass* klass) {
   G_OBJECT_CLASS(klass)->dispose = my_application_dispose;
 }
 
-static void my_application_init(MyApplication* self) {}
+static void my_application_init(MyApplication* self) {
+  self->pending_connection_uris = g_ptr_array_new_with_free_func(g_free);
+}
 
 MyApplication* my_application_new() {
   // Set the program name to the application ID, which helps various systems
@@ -640,5 +704,5 @@ MyApplication* my_application_new() {
 
   return MY_APPLICATION(g_object_new(my_application_get_type(),
                                      "application-id", APPLICATION_ID, "flags",
-                                     G_APPLICATION_NON_UNIQUE, nullptr));
+                                     G_APPLICATION_HANDLES_OPEN, nullptr));
 }

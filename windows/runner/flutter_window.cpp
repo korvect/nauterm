@@ -164,6 +164,25 @@ bool FlutterWindow::OnCreate() {
     return false;
   }
   RegisterPlugins(flutter_controller_->engine());
+  connection_uri_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(),
+          "com.korvect.nauterm/connection_uri",
+          &flutter::StandardMethodCodec::GetInstance());
+  connection_uri_channel_->SetMethodCallHandler(
+      [this](const flutter::MethodCall<flutter::EncodableValue>& call,
+             std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+        if (call.method_name() != "takePendingUris") {
+          result->NotImplemented();
+          return;
+        }
+        flutter::EncodableList uris;
+        for (const auto& uri : pending_connection_uris_) {
+          uris.emplace_back(uri);
+        }
+        pending_connection_uris_.clear();
+        result->Success(flutter::EncodableValue(uris));
+      });
   system_fonts_channel_ =
       std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
           flutter_controller_->engine()->messenger(),
@@ -200,6 +219,7 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  connection_uri_channel_.reset();
   system_fonts_channel_.reset();
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
@@ -212,6 +232,25 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
+  if (message == WM_COPYDATA && connection_uri_channel_) {
+    const auto* data = reinterpret_cast<const COPYDATASTRUCT*>(lparam);
+    if (data == nullptr || data->dwData != kConnectionUriMessage ||
+        data->lpData == nullptr || data->cbData < 1 || data->cbData > 65536) {
+      return FALSE;
+    }
+    const char* uri = static_cast<const char*>(data->lpData);
+    if (uri[data->cbData - 1] != '\0' ||
+        std::char_traits<char>::length(uri) != data->cbData - 1) {
+      return FALSE;
+    }
+    if (data->cbData == 1) {
+      connection_uri_channel_->InvokeMethod("activate", nullptr);
+    } else {
+      pending_connection_uris_.emplace_back(uri, data->cbData - 1);
+      connection_uri_channel_->InvokeMethod("urisAvailable", nullptr);
+    }
+    return TRUE;
+  }
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
     std::optional<LRESULT> result =
@@ -229,4 +268,13 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   }
 
   return Win32Window::MessageHandler(hwnd, message, wparam, lparam);
+}
+
+void FlutterWindow::QueueConnectionUris(
+    const std::vector<std::string>& arguments) {
+  for (const auto& argument : arguments) {
+    if (argument.find("://") != std::string::npos) {
+      pending_connection_uris_.push_back(argument);
+    }
+  }
 }

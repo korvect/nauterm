@@ -5,11 +5,13 @@ class _SftpConnectRequest {
     required this.id,
     required this.host,
     required this.auth,
+    this.initialPath = '~',
   });
 
   final int id;
   final _HostItem host;
   final _SftpRemoteAuth auth;
+  final String initialPath;
 }
 
 enum _SftpConnectionPhase { connecting, hostKey, connected, failed }

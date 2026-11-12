@@ -51,6 +51,18 @@ and is not affiliated with or endorsed by Termius.
 - Password, private key, certificate, identity, proxy, and startup command
   configuration
 - Local, remote, and dynamic SOCKS5 port forwarding
+- Open `ssh://`, `sftp://`, and `telnet://` connection links from other applications
+
+Connection links open temporary sessions using Nauterm's normal authentication
+and host key checks. For example, `ssh://user@example.com:22`,
+`sftp://user@example.com/home/user`, or `telnet://example.com:23`.
+SFTP links can include a remote directory; percent-encode spaces and other
+reserved characters. Passwords in user information are discarded; authentication
+uses the normal connection flow. Query parameters and fragments are not accepted.
+Links work on launch and while Nauterm is running. Select Nauterm as the handler
+in your system's default application settings when another client is already
+associated with a scheme. Windows registration is provided by the installer;
+Linux registration is provided by the installed desktop entry.
 
 ### Files and workflows
 

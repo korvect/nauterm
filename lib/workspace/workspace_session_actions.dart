@@ -949,6 +949,8 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
     int? port,
     bool useMosh = false,
     String? moshServerCommand,
+    bool openSftp = false,
+    String? sftpPath,
   }) async {
     final auth = _sshAuthForHost(
       host,
@@ -1064,6 +1066,26 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
           controller: controller,
         ),
       );
+      if (openSftp) {
+        void openAfterAuthentication() {
+          if (!controller.connectionEvents.any(
+            (event) => event.kind == TerminalConnectionEventKind.authSuccess,
+          )) {
+            return;
+          }
+          controller.removeListener(openAfterAuthentication);
+          // File-only accounts need not accept a shell or PTY request.
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && !controller.isDisposed) {
+              _showTerminalTabSftp(id, initialPath: sftpPath ?? '~');
+            }
+          });
+          WidgetsBinding.instance.scheduleFrame();
+        }
+
+        controller.addListener(openAfterAuthentication);
+        openAfterAuthentication();
+      }
       _sshWorkingDirectories[id] = '~';
       _selectedTerminalId = id;
       _selectedTerminalViewId = id;
@@ -1330,6 +1352,28 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
           host,
           _mapHost(host, const [], const {}),
         );
+    }
+  }
+
+  Future<void> _connectConnectionUri(ConnectionUri target) async {
+    final host = HostEntry(
+      name: target.host,
+      type: NautermHostType.remote,
+      host: target.host,
+      username: target.username,
+      port: target.port,
+      sshEnabled: target.protocol != ConnectionUriProtocol.telnet,
+      telnetEnabled: target.protocol == ConnectionUriProtocol.telnet,
+      telnetUsername: _emptyToNull(target.username),
+      telnetPort: target.port,
+    );
+    switch (target.protocol) {
+      case ConnectionUriProtocol.ssh:
+        await _connectSshHost(host);
+      case ConnectionUriProtocol.telnet:
+        await _connectTelnetHost(host);
+      case ConnectionUriProtocol.sftp:
+        await _connectSshHost(host, openSftp: true, sftpPath: target.path);
     }
   }
 

@@ -194,6 +194,7 @@
   "common.label.view": "查看",
   "common.label.window": "窗口",
   "common.label.workspace": "工作区",
+  "connection.uri.invalid": "无法打开此连接链接。请使用不包含查询参数或片段的 SSH、SFTP 或 Telnet 链接。",
   "language.english.autonym": "English",
   "language.simplifiedChinese.autonym": "简体中文",
   "settings.about.application.description": "应用信息、版本和更新。",
