@@ -334,6 +334,7 @@ Compression=lzma2
 SolidCompression=yes
 CloseApplications=yes
 RestartApplications=no
+ChangesAssociations=yes
 OutputDir=$ResolvedDistDir
 OutputBaseFilename=$AppName-$Version-windows-$Arch-setup
 SetupIconFile=$ResolvedIconPath
@@ -348,6 +349,23 @@ Name: "{autodesktop}\$AppName"; Filename: "{app}\$BinaryName.exe"; Tasks: deskto
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional icons:"
+
+[Registry]
+Root: HKA; Subkey: "Software\Classes\Nauterm.ssh"; ValueType: string; ValueData: "Nauterm SSH Connection"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Nauterm.ssh"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\Nauterm.ssh\shell\open\command"; ValueType: string; ValueData: """{app}\$BinaryName.exe"" ""%1"""
+Root: HKA; Subkey: "Software\Classes\Nauterm.sftp"; ValueType: string; ValueData: "Nauterm SFTP Connection"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Nauterm.sftp"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\Nauterm.sftp\shell\open\command"; ValueType: string; ValueData: """{app}\$BinaryName.exe"" ""%1"""
+Root: HKA; Subkey: "Software\Classes\Nauterm.telnet"; ValueType: string; ValueData: "Nauterm Telnet Connection"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Nauterm.telnet"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\Nauterm.telnet\shell\open\command"; ValueType: string; ValueData: """{app}\$BinaryName.exe"" ""%1"""
+Root: HKA; Subkey: "Software\Nauterm\Capabilities"; ValueType: string; ValueName: "ApplicationName"; ValueData: "$AppName"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Nauterm\Capabilities"; ValueType: string; ValueName: "ApplicationDescription"; ValueData: "SSH, SFTP and Telnet connections"
+Root: HKA; Subkey: "Software\Nauterm\Capabilities\URLAssociations"; ValueType: string; ValueName: "ssh"; ValueData: "Nauterm.ssh"
+Root: HKA; Subkey: "Software\Nauterm\Capabilities\URLAssociations"; ValueType: string; ValueName: "sftp"; ValueData: "Nauterm.sftp"
+Root: HKA; Subkey: "Software\Nauterm\Capabilities\URLAssociations"; ValueType: string; ValueName: "telnet"; ValueData: "Nauterm.telnet"
+Root: HKA; Subkey: "Software\RegisteredApplications"; ValueType: string; ValueName: "$AppName"; ValueData: "Software\Nauterm\Capabilities"; Flags: uninsdeletevalue
 
 [Run]
 Filename: "{app}\$BinaryName.exe"; Description: "Launch $AppName"; Flags: nowait postinstall skipifsilent

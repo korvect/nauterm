@@ -999,7 +999,7 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
       session.connection = _SftpConnectionState.connecting(request.host);
       session.followSshDirectory = false;
       session.followedSshDirectory = null;
-      session.path = '~';
+      session.path = request.initialPath;
       session.pathController.text = session.path;
       session.entries = const [];
       _clearRemoteSelection(session);
@@ -1036,6 +1036,7 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
         id: retryRequestId,
         host: connection.host,
         auth: auth,
+        initialPath: session.path,
       ),
       session,
     );

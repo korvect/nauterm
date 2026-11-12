@@ -13,6 +13,7 @@ import '../workspace/nauterm_workspace.dart';
 import '../update/desktop_update.dart';
 import '../update/startup_update.dart';
 import 'main_window.dart';
+import 'connection_uri_channel.dart';
 import 'native_windowing.dart';
 import 'settings_window.dart';
 
@@ -31,6 +32,7 @@ class _NautermRootState extends State<NautermRoot>
       NautermWorkspaceController();
   late final SyncService _syncService;
   late final StartupUpdateCoordinator _updateCoordinator;
+  late final ConnectionUriChannel _connectionUris;
   bool _isMainWindowMounted = true;
   bool _isMainWindowContentMounted = true;
   bool _isSettingsWindowMounted = false;
@@ -56,6 +58,13 @@ class _NautermRootState extends State<NautermRoot>
       ),
     );
     registerNautermRoot(this);
+    _connectionUris = ConnectionUriChannel(
+      onActivate: showMainWindow,
+      onOpen: (uri) async {
+        showMainWindow();
+        await _workspaceController.openConnectionUri(uri);
+      },
+    )..start();
     nautermDatabaseBulkChangeRevision.addListener(_reloadBulkDatabaseChanges);
     nautermSyncPreferencesRevision.addListener(_reloadSyncPreferences);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -82,6 +91,7 @@ class _NautermRootState extends State<NautermRoot>
 
   @override
   void dispose() {
+    _connectionUris.dispose();
     nautermDatabaseBulkChangeRevision.removeListener(
       _reloadBulkDatabaseChanges,
     );

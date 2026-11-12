@@ -512,7 +512,11 @@ extension _NautermWorkspaceTerminalActions on _NautermWorkspaceState {
     });
   }
 
-  void _showTerminalTabSftp(int terminalId, {int? terminalViewId}) {
+  void _showTerminalTabSftp(
+    int terminalId, {
+    int? terminalViewId,
+    String? initialPath,
+  }) {
     final tab = _terminalTabs.where((tab) => tab.id == terminalId).firstOrNull;
     if (tab == null) {
       return;
@@ -531,8 +535,12 @@ extension _NautermWorkspaceTerminalActions on _NautermWorkspaceState {
       _selectedTerminalId = terminalId;
       _selectedTerminalViewId =
           view?.id ?? tab.rootLayout.views.firstOrNull?.id;
-      if (!tab.sftpPaneMounted && profile != null) {
-        tab.sftpConnectRequest = _sftpConnectRequestForProfile(tab, profile);
+      if ((!tab.sftpPaneMounted || initialPath != null) && profile != null) {
+        tab.sftpConnectRequest = _sftpConnectRequestForProfile(
+          tab,
+          profile,
+          initialPath: initialPath,
+        );
       }
       tab.sftpPaneMounted = true;
       tab.pageMode = _TerminalTabPageMode.sftp;
@@ -605,12 +613,14 @@ extension _NautermWorkspaceTerminalActions on _NautermWorkspaceState {
 
   _SftpConnectRequest _sftpConnectRequestForProfile(
     _TerminalTab tab,
-    SshConnectionProfile profile,
-  ) {
+    SshConnectionProfile profile, {
+    String? initialPath,
+  }) {
     return _SftpConnectRequest(
       id: ++tab.sftpConnectRequestId,
       host: _sftpHostItemForProfile(profile),
       auth: _SftpRemoteAuth.fromSshProfile(profile),
+      initialPath: initialPath ?? '~',
     );
   }
 

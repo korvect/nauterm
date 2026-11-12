@@ -36,6 +36,7 @@ import '../data/known_hosts_store.dart';
 import '../data/host_import.dart';
 import '../data/nauterm_config_store.dart';
 import '../data/workspace_data_loader.dart';
+import 'connection_uri.dart';
 import '../data/nauterm_data_store.dart';
 import '../data/ssh_private_key.dart';
 import '../data/nauterm_paths.dart';
@@ -162,6 +163,24 @@ class NautermWorkspaceController extends ChangeNotifier {
     if (identical(_state, state) && state.mounted) {
       state._openLocalTerminalTab();
     }
+  }
+
+  Future<void> openConnectionUri(String uri) async {
+    // A URL may reopen a main window whose content was unmounted on Close.
+    await WidgetsBinding.instance.endOfFrame;
+    final state = _state;
+    if (state == null) return;
+    await state._workspaceDataReady.future;
+    if (!identical(_state, state) || !state.mounted) return;
+    final target = ConnectionUri.tryParse(uri);
+    if (target == null) {
+      state._showWorkspaceMessage(
+        tr('connection.uri.invalid'),
+        type: _WorkspaceNotificationType.error,
+      );
+      return;
+    }
+    await state._connectConnectionUri(target);
   }
 
   Future<bool> confirmQuitIfNeeded() async {

@@ -7,6 +7,8 @@
 #include <flutter/standard_method_codec.h>
 
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "win32_window.h"
 
@@ -17,6 +19,10 @@ class FlutterWindow : public Win32Window {
   explicit FlutterWindow(const flutter::DartProject& project);
   FlutterWindow(const flutter::DartProject& project, bool show_on_first_frame);
   virtual ~FlutterWindow();
+
+  // Uses the hidden runner window to deliver URLs to the existing engine.
+  static constexpr ULONG_PTR kConnectionUriMessage = 0x4e415552;
+  void QueueConnectionUris(const std::vector<std::string>& arguments);
 
  protected:
   // Win32Window:
@@ -33,6 +39,9 @@ class FlutterWindow : public Win32Window {
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
       system_fonts_channel_;
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
+      connection_uri_channel_;
+  std::vector<std::string> pending_connection_uris_;
   bool show_on_first_frame_ = true;
 };
 

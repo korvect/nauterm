@@ -37,6 +37,8 @@ private func installFlutterHotRestartWorkaround() {
 @main
 class AppDelegate: FlutterAppDelegate {
   private var appMenuChannel: FlutterMethodChannel?
+  private var connectionUriChannel: FlutterMethodChannel?
+  private var pendingConnectionUris: [String] = []
   @IBOutlet weak var newLocalTerminalMenuItem: NSMenuItem?
   @IBOutlet weak var settingsMenuItem: NSMenuItem?
   @IBOutlet weak var closeTabMenuItem: NSMenuItem?
@@ -63,6 +65,19 @@ class AppDelegate: FlutterAppDelegate {
     engine?.run(withEntrypoint: nil)
     if let engine {
       RegisterGeneratedPlugins(registry: engine)
+      connectionUriChannel = FlutterMethodChannel(
+        name: "com.korvect.nauterm/connection_uri",
+        binaryMessenger: engine.binaryMessenger
+      )
+      connectionUriChannel?.setMethodCallHandler { [weak self] call, result in
+        guard call.method == "takePendingUris" else {
+          result(FlutterMethodNotImplemented)
+          return
+        }
+        let uris = self?.pendingConnectionUris ?? []
+        self?.pendingConnectionUris.removeAll()
+        result(uris)
+      }
       appMenuChannel = FlutterMethodChannel(
         name: "com.korvect.nauterm/app_menu",
         binaryMessenger: engine.binaryMessenger
@@ -268,6 +283,11 @@ class AppDelegate: FlutterAppDelegate {
     appMenuChannel?.invokeMethod("showMainWindow", arguments: nil)
     NSApp.activate(ignoringOtherApps: true)
     return true
+  }
+
+  override func application(_ application: NSApplication, open urls: [URL]) {
+    pendingConnectionUris.append(contentsOf: urls.map(\.absoluteString))
+    connectionUriChannel?.invokeMethod("urisAvailable", arguments: nil)
   }
 
   override func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {

@@ -194,6 +194,7 @@
   "common.label.view": "View",
   "common.label.window": "Window",
   "common.label.workspace": "Workspace",
+  "connection.uri.invalid": "Unable to open this connection link. Use an SSH, SFTP, or Telnet link without query parameters or fragments.",
   "language.english.autonym": "English",
   "language.simplifiedChinese.autonym": "简体中文",
   "settings.about.application.description": "Application information, version, and updates.",

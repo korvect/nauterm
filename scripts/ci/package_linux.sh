@@ -122,7 +122,8 @@ create_desktop_file() {
 Type=Application
 Name=$APP_NAME
 Comment=A modern, cross-platform terminal and remote access workspace built for greater control, transparency, and performance.
-Exec=$BINARY_NAME
+Exec=$BINARY_NAME %U
+MimeType=x-scheme-handler/ssh;x-scheme-handler/sftp;x-scheme-handler/telnet;
 Icon=$APP_ID
 Categories=Network;RemoteAccess;TerminalEmulator;
 Terminal=false
