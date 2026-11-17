@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -197,10 +196,11 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('workspace restore behavior uses the settings radio group', (
+  testWidgets('workspace restore selection updates and saves the behavior', (
     WidgetTester tester,
   ) async {
     final previous = workspaceRestoreBehavior;
+    workspaceRestoreBehavior = WorkspaceRestoreBehavior.ask;
     NautermRuntimeSettings? savedSettings;
     settingsRuntimeSettingsSaverOverride = (settings) async {
       savedSettings = settings;
@@ -218,11 +218,11 @@ void main() {
     );
     await tester.pump();
 
-    final group = find.byKey(
+    final select = find.byKey(
       const ValueKey('settings-workspace-restore-behavior'),
     );
     await tester.scrollUntilVisible(
-      group,
+      select,
       200,
       scrollable: find
           .descendant(
@@ -232,45 +232,31 @@ void main() {
           .first,
     );
     await tester.pumpAndSettle();
-    expect(group, findsOneWidget);
-    await tester.ensureVisible(group);
+    expect(select, findsOneWidget);
+    await tester.ensureVisible(select);
     await tester.pumpAndSettle();
     expect(find.text('Restore Workspace on Startup'), findsOneWidget);
     expect(find.text('Ask on Startup'), findsOneWidget);
-    expect(
-      find.descendant(
-        of: group,
-        matching: find.byWidgetPredicate(
-          (widget) => widget is CupertinoRadio<WorkspaceRestoreBehavior>,
-        ),
-      ),
-      findsNWidgets(3),
-    );
-
-    final choiceWidths = [
-      for (final behavior in WorkspaceRestoreBehavior.values)
-        tester.getSize(find.byKey(ValueKey('settings-radio-$behavior'))).width,
-    ];
-    expect(choiceWidths.toSet().length, 1);
-    final groupLeft = tester.getTopLeft(group).dx;
-    final askLabelLeft = tester
-        .getTopLeft(
-          find.descendant(of: group, matching: find.text('Ask on Startup')),
-        )
-        .dx;
-    expect(askLabelLeft - groupLeft, lessThan(40));
-
-    await tester.tap(
-      find.byKey(
-        const ValueKey('settings-radio-WorkspaceRestoreBehavior.always'),
-      ),
-    );
-    await tester.pump();
+    await tester.tap(select);
+    await tester.pumpAndSettle();
+    final menu = find.byKey(const ValueKey('settings-select-menu'));
+    for (final label in ['Ask on Startup', 'Always', 'Never']) {
+      expect(
+        find.descendant(of: menu, matching: find.text(label)),
+        findsOneWidget,
+      );
+    }
+    await tester.tap(find.descendant(of: menu, matching: find.text('Always')));
+    await tester.pumpAndSettle();
 
     expect(workspaceRestoreBehavior, WorkspaceRestoreBehavior.always);
     expect(
       savedSettings?.workspaceRestoreBehavior,
       WorkspaceRestoreBehavior.always,
+    );
+    expect(
+      find.descendant(of: select, matching: find.text('Always')),
+      findsOneWidget,
     );
     await tester.pumpWidget(const SizedBox.shrink());
   });

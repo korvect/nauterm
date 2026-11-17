@@ -216,48 +216,27 @@ Widget _buildSettingsGeneralContent(_SettingsPanelState state) {
                   localizationKey: 'settings.general.workspaceRestore',
                   title: 'Restore Workspace on Startup',
                   subtitle: 'Tabs, split panes, connections, and active port forwards.',
-                  trailingBelow: true,
-                  trailing: Align(
-                    alignment: Alignment.centerLeft,
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 560),
-                      child: _SettingsRadioGroup<WorkspaceRestoreBehavior>(
-                        key: const ValueKey(
-                          'settings-workspace-restore-behavior',
-                        ),
-                        value: state._workspaceRestoreBehavior,
-                        options: [
-                          _SettingsRadioOption(
-                            value: WorkspaceRestoreBehavior.ask,
-                            label: state.context.tr(
-                              'settings.general.workspaceRestore.ask',
-                              fallback: 'Ask on Startup',
-                            ),
-                          ),
-                          _SettingsRadioOption(
-                            value: WorkspaceRestoreBehavior.always,
-                            label: state.context.tr(
-                              'settings.general.workspaceRestore.always',
-                              fallback: 'Always',
-                            ),
-                          ),
-                          _SettingsRadioOption(
-                            value: WorkspaceRestoreBehavior.never,
-                            label: state.context.tr(
-                              'settings.general.workspaceRestore.never',
-                              fallback: 'Never',
-                            ),
-                          ),
-                        ],
-                        onChanged: (value) {
-                          state._mutate(() {
-                            state._workspaceRestoreBehavior = value;
-                            workspaceRestoreBehavior = value;
-                          });
-                          state._persistRuntimeSettings();
-                        },
-                      ),
+                  trailing: _SettingsSelect(
+                    key: const ValueKey('settings-workspace-restore-behavior'),
+                    label: 'Restore Workspace on Startup',
+                    showLabel: false,
+                    value: state._workspaceRestoreBehavior.name,
+                    values: WorkspaceRestoreBehavior.values
+                        .map((behavior) => behavior.name)
+                        .toList(growable: false),
+                    format: (value) => state.context.tr(
+                      'settings.general.workspaceRestore.$value',
                     ),
+                    onChanged: (value) {
+                      final behavior = WorkspaceRestoreBehavior.fromString(
+                        value,
+                      );
+                      state._mutate(() {
+                        state._workspaceRestoreBehavior = behavior;
+                        workspaceRestoreBehavior = behavior;
+                      });
+                      state._persistRuntimeSettings();
+                    },
                   ),
                 ),
                 SizedBox(height: 18),
