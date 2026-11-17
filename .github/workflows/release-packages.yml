@@ -98,7 +98,7 @@ jobs:
               macos_include+=('{"arch":"x86_64","runner":"macos-26-intel"}')
             fi
             if wants_arch arm64; then
-              macos_include+=('{"arch":"arm64","runner":"macos-26"}')
+              macos_include+=('{"arch":"arm64","runner":"xcode-27"}')
             fi
           fi
 
