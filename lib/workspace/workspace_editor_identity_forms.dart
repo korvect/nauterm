@@ -23,7 +23,24 @@ class _IdentityEditorContent extends StatefulWidget {
   State<_IdentityEditorContent> createState() => _IdentityEditorContentState();
 }
 
-class _IdentityEditorContentState extends State<_IdentityEditorContent> {
+class _IdentityEditorContentState extends State<_IdentityEditorContent>
+    with _WorkspaceEditorDraftState<_IdentityEditorContent> {
+  @override
+  Map<String, _WorkspaceDraftField> get draftFields => {
+    'name': _WorkspaceDraftField.text(_nameController),
+    'username': _WorkspaceDraftField.text(_usernameController),
+    'password': _WorkspaceDraftField.text(_passwordController),
+    'keyId': _draftValue(() => _keyId, (value) => _keyId = value),
+    'credentialKind': _draftViewValue(
+      () => _credentialKind,
+      (value) => _credentialKind = value,
+    ),
+    'nameIsAutomatic': _draftViewValue(
+      () => _nameIsAutomatic,
+      (value) => _nameIsAutomatic = value,
+    ),
+  };
+
   late final TextEditingController _nameController;
   late final TextEditingController _usernameController;
   late final TextEditingController _passwordController;
@@ -72,6 +89,7 @@ class _IdentityEditorContentState extends State<_IdentityEditorContent> {
   }
 
   void _handleNameChanged() {
+    if (restoringEditorDraft) return;
     if (_settingAutomaticName) return;
     _nameIsAutomatic = _nameController.text.trim().isEmpty;
   }
@@ -84,6 +102,7 @@ class _IdentityEditorContentState extends State<_IdentityEditorContent> {
   }
 
   void _refreshAutomaticName() {
+    if (restoringEditorDraft) return;
     if (!_nameIsAutomatic) return;
     final suggested = _suggestedName();
     if (_nameController.text == suggested) return;
@@ -281,7 +300,19 @@ class _WorkspaceAddressPortFields extends StatelessWidget {
   }
 }
 
-class _PortForwardEditorContentState extends State<_PortForwardEditorContent> {
+class _PortForwardEditorContentState extends State<_PortForwardEditorContent>
+    with _WorkspaceEditorDraftState<_PortForwardEditorContent> {
+  @override
+  Map<String, _WorkspaceDraftField> get draftFields => {
+    'name': _WorkspaceDraftField.text(_nameController),
+    'bindAddress': _WorkspaceDraftField.text(_bindAddressController),
+    'bindPort': _WorkspaceDraftField.text(_bindPortController),
+    'destinationHost': _WorkspaceDraftField.text(_destinationHostController),
+    'destinationPort': _WorkspaceDraftField.text(_destinationPortController),
+    'type': _draftValue(() => _type, (value) => _type = value),
+    'hostId': _draftValue(() => _hostId, (value) => _hostId = value),
+  };
+
   late final TextEditingController _nameController;
   late final TextEditingController _bindAddressController;
   late final TextEditingController _bindPortController;
@@ -686,7 +717,22 @@ class _ProxyEditorContent extends StatefulWidget {
   State<_ProxyEditorContent> createState() => _ProxyEditorContentState();
 }
 
-class _ProxyEditorContentState extends State<_ProxyEditorContent> {
+class _ProxyEditorContentState extends State<_ProxyEditorContent>
+    with _WorkspaceEditorDraftState<_ProxyEditorContent> {
+  @override
+  Map<String, _WorkspaceDraftField> get draftFields => {
+    'name': _WorkspaceDraftField.text(_nameController),
+    'host': _WorkspaceDraftField.text(_hostController),
+    'port': _WorkspaceDraftField.text(_portController),
+    'username': _WorkspaceDraftField.text(_usernameController),
+    'password': _WorkspaceDraftField.text(_passwordController),
+    'type': _draftValue(() => _type, (value) => _type = value),
+    'identityId': _draftValue(
+      () => _identityId,
+      (value) => _identityId = value,
+    ),
+  };
+
   late final TextEditingController _nameController;
   late final TextEditingController _hostController;
   late final TextEditingController _portController;
@@ -1004,7 +1050,13 @@ class _SnippetPackageEditorContent extends StatefulWidget {
 }
 
 class _SnippetPackageEditorContentState
-    extends State<_SnippetPackageEditorContent> {
+    extends State<_SnippetPackageEditorContent>
+    with _WorkspaceEditorDraftState<_SnippetPackageEditorContent> {
+  @override
+  Map<String, _WorkspaceDraftField> get draftFields => {
+    'name': _WorkspaceDraftField.text(_nameController),
+  };
+
   late final TextEditingController _nameController;
   bool _saving = false;
   String? _error;
@@ -1121,7 +1173,23 @@ class _SnippetEditorContent extends StatefulWidget {
   State<_SnippetEditorContent> createState() => _SnippetEditorContentState();
 }
 
-class _SnippetEditorContentState extends State<_SnippetEditorContent> {
+class _SnippetEditorContentState extends State<_SnippetEditorContent>
+    with _WorkspaceEditorDraftState<_SnippetEditorContent> {
+  @override
+  Map<String, _WorkspaceDraftField> get draftFields => {
+    'description': _WorkspaceDraftField.text(_descriptionController),
+    'script': _WorkspaceDraftField.text(_scriptController),
+    'packageId': _draftValue(() => _packageId, (value) => _packageId = value),
+    'targetGroupIds': _draftValue(
+      () => Set<int>.of(_targetGroupIds),
+      (value) => _targetGroupIds = value,
+    ),
+    'targetHostIds': _draftValue(
+      () => Set<int>.of(_targetHostIds),
+      (value) => _targetHostIds = value,
+    ),
+  };
+
   late final TextEditingController _descriptionController;
   late final TextEditingController _scriptController;
   late int? _packageId;

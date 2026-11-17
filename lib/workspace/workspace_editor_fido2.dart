@@ -12,7 +12,33 @@ class _Fido2KeyEditorContent extends StatefulWidget {
   State<_Fido2KeyEditorContent> createState() => _Fido2KeyEditorContentState();
 }
 
-class _Fido2KeyEditorContentState extends State<_Fido2KeyEditorContent> {
+class _Fido2KeyEditorContentState extends State<_Fido2KeyEditorContent>
+    with _WorkspaceEditorDraftState<_Fido2KeyEditorContent> {
+  @override
+  Map<String, _WorkspaceDraftField> get draftFields => {
+    'label': _WorkspaceDraftField.text(_labelController),
+    'passphrase': _WorkspaceDraftField.text(_passphraseController),
+    'rounds': _WorkspaceDraftField.text(_roundsController),
+    'keyType': _draftValue(() => _keyType, (value) => _keyType = value),
+    'requireUserPresence': _draftValue(
+      () => _requireUserPresence,
+      (value) => _requireUserPresence = value,
+    ),
+    'requirePin': _draftValue(
+      () => _requirePin,
+      (value) => _requirePin = value,
+    ),
+    'cipher': _draftValue(() => _cipher, (value) => _cipher = value),
+    'savePassphrase': _draftValue(
+      () => _savePassphrase,
+      (value) => _savePassphrase = value,
+    ),
+    'passphraseWasEmpty': _draftViewValue(
+      () => _passphraseWasEmpty,
+      (value) => _passphraseWasEmpty = value,
+    ),
+  };
+
   final _labelController = TextEditingController(text: 'FIDO2 key');
   final _pinController = TextEditingController();
   final _requirePinController = TextEditingController();
@@ -56,6 +82,7 @@ class _Fido2KeyEditorContentState extends State<_Fido2KeyEditorContent> {
   }
 
   void _handlePassphraseChanged() {
+    if (restoringEditorDraft) return;
     if (!mounted) return;
     final isEmpty = _passphraseController.text.isEmpty;
     setState(() {
@@ -332,6 +359,15 @@ class _Fido2KeyEditorContentState extends State<_Fido2KeyEditorContent> {
           const Expanded(
             child: _WorkspaceDrawerHeaderTitle(title: 'Generate FIDO2 key'),
           ),
+          if (_WorkspaceEditorDraftScope.maybeOf(context) case final scope?)
+            _WorkspaceDrawerHeaderButton(
+              icon: Icons.undo_rounded,
+              tooltip: tr(
+                'workspace.action.discardChanges',
+                fallback: 'Discard changes',
+              ),
+              onPressed: _working ? null : scope.onDiscard,
+            ),
           _WorkspaceDrawerHeaderButton(
             icon: Icons.keyboard_tab_rounded,
             tooltip: 'Close',

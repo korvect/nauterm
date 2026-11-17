@@ -69,7 +69,25 @@ class _GenerateKeyEditorContent extends StatefulWidget {
       _GenerateKeyEditorContentState();
 }
 
-class _GenerateKeyEditorContentState extends State<_GenerateKeyEditorContent> {
+class _GenerateKeyEditorContentState extends State<_GenerateKeyEditorContent>
+    with _WorkspaceEditorDraftState<_GenerateKeyEditorContent> {
+  @override
+  Map<String, _WorkspaceDraftField> get draftFields => {
+    'name': _WorkspaceDraftField.text(_nameController),
+    'passphrase': _WorkspaceDraftField.text(_passphraseController),
+    'keyType': _draftValue(() => _keyType, (value) => _keyType = value),
+    'ecdsaBits': _draftValue(() => _ecdsaBits, (value) => _ecdsaBits = value),
+    'rsaBits': _draftValue(() => _rsaBits, (value) => _rsaBits = value),
+    'savePassphrase': _draftValue(
+      () => _savePassphrase,
+      (value) => _savePassphrase = value,
+    ),
+    'nameIsAutomatic': _draftViewValue(
+      () => _nameIsAutomatic,
+      (value) => _nameIsAutomatic = value,
+    ),
+  };
+
   late final TextEditingController _nameController;
   late final TextEditingController _passphraseController;
   String _keyType = 'ecdsa';
@@ -109,11 +127,13 @@ class _GenerateKeyEditorContentState extends State<_GenerateKeyEditorContent> {
   }
 
   void _handleNameChanged() {
+    if (restoringEditorDraft) return;
     if (_settingAutomaticName) return;
     _nameIsAutomatic = _nameController.text.trim().isEmpty;
   }
 
   void _refreshAutomaticName() {
+    if (restoringEditorDraft) return;
     if (!_nameIsAutomatic) return;
     final suggested = _suggestedName();
     if (_nameController.text == suggested) return;
@@ -152,6 +172,7 @@ class _GenerateKeyEditorContentState extends State<_GenerateKeyEditorContent> {
         passphrase: passphrase,
         bits: _selectedKeySize,
       );
+      if (!mounted) return;
       await widget.onSave(
         KeyEntry(
           name: name,
@@ -534,7 +555,35 @@ class _KeyEditorContent extends StatefulWidget {
   State<_KeyEditorContent> createState() => _KeyEditorContentState();
 }
 
-class _KeyEditorContentState extends State<_KeyEditorContent> {
+class _KeyEditorContentState extends State<_KeyEditorContent>
+    with _WorkspaceEditorDraftState<_KeyEditorContent> {
+  @override
+  Map<String, _WorkspaceDraftField> get draftFields => {
+    'name': _WorkspaceDraftField.text(_nameController),
+    'private': _WorkspaceDraftField.text(_privateController),
+    'public': _WorkspaceDraftField.text(_publicController),
+    'certificate': _WorkspaceDraftField.text(_certificateController),
+    'passphrase': _WorkspaceDraftField.text(_passphraseController),
+    'savePassphrase': _draftValue(
+      () => _savePassphrase,
+      (value) => _savePassphrase = value,
+    ),
+    'creationMethod': _draftViewValue(
+      () => _creationMethod,
+      (value) => _creationMethod = value,
+    ),
+    'generatedKeyType': _draftValue(
+      () => _generatedKeyType,
+      (value) => _generatedKeyType = value,
+    ),
+    'ecdsaBits': _draftValue(() => _ecdsaBits, (value) => _ecdsaBits = value),
+    'rsaBits': _draftValue(() => _rsaBits, (value) => _rsaBits = value),
+    'nameIsAutomatic': _draftViewValue(
+      () => _nameIsAutomatic,
+      (value) => _nameIsAutomatic = value,
+    ),
+  };
+
   final GlobalKey _importDropKey = GlobalKey();
   late final TextEditingController _nameController;
   late final TextEditingController _privateController;
@@ -610,6 +659,7 @@ class _KeyEditorContentState extends State<_KeyEditorContent> {
   }
 
   void _handleNameChanged() {
+    if (restoringEditorDraft) return;
     if (_settingAutomaticName) return;
     _nameIsAutomatic = _nameController.text.trim().isEmpty;
   }
@@ -652,6 +702,7 @@ class _KeyEditorContentState extends State<_KeyEditorContent> {
   }
 
   void _refreshAutomaticName() {
+    if (restoringEditorDraft) return;
     if (!_nameIsAutomatic) return;
     final suggested = _suggestedName();
     if (_nameController.text == suggested) return;
@@ -798,19 +849,27 @@ class _KeyEditorContentState extends State<_KeyEditorContent> {
       _saving = true;
       _error = null;
     });
-    await widget.onSave(
-      KeyEntry(
-        id: widget.request.initial?.id,
-        name: name,
-        privateKey: _emptyToNull(_privateController.text),
-        publicKey: _emptyToNull(_publicController.text),
-        certificate: _emptyToNull(_certificateController.text),
-        passphrase:
-            _keyRequiresPassphrase && _passphraseController.text.isNotEmpty
-            ? _passphraseController.text
-            : null,
-      ),
-    );
+    try {
+      await widget.onSave(
+        KeyEntry(
+          id: widget.request.initial?.id,
+          name: name,
+          privateKey: _emptyToNull(_privateController.text),
+          publicKey: _emptyToNull(_publicController.text),
+          certificate: _emptyToNull(_certificateController.text),
+          passphrase:
+              _keyRequiresPassphrase && _passphraseController.text.isNotEmpty
+              ? _passphraseController.text
+              : null,
+        ),
+      );
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _error = '$error';
+      });
+    }
   }
 
   Future<void> _generate() async {
@@ -837,6 +896,7 @@ class _KeyEditorContentState extends State<_KeyEditorContent> {
         passphrase: passphrase,
         bits: _selectedGeneratedKeySize,
       );
+      if (!mounted) return;
       await widget.onSave(
         KeyEntry(
           name: name,

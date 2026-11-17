@@ -85,7 +85,39 @@ class _HostEnvironmentEditorContent extends StatefulWidget {
 }
 
 class _HostEnvironmentEditorContentState
-    extends State<_HostEnvironmentEditorContent> {
+    extends State<_HostEnvironmentEditorContent>
+    with _WorkspaceEditorDraftState<_HostEnvironmentEditorContent> {
+  @override
+  Iterable<Listenable> get draftChanges => [
+    for (final row in _drafts) ...[row.variableController, row.valueController],
+  ];
+
+  @override
+  Map<String, _WorkspaceDraftField> get draftFields => {
+    'variables': _draftValue(
+      () => [
+        for (final row in _drafts)
+          (
+            variable: row.variableController.value,
+            value: row.valueController.value,
+          ),
+      ],
+      (rows) {
+        for (final row in _drafts) {
+          row.dispose();
+        }
+        _drafts.clear();
+        for (final row in rows) {
+          _drafts.add(
+            _HostEnvironmentVariableDraft()
+              ..variableController.value = row.variable
+              ..valueController.value = row.value,
+          );
+        }
+      },
+    ),
+  };
+
   late final List<_HostEnvironmentVariableDraft> _drafts;
   _HostEnvironmentVariableDraft? _autofocusDraft;
   String? _error;

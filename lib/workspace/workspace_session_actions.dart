@@ -789,7 +789,13 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
       _showWorkspaceMessage('Host is not available.');
       return;
     }
-    final host = rawHost;
+    await _connectHostEntry(rawHost, protocol: protocol);
+  }
+
+  Future<void> _connectHostEntry(
+    HostEntry host, {
+    _HostConnectProtocol? protocol,
+  }) async {
     if (host.type == NautermHostType.serial) {
       final config = host.serialConnectionConfig;
       if (config == null) {
@@ -839,7 +845,10 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
               host.telnetEnabled,
             ].where((enabled) => enabled).length >
             1) {
-      await _openHostProtocolConnection(host, item);
+      await _openHostProtocolConnection(
+        host,
+        _mapHost(host, _identityEntries, _tagNamesByUuid(_tagEntries)),
+      );
       return;
     }
     final selectedProtocol =

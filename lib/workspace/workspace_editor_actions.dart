@@ -36,7 +36,16 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
   }) {
     _setWorkspaceState(() {
       _editorStack.add(
-        _WorkspaceEditorStackEntry(request: request, onSaved: onSaved),
+        _WorkspaceEditorStackEntry(
+          request: request,
+          onSaved: onSaved,
+          draft: _editorStack.last.draft.children.putIfAbsent(
+            request is _HostEnvironmentEditorRequest
+                ? 'environment'
+                : _workspaceEditorRequestKey(request),
+            _WorkspaceEditorDraft.new,
+          ),
+        ),
       );
       _syncEditorSelection();
     });
@@ -45,12 +54,19 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
   void _closeEditor() {
     _setWorkspaceState(() {
       if (_editorStack.length > 1) {
+        _editorStack.last.draft.checkpoint();
         _editorStack.removeLast();
         _syncEditorSelection();
       } else {
         _editorRequest = null;
       }
     });
+  }
+
+  void _discardEditor() {
+    if (_editorStack.isEmpty) return;
+    _editorStack.last.draft.discard();
+    _closeEditor();
   }
 
   void _completeEditorSave(Object saved) {
@@ -179,13 +195,11 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
   Future<void> _saveGroup(HostGroup group) async {
     final parentId = group.parentId;
     if (parentId != null && !_canUseGroupAsParent(_groupEntries, parentId)) {
-      _showWorkspaceMessage('Groups can only be nested two levels deep.');
-      return;
+      throw StateError('Groups can only be nested two levels deep.');
     }
     final store = _dataStore;
     if (store == null) {
-      _showWorkspaceMessage('Database is not ready.');
-      return;
+      throw StateError('Database is not ready.');
     }
     final id = store.saveGroup(group);
     if (mounted) {
@@ -901,9 +915,14 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       ];
       _keys = _keyEntries.map(_mapKey).toList(growable: false);
       final current = _editorStack.last;
+      final request = _KeyEditorRequest(initial: saved);
       _editorStack[_editorStack.length - 1] = _WorkspaceEditorStackEntry(
-        request: _KeyEditorRequest(initial: saved),
+        request: request,
         onSaved: current.onSaved,
+        draft: _workspaceModel.editorDrafts.putIfAbsent(
+          _workspaceEditorRequestKey(request),
+          _WorkspaceEditorDraft.new,
+        ),
       );
     });
   }
@@ -1124,8 +1143,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
   Future<void> _saveKey(KeyEntry key) async {
     final store = _dataStore;
     if (store == null) {
-      _showWorkspaceMessage('Database is not ready.');
-      return;
+      throw StateError('Database is not ready.');
     }
     final id = store.saveKey(key);
     final detail = store.getKey(id);
@@ -1170,8 +1188,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
   Future<void> _saveIdentity(IdentityEntry identity) async {
     final store = _dataStore;
     if (store == null) {
-      _showWorkspaceMessage('Database is not ready.');
-      return;
+      throw StateError('Database is not ready.');
     }
     final id = store.saveIdentity(identity);
     final detail = store.getIdentity(id);
@@ -1229,8 +1246,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
   Future<void> _saveProxy(ProxyEntry proxy) async {
     final store = _dataStore;
     if (store == null) {
-      _showWorkspaceMessage('Database is not ready.');
-      return;
+      throw StateError('Database is not ready.');
     }
     final id = store.saveProxy(proxy);
     if (mounted) {
@@ -1482,7 +1498,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
   Future<void> _savePortForward(PortForwardEntry portForward) async {
     final store = _dataStore;
     if (store == null) {
-      return;
+      throw StateError('Database is not ready.');
     }
     final id = portForward.id;
     if (id != null) {

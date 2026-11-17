@@ -55,10 +55,15 @@ typedef _CreateRelatedCredential = void Function(
 });
 
 class _WorkspaceEditorStackEntry {
-  const _WorkspaceEditorStackEntry({required this.request, this.onSaved});
+  _WorkspaceEditorStackEntry({
+    required this.request,
+    this.onSaved,
+    _WorkspaceEditorDraft? draft,
+  }) : draft = draft ?? _WorkspaceEditorDraft();
 
   final _WorkspaceEditorRequest request;
   final ValueChanged<Object>? onSaved;
+  final _WorkspaceEditorDraft draft;
 }
 
 sealed class _WorkspaceEditorRequest {
@@ -192,6 +197,8 @@ class _SnippetDraft {
 class _WorkspaceEditorDrawer extends StatelessWidget {
   const _WorkspaceEditorDrawer({
     required this.request,
+    required this.draft,
+    required this.onDiscard,
     required this.groups,
     required this.hosts,
     required this.keys,
@@ -249,6 +256,8 @@ class _WorkspaceEditorDrawer extends StatelessWidget {
   });
 
   final _WorkspaceEditorRequest? request;
+  final _WorkspaceEditorDraft draft;
+  final VoidCallback onDiscard;
   final List<HostGroup> groups;
   final List<HostEntry> hosts;
   final List<KeyEntry> keys;
@@ -325,7 +334,10 @@ class _WorkspaceEditorDrawer extends StatelessWidget {
         onCreateSnippet: onCreateSnippet,
         onEditEnvironment: onEditHostEnvironment,
         onClose: onClose,
-        onSave: onSaveGroup,
+        onSave: (value) async {
+          await onSaveGroup(value);
+          draft.discard();
+        },
         onDuplicate: onDuplicateGroup,
         onDelete: onDeleteGroup,
       ),
@@ -347,7 +359,10 @@ class _WorkspaceEditorDrawer extends StatelessWidget {
         onCreateTag: onCreateTag,
         onCreateSnippet: onCreateSnippet,
         onEditEnvironment: onEditHostEnvironment,
-        onSave: onSaveHost,
+        onSave: (value) async {
+          await onSaveHost(value);
+          draft.discard();
+        },
         onConnect: onConnectHost,
         onDuplicate: onDuplicateHost,
         onDelete: onDeleteHost,
@@ -355,16 +370,25 @@ class _WorkspaceEditorDrawer extends StatelessWidget {
       _HostEnvironmentEditorRequest() => _HostEnvironmentEditorContent(
         request: request,
         onClose: onClose,
-        onSave: onSaveHostEnvironment,
+        onSave: (value) {
+          onSaveHostEnvironment(value);
+          draft.discard();
+        },
       ),
       _KeyEditorRequest(generate: true) => _GenerateKeyEditorContent(
         onClose: onClose,
-        onSave: onSaveGeneratedKey,
+        onSave: (value) async {
+          await onSaveGeneratedKey(value);
+          draft.discard();
+        },
       ),
       _KeyEditorRequest() => _KeyEditorContent(
         request: request,
         onClose: onClose,
-        onSave: onSaveKey,
+        onSave: (value) async {
+          await onSaveKey(value);
+          draft.discard();
+        },
         onDuplicate: onDuplicateKey,
         onExportToHost: onExportKeyToHost,
         onExportToFile: onExportKeyToFile,
@@ -372,7 +396,10 @@ class _WorkspaceEditorDrawer extends StatelessWidget {
       ),
       _Fido2KeyEditorRequest() => _Fido2KeyEditorContent(
         onClose: onClose,
-        onSave: onSaveGeneratedKey,
+        onSave: (value) async {
+          await onSaveGeneratedKey(value);
+          draft.discard();
+        },
       ),
       _KeyExportEditorRequest() => _KeyExportEditorContent(
         request: request,
@@ -389,7 +416,10 @@ class _WorkspaceEditorDrawer extends StatelessWidget {
         keys: keys,
         onClose: onClose,
         onCreateCredential: onCreateCredential,
-        onSave: onSaveIdentity,
+        onSave: (value) async {
+          await onSaveIdentity(value);
+          draft.discard();
+        },
         onDuplicate: onDuplicateIdentity,
         onDelete: onDeleteIdentity,
       ),
@@ -397,7 +427,10 @@ class _WorkspaceEditorDrawer extends StatelessWidget {
         request: request,
         hosts: hosts,
         onClose: onClose,
-        onSave: onSavePortForward,
+        onSave: (value) async {
+          await onSavePortForward(value);
+          draft.discard();
+        },
         onDelete: onDeletePortForward,
       ),
       _ProxyEditorRequest() => _ProxyEditorContent(
@@ -405,14 +438,20 @@ class _WorkspaceEditorDrawer extends StatelessWidget {
         identities: identities,
         onClose: onClose,
         onCreateIdentity: onCreateIdentity,
-        onSave: onSaveProxy,
+        onSave: (value) async {
+          await onSaveProxy(value);
+          draft.discard();
+        },
         onDuplicate: onDuplicateProxy,
         onDelete: onDeleteProxy,
       ),
       _SnippetPackageEditorRequest() => _SnippetPackageEditorContent(
         request: request,
         onClose: onClose,
-        onSave: onSaveSnippetPackage,
+        onSave: (value) async {
+          await onSaveSnippetPackage(value);
+          draft.discard();
+        },
         onDelete: onDeleteSnippetPackage,
       ),
       _SnippetEditorRequest() => _SnippetEditorContent(
@@ -422,7 +461,10 @@ class _WorkspaceEditorDrawer extends StatelessWidget {
         hosts: hosts,
         onClose: onClose,
         onCreatePackage: onCreateSnippetPackage,
-        onSave: onSaveSnippet,
+        onSave: (initial, value) async {
+          await onSaveSnippet(initial, value);
+          draft.discard();
+        },
         onDuplicate: onDuplicateSnippet,
         onDelete: onDeleteSnippet,
       ),
@@ -434,14 +476,19 @@ class _WorkspaceEditorDrawer extends StatelessWidget {
       ),
     };
 
-    return Material(
-      color: _surface,
-      elevation: 18,
-      shadowColor: const Color(0x26000000),
-      shape: Border(left: BorderSide(color: _sidebarDivider)),
-      child: KeyedSubtree(
-        key: ValueKey(_workspaceEditorRequestKey(request)),
-        child: content,
+    return _WorkspaceEditorDraftScope(
+      key: ObjectKey(draft),
+      draft: draft,
+      onDiscard: onDiscard,
+      child: Material(
+        color: _surface,
+        elevation: 18,
+        shadowColor: const Color(0x26000000),
+        shape: Border(left: BorderSide(color: _sidebarDivider)),
+        child: KeyedSubtree(
+          key: ValueKey(_workspaceEditorRequestKey(request)),
+          child: content,
+        ),
       ),
     );
   }
@@ -784,6 +831,19 @@ class _EditorShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final draftScope = _WorkspaceEditorDraftScope.maybeOf(context);
+    final actions = [
+      ...headerActions,
+      if (draftScope != null)
+        _EditorShellMenuAction(
+          label: tr(
+            'workspace.action.discardChanges',
+            fallback: 'Discard changes',
+          ),
+          icon: Icons.undo_rounded,
+          onSelected: draftScope.onDiscard,
+        ),
+    ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -797,8 +857,7 @@ class _EditorShell extends StatelessWidget {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final showClose = constraints.maxWidth >= 28;
-              final showMore =
-                  headerActions.isNotEmpty && constraints.maxWidth >= 56;
+              final showMore = actions.isNotEmpty && constraints.maxWidth >= 56;
               return Row(
                 children: [
                   Expanded(
@@ -811,7 +870,7 @@ class _EditorShell extends StatelessWidget {
                     _WorkspaceDropdown<_EditorShellMenuAction>(
                       width: 170,
                       entries: [
-                        for (final action in headerActions)
+                        for (final action in actions)
                           NautermContextMenuAction<_EditorShellMenuAction>(
                             value: action,
                             label: action.label,
@@ -989,6 +1048,15 @@ class _WorkspaceDrawerHeaderTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final draft = _WorkspaceEditorDraftScope.maybeOf(context)?.draft;
+    if (draft == null) return _buildTitle(context, unsaved: false);
+    return ListenableBuilder(
+      listenable: draft,
+      builder: (context, _) => _buildTitle(context, unsaved: draft.hasChanges),
+    );
+  }
+
+  Widget _buildTitle(BuildContext context, {required bool unsaved}) {
     final subtitle = this.subtitle?.trim();
     final subtitleText = subtitle == null || subtitle.isEmpty
         ? null
@@ -1014,22 +1082,47 @@ class _WorkspaceDrawerHeaderTitle extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          tr(title),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          strutStyle: const StrutStyle(
-            fontSize: NautermFontSizes.titleSmall,
-            height: 1,
-            forceStrutHeight: true,
-          ),
-          style: TextStyle(
-            color: _text,
-            fontSize: NautermFontSizes.titleSmall,
-            height: 1,
-            fontWeight: NautermFontWeights.semibold,
-            letterSpacing: 0,
-          ),
+        Row(
+          children: [
+            Flexible(
+              flex: 3,
+              child: Text(
+                tr(title),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                strutStyle: const StrutStyle(
+                  fontSize: NautermFontSizes.titleSmall,
+                  height: 1,
+                  forceStrutHeight: true,
+                ),
+                style: TextStyle(
+                  color: _text,
+                  fontSize: NautermFontSizes.titleSmall,
+                  height: 1,
+                  fontWeight: NautermFontWeights.semibold,
+                  letterSpacing: 0,
+                ),
+              ),
+            ),
+            if (unsaved) ...[
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  tr('workspace.label.unsaved', fallback: 'Unsaved'),
+                  key: const ValueKey('workspace-editor-unsaved'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: _mutedText,
+                    fontSize: 10,
+                    fontWeight: NautermFontWeights.medium,
+                    height: 1,
+                    letterSpacing: 0,
+                  ),
+                ),
+              ),
+            ],
+          ],
         ),
         ?subtitleText,
       ],

@@ -39,7 +39,121 @@ class _GroupEditorContent extends StatefulWidget {
   State<_GroupEditorContent> createState() => _GroupEditorContentState();
 }
 
-class _GroupEditorContentState extends State<_GroupEditorContent> {
+class _GroupEditorContentState extends State<_GroupEditorContent>
+    with _WorkspaceEditorDraftState<_GroupEditorContent> {
+  @override
+  void didRestoreEditorDraft() {
+    _selectedTheme = null;
+    _selectedDarkTheme = null;
+    _selectedTelnetTheme = null;
+    _selectedTelnetDarkTheme = null;
+    _loadSelectedTheme();
+    _loadSelectedDarkTheme();
+    _loadSelectedTelnetTheme();
+    _loadSelectedTelnetDarkTheme();
+  }
+
+  @override
+  Map<String, _WorkspaceDraftField> get draftFields => {
+    'name': _WorkspaceDraftField.text(_nameController),
+    'port': _WorkspaceDraftField.text(_portController),
+    'username': _WorkspaceDraftField.text(_usernameController),
+    'password': _WorkspaceDraftField.text(_passwordController),
+    'moshCommand': _WorkspaceDraftField.text(_moshCommandController),
+    'telnetPort': _WorkspaceDraftField.text(_telnetPortController),
+    'telnetUsername': _WorkspaceDraftField.text(_telnetUsernameController),
+    'telnetPassword': _WorkspaceDraftField.text(_telnetPasswordController),
+    'parentId': _draftValue(() => _parentId, (value) => _parentId = value),
+    'startupSnippetId': _draftValue(
+      () => _startupSnippetId,
+      (value) => _startupSnippetId = value,
+    ),
+    'identityId': _draftValue(
+      () => _identityId,
+      (value) => _identityId = value,
+    ),
+    'proxyId': _draftValue(() => _proxyId, (value) => _proxyId = value),
+    'keyId': _draftValue(() => _keyId, (value) => _keyId = value),
+    'telnetIdentityId': _draftValue(
+      () => _telnetIdentityId,
+      (value) => _telnetIdentityId = value,
+    ),
+    'sshCredentialKind': _draftViewValue(
+      () => _sshCredentialKind,
+      (value) => _sshCredentialKind = value,
+    ),
+    'sshEnabled': _draftValue(
+      () => _sshEnabled,
+      (value) => _sshEnabled = value,
+    ),
+    'moshEnabled': _draftValue(
+      () => _moshEnabled,
+      (value) => _moshEnabled = value,
+    ),
+    'telnetEnabled': _draftValue(
+      () => _telnetEnabled,
+      (value) => _telnetEnabled = value,
+    ),
+    'sshConfigured': _draftValue(
+      () => _sshConfigured,
+      (value) => _sshConfigured = value,
+    ),
+    'moshConfigured': _draftValue(
+      () => _moshConfigured,
+      (value) => _moshConfigured = value,
+    ),
+    'telnetConfigured': _draftValue(
+      () => _telnetConfigured,
+      (value) => _telnetConfigured = value,
+    ),
+    'portConfigured': _draftValue(
+      () => _portConfigured,
+      (value) => _portConfigured = value,
+    ),
+    'telnetPortConfigured': _draftValue(
+      () => _telnetPortConfigured,
+      (value) => _telnetPortConfigured = value,
+    ),
+    'encodingConfigured': _draftValue(
+      () => _encodingConfigured,
+      (value) => _encodingConfigured = value,
+    ),
+    'telnetEncodingConfigured': _draftValue(
+      () => _telnetEncodingConfigured,
+      (value) => _telnetEncodingConfigured = value,
+    ),
+    'sshShowMore': _draftViewValue(
+      () => _sshShowMore,
+      (value) => _sshShowMore = value,
+    ),
+    'telnetShowMore': _draftViewValue(
+      () => _telnetShowMore,
+      (value) => _telnetShowMore = value,
+    ),
+    'encoding': _draftValue(() => _encoding, (value) => _encoding = value),
+    'telnetEncoding': _draftValue(
+      () => _telnetEncoding,
+      (value) => _telnetEncoding = value,
+    ),
+    'themeId': _draftValue(() => _themeId, (value) => _themeId = value),
+    'darkThemeId': _draftValue(
+      () => _darkThemeId,
+      (value) => _darkThemeId = value,
+    ),
+    'telnetThemeId': _draftValue(
+      () => _telnetThemeId,
+      (value) => _telnetThemeId = value,
+    ),
+    'telnetDarkThemeId': _draftValue(
+      () => _telnetDarkThemeId,
+      (value) => _telnetDarkThemeId = value,
+    ),
+    'environmentVariables': _draftValue(
+      () => List<HostEnvironmentVariable>.of(_environmentVariables),
+      (value) => _environmentVariables = value,
+    ),
+  };
+
   late final TextEditingController _nameController;
   late final TextEditingController _portController;
   late final TextEditingController _usernameController;
@@ -511,45 +625,53 @@ class _GroupEditorContentState extends State<_GroupEditorContent> {
       _saving = true;
       _error = null;
     });
-    await widget.onSave(
-      HostGroup(
-        id: widget.request.initial?.id,
-        name: name,
-        parentId: _parentId,
-        startupSnippetId: _sshEnabled ? _startupSnippetId : null,
-        identityId: _sshEnabled ? _identityId : null,
-        proxyId: _sshEnabled ? _proxyId : null,
-        port: _sshEnabled ? port : null,
-        username: _sshEnabled && _identityId == null
-            ? _emptyToNull(_usernameController.text)
-            : null,
-        password: _sshEnabled && _identityId == null
-            ? _emptyToNull(_passwordController.text)
-            : null,
-        sshEnabled: _sshEnabled,
-        moshEnabled: _sshEnabled ? _moshEnabled : false,
-        moshServerCommand: _sshEnabled && _moshEnabled
-            ? _emptyToNull(_moshCommandController.text)
-            : null,
-        telnetEnabled: _telnetEnabled,
-        telnetIdentityId: _telnetEnabled ? _telnetIdentityId : null,
-        telnetUsername: _telnetEnabled && _telnetIdentityId == null
-            ? _emptyToNull(_telnetUsernameController.text)
-            : null,
-        telnetPassword: _telnetEnabled && _telnetIdentityId == null
-            ? _emptyToNull(_telnetPasswordController.text)
-            : null,
-        telnetPort: _telnetEnabled ? telnetPort : null,
-        themeId: _sshEnabled ? _themeId : null,
-        darkThemeId: _sshEnabled ? _darkThemeId : null,
-        telnetThemeId: _telnetEnabled ? _telnetThemeId : null,
-        telnetDarkThemeId: _telnetEnabled ? _telnetDarkThemeId : null,
-        environmentVariables: _sshEnabled ? _environmentVariables : const [],
-        encoding: _sshEnabled ? _encoding : null,
-        telnetEncoding: _telnetEnabled ? _telnetEncoding : null,
-        keyId: _sshEnabled && _identityId == null ? _keyId : null,
-      ),
-    );
+    try {
+      await widget.onSave(
+        HostGroup(
+          id: widget.request.initial?.id,
+          name: name,
+          parentId: _parentId,
+          startupSnippetId: _sshEnabled ? _startupSnippetId : null,
+          identityId: _sshEnabled ? _identityId : null,
+          proxyId: _sshEnabled ? _proxyId : null,
+          port: _sshEnabled ? port : null,
+          username: _sshEnabled && _identityId == null
+              ? _emptyToNull(_usernameController.text)
+              : null,
+          password: _sshEnabled && _identityId == null
+              ? _emptyToNull(_passwordController.text)
+              : null,
+          sshEnabled: _sshEnabled,
+          moshEnabled: _sshEnabled ? _moshEnabled : false,
+          moshServerCommand: _sshEnabled && _moshEnabled
+              ? _emptyToNull(_moshCommandController.text)
+              : null,
+          telnetEnabled: _telnetEnabled,
+          telnetIdentityId: _telnetEnabled ? _telnetIdentityId : null,
+          telnetUsername: _telnetEnabled && _telnetIdentityId == null
+              ? _emptyToNull(_telnetUsernameController.text)
+              : null,
+          telnetPassword: _telnetEnabled && _telnetIdentityId == null
+              ? _emptyToNull(_telnetPasswordController.text)
+              : null,
+          telnetPort: _telnetEnabled ? telnetPort : null,
+          themeId: _sshEnabled ? _themeId : null,
+          darkThemeId: _sshEnabled ? _darkThemeId : null,
+          telnetThemeId: _telnetEnabled ? _telnetThemeId : null,
+          telnetDarkThemeId: _telnetEnabled ? _telnetDarkThemeId : null,
+          environmentVariables: _sshEnabled ? _environmentVariables : const [],
+          encoding: _sshEnabled ? _encoding : null,
+          telnetEncoding: _telnetEnabled ? _telnetEncoding : null,
+          keyId: _sshEnabled && _identityId == null ? _keyId : null,
+        ),
+      );
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _error = '$error';
+      });
+    }
   }
 
   void _editEnvironment() {
@@ -1179,7 +1301,169 @@ class _HostTagChip extends StatelessWidget {
   }
 }
 
-class _HostEditorContentState extends State<_HostEditorContent> {
+class _HostEditorContentState extends State<_HostEditorContent>
+    with _WorkspaceEditorDraftState<_HostEditorContent> {
+  @override
+  Iterable<Listenable> get draftChanges => [_serialForm];
+
+  @override
+  void didRestoreEditorDraft() {
+    if (_type == NautermHostType.serial) _serialForm.refreshPorts();
+    _selectedTheme = null;
+    _selectedDarkTheme = null;
+    _selectedTelnetTheme = null;
+    _selectedTelnetDarkTheme = null;
+    _loadSelectedTheme();
+    _loadSelectedDarkTheme();
+    _loadSelectedTelnetTheme();
+    _loadSelectedTelnetDarkTheme();
+  }
+
+  @override
+  Map<String, _WorkspaceDraftField> get draftFields => {
+    'name': _WorkspaceDraftField.text(_nameController),
+    'host': _WorkspaceDraftField.text(_hostController),
+    'port': _WorkspaceDraftField.text(_portController),
+    'username': _WorkspaceDraftField.text(_usernameController),
+    'password': _WorkspaceDraftField.text(_passwordController),
+    'moshServerCommand': _WorkspaceDraftField.text(
+      _moshServerCommandController,
+    ),
+    'telnetPort': _WorkspaceDraftField.text(_telnetPortController),
+    'telnetUsername': _WorkspaceDraftField.text(_telnetUsernameController),
+    'telnetPassword': _WorkspaceDraftField.text(_telnetPasswordController),
+    'shell': _WorkspaceDraftField.text(_shellController),
+    'workDir': _WorkspaceDraftField.text(_workDirController),
+    'type': _draftValue(() => _type, (value) => _type = value),
+    'sshEnabled': _draftValue(
+      () => _sshEnabled,
+      (value) => _sshEnabled = value,
+    ),
+    'moshEnabled': _draftValue(
+      () => _moshEnabled,
+      (value) => _moshEnabled = value,
+    ),
+    'telnetEnabled': _draftValue(
+      () => _telnetEnabled,
+      (value) => _telnetEnabled = value,
+    ),
+    'sshConfigured': _draftValue(
+      () => _sshConfigured,
+      (value) => _sshConfigured = value,
+    ),
+    'moshConfigured': _draftValue(
+      () => _moshConfigured,
+      (value) => _moshConfigured = value,
+    ),
+    'telnetConfigured': _draftValue(
+      () => _telnetConfigured,
+      (value) => _telnetConfigured = value,
+    ),
+    'portConfigured': _draftValue(
+      () => _portConfigured,
+      (value) => _portConfigured = value,
+    ),
+    'telnetPortConfigured': _draftValue(
+      () => _telnetPortConfigured,
+      (value) => _telnetPortConfigured = value,
+    ),
+    'encodingConfigured': _draftValue(
+      () => _encodingConfigured,
+      (value) => _encodingConfigured = value,
+    ),
+    'telnetEncodingConfigured': _draftValue(
+      () => _telnetEncodingConfigured,
+      (value) => _telnetEncodingConfigured = value,
+    ),
+    'groupId': _draftValue(() => _groupId, (value) => _groupId = value),
+    'identityId': _draftValue(
+      () => _identityId,
+      (value) => _identityId = value,
+    ),
+    'proxyId': _draftValue(() => _proxyId, (value) => _proxyId = value),
+    'telnetIdentityId': _draftValue(
+      () => _telnetIdentityId,
+      (value) => _telnetIdentityId = value,
+    ),
+    'keyId': _draftValue(() => _keyId, (value) => _keyId = value),
+    'startupSnippetId': _draftValue(
+      () => _startupSnippetId,
+      (value) => _startupSnippetId = value,
+    ),
+    'sshCredentialKind': _draftViewValue(
+      () => _sshCredentialKind,
+      (value) => _sshCredentialKind = value,
+    ),
+    'themeId': _draftValue(() => _themeId, (value) => _themeId = value),
+    'darkThemeId': _draftValue(
+      () => _darkThemeId,
+      (value) => _darkThemeId = value,
+    ),
+    'telnetThemeId': _draftValue(
+      () => _telnetThemeId,
+      (value) => _telnetThemeId = value,
+    ),
+    'telnetDarkThemeId': _draftValue(
+      () => _telnetDarkThemeId,
+      (value) => _telnetDarkThemeId = value,
+    ),
+    'encoding': _draftValue(() => _encoding, (value) => _encoding = value),
+    'telnetEncoding': _draftValue(
+      () => _telnetEncoding,
+      (value) => _telnetEncoding = value,
+    ),
+    'sshCompatibilityMode': _draftValue(
+      () => _sshCompatibilityMode,
+      (value) => _sshCompatibilityMode = value,
+    ),
+    'customIcon': _draftValue(
+      () => _customIcon,
+      (value) => _customIcon = value,
+    ),
+    'sshShowMore': _draftViewValue(
+      () => _sshShowMore,
+      (value) => _sshShowMore = value,
+    ),
+    'telnetShowMore': _draftViewValue(
+      () => _telnetShowMore,
+      (value) => _telnetShowMore = value,
+    ),
+    'nameIsAutomatic': _draftViewValue(
+      () => _nameIsAutomatic,
+      (value) => _nameIsAutomatic = value,
+    ),
+    'tagUuids': _draftValue(
+      () => Set<String>.of(_tagUuids),
+      (value) => _tagUuids = value,
+    ),
+    'environmentVariables': _draftValue(
+      () => List<HostEnvironmentVariable>.of(_environmentVariables),
+      (value) => _environmentVariables = value,
+    ),
+    'serial.portController': _WorkspaceDraftField.text(
+      _serialForm.portController,
+    ),
+    'serial.baudController': _WorkspaceDraftField.text(
+      _serialForm.baudController,
+    ),
+    'serial.dataBits': _draftValue(
+      () => _serialForm.dataBits,
+      (value) => _serialForm.dataBits = value,
+    ),
+    'serial.stopBits': _draftValue(
+      () => _serialForm.stopBits,
+      (value) => _serialForm.stopBits = value,
+    ),
+    'serial.parity': _draftValue(
+      () => _serialForm.parity,
+      (value) => _serialForm.parity = value,
+    ),
+    'serial.flowControl': _draftValue(
+      () => _serialForm.flowControl,
+      (value) => _serialForm.flowControl = value,
+    ),
+  };
+
   late final _SerialConnectionFormController _serialForm;
   late final TextEditingController _nameController;
   late final TextEditingController _hostController;
@@ -1476,6 +1760,7 @@ class _HostEditorContentState extends State<_HostEditorContent> {
   }
 
   void _handleNameChanged() {
+    if (restoringEditorDraft) return;
     if (_settingAutomaticName) return;
     _nameIsAutomatic = _nameController.text.trim().isEmpty;
     if (_nameError != null && _nameController.text.trim().isNotEmpty) {
@@ -1484,6 +1769,7 @@ class _HostEditorContentState extends State<_HostEditorContent> {
   }
 
   void _refreshAutomaticName() {
+    if (restoringEditorDraft) return;
     if (!_nameIsAutomatic) return;
     final suggested = _suggestedName();
     if (_nameController.text == suggested) return;
@@ -1818,7 +2104,9 @@ class _HostEditorContentState extends State<_HostEditorContent> {
     );
   }
 
-  Future<void> _save() async {
+  Future<void> _save() => _submit();
+
+  Future<void> _submit({bool connect = false}) async {
     final serialConfig = _type == NautermHostType.serial
         ? _serialForm.readConfig()
         : null;
@@ -1858,77 +2146,87 @@ class _HostEditorContentState extends State<_HostEditorContent> {
       return;
     }
 
+    final initial = widget.request.initial;
+    final host = HostEntry(
+      id: connect ? null : initial?.id,
+      name: name,
+      groupId: _groupId,
+      identityId: sshEnabled ? _identityId : null,
+      proxyId: sshEnabled ? _proxyId : null,
+      host: isRemote ? _emptyToNull(_hostController.text) : null,
+      port: sshEnabled ? port : null,
+      username: sshEnabled && _identityId == null
+          ? _emptyToNull(_usernameController.text)
+          : null,
+      password: sshEnabled && _identityId == null
+          ? _emptyToNull(_passwordController.text)
+          : null,
+      themeId: normalizeTerminalThemeId(_themeId),
+      darkThemeId: normalizeTerminalThemeId(_darkThemeId),
+      startupSnippetId: sshEnabled ? _startupSnippetId : null,
+      sshEnabled: sshEnabled,
+      moshEnabled: moshEnabled,
+      moshServerCommand:
+          _emptyToNull(_moshServerCommandController.text) ??
+          defaultMoshServerCommand,
+      telnetEnabled: telnetEnabled,
+      telnetIdentityId: telnetEnabled ? _telnetIdentityId : null,
+      telnetUsername: telnetEnabled && _telnetIdentityId == null
+          ? _emptyToNull(_telnetUsernameController.text)
+          : null,
+      telnetPassword: telnetEnabled && _telnetIdentityId == null
+          ? _emptyToNull(_telnetPasswordController.text)
+          : null,
+      telnetPort: telnetEnabled ? telnetPort : null,
+      telnetThemeId: telnetEnabled
+          ? normalizeTerminalThemeId(_telnetThemeId)
+          : null,
+      telnetDarkThemeId: telnetEnabled
+          ? normalizeTerminalThemeId(_telnetDarkThemeId)
+          : null,
+      environmentVariables: sshEnabled ? _environmentVariables : const [],
+      encoding: _encoding,
+      telnetEncoding: _telnetEncoding,
+      type: _type,
+      keyId: sshEnabled && _identityId == null ? _keyId : null,
+      shellPath: _type == NautermHostType.local
+          ? _emptyToNull(_shellController.text)
+          : null,
+      workDir: _type == NautermHostType.local
+          ? _emptyToNull(_workDirController.text)
+          : null,
+      os: _type == NautermHostType.serial ? null : initial?.os,
+      distro: _type == NautermHostType.serial ? null : initial?.distro,
+      serialPort: serialConfig?.serialPort,
+      serialBaudRate: serialConfig?.baudRate,
+      config: HostEntry.withIcon(
+        HostEntry.withSshCompatibilityMode(
+          serialConfig?.mergeHostConfig(initial?.config ?? const {}) ??
+              initial?.config ??
+              const {},
+          enabled: isRemote && _sshCompatibilityMode,
+        ),
+        _customIcon,
+      ),
+      tagUuids: _tagUuids.toList(growable: false),
+    );
+    if (connect) {
+      widget.onConnect(host);
+      return;
+    }
     setState(() {
       _saving = true;
       _error = null;
     });
-
-    final initial = widget.request.initial;
-    await widget.onSave(
-      HostEntry(
-        id: initial?.id,
-        name: name,
-        groupId: _groupId,
-        identityId: sshEnabled ? _identityId : null,
-        proxyId: sshEnabled ? _proxyId : null,
-        host: isRemote ? _emptyToNull(_hostController.text) : null,
-        port: sshEnabled ? port : null,
-        username: sshEnabled && _identityId == null
-            ? _emptyToNull(_usernameController.text)
-            : null,
-        password: sshEnabled && _identityId == null
-            ? _emptyToNull(_passwordController.text)
-            : null,
-        themeId: normalizeTerminalThemeId(_themeId),
-        darkThemeId: normalizeTerminalThemeId(_darkThemeId),
-        startupSnippetId: sshEnabled ? _startupSnippetId : null,
-        sshEnabled: sshEnabled,
-        moshEnabled: moshEnabled,
-        moshServerCommand:
-            _emptyToNull(_moshServerCommandController.text) ??
-            defaultMoshServerCommand,
-        telnetEnabled: telnetEnabled,
-        telnetIdentityId: telnetEnabled ? _telnetIdentityId : null,
-        telnetUsername: telnetEnabled && _telnetIdentityId == null
-            ? _emptyToNull(_telnetUsernameController.text)
-            : null,
-        telnetPassword: telnetEnabled && _telnetIdentityId == null
-            ? _emptyToNull(_telnetPasswordController.text)
-            : null,
-        telnetPort: telnetEnabled ? telnetPort : null,
-        telnetThemeId: telnetEnabled
-            ? normalizeTerminalThemeId(_telnetThemeId)
-            : null,
-        telnetDarkThemeId: telnetEnabled
-            ? normalizeTerminalThemeId(_telnetDarkThemeId)
-            : null,
-        environmentVariables: sshEnabled ? _environmentVariables : const [],
-        encoding: _encoding,
-        telnetEncoding: _telnetEncoding,
-        type: _type,
-        keyId: sshEnabled && _identityId == null ? _keyId : null,
-        shellPath: _type == NautermHostType.local
-            ? _emptyToNull(_shellController.text)
-            : null,
-        workDir: _type == NautermHostType.local
-            ? _emptyToNull(_workDirController.text)
-            : null,
-        os: _type == NautermHostType.serial ? null : initial?.os,
-        distro: _type == NautermHostType.serial ? null : initial?.distro,
-        serialPort: serialConfig?.serialPort,
-        serialBaudRate: serialConfig?.baudRate,
-        config: HostEntry.withIcon(
-          HostEntry.withSshCompatibilityMode(
-            serialConfig?.mergeHostConfig(initial?.config ?? const {}) ??
-                initial?.config ??
-                const {},
-            enabled: isRemote && _sshCompatibilityMode,
-          ),
-          _customIcon,
-        ),
-        tagUuids: _tagUuids.toList(growable: false),
-      ),
-    );
+    try {
+      await widget.onSave(host);
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _error = '$error';
+      });
+    }
   }
 
   void _editEnvironmentVariables() {
@@ -1980,7 +2278,9 @@ class _HostEditorContentState extends State<_HostEditorContent> {
       headerActions: initial?.id == null || _saving
           ? const []
           : [
-              _EditorShellMenuAction.connect(() => widget.onConnect(initial!)),
+              _EditorShellMenuAction.connect(
+                () => unawaited(_submit(connect: true)),
+              ),
               _EditorShellMenuAction.duplicate(
                 () => widget.onDuplicate(initial!),
               ),

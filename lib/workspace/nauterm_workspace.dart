@@ -87,6 +87,7 @@ part 'workspace_host_icons.dart';
 part 'workspace_context_menu.dart';
 part 'workspace_form_controls.dart';
 part 'workspace_editor_drawer.dart';
+part 'workspace_editor_drafts.dart';
 part 'keychain_pane.dart';
 part 'workspace_connection_page.dart';
 part 'workspace_panes.dart';
@@ -319,8 +320,56 @@ class _NautermWorkspaceModel extends ChangeNotifier {
       section: <_WorkspaceEditorStackEntry>[],
   };
 
+  final Map<Object, _WorkspaceEditorDraft> editorDrafts = {};
+
   void mutate(VoidCallback update) {
+    final previousEntries = (
+      groupEntries,
+      hostEntries,
+      keyEntries,
+      identityEntries,
+      proxyEntries,
+      portForwardEntries,
+      snippetPackageEntries,
+      snippets,
+    );
     update();
+    if (previousEntries !=
+        (
+          groupEntries,
+          hostEntries,
+          keyEntries,
+          identityEntries,
+          proxyEntries,
+          portForwardEntries,
+          snippetPackageEntries,
+          snippets,
+        )) {
+      final savedKeys = {
+        for (final entry in groupEntries) 'group:${entry.id}',
+        for (final entry in hostEntries) 'host:${entry.id}',
+        for (final entry in keyEntries) ...[
+          'key:${entry.id}',
+          'key-export:${entry.id}',
+        ],
+        for (final entry in identityEntries) 'identity:${entry.id}',
+        for (final entry in proxyEntries) 'proxy:${entry.id}',
+        for (final entry in portForwardEntries) 'forward:${entry.id}',
+        for (final entry in snippetPackageEntries)
+          'snippet-package:${entry.id}',
+        for (final entry in snippets) 'snippet:${entry.id}',
+      };
+      editorDrafts.removeWhere((key, draft) {
+        final savedEntity =
+            key is String &&
+            RegExp(
+              r'^(group|host|key|key-export|identity|proxy|forward|snippet-package|snippet):[0-9]+$',
+            ).hasMatch(key);
+        if (!savedEntity || savedKeys.contains(key)) return false;
+        draft.discard();
+        return true;
+      });
+    }
     notifyListeners();
   }
 }
@@ -661,9 +710,18 @@ class _NautermWorkspaceState extends ConsumerState<NautermWorkspace>
       _editorStack.isEmpty ? null : _editorStack.last.request;
 
   set _editorRequest(_WorkspaceEditorRequest? value) {
+    for (final entry in _editorStack) {
+      entry.draft.checkpoint();
+    }
     _editorStack.clear();
     if (value != null) {
-      _editorStack.add(_WorkspaceEditorStackEntry(request: value));
+      final draft = _workspaceModel.editorDrafts.putIfAbsent(
+        _workspaceEditorRequestKey(value),
+        _WorkspaceEditorDraft.new,
+      );
+      _editorStack.add(
+        _WorkspaceEditorStackEntry(request: value, draft: draft),
+      );
     }
     _syncEditorSelection();
   }

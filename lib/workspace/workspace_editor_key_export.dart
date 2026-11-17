@@ -100,7 +100,20 @@ class _KeyExportEditorContent extends StatefulWidget {
       _KeyExportEditorContentState();
 }
 
-class _KeyExportEditorContentState extends State<_KeyExportEditorContent> {
+class _KeyExportEditorContentState extends State<_KeyExportEditorContent>
+    with _WorkspaceEditorDraftState<_KeyExportEditorContent> {
+  @override
+  Map<String, _WorkspaceDraftField> get draftFields => {
+    'location': _WorkspaceDraftField.text(_locationController),
+    'filename': _WorkspaceDraftField.text(_filenameController),
+    'script': _WorkspaceDraftField.text(_scriptController),
+    'hostId': _draftValue(() => _hostId, (value) => _hostId = value),
+    'advancedExpanded': _draftViewValue(
+      () => _advancedExpanded,
+      (value) => _advancedExpanded = value,
+    ),
+  };
+
   late final TextEditingController _locationController;
   late final TextEditingController _filenameController;
   late final TextEditingController _scriptController;

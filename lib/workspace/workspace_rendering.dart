@@ -354,10 +354,24 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
                                   section == _section &&
                                   index == _editorStackFor(section).length - 1,
                               child: FocusScope(
+                                onKeyEvent: (_, event) {
+                                  if (event is KeyDownEvent &&
+                                      event.logicalKey ==
+                                          LogicalKeyboardKey.escape &&
+                                      section == _section &&
+                                      index ==
+                                          _editorStackFor(section).length - 1) {
+                                    _closeEditor();
+                                    return KeyEventResult.handled;
+                                  }
+                                  return KeyEventResult.ignored;
+                                },
                                 key: ValueKey(
                                   'workspace-editor-focus-region:${section.name}:$index',
                                 ),
                                 child: _WorkspaceEditorDrawer(
+                                  draft: _editorStackFor(section)[index].draft,
+                                  onDiscard: _discardEditor,
                                   request: _editorStackFor(
                                     section,
                                   )[index].request,
@@ -430,15 +444,8 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
                                     }();
                                   },
                                   onSaveHost: _saveHost,
-                                  onConnectHost: (host) {
-                                    _connectHost(
-                                      _mapHost(
-                                        host,
-                                        _identityEntries,
-                                        _tagNamesByUuid(_tagEntries),
-                                      ),
-                                    );
-                                  },
+                                  onConnectHost: (host) =>
+                                      unawaited(_connectHostEntry(host)),
                                   onDuplicateHost: (host) {
                                     _handleHostContextAction(
                                       _mapHost(
