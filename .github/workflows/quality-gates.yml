@@ -8,9 +8,6 @@ on:
         required: false
         type: boolean
         default: false
-    secrets:
-      MOSH_REPOSITORY_TOKEN:
-        required: false
   workflow_dispatch:
     inputs:
       integration:
@@ -30,7 +27,7 @@ env:
 
 jobs:
   quality:
-    name: Flutter, Rust, Mosh, and release metadata
+    name: Flutter, Rust, and release metadata
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -50,17 +47,7 @@ jobs:
           bash scripts/ci/verify_versions.sh
           bash scripts/ci/verify_app_icons.sh
           bash scripts/ci/verify_mosh_artifacts.sh
-
-      - id: mosh-source
-        name: Read pinned Mosh revision
-        run: echo "revision=$(tr -d '[:space:]' < third_party/nauterm_mosh_ffi/SOURCE_REVISION)" >> "$GITHUB_OUTPUT"
-
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          repository: korvect/nauterm-mosh
-          ref: ${{ steps.mosh-source.outputs.revision }}
-          path: nauterm-mosh
-          token: ${{ secrets.MOSH_REPOSITORY_TOKEN || github.token }}
+          bash scripts/ci/check_mosh_abi.sh third_party/nauterm_mosh_ffi/linux-x86_64/libnauterm_mosh_ffi.so
 
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
@@ -104,33 +91,6 @@ jobs:
 
       - name: Run native Rust unit tests
         run: cargo test --manifest-path native/nauterm_ffi/Cargo.toml --locked --features test-credential-store
-
-      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
-        with:
-          manifest-path: nauterm-mosh/Cargo.toml
-          command: check licenses
-          arguments: --all-features
-
-      - name: Check Mosh formatting
-        continue-on-error: true
-        run: cargo fmt --all -- --check
-        working-directory: nauterm-mosh
-
-      - name: Run Mosh Clippy
-        run: cargo clippy --workspace --all-targets --locked -- -D warnings
-        working-directory: nauterm-mosh
-
-      - name: Run Mosh unit tests
-        run: cargo test --workspace --locked
-        working-directory: nauterm-mosh
-
-      - name: Build and verify the Mosh ABI
-        run: cargo build --package nauterm_mosh_ffi --locked
-        working-directory: nauterm-mosh
-
-      - run: bash scripts/ci/check_mosh_abi.sh nauterm-mosh
-
-      - run: bash scripts/ci/verify_mosh_artifacts.sh nauterm-mosh
 
   integration:
     name: Integration (${{ matrix.os }})

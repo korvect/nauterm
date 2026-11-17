@@ -47,8 +47,6 @@ jobs:
     uses: ./.github/workflows/quality-gates.yml
     with:
       integration: false
-    secrets:
-      MOSH_REPOSITORY_TOKEN: ${{ secrets.MOSH_REPOSITORY_TOKEN }}
 
   select-builds:
     name: Select builds

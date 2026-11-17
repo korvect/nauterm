@@ -1,14 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-mosh_root="${1:-../nauterm-mosh}"
+library="${1:?Usage: $0 <path-to-Mosh-dynamic-library>}"
+
+if [ ! -f "$library" ]; then
+  echo "Missing Mosh dynamic library: $library" >&2
+  exit 1
+fi
+
 case "$(uname -s)" in
   Darwin)
-    library="$mosh_root/target/debug/libnauterm_mosh_ffi.dylib"
     symbols="$(nm -gU "$library")"
     ;;
   Linux)
-    library="$mosh_root/target/debug/libnauterm_mosh_ffi.so"
     symbols="$(nm -D --defined-only "$library")"
     ;;
   *)
