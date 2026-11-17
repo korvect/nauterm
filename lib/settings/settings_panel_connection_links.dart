@@ -48,7 +48,7 @@ class _ConnectionLinkDefaultsState extends State<_ConnectionLinkDefaults>
         _handlers = handlers;
         _loading = false;
         _errorKey = handlers.values.any((value) => value == null)
-            ? 'settings.general.connectionLinks.queryFailed'
+            ? 'settings.general.defaultUrlHandler.queryFailed'
             : null;
       });
     } on Object {
@@ -56,7 +56,7 @@ class _ConnectionLinkDefaultsState extends State<_ConnectionLinkDefaults>
       setState(() {
         _handlers = const {};
         _loading = false;
-        _errorKey = 'settings.general.connectionLinks.queryFailed';
+        _errorKey = 'settings.general.defaultUrlHandler.queryFailed';
       });
     }
   }
@@ -74,8 +74,8 @@ class _ConnectionLinkDefaultsState extends State<_ConnectionLinkDefaults>
       if (!mounted) return;
       setState(() {
         _errorKey = error is PlatformException && error.code == 'not_registered'
-            ? 'settings.general.connectionLinks.notRegistered'
-            : 'settings.general.connectionLinks.setFailed';
+            ? 'settings.general.defaultUrlHandler.notRegistered'
+            : 'settings.general.defaultUrlHandler.setFailed';
       });
     } finally {
       if (mounted) setState(() => _setting = null);
@@ -90,7 +90,7 @@ class _ConnectionLinkDefaultsState extends State<_ConnectionLinkDefaults>
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            tr('settings.general.connectionLinks.description'),
+            tr('settings.general.defaultUrlHandler.description'),
             style: TextStyle(color: _mutedText, fontSize: 12, height: 1.35),
           ),
           const SizedBox(height: 12),
@@ -121,25 +121,25 @@ class _ConnectionLinkDefaultsState extends State<_ConnectionLinkDefaults>
     final busy = _setting == scheme || (_loading && isDefault == null);
     final tooltip = tr(
       busy
-          ? 'settings.general.connectionLinks.checking'
+          ? 'settings.general.defaultUrlHandler.checking'
           : isDefault == true
-          ? 'settings.general.connectionLinks.isDefault'
+          ? 'settings.general.defaultUrlHandler.isDefault'
           : defaultTargetPlatform == TargetPlatform.windows
-          ? 'settings.general.connectionLinks.openSettings'
-          : 'settings.general.connectionLinks.setDefault',
+          ? 'settings.general.defaultUrlHandler.openSettings'
+          : 'settings.general.defaultUrlHandler.setDefault',
       args: {'scheme': scheme},
     );
     return Tooltip(
       message: tooltip,
       child: Semantics(
         value: busy
-            ? tr('settings.general.connectionLinks.checking')
+            ? tr('settings.general.defaultUrlHandler.checking')
             : isDefault == null
-            ? tr('settings.general.connectionLinks.queryFailed')
+            ? tr('settings.general.defaultUrlHandler.queryFailed')
             : tr(
                 isDefault
-                    ? 'settings.general.connectionLinks.isDefault'
-                    : 'settings.general.connectionLinks.setDefault',
+                    ? 'settings.general.defaultUrlHandler.isDefault'
+                    : 'settings.general.defaultUrlHandler.setDefault',
                 args: {'scheme': scheme},
               ),
         child: TextButton(

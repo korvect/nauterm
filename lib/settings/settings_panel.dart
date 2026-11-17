@@ -177,10 +177,12 @@ class _SettingsSearchEntry {
 const _settingsSearchEntries = <_SettingsSearchEntry>[
   _SettingsSearchEntry(
     page: _SettingsPage.general,
-    section: 'general-connection-links',
-    title: 'Connection Links',
-    subtitle: 'Use Nauterm as the default application for connection links.',
-    keywords: 'ssh sftp telnet uri url scheme default application',
+    section: 'general-default-url-handler',
+    title: 'Default URL Handler',
+    subtitle:
+        'Use Nauterm as the default handler for SSH, SFTP, and Telnet links.',
+    keywords:
+        'ssh sftp telnet uri url scheme default application connection links',
   ),
   _SettingsSearchEntry(
     page: _SettingsPage.general,

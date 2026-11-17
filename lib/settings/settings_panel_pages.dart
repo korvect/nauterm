@@ -177,10 +177,10 @@ Widget _buildSettingsGeneralContent(_SettingsPanelState state) {
         ),
         SizedBox(height: 30),
         _SettingsSection(
-          key: state._settingsSectionKey('general-connection-links'),
+          key: state._settingsSectionKey('general-default-url-handler'),
           icon: LucideIcons.link,
-          title: 'Connection Links',
-          localizationKey: 'settings.general.connectionLinks.title',
+          title: 'Default URL Handler',
+          localizationKey: 'settings.general.defaultUrlHandler.title',
           child: const _ConnectionLinkDefaults(),
         ),
         SizedBox(height: 30),
