@@ -1,5 +1,4 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../app/nauterm_localizations.dart';
 import '../app/nauterm_theme.dart';
@@ -25,9 +24,7 @@ class NautermSettingsApp extends StatelessWidget {
           supportedLocales: NautermLocalizations.supportedLocales,
           localizationsDelegates: const [
             NautermLocalizations.delegate,
-            GlobalMaterialLocalizations.delegate,
-            GlobalWidgetsLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate,
+            ...GlobalMaterialLocalizations.delegates,
           ],
           theme: settingsTheme(Brightness.light),
           darkTheme: settingsTheme(Brightness.dark),

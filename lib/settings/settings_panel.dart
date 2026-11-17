@@ -8,10 +8,9 @@ import 'dart:ui'
     show BoxHeightStyle, BoxWidthStyle, ViewFocusEvent, ViewFocusState;
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/cupertino.dart';
+import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show ScrollCacheExtent;
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/src/widgets/_window.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -1222,7 +1221,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
   void _closeSettingsWindow(BuildContext context) {
     if (defaultTargetPlatform != TargetPlatform.linux) {
       final windowController = WindowScope.maybeOf(context);
-      if (windowController is RegularWindowController) {
+      if (windowController is WindowController) {
         hideSettingsNativeWindow();
         windowController.destroy();
         return;

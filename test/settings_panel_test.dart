@@ -2,9 +2,8 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nauterm/app/nauterm_localizations.dart';
 import 'package:nauterm/data/nauterm_data_store.dart';
@@ -95,9 +94,7 @@ void main() {
         supportedLocales: NautermLocalizations.supportedLocales,
         localizationsDelegates: [
           NautermLocalizations.delegate,
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
+          ...GlobalMaterialLocalizations.delegates,
         ],
         home: SettingsPanel(detectExternalEditors: false),
       ),
@@ -174,9 +171,7 @@ void main() {
         supportedLocales: NautermLocalizations.supportedLocales,
         localizationsDelegates: [
           NautermLocalizations.delegate,
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
+          ...GlobalMaterialLocalizations.delegates,
         ],
         home: SettingsPanel(detectExternalEditors: false),
       ),

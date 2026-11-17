@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../terminal/terminal_theme.dart';
 import 'nauterm_typography.dart';

@@ -20,7 +20,7 @@ permissions:
   contents: read
 
 env:
-  FLUTTER_VERSION: 3.47.9
+  FLUTTER_VERSION: 3.50.0
   RUST_TOOLCHAIN: 1.99.1
   ZIG_VERSION: 0.17.1
   CARGO_TERM_COLOR: always
