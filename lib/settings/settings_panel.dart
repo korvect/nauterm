@@ -115,6 +115,8 @@ const double _settingsFieldFontSize = 14;
 const double _settingsFieldTextHeight = 18;
 const int _settingsSelectMaximumVisibleRows = 6;
 const double _settingsCompactSidebarBreakpoint = 720;
+const double _settingsSidebarWidth = 200;
+const double _settingsCompactSidebarWidth = 68;
 const double _settingsStackedRowBreakpoint = 480;
 const double _settingsStackedFieldsBreakpoint = 520;
 const double _settingsContentMaxWidth = 1000;
@@ -1334,14 +1336,6 @@ class _SettingsPanelState extends State<SettingsPanel> {
         },
       ),
     );
-  }
-
-  EdgeInsets get _contentPadding {
-    final compact =
-        MediaQuery.sizeOf(context).width < _settingsCompactSidebarBreakpoint;
-    return compact
-        ? const EdgeInsets.fromLTRB(20, 20, 22, 24)
-        : const EdgeInsets.fromLTRB(26, 24, 30, 30);
   }
 
   Widget _buildContent() {

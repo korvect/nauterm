@@ -617,7 +617,7 @@ Widget _buildSettingsSyncContent(_SettingsPanelState state) {
     thumbVisibility: true,
     child: ListView(
       controller: state._contentScrollController,
-      padding: state._contentPadding,
+      padding: _settingsContentPadding(state.context),
       children: [
         Text(
           tr('settings.pages.sync.title', fallback: 'Sync & Backup'),
@@ -1725,7 +1725,7 @@ Widget _buildSettingsMasterKeyContent(_SettingsPanelState state) {
     thumbVisibility: true,
     child: ListView(
       controller: state._contentScrollController,
-      padding: state._contentPadding,
+      padding: _settingsContentPadding(state.context),
       children: [
         Text(
           tr('common.label.masterKey', fallback: 'Master Key'),

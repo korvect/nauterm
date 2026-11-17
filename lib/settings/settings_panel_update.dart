@@ -235,7 +235,7 @@ class _AboutSettingsPageState extends State<_AboutSettingsPage> {
       thumbVisibility: true,
       child: ListView(
         controller: settingsState._contentScrollController,
-        padding: settingsState._contentPadding,
+        padding: _settingsContentPadding(context),
         children: [
           Text(
             tr('settings.pages.about.title', fallback: 'About Nauterm'),

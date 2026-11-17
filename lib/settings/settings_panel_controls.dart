@@ -1,5 +1,23 @@
 part of 'settings_panel.dart';
 
+EdgeInsets _settingsContentPadding(BuildContext context) {
+  final width = MediaQuery.sizeOf(context).width;
+  final compact = width < _settingsCompactSidebarBreakpoint;
+  final sidebarWidth = compact
+      ? _settingsCompactSidebarWidth
+      : _settingsSidebarWidth;
+  final horizontal = math.max(
+    compact ? 21.0 : 28.0,
+    (width - sidebarWidth - _settingsContentMaxWidth) / 2,
+  );
+  return EdgeInsets.fromLTRB(
+    horizontal,
+    compact ? 20 : 24,
+    horizontal,
+    compact ? 24 : 30,
+  );
+}
+
 class _SettingsSidebar extends StatelessWidget {
   const _SettingsSidebar({
     required this.selectedPage,
@@ -14,7 +32,7 @@ class _SettingsSidebar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: compact ? 68 : 200,
+      width: compact ? _settingsCompactSidebarWidth : _settingsSidebarWidth,
       decoration: BoxDecoration(
         color: _surfaceContainer,
         border: Border(right: BorderSide(color: _softOutline)),
@@ -509,7 +527,7 @@ Widget _buildSettingsSearchResults(_SettingsPanelState state) {
       .where((entry) => entry.matches(state._settingsSearchQuery))
       .toList(growable: false);
   return ListView(
-    padding: state._contentPadding,
+    padding: _settingsContentPadding(state.context),
     children: [
       Text(
         tr('settings.label.searchSettings', fallback: 'Search Settings'),

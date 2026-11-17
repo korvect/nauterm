@@ -8,7 +8,7 @@ Widget _buildSettingsGeneralContent(_SettingsPanelState state) {
       key: const ValueKey('settings-general-scroll-view'),
       scrollCacheExtent: const ScrollCacheExtent.viewport(100),
       controller: state._contentScrollController,
-      padding: state._contentPadding,
+      padding: _settingsContentPadding(state.context),
       children: [
         Text(
           state.context.tr(
@@ -376,7 +376,7 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
       key: const ValueKey('settings-terminal-scroll-view'),
       scrollCacheExtent: const ScrollCacheExtent.viewport(100),
       controller: state._contentScrollController,
-      padding: state._contentPadding,
+      padding: _settingsContentPadding(state.context),
       children: [
         Text(
           tr('settings.pages.terminal.title', fallback: 'Terminal'),
@@ -1352,7 +1352,7 @@ Widget _buildSettingsSftpContent(_SettingsPanelState state) {
     child: ListView(
       scrollCacheExtent: const ScrollCacheExtent.viewport(100),
       controller: state._contentScrollController,
-      padding: state._contentPadding,
+      padding: _settingsContentPadding(state.context),
       children: [
         Text(
           tr('settings.pages.sftp.title', fallback: 'SFTP'),
@@ -1568,7 +1568,7 @@ Widget _buildSettingsShortcutsContent(_SettingsPanelState state) {
     child: ListView(
       scrollCacheExtent: const ScrollCacheExtent.viewport(100),
       controller: state._contentScrollController,
-      padding: state._contentPadding,
+      padding: _settingsContentPadding(state.context),
       children: [
         Text(
           tr('settings.pages.shortcuts.title', fallback: 'Shortcuts'),
@@ -1655,7 +1655,7 @@ Widget _buildSettingsAiContent(_SettingsPanelState state) {
     child: ListView(
       scrollCacheExtent: const ScrollCacheExtent.viewport(100),
       controller: state._contentScrollController,
-      padding: state._contentPadding,
+      padding: _settingsContentPadding(state.context),
       children: [
         Text(
           tr(
