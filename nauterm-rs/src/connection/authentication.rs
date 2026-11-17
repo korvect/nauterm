@@ -24,6 +24,7 @@ pub(super) struct State {
     loaded_keys: bool,
     pub(super) loading: bool,
     pub busy: bool,
+    pub(super) save: Option<bool>,
     generation: u64,
     task: Option<Task<()>>,
     pub(super) related: Option<(Entity<Keychain>, Subscription)>,
@@ -127,16 +128,78 @@ impl Connection {
                     && log.event.method.as_deref() != Some("fido2")
             })
     }
+    pub(super) fn allowed_mode(&self, mode: AuthMode) -> bool {
+        self.state.credentials.as_ref().is_none_or(|(_, methods)| {
+            methods.iter().any(|method| {
+                method
+                    == match mode {
+                        AuthMode::Password => "password",
+                        AuthMode::PublicKey => "publickey",
+                    }
+            })
+        })
+    }
+
+    pub(super) fn sync_challenge_inputs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let challenge = self.state.challenge.as_ref();
+        if self.challenge_id == challenge.map(|challenge| challenge.id) {
+            return;
+        }
+        self.challenge_id = challenge.map(|challenge| challenge.id);
+        self.challenge_inputs.clear();
+        self.challenge_subscriptions.clear();
+        if let Some(challenge) = challenge {
+            self.error = None;
+            self.needs_auth_focus = true;
+            for prompt in &challenge.prompts {
+                let input = cx.new(|cx| InputState::new(window, cx).masked(!prompt.echo));
+                self.challenge_subscriptions.push(cx.subscribe_in(
+                    &input,
+                    window,
+                    |this, _, event: &InputEvent, window, cx| {
+                        if matches!(event, InputEvent::PressEnter { .. }) {
+                            this.authenticate(window, cx);
+                        }
+                    },
+                ));
+                self.challenge_inputs.push(input);
+            }
+        }
+    }
+
+    pub(super) fn can_save_connection(&self) -> bool {
+        self.auth.binding.is_some()
+    }
+
     fn can_authenticate(&self, cx: &App) -> bool {
         if self.auth.busy {
             return false;
         }
+        if self.state.challenge.is_some() {
+            return self.challenge_id.is_some();
+        }
         if self.requires_fido2_pin() {
             return !self.fido2_pin.read(cx).value().is_empty();
+        }
+        if self.state.credentials.is_some()
+            && self.needs_key_passphrase()
+            && self
+                .target
+                .ssh()
+                .is_some_and(|options| !options.private_key.is_empty())
+        {
+            return !self.passphrase.read(cx).value().is_empty();
         }
         let username = self.username.read(cx).value();
         if username.trim().is_empty() || username.chars().any(char::is_control) {
             return false;
+        }
+        if self
+            .target
+            .ssh()
+            .is_some_and(|options| options.username.is_empty())
+        {
+            return true;
         }
         match self.mode {
             AuthMode::Password => !self.password.read(cx).value().is_empty(),
@@ -152,10 +215,36 @@ impl Connection {
         }
     }
     pub(super) fn authenticate(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.submit_authentication(self.auth.binding.is_some(), window, cx);
+        self.submit_authentication(self.auth.save.unwrap_or(false), window, cx);
     }
     fn submit_authentication(&mut self, save: bool, window: &mut Window, cx: &mut Context<Self>) {
         if !self.can_authenticate(cx) {
+            return;
+        }
+        if let Some(challenge) = &self.state.challenge {
+            let responses = self
+                .challenge_inputs
+                .iter()
+                .map(|input| input.read(cx).value().to_string())
+                .collect();
+            let owner = self.attached.as_ref().and_then(WeakEntity::upgrade);
+            let result = self
+                .session
+                .as_ref()
+                .or_else(|| owner.as_ref().map(|terminal| &terminal.read(cx).session))
+                .ok_or_else(|| anyhow::anyhow!("The connection is no longer active."))
+                .and_then(|session| session.respond_to_authentication(challenge.id, responses));
+            match result {
+                Ok(()) => {
+                    self.state.challenge = None;
+                    self.state.phase = Phase::Connecting;
+                    self.challenge_inputs.clear();
+                    self.challenge_subscriptions.clear();
+                    self.error = None;
+                }
+                Err(error) => self.error = Some(error.to_string()),
+            }
+            cx.notify();
             return;
         }
         if self.requires_fido2_pin() {
@@ -166,13 +255,33 @@ impl Connection {
             options.password.zeroize();
             self.fido2_pin
                 .update(cx, |input, cx| input.set_value("", window, cx));
-            self.start(window, cx);
+            let options = options.clone();
+            self.finish_authentication(options, window, cx);
             return;
         }
         let Some(mut options) = self.target.ssh().cloned() else {
             return;
         };
+        if options.username.is_empty() {
+            options.username = self.username.read(cx).value().trim().to_owned();
+            self.auth.save = Some(save && self.can_save_connection());
+            if let Some(target) = self.target.ssh_mut() {
+                *target = options;
+            }
+            self.start(window, cx);
+            return;
+        }
+        if self.state.credentials.is_some()
+            && self.needs_key_passphrase()
+            && !options.private_key.is_empty()
+        {
+            options.passphrase = Zeroizing::new(self.passphrase.read(cx).value().to_string());
+            self.finish_authentication(options, window, cx);
+            return;
+        }
         options.username = self.username.read(cx).value().trim().to_owned();
+        let save = save && self.auth.binding.is_some();
+        self.auth.save = Some(save);
         let credential = match self.mode {
             AuthMode::Password => {
                 Credential::Password(Zeroizing::new(self.password.read(cx).value().to_string()))
@@ -271,11 +380,50 @@ impl Connection {
         let Some(target) = self.target.ssh_mut() else {
             return;
         };
-        *target = options;
+        *target = options.clone();
         for input in [&self.password, &self.passphrase] {
             input.update(cx, |input, cx| input.set_value("", window, cx));
         }
-        self.start(window, cx);
+        if let Some((id, _)) = self.state.credentials.as_ref() {
+            let owner = self.attached.as_ref().and_then(WeakEntity::upgrade);
+            let result = (|| -> anyhow::Result<()> {
+                let session = self
+                    .session
+                    .as_ref()
+                    .or_else(|| owner.as_ref().map(|terminal| &terminal.read(cx).session))
+                    .ok_or_else(|| anyhow::anyhow!("The connection is no longer active."))?;
+                let optional = |secret: &str| (!secret.is_empty()).then(|| secret.to_owned());
+                session.respond_to_credentials(
+                    *id,
+                    nauterm_core::ssh::AuthenticationCredentials {
+                        method: if options.private_key.is_empty() {
+                            "password"
+                        } else {
+                            "publickey"
+                        }
+                        .into(),
+                        password: optional(&options.password),
+                        private_key: optional(&options.private_key),
+                        certificate: optional(&options.certificate),
+                        passphrase: optional(&crate::fido2::authentication(
+                            &options.passphrase,
+                            &options.fido2_pin,
+                        )?),
+                    },
+                )
+            })();
+            match result {
+                Ok(()) => {
+                    self.state.credentials = None;
+                    self.state.phase = Phase::Connecting;
+                    self.error = None;
+                }
+                Err(error) => self.error = Some(error.to_string()),
+            }
+            cx.notify();
+        } else {
+            self.start(window, cx);
+        }
     }
     pub(super) fn add_authentication_key(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.auth.busy || self.auth.related.is_some() {
@@ -445,34 +593,36 @@ impl Connection {
     }
     pub(super) fn authentication_footer(&self, cx: &mut Context<Self>) -> AnyElement {
         let can_continue = self.can_authenticate(cx);
-        if self.requires_fido2_pin() || self.auth.binding.is_none() {
+        if self.state.challenge.is_some()
+            || self.requires_fido2_pin()
+            || self.auth.binding.is_none()
+            || self.auth.save.is_some()
+        {
             return self
                 .action("authenticate", "Continue", true)
                 .disabled(!can_continue)
                 .loading(self.auth.busy)
-                .on_click(
-                    cx.listener(|this, _, window, cx| {
-                        this.submit_authentication(false, window, cx)
-                    }),
-                )
+                .on_click(cx.listener(|this, _, window, cx| this.authenticate(window, cx)))
                 .into_any_element();
         }
         let owner = cx.weak_entity();
+        let can_save = self
+            .target
+            .ssh()
+            .is_some_and(|options| options.username.is_empty())
+            || self
+                .auth
+                .catalog
+                .as_ref()
+                .is_some_and(|catalog| catalog.save_target.is_some());
         ButtonGroup::new()
             .controls()
             .button(
-                self.action("authenticate-save", "Continue & Save", true)
-                    .disabled(
-                        !can_continue
-                            || self
-                                .auth
-                                .catalog
-                                .as_ref()
-                                .is_none_or(|catalog| catalog.save_target.is_none()),
-                    )
+                self.action("authenticate", "Continue", true)
+                    .disabled(!can_continue)
                     .loading(self.auth.busy)
                     .on_click(cx.listener(|this, _, window, cx| {
-                        this.submit_authentication(true, window, cx)
+                        this.submit_authentication(false, window, cx)
                     })),
             )
             .dropdown(
@@ -484,11 +634,13 @@ impl Connection {
                 move |menu, _, _| {
                     let owner = owner.clone();
                     menu.item(
-                        MenuItem::localized("Continue").on_click(move |_, window, cx| {
-                            let _ = owner.update(cx, |this, cx| {
-                                this.submit_authentication(false, window, cx)
-                            });
-                        }),
+                        MenuItem::localized("Continue & Save")
+                            .disabled(!can_save)
+                            .on_click(move |_, window, cx| {
+                                let _ = owner.update(cx, |this, cx| {
+                                    this.submit_authentication(true, window, cx)
+                                });
+                            }),
                     )
                 },
             )

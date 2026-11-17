@@ -10,6 +10,7 @@ pub struct TerminalBinding {
     pub options: SshOptions,
     pub title: String,
     pub host_id: Option<Id>,
+    pub directory: Option<String>,
     pub compact: bool,
 }
 pub(super) struct DirectoryBinding {
@@ -221,7 +222,7 @@ impl FilePane {
                     options: binding.options.for_new_connection(),
                     title: binding.title,
                     host_id: binding.host_id,
-                    path: "~".into(),
+                    path: binding.directory.unwrap_or_else(|| "~".into()),
                 },
                 window,
                 cx,

@@ -213,6 +213,9 @@ impl Nauterm {
                 options: options.for_new_connection(),
                 title: session.title.clone(),
                 host_id,
+                directory: (!compact)
+                    .then(|| session.restore_directory.clone())
+                    .flatten(),
                 compact,
             }),
             _ => None,

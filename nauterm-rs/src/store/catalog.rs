@@ -81,6 +81,7 @@ struct TelnetEdit<'a> {
     identity_id: &'a mut Option<i64>,
     identity_uuid: &'a mut Option<String>,
     theme: &'a mut Option<String>,
+    dark_theme: &'a mut Option<String>,
     encoding: &'a mut Option<String>,
 }
 fn patch_telnet(
@@ -101,6 +102,7 @@ fn patch_telnet(
         *row.identity_id = None;
         *row.identity_uuid = None;
         *row.theme = None;
+        *row.dark_theme = None;
         *row.encoding = None;
         return Ok(());
     };
@@ -118,6 +120,9 @@ fn patch_telnet(
     }
     if differs(before.map(|value| &value.theme), &after.theme) {
         *row.theme = after.theme.map(|theme| theme.id().into());
+    }
+    if differs(before.map(|value| &value.dark_theme), &after.dark_theme) {
+        *row.dark_theme = after.dark_theme.map(|theme| theme.id().into());
     }
     if differs(before.map(|value| &value.encoding), &after.encoding) {
         *row.encoding = Some(after.encoding.label().into());
@@ -144,6 +149,7 @@ struct ProfileEdit<'a> {
     key_id: &'a mut Option<i64>,
     key_uuid: &'a mut Option<String>,
     theme: &'a mut Option<String>,
+    dark_theme: &'a mut Option<String>,
     startup_id: &'a mut Option<i64>,
     startup_uuid: &'a mut Option<String>,
     environment: &'a mut Vec<nauterm_core::HostEnvironmentVariable>,
@@ -184,6 +190,10 @@ macro_rules! native_profile {
                     self.telnet_theme_id.as_deref(),
                     self.telnet_encoding.as_deref(),
                 )?;
+                profile.dark_theme = self
+                    .telnet_dark_theme_id
+                    .as_deref()
+                    .and_then(ThemeId::from_id);
                 profile.password_id = self
                     .telnet_password
                     .as_ref()
@@ -205,7 +215,9 @@ macro_rules! native_profile {
                     },
                     credential,
                     theme: self.theme_id.as_deref().and_then(ThemeId::from_id),
+                    dark_theme: self.dark_theme_id.as_deref().and_then(ThemeId::from_id),
                     setup: Setup {
+                        compatibility_mode: false,
                         profile_source: Some(reference.clone()),
                         password_id: self
                             .password
@@ -236,6 +248,7 @@ macro_rules! native_profile {
                     identity_id: &mut self.telnet_identity_id,
                     identity_uuid: &mut self.telnet_identity_uuid,
                     theme: &mut self.telnet_theme_id,
+                    dark_theme: &mut self.telnet_dark_theme_id,
                     encoding: &mut self.telnet_encoding,
                 }
             }
@@ -249,6 +262,7 @@ macro_rules! native_profile {
                     key_id: &mut self.key_id,
                     key_uuid: &mut self.key_uuid,
                     theme: &mut self.theme_id,
+                    dark_theme: &mut self.dark_theme_id,
                     startup_id: &mut self.startup_snippet_id,
                     startup_uuid: &mut self.startup_snippet_uuid,
                     environment: &mut self.environment_variables,
@@ -267,6 +281,7 @@ fn host_profile(host: &Host) -> Profile {
         username: host.username.clone(),
         credential: host.credential,
         theme: host.theme,
+        dark_theme: host.dark_theme,
         setup: host.ssh.clone(),
     }
 }
@@ -321,6 +336,9 @@ fn patch_profile(
     }
     if differs(before.map(|value| &value.theme), &after.theme) {
         *row.theme = after.theme.map(|theme| theme.id().to_owned());
+    }
+    if differs(before.map(|value| &value.dark_theme), &after.dark_theme) {
+        *row.dark_theme = after.dark_theme.map(|theme| theme.id().to_owned());
     }
     if differs(
         before.map(|value| &value.setup.startup_snippet),
@@ -438,7 +456,13 @@ impl Catalog {
                 unreachable!()
             };
             let stamp = Stamp::new(host.id, host.uuid.as_deref(), host.version)?;
-            let profile = host.view(stamp.reference("host"))?;
+            let mut profile = host.view(stamp.reference("host"))?;
+            profile.setup.compatibility_mode = host
+                .config
+                .get("ssh")
+                .and_then(|ssh| ssh.get("compatibility_mode"))
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or_default();
             catalog.hosts.push(Host {
                 id: id(stamp.id)?,
                 uuid: Some(stamp.uuid.clone()),
@@ -446,11 +470,19 @@ impl Catalog {
                     os: host.os.clone(),
                     distro: host.distro.clone(),
                 },
+                icon: host
+                    .config
+                    .get("icon")
+                    .and_then(serde_json::Value::as_str)
+                    .filter(|icon| !icon.is_empty())
+                    .map(str::to_owned),
                 name: host.name.clone(),
                 kind: match host.host_type {
                     HostType::Remote => HostKind::Remote,
                     HostType::Local => HostKind::Local,
+                    HostType::Serial => HostKind::Serial,
                 },
+                serial: crate::serial::Config::from_host(host)?,
                 shell_path: host.shell_path.clone(),
                 work_dir: host.work_dir.clone(),
                 ssh: profile.setup,
@@ -461,6 +493,7 @@ impl Catalog {
                 group_id: host.group_id.map(id).transpose()?,
                 proxy_id: host.proxy_id,
                 theme: profile.theme,
+                dark_theme: profile.dark_theme,
                 tags: host
                     .tag_uuids
                     .iter()
@@ -791,10 +824,42 @@ impl Catalog {
                 clear_host_identity(host);
             }
             host.name = value.name.clone();
+            if differs(template.map(|value| &value.icon), &value.icon) {
+                if let Some(icon) = &value.icon {
+                    host.config.insert("icon".into(), icon.clone().into());
+                } else {
+                    host.config.remove("icon");
+                }
+            }
             host.host_type = match value.kind {
                 HostKind::Remote => HostType::Remote,
                 HostKind::Local => HostType::Local,
+                HostKind::Serial => HostType::Serial,
             };
+            if let Some(serial) = value
+                .serial
+                .as_ref()
+                .filter(|_| value.kind == HostKind::Serial)
+            {
+                serial.apply_to_host(host);
+            } else if template.is_some_and(|previous| previous.kind == HostKind::Serial) {
+                host.serial_port = None;
+                host.serial_baud_rate = None;
+                host.config.remove("serial");
+            }
+            if value.supports_ssh()
+                && template
+                    .is_none_or(|old| old.ssh.compatibility_mode != value.ssh.compatibility_mode)
+            {
+                let ssh = host
+                    .config
+                    .entry("ssh")
+                    .or_insert_with(|| serde_json::json!({}));
+                if !ssh.is_object() {
+                    *ssh = serde_json::json!({});
+                }
+                ssh["compatibility_mode"] = value.ssh.compatibility_mode.into();
+            }
             if differs(template.map(|value| &value.address), &value.address) {
                 host.host = (!value.address.is_empty()).then(|| value.address.clone());
             }
@@ -834,6 +899,11 @@ impl Catalog {
                 && differs(template.map(|value| &value.theme), &value.theme)
             {
                 host.theme_id = value.theme.map(|theme| theme.id().into());
+            }
+            if !value.supports_ssh()
+                && differs(template.map(|value| &value.dark_theme), &value.dark_theme)
+            {
+                host.dark_theme_id = value.dark_theme.map(|theme| theme.id().into());
             }
             let before_mosh = template
                 .filter(|value| value.connections.mosh)

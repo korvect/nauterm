@@ -43,18 +43,16 @@ impl Nauterm {
         &mut self,
         session: &mut crate::native::Session,
         title: &str,
-        appearance: &crate::terminal_appearance::Appearance,
         host_id: Option<Id>,
         cx: &mut Context<Self>,
     ) {
-        if let Some(start) = self.prepare_connection_recording(title, appearance, host_id, cx) {
+        if let Some(start) = self.prepare_connection_recording(title, host_id, cx) {
             session.record(&start);
         }
     }
     pub(super) fn prepare_connection_recording(
         &mut self,
         title: &str,
-        appearance: &crate::terminal_appearance::Appearance,
         host_id: Option<Id>,
         cx: &mut Context<Self>,
     ) -> Option<crate::recordings::Start> {
@@ -62,8 +60,7 @@ impl Nauterm {
             return None;
         }
         let service = self.ensure_recordings(cx)?;
-        let mut start =
-            crate::recordings::Start::new(service, self.data.recordings, title, appearance.theme);
+        let mut start = crate::recordings::Start::new(service, self.data.recordings, title);
         if let Some(host) = host_id.and_then(|id| self.data.hosts.iter().find(|host| host.id == id))
         {
             start.host_id = i64::try_from(host.id).ok();

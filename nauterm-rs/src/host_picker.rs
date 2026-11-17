@@ -400,6 +400,7 @@ impl Render for HostPicker {
                             host.name.clone(),
                             format!("{}:{}", host.address, host.port),
                             avatar::host(&host.name)
+                                .custom_icon(host.icon.as_deref())
                                 .platform(host.platform.clone())
                                 .into_any_element(),
                         )
@@ -462,6 +463,9 @@ mod tests {
         let data = AppState {
             hosts: vec![
                 Host {
+                    serial: None,
+                    icon: None,
+                    dark_theme: None,
                     connections: Default::default(),
                     uuid: None,
                     platform: Default::default(),
@@ -481,6 +485,9 @@ mod tests {
                     theme: None,
                 },
                 Host {
+                    serial: None,
+                    icon: None,
+                    dark_theme: None,
                     connections: Default::default(),
                     uuid: None,
                     platform: Default::default(),

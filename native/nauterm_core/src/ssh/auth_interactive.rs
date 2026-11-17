@@ -1,13 +1,13 @@
 use super::*;
 use tokio::sync::oneshot;
 
-#[derive(Clone, Debug, serde::Serialize)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct KeyboardInteractivePrompt {
     pub prompt: String,
     pub echo: bool,
 }
 
-#[derive(Clone, Debug, serde::Serialize)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct KeyboardInteractiveChallenge {
     pub id: u64,
     pub name: String,
@@ -17,7 +17,7 @@ pub struct KeyboardInteractiveChallenge {
 
 #[derive(Default, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct AuthenticationCredentials {
+pub struct AuthenticationCredentials {
     pub method: String,
     pub password: Option<String>,
     pub private_key: Option<String>,

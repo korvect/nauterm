@@ -43,7 +43,7 @@ mod text;
 gpui_kit::actions!(terminal, [Find]);
 
 pub struct Terminal {
-    session: Session,
+    pub(crate) session: Session,
     connection: ConnectionState,
     network: network::Status,
     reconnect: reconnect::Reconnect,

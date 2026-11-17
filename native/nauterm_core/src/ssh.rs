@@ -37,7 +37,7 @@ mod sftp;
 pub(crate) use auth::{
     authenticate, openssh_certificate_type, prepare_private_key, HostKeyVerification,
 };
-pub(crate) use auth_interactive::AuthenticationCredentials;
+pub use auth_interactive::AuthenticationCredentials;
 use auth_interactive::AuthenticationInteraction;
 pub use auth_interactive::KeyboardInteractiveChallenge;
 use probe::*;
@@ -1583,7 +1583,7 @@ enum SshCommand {
     Shutdown,
 }
 
-const SSH_COMPATIBILITY_MODE_ENV: &str = "__NAUTERM_SSH_COMPATIBILITY_MODE";
+pub const SSH_COMPATIBILITY_MODE_ENV: &str = "__NAUTERM_SSH_COMPATIBILITY_MODE";
 
 struct SshTarget {
     authentication: AuthenticationInteraction,
@@ -1714,7 +1714,7 @@ impl SshTransport {
         self.authentication.respond(id, responses)
     }
 
-    pub(crate) fn respond_to_authentication_credentials(
+    pub fn respond_to_authentication_credentials(
         &self,
         id: u64,
         credentials: AuthenticationCredentials,

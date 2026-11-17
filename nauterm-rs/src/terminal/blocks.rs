@@ -102,7 +102,7 @@ impl Terminal {
                 }
             }
         }
-        if self.appearance.copy_on_select {
+        if self.appearance.copy_on_select && self.selection.is_some() {
             self.copy_selection(cx);
         }
     }

@@ -336,6 +336,14 @@ impl Core {
                 },
             )
             .collect();
+        if options.compatibility_mode {
+            terminal
+                .environment
+                .push(nauterm_core::terminal::TerminalEnvironmentVariable {
+                    variable: nauterm_core::ssh::SSH_COMPATIBILITY_MODE_ENV.into(),
+                    value: "true".into(),
+                });
+        }
         let id = sessions(|manager| {
             if let Some(config) = mosh {
                 return manager.create_mosh(
@@ -556,6 +564,7 @@ impl HostOsRequest {
                     Some(&args.known_hosts),
                     args.native_proxy(),
                     HostTrust::Strict.native(),
+                    options.compatibility_mode,
                 )
             }
         };
@@ -612,6 +621,7 @@ impl SystemInfoRequest {
             Some(&args.known_hosts),
             args.native_proxy(),
             HostTrust::Strict.native(),
+            self.options.compatibility_mode,
         );
         let mut info: crate::system_info::data::Snapshot = mapped(native)?;
         info.processes.truncate(200);
@@ -976,6 +986,30 @@ impl Session {
         Ok(())
     }
 
+    pub(crate) fn respond_to_authentication(&self, id: u64, responses: Vec<String>) -> Result<()> {
+        ensure!(
+            sessions(|manager| manager.respond_to_authentication(self.id, id, Some(responses)))?,
+            "The authentication challenge is no longer active."
+        );
+        Ok(())
+    }
+
+    pub(crate) fn respond_to_credentials(
+        &self,
+        id: u64,
+        credentials: nauterm_core::ssh::AuthenticationCredentials,
+    ) -> Result<()> {
+        ensure!(
+            sessions(|manager| manager.respond_to_authentication_credentials(
+                self.id,
+                id,
+                credentials
+            ))?,
+            "The credentials request is no longer active."
+        );
+        Ok(())
+    }
+
     fn native_events(&self) -> Result<Vec<SessionEvent>> {
         mapped(sessions(|manager| manager.drain_events(self.id))?)
     }
@@ -1044,7 +1078,6 @@ impl Session {
             title: start.title.clone(),
             host_id: start.host_id,
             host_uuid: start.host_uuid.clone(),
-            theme_id: Some(start.theme.id().into()),
             started_at: start.started_at,
             ..Default::default()
         };
@@ -1417,6 +1450,7 @@ pub struct SshOptions {
     pub temporary_trust: Option<Arc<tempfile::TempDir>>,
     pub proxy: Option<crate::proxies::Transport>,
     pub encoding: crate::host_session::Encoding,
+    pub compatibility_mode: bool,
     pub environment: Vec<crate::host_session::Variable>,
     pub startup: zeroize::Zeroizing<String>,
     pub password: zeroize::Zeroizing<String>,
@@ -1442,6 +1476,7 @@ impl SshOptions {
             temporary_trust: None,
             proxy: None,
             encoding: Default::default(),
+            compatibility_mode: false,
             environment: vec![],
             startup: Default::default(),
             password: Default::default(),
@@ -1530,6 +1565,9 @@ pub struct SessionEvent {
     pub method: Option<String>,
     pub exit_status: Option<u32>,
     pub latency_ms: Option<u32>,
+    pub challenge: Option<nauterm_core::ssh::KeyboardInteractiveChallenge>,
+    pub authentication_methods: Option<Vec<String>>,
+    pub authentication_request_id: Option<u64>,
 }
 
 impl Drop for Session {

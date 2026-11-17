@@ -130,6 +130,7 @@ impl Nauterm {
         editor.proxy_id = host.proxy_id;
         if let Some(theme) = &mut editor.theme {
             theme.selected = host.theme;
+            theme.dark_selected = host.dark_theme;
         }
         draft.setup = host.ssh;
         if let Some(id) = profile.setup.environment_id

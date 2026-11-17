@@ -85,6 +85,9 @@ impl Nauterm {
         cx: &mut Context<Self>,
     ) {
         let result = (|| -> anyhow::Result<Host> {
+            if let Some(host) = &choice.temporary {
+                return Ok(host.clone());
+            }
             let host = self
                 .data
                 .hosts
@@ -136,6 +139,78 @@ impl Nauterm {
         session.title = host.name.clone();
         session.content = TabContent::Preparing(None);
         session._metadata.clear();
+        if host.id == 0 {
+            let Host {
+                address,
+                username,
+                name,
+                ..
+            } = host;
+            match choice.protocol {
+                Protocol::Telnet => self.install_telnet_connection(
+                    id,
+                    core,
+                    crate::telnet::Options {
+                        host: address,
+                        port: choice.port,
+                        username,
+                        password: Default::default(),
+                        encoding: Default::default(),
+                    },
+                    window,
+                    cx,
+                ),
+                Protocol::Ssh => self.install_connection(
+                    id,
+                    core,
+                    SshOptions::new(
+                        address,
+                        choice.port,
+                        username,
+                        self.store.paths.known_hosts(),
+                    ),
+                    window,
+                    cx,
+                ),
+                Protocol::Mosh => {
+                    let config = match crate::mosh::Config::new(choice.command.as_deref()) {
+                        Ok(config) => config,
+                        Err(error) => {
+                            self.session_mut(id).unwrap().content =
+                                TabContent::Preparing(Some(error.to_string()));
+                            cx.notify();
+                            return;
+                        }
+                    };
+                    let options = SshOptions::new(
+                        address,
+                        choice.port,
+                        username,
+                        self.store.paths.known_hosts(),
+                    );
+                    let appearance = self.data.terminal_for_host(None);
+                    let recording = self.prepare_connection_recording(&name, None, cx);
+                    let view = cx.new(|cx| {
+                        Connection::new_mosh_unfocused(
+                            core,
+                            options,
+                            config,
+                            crate::connection::TerminalPresentation {
+                                title: name,
+                                dark: self.data.dark,
+                                palette: appearance.palette(),
+                                recording,
+                            },
+                            window,
+                            cx,
+                        )
+                    });
+                    self.watch_connection(id, view, window, cx);
+                }
+            }
+            cx.notify();
+            return;
+        }
         match choice.protocol {
             Protocol::Ssh => {
                 session.restore_target = Some(RestoreTarget::Host {

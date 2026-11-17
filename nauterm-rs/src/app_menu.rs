@@ -38,7 +38,6 @@ pub struct SelectTab {
 
 struct MainWindow {
     handle: AnyWindowHandle,
-    #[cfg(target_os = "macos")]
     view: WeakEntity<crate::ui::Nauterm>,
 }
 impl Global for MainWindow {}
@@ -46,12 +45,51 @@ impl Global for MainWindow {}
 pub fn register_main_window(window: &Window, view: &Entity<crate::ui::Nauterm>, cx: &mut App) {
     cx.set_global(MainWindow {
         handle: window.window_handle(),
-        #[cfg(target_os = "macos")]
         view: view.downgrade(),
     });
-    #[cfg(not(target_os = "macos"))]
-    let _ = view;
     crate::window_chrome::register_window(window);
+    if cx.try_global::<ConnectionLinks>().is_some() {
+        cx.defer(dispatch_connection_links);
+    }
+}
+
+#[derive(Default)]
+struct ConnectionLinks(Vec<crate::quick_connect::Target>);
+impl Global for ConnectionLinks {}
+
+pub fn open_connection_links(urls: Vec<String>, cx: &mut App) {
+    let links = urls
+        .iter()
+        .filter_map(|url| crate::quick_connect::connection_url(url))
+        .collect::<Vec<_>>();
+    if links.is_empty() {
+        return;
+    }
+    if cx.try_global::<ConnectionLinks>().is_none() {
+        cx.set_global(ConnectionLinks::default());
+    }
+    cx.global_mut::<ConnectionLinks>().0.extend(links);
+    if windows::has_main_window(cx) {
+        dispatch_connection_links(cx);
+    } else {
+        windows::open(cx);
+    }
+}
+
+fn dispatch_connection_links(cx: &mut App) {
+    if !windows::has_main_window(cx) {
+        return;
+    }
+    let (handle, view) = {
+        let main = cx.global::<MainWindow>();
+        (main.handle, main.view.clone())
+    };
+    let links = std::mem::take(&mut cx.global_mut::<ConnectionLinks>().0);
+    if !links.is_empty() {
+        let _ = handle.update(cx, |_, window, cx| {
+            let _ = view.update(cx, |this, cx| this.open_connection_links(links, window, cx));
+        });
+    }
 }
 
 #[cfg(target_os = "macos")]

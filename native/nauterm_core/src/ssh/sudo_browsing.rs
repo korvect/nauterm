@@ -28,6 +28,7 @@ pub fn list(
     trust: HostKeyTrustMode,
     session_id: &str,
     sudo_password: Option<&str>,
+    compatibility_mode: bool,
 ) -> SftpDirectoryEntries {
     let events = Arc::new(Mutex::new(Vec::<SessionEvent>::new()));
     let cancel = sftp_task_cancel_flag(request_id);
@@ -86,7 +87,7 @@ pub fn list(
                                 events.clone(),
                                 sudo_password,
                                 8,
-                                false,
+                                compatibility_mode,
                             ),
                         )
                         .await?;

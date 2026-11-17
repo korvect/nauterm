@@ -1868,24 +1868,24 @@ mod tests {
         .unwrap();
 
         let (header, payload, _) =
-            decrypt_envelope(envelope.clone(), None, Some(&sync_key), 5).unwrap();
+            decrypt_envelope(envelope.clone(), None, Some(&sync_key), 7).unwrap();
         assert_eq!(header.schema_version, 4);
         assert_eq!(payload.exported_at, 42);
 
-        for version in [0, 1, 2, 3, 4, 5, 6] {
+        for version in 0..=8 {
             let mut candidate = envelope.clone();
             candidate.header.schema_version = version;
             let bytes = serde_json::to_vec(&candidate).unwrap();
             assert_eq!(
-                inspect_envelope(&bytes, 5).is_ok(),
-                matches!(version, 4 | 5),
+                inspect_envelope(&bytes, 7).is_ok(),
+                (1..=7).contains(&version),
                 "schema {version}"
             );
         }
 
         let mut tampered = envelope;
         tampered.header.schema_version = 5;
-        assert!(decrypt_envelope(tampered, None, Some(&sync_key), 5).is_err());
+        assert!(decrypt_envelope(tampered, None, Some(&sync_key), 7).is_err());
     }
 
     #[test]

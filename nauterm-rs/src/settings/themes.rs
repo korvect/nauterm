@@ -89,7 +89,7 @@ impl Settings {
         for (index, color) in self
             .values
             .terminal
-            .palette()
+            .palette_for_mode(self.edit_dark_terminal_theme)
             .editor_colors()
             .into_iter()
             .enumerate()
@@ -104,7 +104,11 @@ impl Settings {
                     if state.read(cx).revision != event.revision {
                         return;
                     }
-                    if let Err(error) = this.values.terminal.change_color(index, event.color) {
+                    if let Err(error) = this.values.terminal.change_mode_color(
+                        this.edit_dark_terminal_theme,
+                        index,
+                        event.color,
+                    ) {
                         this.error = Some(error.to_string());
                         cx.notify();
                         return;
@@ -119,12 +123,25 @@ impl Settings {
         }
     }
     fn select_theme(&mut self, id: ThemeId, window: &mut Window, cx: &mut Context<Self>) {
-        self.external_theme(id, window, cx);
+        if self.edit_dark_terminal_theme {
+            self.values.terminal.dark_theme = id;
+            self.values.terminal.dark_custom_palette = None;
+            self.refresh_theme_colors(window, cx);
+        } else {
+            self.external_theme(id, window, cx);
+        }
         self.changed(window, cx);
     }
     pub fn external_theme(&mut self, id: ThemeId, window: &mut Window, cx: &mut Context<Self>) {
         self.values.terminal.select_theme(id);
-        let values = self.values.terminal.palette().editor_colors();
+        self.refresh_theme_colors(window, cx);
+    }
+    fn refresh_theme_colors(&self, window: &mut Window, cx: &mut Context<Self>) {
+        let values = self
+            .values
+            .terminal
+            .palette_for_mode(self.edit_dark_terminal_theme)
+            .editor_colors();
         for (control, color) in self.colors.iter().zip(values) {
             control
                 .state
@@ -253,13 +270,11 @@ impl Settings {
             (usable - 24.) / 2. - 20.
         };
         let columns = if gallery_width < 500. { 2 } else { 3 };
-        let selected =
-            (self.values.terminal.custom_palette.is_none()).then_some(self.values.terminal.theme);
-        let title = if selected.is_some() {
-            self.values.terminal.theme.label()
-        } else {
-            "Custom".into()
-        };
+        let (theme, custom) = self
+            .values
+            .terminal
+            .theme_for_mode(self.edit_dark_terminal_theme);
+        let selected = custom.is_none().then_some(theme);
         let ready = self.theme_gallery_ready;
         let row_count = if ready {
             self.theme_matches.len().div_ceil(columns)
@@ -268,7 +283,26 @@ impl Settings {
         };
         div().w_full().flex().gap(px(24.)).when(compact, |view| view.flex_col())
             .child(div().flex_1().min_w_0().h(px(620.)).flex().flex_col().gap(px(14.))
-                .child(div().w_full().h(px(ThemePreview::COMPACT_HEIGHT)).flex_shrink_0().child(ThemePreview::new(title, self.values.terminal.palette()).compact()))
+                .child(self.row("settings.terminal.followTheme.title", "settings.terminal.followTheme.description",
+                    Switch::new("follow-terminal-appearance", "Switch themes automatically", self.values.terminal.follow_app_theme)
+                        .on_change(cx.listener(|this, value, window, cx| {
+                            this.values.terminal.follow_app_theme = *value;
+                            this.changed(window, cx);
+                        }))))
+                .child(div().flex().gap(px(8.)).children([false, true].into_iter().map(|dark| {
+                    let (theme, custom) = self.values.terminal.theme_for_mode(dark);
+                    let title = if custom.is_some() { "Custom".into() } else { theme.label() };
+                    div().flex_1().min_w_0().flex().flex_col().gap(px(4.))
+                        .child(crate::localization::text(cx, if dark { "Dark theme" } else { "Light theme" }))
+                        .child(Button::new(if dark { "edit-dark-terminal-theme" } else { "edit-light-terminal-theme" })
+                            .ghost().p_0().h(px(ThemePreview::COMPACT_HEIGHT))
+                            .child(ThemePreview::new(title, self.values.terminal.palette_for_mode(dark))
+                                .compact().selected(self.edit_dark_terminal_theme == dark))
+                            .on_click(cx.listener(move |this, _, window, cx| {
+                                this.edit_dark_terminal_theme = dark;
+                                this.refresh_theme_colors(window, cx);
+                            })))
+                })))
                 .child(self.inspector()))
             .child(div().flex_1().min_w_0().h(px(620.)).rounded(px(10.)).border_1().border_color(p.border).bg(p.sidebar).p(px(10.)).flex().flex_col().gap(px(10.))
                 .child(Input::new(&self.theme_search).small().aria_label(crate::localization::text(cx, "Search themes")).cleanable(true).prefix(Icon::new(IconName::Search).with_size(px(14.))))

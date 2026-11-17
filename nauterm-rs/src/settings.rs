@@ -2,8 +2,8 @@
 //! the owning workspace persists them and updates its live terminal entities.
 use crate::{
     components::{
-        RadioGroup, RgbChange, RgbPicker, RgbState, ScrollbarsExt, SelectEvent, SelectModel,
-        SelectOption, Switch, TrackedText,
+        RgbChange, RgbPicker, RgbState, ScrollbarsExt, SelectEvent, SelectModel, SelectOption,
+        Switch, TrackedText,
         settings::{Button, Input},
     },
     model::{AppState, AppTheme, RestoreBehavior},
@@ -151,6 +151,26 @@ impl Field {
         appearance.validate()
     }
 }
+fn restore_behavior_options() -> Vec<SelectOption<RestoreBehavior>> {
+    [
+        (
+            RestoreBehavior::Ask,
+            "settings.general.workspaceRestore.ask",
+        ),
+        (
+            RestoreBehavior::Always,
+            "settings.general.workspaceRestore.always",
+        ),
+        (
+            RestoreBehavior::Never,
+            "settings.general.workspaceRestore.never",
+        ),
+    ]
+    .into_iter()
+    .map(|(value, label)| SelectOption::localized(value, label))
+    .collect()
+}
+
 struct Control {
     field: Field,
     select: SelectModel<String>,
@@ -166,6 +186,8 @@ pub struct Settings {
     language: general::LanguageControl,
     host_icons: SelectModel<crate::avatar::Mode>,
     _host_icon_events: Subscription,
+    restore_behavior: SelectModel<RestoreBehavior>,
+    _restore_behavior_events: Subscription,
     page: Page,
     page_generation: u64,
     search: search::State,
@@ -184,6 +206,7 @@ pub struct Settings {
     theme_search: Entity<InputState>,
     theme_matches: Vec<ThemeId>,
     theme_gallery_ready: bool,
+    edit_dark_terminal_theme: bool,
     theme_scroll: UniformListScrollHandle,
     _theme_search_events: Subscription,
     word_boundaries: Entity<InputState>,
@@ -270,6 +293,18 @@ impl Settings {
             |this, _, event: &SelectEvent<crate::avatar::Mode>, window, cx| {
                 if let SelectEvent::Confirm(Some(Some(mode))) = event {
                     this.values.host_icons = *mode;
+                    this.changed(window, cx);
+                }
+            },
+        );
+        let restore_behavior =
+            SelectModel::new(restore_behavior_options(), Some(values.restore), window, cx);
+        let restore_behavior_events = cx.subscribe_in(
+            &restore_behavior.state,
+            window,
+            |this, _, event: &SelectEvent<RestoreBehavior>, window, cx| {
+                if let SelectEvent::Confirm(Some(Some(behavior))) = event {
+                    this.values.restore = *behavior;
                     this.changed(window, cx);
                 }
             },
@@ -498,6 +533,8 @@ impl Settings {
             language,
             host_icons,
             _host_icon_events: host_icon_events,
+            restore_behavior,
+            _restore_behavior_events: restore_behavior_events,
             page: Page::General,
             page_generation: 0,
             search,
@@ -516,6 +553,7 @@ impl Settings {
             theme_search,
             theme_matches: vec![],
             theme_gallery_ready: false,
+            edit_dark_terminal_theme: false,
             theme_scroll: UniformListScrollHandle::default(),
             _theme_search_events: theme_events,
             word_boundaries,
@@ -922,28 +960,6 @@ impl Settings {
         self.search.section(section, content)
     }
     fn general(&self, window: &Window, cx: &mut Context<Self>) -> AnyElement {
-        let restore_behavior = RadioGroup::new(
-            "restore-behavior",
-            [
-                (
-                    RestoreBehavior::Ask,
-                    self.text("settings.general.workspaceRestore.ask"),
-                ),
-                (
-                    RestoreBehavior::Always,
-                    self.text("settings.general.workspaceRestore.always"),
-                ),
-                (
-                    RestoreBehavior::Never,
-                    self.text("settings.general.workspaceRestore.never"),
-                ),
-            ],
-            self.values.restore,
-        )
-        .on_change(cx.listener(|this, value, window, cx| {
-            this.values.restore = *value;
-            this.changed(window, cx);
-        }));
         sections::stack()
             .child(
                 self.section(
@@ -1003,18 +1019,11 @@ impl Settings {
                                 )),
                             ),
                         )
-                        .child(
-                            div()
-                                .w_full()
-                                .flex()
-                                .flex_col()
-                                .gap(px(10.))
-                                .child(self.row_caption(
-                                    "settings.general.workspaceRestore.label",
-                                    "settings.general.workspaceRestore.description",
-                                ))
-                                .child(div().w_full().max_w(px(560.)).child(restore_behavior)),
-                        )
+                        .child(self.row(
+                            "settings.general.workspaceRestore.label",
+                            "settings.general.workspaceRestore.description",
+                            self.restore_behavior.control("Restore on startup", cx),
+                        ))
                         .child(
                             self.row(
                                 "settings.general.confirmOnClose.label",

@@ -1271,7 +1271,7 @@ impl SessionManager {
             .unwrap_or(false)
     }
 
-    pub(crate) fn respond_to_authentication_credentials(
+    pub fn respond_to_authentication_credentials(
         &self,
         id: SessionId,
         request_id: u64,

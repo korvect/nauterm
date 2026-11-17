@@ -4,6 +4,8 @@ use gpui_kit::base::input::InputState;
 pub(super) struct Draft {
     pub automatic_name: Option<super::host_name::Draft>,
     pub kind: HostKind,
+    pub serial: Entity<crate::serial::dialog::Connection>,
+    pub icon: SelectModel<String>,
     pub telnet: super::telnet_config::Draft,
     pub mosh: super::mosh_config::Draft,
     pub shell: Option<String>,
@@ -132,7 +134,7 @@ impl Draft {
             },
         );
         let types = SelectModel::new(
-            [HostKind::Remote, HostKind::Local]
+            [HostKind::Remote, HostKind::Local, HostKind::Serial]
                 .into_iter()
                 .map(|kind| SelectOption::localized(kind, kind.label()))
                 .collect(),
@@ -154,7 +156,7 @@ impl Draft {
                     && let SelectEvent::Confirm(Some(Some(kind))) = event
                 {
                     draft.kind = *kind;
-                    if *kind == HostKind::Local {
+                    if *kind != HostKind::Remote {
                         draft.cancel_inheritance();
                     }
                     cx.notify();
@@ -199,6 +201,19 @@ impl Draft {
             });
         })
         .detach();
+        let icon = SelectModel::new(
+            std::iter::once(SelectOption::localized(String::new(), "Automatic"))
+                .chain(
+                    crate::avatar::HOST_ICON_NAMES
+                        .iter()
+                        .map(|(id, label)| SelectOption::new((*id).into(), *label)),
+                )
+                .collect(),
+            Some(host.and_then(|host| host.icon.clone()).unwrap_or_default()),
+            window,
+            cx,
+        );
+        let icon_event = cx.subscribe(&icon.state, |_, _, _: &SelectEvent<String>, cx| cx.notify());
         Self {
             automatic_name: None,
             ssh_enabled: host.is_none_or(|host| host.connections.ssh),
@@ -223,6 +238,14 @@ impl Draft {
             environment_changed: false,
             environment_page: None,
             kind,
+            icon,
+            serial: cx.new(|cx| {
+                crate::serial::dialog::Connection::embedded(
+                    host.and_then(|host| host.serial.as_ref()),
+                    window,
+                    cx,
+                )
+            }),
             shell,
             types,
             shells,
@@ -234,6 +257,7 @@ impl Draft {
             }),
             _events: vec![
                 type_event,
+                icon_event,
                 shell_event,
                 startup_event,
                 startup_create,
@@ -241,8 +265,17 @@ impl Draft {
             ],
         }
     }
+    pub fn selected_icon<'a>(&self, cx: &'a App) -> Option<&'a str> {
+        self.icon
+            .state
+            .read(cx)
+            .selected_value()
+            .and_then(|value| value.as_deref())
+            .filter(|value| !value.is_empty())
+    }
+
     pub fn values(&self, cx: &App) -> (HostKind, Option<String>, Option<String>) {
-        if self.kind == HostKind::Remote {
+        if self.kind != HostKind::Local {
             return (self.kind, None, None);
         }
         let directory = self.directory.read(cx).value().trim().to_owned();
@@ -253,6 +286,9 @@ impl Draft {
         )
     }
     pub fn validate(&self, cx: &App) -> anyhow::Result<()> {
+        if self.kind == HostKind::Serial {
+            return self.serial.read(cx).configuration(cx).map(|_| ());
+        }
         if self.kind == HostKind::Local {
             let (kind, shell_path, work_dir) = self.values(cx);
             Host {
@@ -432,6 +468,31 @@ impl Nauterm {
                 vec![
                     self.editor_field(editor, 0, "Name *"),
                     draft.types.field("Type", draft.busy),
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(8.))
+                        .child(
+                            crate::avatar::host(&editor.fields[0].1.read(cx).value())
+                                .editing()
+                                .platform(
+                                    editor
+                                        .id
+                                        .and_then(|id| {
+                                            self.data.hosts.iter().find(|host| host.id == id)
+                                        })
+                                        .map(|host| host.platform.clone())
+                                        .unwrap_or_default(),
+                                )
+                                .custom_icon(draft.selected_icon(cx)),
+                        )
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .child(draft.icon.filterable_field("Icon", draft.busy)),
+                        )
+                        .into_any_element(),
                     self.parent_group_field(editor),
                     editor
                         .tags
@@ -443,7 +504,12 @@ impl Nauterm {
                 ],
             ),
         ];
-        if local {
+        sections.swap(0, 1);
+        if draft.kind == HostKind::Serial {
+            sections.remove(1);
+            sections
+                .push(self.editor_section("Serial", vec![draft.serial.clone().into_any_element()]));
+        } else if local {
             sections.push(self.editor_section("Theme", vec![self.host_theme_section(editor, cx)]));
             sections.push(self.editor_section(
                 "Local",
@@ -469,6 +535,25 @@ impl Nauterm {
         let draft = editor.host.as_ref().unwrap();
         let selects = editor.selects.as_ref().unwrap();
         let mut fields = self.host_authentication_fields(editor, cx);
+        if editor.kind == ItemKind::Host {
+            fields.push(
+                crate::components::Switch::new(
+                    "ssh-compatibility-mode",
+                    "Compatibility Mode",
+                    draft.setup.compatibility_mode,
+                )
+                .disabled(draft.busy)
+                .on_change(cx.listener(|this, value, _, cx| {
+                    if let Some(draft) =
+                        this.editor.as_mut().and_then(|editor| editor.host.as_mut())
+                    {
+                        draft.setup.compatibility_mode = *value;
+                        cx.notify();
+                    }
+                }))
+                .into_any_element(),
+            );
+        }
         if draft.more {
             fields.push(draft.startup.field_with_actions(
                 "Startup snippet",

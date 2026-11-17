@@ -140,7 +140,7 @@ pub(crate) fn prepare_private_key<'a>(
     events: &Arc<Mutex<Vec<SessionEvent>>>,
     wakeup: &Arc<Mutex<Option<WakeupCallback>>>,
 ) -> Result<Option<PreparedPrivateKey<'a>>, String> {
-    let Some(encoded) = encoded else {
+    let Some(encoded) = configured_secret(encoded) else {
         return Ok(None);
     };
     // OpenSSH retains the public key outside the encrypted private section.
@@ -687,7 +687,11 @@ pub(crate) async fn authenticate<H: client::Handler>(
     let mut partially_authenticated = false;
     loop {
         if remaining_methods.contains(&russh::MethodKind::PublicKey) {
-            if let Some(encoded) = credentials.private_key.take() {
+            if let Some(encoded) = credentials
+                .private_key
+                .take()
+                .filter(|value| !value.is_empty())
+            {
                 let prepared = prepare_private_key(Some(&encoded), events, wakeup)?.unwrap();
                 let result = authenticate_configured_key(
                     handle,

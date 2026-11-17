@@ -188,7 +188,7 @@ impl Nauterm {
         let label = session.title.clone();
         let appearance = session.appearance(&self.data);
         let host_id = session.host_id();
-        let recording = self.prepare_connection_recording(&label, &appearance, host_id, cx);
+        let recording = self.prepare_connection_recording(&label, host_id, cx);
         let connection = cx.new(|cx| {
             Connection::new_telnet_unfocused(
                 core,

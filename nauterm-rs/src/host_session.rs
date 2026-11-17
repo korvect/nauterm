@@ -20,6 +20,7 @@ pub struct Profile {
     pub username: String,
     pub credential: Option<crate::model::CredentialRef>,
     pub theme: Option<crate::terminal_appearance::ThemeId>,
+    pub dark_theme: Option<crate::terminal_appearance::ThemeId>,
     pub setup: Setup,
 }
 impl Default for Profile {
@@ -29,6 +30,7 @@ impl Default for Profile {
             username: String::new(),
             credential: None,
             theme: None,
+            dark_theme: None,
             setup: Setup::default(),
         }
     }
@@ -89,6 +91,7 @@ pub fn inherit_defaults(
         host.credential = profile.credential;
     }
     host.theme = host.theme.or(profile.theme);
+    host.dark_theme = host.dark_theme.or(profile.dark_theme);
     host.ssh.startup_snippet = host.ssh.startup_snippet.or(profile.setup.startup_snippet);
     if !flags.encoding_configured {
         host.ssh.encoding = profile.setup.encoding;
@@ -137,6 +140,7 @@ pub struct Setup {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub password_id: Option<String>,
     pub encoding: Encoding,
+    pub compatibility_mode: bool,
 }
 impl Setup {
     pub fn is_default(&self) -> bool {
@@ -343,6 +347,7 @@ impl Vault {
     ) -> Result<SshOptions> {
         setup.validate()?;
         options.encoding = setup.encoding;
+        options.compatibility_mode = setup.compatibility_mode;
         if let Some(id) = setup.environment_id {
             options.environment = self.host_environment(id).await?;
         }

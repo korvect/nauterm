@@ -133,12 +133,14 @@ pub enum HostKind {
     #[default]
     Remote,
     Local,
+    Serial,
 }
 impl HostKind {
     pub fn label(self) -> &'static str {
         match self {
             Self::Remote => "Remote",
             Self::Local => "Local",
+            Self::Serial => "Serial",
         }
     }
 }
@@ -151,6 +153,8 @@ pub struct Host {
     /// Read-only projection of the shared native Host's detected platform.
     #[serde(skip)]
     pub platform: crate::avatar::Platform,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
     pub name: String,
     #[serde(default, rename = "type")]
     pub kind: HostKind,
@@ -158,6 +162,8 @@ pub struct Host {
     pub shell_path: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub work_dir: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub serial: Option<crate::serial::Config>,
     #[serde(
         default,
         skip_serializing_if = "crate::host_session::Setup::is_default"
@@ -176,6 +182,8 @@ pub struct Host {
     /// None follows the application terminal theme; persist only a resource ID.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub theme: Option<crate::terminal_appearance::ThemeId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dark_theme: Option<crate::terminal_appearance::ThemeId>,
     /// Native protocol availability, refreshed with the shared catalog. This
     /// projection does not become a second owner of protocol configuration.
     #[serde(skip)]
@@ -208,7 +216,12 @@ impl Host {
     }
     pub fn protocol_summary(&self) -> String {
         if !self.is_remote() {
-            return "local".into();
+            return if self.kind == HostKind::Serial {
+                "serial"
+            } else {
+                "local"
+            }
+            .into();
         }
         [
             self.connections.ssh.then_some("ssh"),
@@ -221,7 +234,14 @@ impl Host {
         .join(", ")
     }
     pub fn validate_endpoint(&self) -> anyhow::Result<()> {
-        use anyhow::ensure;
+        use anyhow::{Context, ensure};
+        if self.kind == HostKind::Serial {
+            return self
+                .serial
+                .as_ref()
+                .context("Serial configuration is required.")?
+                .validate();
+        }
         if self.is_remote() {
             if self.connections.ssh {
                 self.ssh.validate()?;
@@ -289,6 +309,7 @@ impl Group {
             username: profile.username,
             credential: profile.credential,
             theme: profile.theme,
+            dark_theme: profile.dark_theme,
             proxy_id: self.proxy_id,
             ssh: profile.setup,
             connections: ConnectionProfiles {
@@ -555,11 +576,33 @@ impl AppState {
             })
     }
     pub fn terminal_for_host(&self, id: Option<Id>) -> crate::terminal_appearance::Appearance {
-        let mut appearance = self.terminal.clone();
-        if let Some(theme) = id
+        self.terminal_for_protocol(id, false)
+    }
+    pub fn terminal_for_protocol(
+        &self,
+        id: Option<Id>,
+        telnet: bool,
+    ) -> crate::terminal_appearance::Appearance {
+        let dark = self.terminal.follow_app_theme && self.dark;
+        let mut appearance = self.terminal.for_app_theme(self.dark);
+        let theme = id
             .and_then(|id| self.hosts.iter().find(|host| host.id == id))
-            .and_then(|host| host.theme)
-        {
+            .and_then(|host| {
+                if telnet {
+                    host.connections.telnet.as_ref().and_then(|profile| {
+                        if dark {
+                            profile.dark_theme
+                        } else {
+                            profile.theme
+                        }
+                    })
+                } else if dark {
+                    host.dark_theme
+                } else {
+                    host.theme
+                }
+            });
+        if let Some(theme) = theme {
             appearance.select_theme(theme);
         }
         appearance
@@ -1228,6 +1271,9 @@ mod tests {
     fn scoped_search_combines_fields_and_is_case_insensitive() {
         let state = AppState::default();
         let host = Host {
+            serial: None,
+            icon: None,
+            dark_theme: None,
             connections: Default::default(),
             uuid: None,
             platform: Default::default(),
@@ -1266,6 +1312,9 @@ mod tests {
             proxy_id: None,
         });
         state.hosts.push(Host {
+            serial: None,
+            icon: None,
+            dark_theme: None,
             connections: Default::default(),
             uuid: None,
             platform: Default::default(),

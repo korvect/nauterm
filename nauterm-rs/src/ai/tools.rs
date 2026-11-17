@@ -610,7 +610,7 @@ mod tests {
         message.content = "Changed".into();
         assert!(google_text_replay(&message).is_err());
         message.content = "Hello".into();
-        message.provider_metadata.get_mut("google_parts").unwrap()[0]["text"] = json!(42);
+        message.provider_metadata.get_mut("google").unwrap()["parts"][0]["text"] = json!(42);
         assert!(google_text_replay(&message).is_err());
         Ok(())
     }

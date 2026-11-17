@@ -130,6 +130,14 @@ fn main() -> anyhow::Result<()> {
     let quit_journal = recovery.as_ref().map(|recovery| recovery.journal.clone());
     let reopen_journal = quit_journal.clone();
     let application = gpui_kit::application().with_assets(assets::Assets);
+    let (url_tx, url_rx) = async_channel::unbounded();
+    application.on_open_urls(move |urls| {
+        let _ = url_tx.try_send(urls);
+    });
+    let launch_links = std::env::args_os()
+        .skip(1)
+        .filter_map(|arg| arg.into_string().ok())
+        .collect();
     application.on_reopen(app_menu::reopen);
     application.run(move |cx| {
         gpui_kit::init(cx);
@@ -223,6 +231,13 @@ fn main() -> anyhow::Result<()> {
             cx.quit();
         }
         cx.activate(true);
+        app_menu::open_connection_links(launch_links, cx);
+        cx.spawn(async move |cx| {
+            while let Ok(urls) = url_rx.recv().await {
+                cx.update(|cx| app_menu::open_connection_links(urls, cx));
+            }
+        })
+        .detach();
         #[cfg(target_os = "macos")]
         cx.foreground_executor()
             .spawn(async {

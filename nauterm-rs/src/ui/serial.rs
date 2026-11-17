@@ -6,6 +6,7 @@ use crate::{
         dialog::{Connection as SerialConnection, Event},
     },
 };
+use anyhow::Context as _;
 
 pub(super) struct SerialDialog {
     view: Entity<SerialConnection>,
@@ -28,7 +29,9 @@ impl Nauterm {
                 }
                 let Event::Connect(config) = event;
                 let core = view.read(cx).core();
-                if let Err(error) = this.open_serial(config, core, workspace, window, cx) {
+                if let Err(error) =
+                    this.open_serial(config, core, (workspace, None, false), window, cx)
+                {
                     view.update(cx, |view, cx| view.failed(error.to_string(), cx));
                 }
             },
@@ -41,14 +44,36 @@ impl Nauterm {
         });
         cx.notify();
     }
+    pub(super) fn open_saved_serial(
+        &mut self,
+        host: Host,
+        workspace: Id,
+        overview: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> anyhow::Result<()> {
+        let config = host
+            .serial
+            .as_ref()
+            .context("Serial configuration is required.")?;
+        self.open_serial(
+            config,
+            None,
+            (workspace, Some((host.id, host.name)), overview),
+            window,
+            cx,
+        )
+    }
+
     fn open_serial(
         &mut self,
         config: &Config,
         core: Option<Arc<Core>>,
-        workspace: Id,
+        target: (Id, Option<(Id, String)>, bool),
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> anyhow::Result<()> {
+        let (workspace, host, overview) = target;
         anyhow::ensure!(
             self.data.workspaces.iter().any(|item| item.id == workspace),
             "The destination workspace is no longer available."
@@ -69,10 +94,12 @@ impl Nauterm {
                 id,
                 SessionView {
                     id,
-                    title: config.path.clone(),
+                    title: host
+                        .as_ref()
+                        .map_or_else(|| config.path.clone(), |(_, name)| name.clone()),
                     content: TabContent::Preparing(None),
                     ssh: None,
-                    restore_target: None,
+                    restore_target: host.map(|(id, _)| RestoreTarget::Host { id, port: None }),
                     restore_directory: None,
                     files: None,
                     tool_files: None,
@@ -87,7 +114,7 @@ impl Nauterm {
         self.core = Some(core.clone());
         self.serial_connect = None;
         self.install_serial_connection(id, core, config.clone(), window, cx);
-        self.show_session(id, false, window, cx);
+        self.show_session(id, overview, window, cx);
         self.notice = None;
         cx.notify();
         Ok(())
@@ -108,7 +135,7 @@ impl Nauterm {
         };
         let label = session.title.clone();
         let appearance = session.appearance(&self.data);
-        let recording = self.prepare_connection_recording(&label, &appearance, None, cx);
+        let recording = self.prepare_connection_recording(&label, session.host_id(), cx);
         let connection = cx.new(|cx| {
             Connection::new_serial_unfocused(
                 core,

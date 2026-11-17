@@ -7,6 +7,8 @@ use crate::{
 
 pub(super) struct Draft {
     pub selected: Option<ThemeId>,
+    pub dark_selected: Option<ThemeId>,
+    dark_gallery: bool,
     pub gallery: bool,
     search: Entity<InputState>,
     scroll: UniformListScrollHandle,
@@ -25,6 +27,8 @@ impl Draft {
         });
         Self {
             selected,
+            dark_selected: None,
+            dark_gallery: false,
             gallery: false,
             search,
             scroll,
@@ -61,32 +65,65 @@ impl Nauterm {
         target: Target,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(8.))
+            .child(self.protocol_theme_field(editor, target, false, cx))
+            .child(self.protocol_theme_field(editor, target, true, cx))
+            .into_any_element()
+    }
+
+    fn protocol_theme_field(
+        &self,
+        editor: &Editor,
+        target: Target,
+        dark: bool,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let draft = editor.theme_for(target).expect("host theme draft");
-        let colors = draft
-            .selected
+        let selected = if dark {
+            draft.dark_selected
+        } else {
+            draft.selected
+        };
+        let colors = selected
             .map(TerminalPalette::new)
-            .unwrap_or_else(|| self.data.terminal.palette());
-        let title = draft
-            .selected
+            .unwrap_or_else(|| self.data.terminal.palette_for_mode(dark));
+        let title = selected
             .map(ThemeId::label)
             .unwrap_or_else(|| "Default".into());
-        Button::new(SharedString::from(format!("host-{}-theme", target.id())))
-            .ghost()
-            .disabled(editor.host.as_ref().is_some_and(|draft| draft.busy))
-            .w_full()
-            .h(px(ThemePreview::COMPACT_HEIGHT))
-            .p_0()
-            .rounded(px(8.))
-            .tooltip("Select terminal theme")
-            .child(ThemePreview::new(title, colors).compact().selected(true))
-            .on_click(cx.listener(move |this, _, window, cx| {
-                this.refresh_theme_catalog(cx);
-                if let Some(draft) = this.editor.as_mut().and_then(|e| e.theme_for_mut(target)) {
-                    draft.gallery = true;
-                    draft.search.update(cx, |input, cx| input.focus(window, cx));
-                    cx.notify();
-                }
-            }))
+        let preview = Button::new(SharedString::from(format!(
+            "host-{}-theme-{dark}",
+            target.id()
+        )))
+        .ghost()
+        .disabled(editor.host.as_ref().is_some_and(|draft| draft.busy))
+        .w_full()
+        .h(px(ThemePreview::COMPACT_HEIGHT))
+        .p_0()
+        .rounded(px(8.))
+        .tooltip("Select terminal theme")
+        .child(ThemePreview::new(title, colors).compact().selected(true))
+        .on_click(cx.listener(move |this, _, window, cx| {
+            this.refresh_theme_catalog(cx);
+            if let Some(draft) = this.editor.as_mut().and_then(|e| e.theme_for_mut(target)) {
+                draft.gallery = true;
+                draft.dark_gallery = dark;
+                draft.search.update(cx, |input, cx| input.focus(window, cx));
+                cx.notify();
+            }
+        }))
+        .into_any_element();
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(4.))
+            .child(crate::localization::text(
+                cx,
+                if dark { "Dark theme" } else { "Light theme" },
+            ))
+            .child(preview)
             .into_any_element()
     }
     pub(super) fn leave_host_theme_gallery(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -115,8 +152,13 @@ impl Nauterm {
                 .collect::<Vec<_>>(),
         );
         let count = entries.len().div_ceil(2);
-        let selected = draft.selected;
-        let default = self.data.terminal.palette();
+        let dark = draft.dark_gallery;
+        let selected = if dark {
+            draft.dark_selected
+        } else {
+            draft.selected
+        };
+        let default = self.data.terminal.palette_for_mode(dark);
         let owner = cx.weak_entity();
         div()
             .w(px(layout::DRAWER_WIDTH))
@@ -217,7 +259,11 @@ impl Nauterm {
                                                         .as_mut()
                                                         .and_then(|e| e.theme_for_mut(target))
                                                     {
-                                                        draft.selected = theme;
+                                                        if dark {
+                                                            draft.dark_selected = theme;
+                                                        } else {
+                                                            draft.selected = theme;
+                                                        }
                                                     }
                                                     this.leave_host_theme_gallery(window, cx);
                                                 });

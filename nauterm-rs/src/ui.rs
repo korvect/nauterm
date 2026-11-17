@@ -86,10 +86,11 @@ gpui_kit::actions!(
     ]
 );
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 enum RemoteMode {
     Ssh,
     Sftp,
+    SftpAt(String),
     Mosh,
 }
 
@@ -230,22 +231,12 @@ impl SessionView {
         }
     }
     fn appearance(&self, data: &AppState) -> crate::terminal_appearance::Appearance {
-        let mut appearance = data.terminal_for_host(self.host_id());
-        if let Some(RestoreTarget::TelnetHost { id, .. }) = self.restore_target
-            && let Some(theme) = data
-                .hosts
-                .iter()
-                .find(|host| host.id == id)
-                .and_then(|host| host.connections.telnet.as_ref())
-                .and_then(|profile| profile.theme)
-        {
-            appearance = data.terminal.clone();
-            appearance.select_theme(theme);
-        } else if matches!(self.restore_target, Some(RestoreTarget::TelnetHost { .. })) {
-            appearance = data.terminal.clone();
-        }
-        if let Some(theme) = self.replay.as_ref().and_then(|replay| replay.theme) {
-            appearance.select_theme(theme);
+        let mut appearance = data.terminal_for_protocol(
+            self.host_id(),
+            matches!(self.restore_target, Some(RestoreTarget::TelnetHost { .. })),
+        );
+        if let Some(replay) = &self.replay {
+            appearance = data.terminal_for_host(replay.host_id);
         }
         appearance
     }
@@ -360,6 +351,7 @@ pub struct Nauterm {
     data: AppState,
     store: Arc<Store>,
     storage_loading: bool,
+    pending_links: Vec<crate::quick_connect::Target>,
     startup_task: Option<Task<()>>,
     storage_error: Option<String>,
     page: Page,
@@ -637,6 +629,7 @@ impl Nauterm {
             data,
             store,
             storage_loading: true,
+            pending_links: vec![],
             startup_task: None,
             storage_error,
             page: Page::Hosts,
@@ -782,7 +775,7 @@ impl Nauterm {
         let shell = shell.map(|shell| shell.path);
         let target = LocalTarget {
             label,
-            appearance: self.data.terminal.clone(),
+            appearance: self.data.terminal_for_host(None),
             shell: shell.clone(),
             directory: None,
             restore: RestoreTarget::Local {
@@ -859,7 +852,7 @@ impl Nauterm {
             RestoreTarget::Host { id, .. } => Some(*id),
             _ => None,
         };
-        self.record_session(&mut session, &target.label, &target.appearance, host_id, cx);
+        self.record_session(&mut session, &target.label, host_id, cx);
         let terminal =
             cx.new(|cx| Terminal::new(session, vec![], target.appearance, None, window, cx));
         let metadata = self.terminal_subscriptions(&terminal, window, cx);
@@ -905,8 +898,14 @@ impl Nauterm {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if host.id > 0
-            && host.is_remote()
+        if host.kind == HostKind::Serial {
+            if let Err(error) = self.open_saved_serial(host, workspace, overview, window, cx) {
+                self.notice = Some(error.to_string());
+                cx.notify();
+            }
+            return;
+        }
+        if host.is_remote()
             && [
                 host.connections.ssh,
                 host.connections.mosh,
@@ -956,7 +955,7 @@ impl Nauterm {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let sftp_page = mode == RemoteMode::Sftp;
+        let sftp_page = matches!(&mode, RemoteMode::Sftp | RemoteMode::SftpAt(_));
         if !host.is_remote() {
             if sftp_page {
                 self.notice = Some("A local host is not an SSH/SFTP endpoint.".into());
@@ -1025,7 +1024,10 @@ impl Nauterm {
                             port: None,
                         }
                     }),
-                    restore_directory: None,
+                    restore_directory: match mode {
+                        RemoteMode::SftpAt(path) if !path.is_empty() => Some(path),
+                        _ => None,
+                    },
                     files: None,
                     tool_files: None,
                     _file_events: vec![],
@@ -1124,6 +1126,7 @@ impl Nauterm {
             }
         }
         options.encoding = setup.encoding;
+        options.compatibility_mode = setup.compatibility_mode;
         if mosh
             || credential.is_some()
             || proxy_id.is_some()
@@ -1242,7 +1245,7 @@ impl Nauterm {
             }
             _ => None,
         };
-        let recording = self.prepare_connection_recording(&label, &appearance, host_id, cx);
+        let recording = self.prepare_connection_recording(&label, host_id, cx);
         let connection = cx.new(|cx| {
             let presentation = crate::connection::TerminalPresentation {
                 title: label,
@@ -1281,7 +1284,8 @@ impl Nauterm {
             .cloned();
         if let Some(host) = &host {
             connection.update(cx, |view, cx| {
-                view.set_host_platform(host.platform.clone(), cx)
+                view.set_host_platform(host.platform.clone(), cx);
+                view.set_host_icon(host.icon.clone(), cx);
             });
         }
         if connection.read(cx).uses_ssh_authentication() {
@@ -1384,6 +1388,9 @@ impl Nauterm {
         }
         let address = crate::ssh_address::SshAddress::parse(&query).ok()?;
         Some(Host {
+            serial: None,
+            icon: None,
+            dark_theme: None,
             connections: Default::default(),
             uuid: None,
             platform: Default::default(),
@@ -1558,6 +1565,9 @@ impl Nauterm {
                             let mut candidate = this.data.clone();
                             let id = candidate.allocate_id();
                             candidate.hosts.push(Host {
+                                serial: None,
+                                icon: None,
+                                dark_theme: None,
                                 connections: Default::default(),
                                 uuid: None,
                                 platform: Default::default(),
@@ -2101,7 +2111,7 @@ impl Nauterm {
             )
         });
         let theme = matches!(kind, ItemKind::Host | ItemKind::Group).then(|| {
-            host_themes::Draft::new(
+            let mut draft = host_themes::Draft::new(
                 if kind == ItemKind::Host {
                     id.and_then(|id| self.data.hosts.iter().find(|host| host.id == id))
                         .and_then(|host| host.theme)
@@ -2112,7 +2122,16 @@ impl Nauterm {
                 },
                 window,
                 cx,
-            )
+            );
+            draft.dark_selected = if kind == ItemKind::Host {
+                id.and_then(|id| self.data.hosts.iter().find(|host| host.id == id))
+                    .and_then(|host| host.dark_theme)
+            } else {
+                id.and_then(|id| self.data.groups.iter().find(|group| group.id == id))
+                    .and_then(Group::profile)
+                    .and_then(|profile| profile.dark_theme)
+            };
+            draft
         });
         let host = matches!(kind, ItemKind::Host | ItemKind::Group).then(|| {
             let group = (kind == ItemKind::Group)
@@ -2271,7 +2290,7 @@ impl Nauterm {
         let local = editor
             .host
             .as_ref()
-            .is_some_and(|draft| draft.kind == HostKind::Local);
+            .is_some_and(|draft| draft.kind != HostKind::Remote);
         let group_without_ssh = matches!(editor.kind, ItemKind::Host | ItemKind::Group)
             && editor.host.as_ref().is_some_and(|draft| !draft.ssh_enabled);
         let error = if values[0].is_empty() {
@@ -2343,6 +2362,7 @@ impl Nauterm {
             editor.proxy_id,
             editor.theme.as_ref().and_then(|draft| draft.selected),
         );
+        let dark_theme = editor.theme.as_ref().and_then(|draft| draft.dark_selected);
         let previous = self.data.clone();
         let id = existing.unwrap_or_else(|| {
             if matches!(kind, ItemKind::Host | ItemKind::Group) {
@@ -2362,6 +2382,24 @@ impl Nauterm {
                         .and_then(|id| self.data.hosts.iter().find(|host| host.id == id))
                         .and_then(|host| host.uuid.clone()),
                     kind: host_kind,
+                    icon: self
+                        .editor
+                        .as_ref()
+                        .and_then(|editor| editor.host.as_ref())
+                        .and_then(|draft| draft.selected_icon(cx))
+                        .map(str::to_owned),
+                    serial: (host_kind == HostKind::Serial).then(|| {
+                        self.editor
+                            .as_ref()
+                            .unwrap()
+                            .host
+                            .as_ref()
+                            .unwrap()
+                            .serial
+                            .read(cx)
+                            .configuration(cx)
+                            .expect("validated serial configuration")
+                    }),
                     shell_path,
                     work_dir,
                     ssh: if local {
@@ -2405,6 +2443,7 @@ impl Nauterm {
                     credential: credential.filter(|_| !local),
                     proxy_id: proxy_id.filter(|_| !local),
                     theme,
+                    dark_theme,
                     connections: {
                         let draft = self.editor.as_ref().unwrap().host.as_ref().unwrap();
                         ConnectionProfiles {
@@ -2433,6 +2472,7 @@ impl Nauterm {
                     },
                     credential,
                     theme,
+                    dark_theme,
                     setup: draft.setup.clone(),
                 });
                 self.save_group_candidate(
@@ -3238,6 +3278,13 @@ impl Nauterm {
                 .into_any_element()
         } else if kind == ItemKind::Host {
             crate::avatar::host(&title)
+                .custom_icon(
+                    self.data
+                        .hosts
+                        .iter()
+                        .find(|host| host.id == id)
+                        .and_then(|host| host.icon.as_deref()),
+                )
                 .platform(
                     self.data
                         .hosts
@@ -3481,9 +3528,7 @@ impl Nauterm {
                     ItemKind::Host,
                     host.id,
                     host.name.clone(),
-                    if !host.is_remote() {
-                        "local".into()
-                    } else if username.is_empty() {
+                    if !host.is_remote() || username.is_empty() {
                         host.protocol_summary()
                     } else {
                         format!("{}, {username}", host.protocol_summary())

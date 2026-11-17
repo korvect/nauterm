@@ -88,12 +88,81 @@ const OS_ICONS: &[(&[&str], &str, u32)] = &[
     (&["opnsense"], "opnsense", 0xe44a20),
     (&["pfsense"], "pfsense", 0x212121),
     (&["mikrotik", "routeros"], "mikrotik", 0x293239),
+    (&["vyos"], "vyos", 0xff9000),
+    (&["cisco"], "cisco", 0x049fd9),
+    (&["huawei"], "huawei", 0xff0000),
+    (&["fortinet", "fortigate"], "fortinet", 0xee3124),
+    (&["h3c", "comware"], "h3c", 0xed1c24),
+    (&["ruijie", "rgos"], "ruijie", 0xe31e24),
+    (&["zte"], "zte", 0x00bffe),
+    (&["network"], "network", 0x0f766e),
     (&["android"], "android", 0x3ddc84),
     (&["raspberry", "raspi"], "raspberrypi", 0xa22846),
     (&["linux", "gnu"], "linux", 0xfcc624),
     (&["macos", "darwin", "osx"], "apple", 0x000000),
     (&["windows", "win32", "winnt"], "windows", 0x0078d4),
     (&["unix"], "linux", 0xfcc624),
+];
+
+pub(crate) const HOST_ICON_NAMES: &[(&str, &str)] = &[
+    ("linux", "Linux"),
+    ("windows", "Windows"),
+    ("apple", "macOS"),
+    ("ubuntu", "Ubuntu"),
+    ("debian", "Debian"),
+    ("fedora", "Fedora"),
+    ("redhat", "Red Hat"),
+    ("centos", "CentOS"),
+    ("almalinux", "AlmaLinux"),
+    ("rockylinux", "Rocky Linux"),
+    ("alpine", "Alpine Linux"),
+    ("arch", "Arch Linux"),
+    ("manjaro", "Manjaro"),
+    ("gentoo", "Gentoo"),
+    ("opensuse", "openSUSE"),
+    ("suse", "SUSE"),
+    ("linuxmint", "Linux Mint"),
+    ("kalilinux", "Kali Linux"),
+    ("nixos", "NixOS"),
+    ("popos", "Pop!_OS"),
+    ("elementary", "elementary OS"),
+    ("zorin", "Zorin OS"),
+    ("mxlinux", "MX Linux"),
+    ("voidlinux", "Void Linux"),
+    ("slackware", "Slackware"),
+    ("garudalinux", "Garuda Linux"),
+    ("endeavouros", "EndeavourOS"),
+    ("artixlinux", "Artix Linux"),
+    ("cachyos", "CachyOS"),
+    ("nobaralinux", "Nobara Linux"),
+    ("asahilinux", "Asahi Linux"),
+    ("grapheneos", "GrapheneOS"),
+    ("qubesos", "Qubes OS"),
+    ("reactos", "ReactOS"),
+    ("freebsd", "FreeBSD"),
+    ("openbsd", "OpenBSD"),
+    ("netbsd", "NetBSD"),
+    ("bsd", "BSD"),
+    ("proxmox", "Proxmox"),
+    ("vmware", "VMware"),
+    ("truenas", "TrueNAS"),
+    ("unraid", "Unraid"),
+    ("synology", "Synology"),
+    ("qnap", "QNAP"),
+    ("openwrt", "OpenWrt"),
+    ("opnsense", "OPNsense"),
+    ("pfsense", "pfSense"),
+    ("mikrotik", "MikroTik"),
+    ("vyos", "VyOS"),
+    ("cisco", "Cisco"),
+    ("huawei", "Huawei"),
+    ("fortinet", "Fortinet"),
+    ("h3c", "H3C"),
+    ("ruijie", "Ruijie"),
+    ("zte", "ZTE"),
+    ("network", "Network device"),
+    ("android", "Android"),
+    ("raspberrypi", "Raspberry Pi"),
 ];
 
 pub fn color(name: &str) -> u32 {
@@ -115,6 +184,8 @@ pub fn host(name: &str) -> HostAvatar {
         name: name.to_owned(),
         platform: Platform::default(),
         dimension: 40.,
+        custom_icon: None,
+        editing: false,
     }
 }
 
@@ -135,8 +206,18 @@ pub struct HostAvatar {
     name: String,
     platform: Platform,
     dimension: f32,
+    custom_icon: Option<String>,
+    editing: bool,
 }
 impl HostAvatar {
+    pub fn custom_icon(mut self, icon: Option<&str>) -> Self {
+        self.custom_icon = icon.map(str::to_owned);
+        self
+    }
+    pub fn editing(mut self) -> Self {
+        self.editing = true;
+        self
+    }
     pub fn platform(mut self, platform: Platform) -> Self {
         self.platform = platform;
         self
@@ -155,8 +236,27 @@ impl RenderOnce for HostAvatar {
             .map(|c| c.to_uppercase().to_string())
             .unwrap_or("?".into());
         let dimension = self.dimension;
-        let mode = cx.try_global::<Mode>().copied().unwrap_or_default();
-        let icon = self.platform.icon();
+        let mode = if self.editing {
+            Mode::OsIcon
+        } else {
+            cx.try_global::<Mode>().copied().unwrap_or_default()
+        };
+        let icon = self
+            .custom_icon
+            .as_deref()
+            .and_then(|selected| {
+                HOST_ICON_NAMES
+                    .iter()
+                    .find(|(slug, _)| *slug == selected)
+                    .map(|(slug, _)| {
+                        let color = OS_ICONS
+                            .iter()
+                            .find(|(_, icon, _)| icon == slug)
+                            .map_or(0x075e92, |(_, _, color)| *color);
+                        (*slug, color)
+                    })
+            })
+            .or_else(|| self.platform.icon());
         let replace = mode == Mode::OsIcon && icon.is_some();
         let mut view = div()
             .size(px(dimension))

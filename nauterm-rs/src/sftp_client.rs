@@ -363,6 +363,7 @@ impl Request {
                 options.trust.native(),
                 &sudo.id,
                 password,
+                options.compatibility_mode,
             )
         } else {
             nauterm_core::ssh::list_sftp_directory_entries_blocking_with_trust(
@@ -383,6 +384,7 @@ impl Request {
                 arguments.native_proxy(),
                 directory,
                 options.trust.native(),
+                options.compatibility_mode,
             )
         };
         let listing: Listing = serde_json::from_value(serde_json::to_value(listing)?)?;
@@ -482,7 +484,7 @@ impl Request {
             Some(Arc::new(move |bytes, total, path| {
                 report_progress(&sink, bytes, total, path)
             })),
-            false,
+            options.compatibility_mode,
         );
         let result: TaskResult = serde_json::from_value(serde_json::to_value(result)?)?;
         ensure!(

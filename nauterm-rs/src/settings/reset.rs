@@ -114,6 +114,8 @@ impl Settings {
             self.values.dark = self.values.theme.dark(window.appearance());
             self.host_icons
                 .set_selected(Some(self.values.host_icons), window, cx);
+            self.restore_behavior
+                .set_selected(Some(self.values.restore), window, cx);
             self.reset_window_controls(window, cx);
         }
         if scope.includes(Page::Terminal) {

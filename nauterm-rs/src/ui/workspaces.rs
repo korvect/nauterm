@@ -225,6 +225,37 @@ impl Nauterm {
         });
         cx.notify();
     }
+    pub fn open_connection_links(
+        &mut self,
+        links: Vec<crate::quick_connect::Target>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.pending_links.extend(links);
+        self.flush_connection_links(window, cx);
+    }
+
+    pub(super) fn flush_connection_links(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.resources_ready()
+            || self.recovery_pending.is_some()
+            || self.exiting.is_some()
+            || self.close_pending.is_some()
+        {
+            return;
+        }
+        for link in std::mem::take(&mut self.pending_links) {
+            self.connect_quick_target(
+                QuickRequest {
+                    target: Box::new(link),
+                    destination: Some(self.data.selected_workspace),
+                    overview: false,
+                },
+                window,
+                cx,
+            );
+        }
+    }
+
     fn connect_quick_target(
         &mut self,
         request: QuickRequest,
@@ -288,6 +319,14 @@ impl Nauterm {
             Target::Sftp(host) => {
                 self.open_remote_in(host, workspace, overview, RemoteMode::Sftp, window, cx)
             }
+            Target::SftpUri(host, path) => self.open_remote_in(
+                host,
+                workspace,
+                overview,
+                RemoteMode::SftpAt(path),
+                window,
+                cx,
+            ),
             Target::Telnet(options) => {
                 self.open_telnet_in(options, workspace, overview, window, cx)
             }
