@@ -157,7 +157,9 @@ Future<NautermWorkspaceController> _pumpWorkspace(
   if (data == null) {
     var ready = false;
     unawaited(controller.initialDataReady.then((_) => ready = true));
-    await _pumpConnection(tester);
+    for (var attempt = 0; attempt < 6 && !ready; attempt++) {
+      await _pumpConnection(tester);
+    }
     expect(
       ready,
       isTrue,
