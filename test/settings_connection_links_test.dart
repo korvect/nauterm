@@ -79,7 +79,14 @@ void main() {
     });
     await _pumpSettings(tester);
     expect(
-      tester.widget<IconButton>(_button('telnet')).tooltip,
+      tester
+          .widget<Tooltip>(
+            find.ancestor(
+              of: _button('telnet'),
+              matching: find.byType(Tooltip),
+            ),
+          )
+          .message,
       'Open default application settings for telnet.',
     );
     await tester.tap(_button('telnet'));
@@ -111,7 +118,7 @@ void main() {
       find.text('Unable to set Nauterm as the default application.'),
       findsOneWidget,
     );
-    expect(tester.widget<IconButton>(_button('sftp')).onPressed, isNotNull);
+    expect(tester.widget<TextButton>(_button('sftp')).onPressed, isNotNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 

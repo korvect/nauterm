@@ -84,49 +84,39 @@ class _ConnectionLinkDefaultsState extends State<_ConnectionLinkDefaults>
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          tr('settings.general.connectionLinks.description'),
-          style: TextStyle(color: _faintText, fontSize: 12, height: 1.35),
-        ),
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 28,
-          runSpacing: 12,
-          children: [
-            for (final scheme in ConnectionUriChannel.schemes)
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    '$scheme://',
-                    style: TextStyle(
-                      color: _text,
-                      fontSize: 14,
-                      fontWeight: NautermFontWeights.medium,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  _statusButton(scheme),
-                ],
-              ),
-          ],
-        ),
-        if (_errorKey != null) ...[
-          const SizedBox(height: 8),
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: _settingsContentMaxWidth),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
           Text(
-            tr(_errorKey!),
-            key: const ValueKey('settings-connection-links-error'),
-            style: const TextStyle(color: Color(0xffef4444), fontSize: 12),
+            tr('settings.general.connectionLinks.description'),
+            style: TextStyle(color: _mutedText, fontSize: 12, height: 1.35),
           ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              for (final scheme in ConnectionUriChannel.schemes) ...[
+                if (scheme != ConnectionUriChannel.schemes.first)
+                  const SizedBox(width: 12),
+                Expanded(child: _protocolButton(scheme)),
+              ],
+            ],
+          ),
+          if (_errorKey != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              tr(_errorKey!),
+              key: const ValueKey('settings-connection-links-error'),
+              style: const TextStyle(color: Color(0xffef4444), fontSize: 12),
+            ),
+          ],
         ],
-      ],
+      ),
     );
   }
 
-  Widget _statusButton(String scheme) {
+  Widget _protocolButton(String scheme) {
     final isDefault = _handlers[scheme];
     final busy = _setting == scheme || (_loading && isDefault == null);
     final tooltip = tr(
@@ -139,51 +129,75 @@ class _ConnectionLinkDefaultsState extends State<_ConnectionLinkDefaults>
           : 'settings.general.connectionLinks.setDefault',
       args: {'scheme': scheme},
     );
-    return Semantics(
-      value: busy
-          ? tr('settings.general.connectionLinks.checking')
-          : isDefault == null
-          ? tr('settings.general.connectionLinks.queryFailed')
-          : tr(
-              isDefault
-                  ? 'settings.general.connectionLinks.isDefault'
-                  : 'settings.general.connectionLinks.setDefault',
-              args: {'scheme': scheme},
+    return Tooltip(
+      message: tooltip,
+      child: Semantics(
+        value: busy
+            ? tr('settings.general.connectionLinks.checking')
+            : isDefault == null
+            ? tr('settings.general.connectionLinks.queryFailed')
+            : tr(
+                isDefault
+                    ? 'settings.general.connectionLinks.isDefault'
+                    : 'settings.general.connectionLinks.setDefault',
+                args: {'scheme': scheme},
+              ),
+        child: TextButton(
+          key: ValueKey('settings-default-handler:$scheme'),
+          onPressed: _loading || _setting != null
+              ? null
+              : () => unawaited(_setDefault(scheme)),
+          style: TextButton.styleFrom(
+            foregroundColor: _text,
+            disabledForegroundColor: _faintText,
+            minimumSize: const Size.fromHeight(40),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(7),
             ),
-      child: IconButton(
-        key: ValueKey('settings-default-handler:$scheme'),
-        tooltip: tooltip,
-        onPressed: _loading || _setting != null
-            ? null
-            : () => unawaited(_setDefault(scheme)),
-        padding: const EdgeInsets.all(4),
-        constraints: const BoxConstraints.tightFor(width: 32, height: 32),
-        icon: Container(
-          key: ValueKey('settings-default-handler-status:$scheme'),
-          width: 22,
-          height: 22,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: busy
-                ? _faintText
-                : isDefault == true
-                ? const Color(0xff22c55e)
-                : const Color(0xffef4444),
+            visualDensity: VisualDensity.standard,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            textStyle: TextStyle(
+              fontSize: _settingsFieldFontSize,
+              fontWeight: NautermFontWeights.medium,
+              letterSpacing: 0,
+            ),
           ),
-          alignment: Alignment.center,
-          child: busy
-              ? const SizedBox.square(
-                  dimension: 12,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                )
-              : Icon(
-                  isDefault == true ? Icons.check_rounded : Icons.close_rounded,
-                  size: 16,
-                  color: Colors.white,
+          child: Row(
+            children: [
+              Expanded(child: Text('$scheme://')),
+              const SizedBox(width: 12),
+              Container(
+                key: ValueKey('settings-default-handler-status:$scheme'),
+                width: 20,
+                height: 20,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: busy
+                      ? _faintText
+                      : isDefault == true
+                      ? const Color(0xff22c55e)
+                      : const Color(0xffef4444),
                 ),
+                alignment: Alignment.center,
+                child: busy
+                    ? const SizedBox.square(
+                        dimension: 12,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Icon(
+                        isDefault == true
+                            ? Icons.check_rounded
+                            : Icons.close_rounded,
+                        size: 16,
+                        color: Colors.white,
+                      ),
+              ),
+            ],
+          ),
         ),
       ),
     );
