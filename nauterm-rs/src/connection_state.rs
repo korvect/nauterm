@@ -92,6 +92,8 @@ pub struct ConnectionState {
     pub changed_key: bool,
     pub interventions: Vec<Intervention>,
     pub latency_ms: Option<u32>,
+    pub challenge: Option<nauterm_core::ssh::KeyboardInteractiveChallenge>,
+    pub credentials: Option<(u64, Vec<String>)>,
 }
 
 impl ConnectionState {
@@ -128,6 +130,8 @@ impl ConnectionState {
         self.message.clear();
         self.fingerprint = None;
         self.latency_ms = None;
+        self.challenge = None;
+        self.credentials = None;
     }
 
     pub fn apply(&mut self, event: SessionEvent) {
@@ -145,7 +149,27 @@ impl ConnectionState {
         } else {
             "transport"
         };
+        if let Some(id) = event.authentication_request_id {
+            self.credentials = Some((id, event.authentication_methods.clone().unwrap_or_default()));
+            self.challenge = None;
+        }
         match event.kind.as_str() {
+            "auth_interactive_request" => {
+                if self.challenge.as_ref().map(|challenge| challenge.id)
+                    != event.challenge.as_ref().map(|challenge| challenge.id)
+                {
+                    self.interventions.push(Intervention::Authentication);
+                }
+                self.credentials = None;
+                self.challenge = event.challenge.clone();
+                self.phase = Phase::Authentication;
+                self.message = event.message.clone();
+            }
+            "auth_interactive_submitted" | "auth_credentials_submitted" => {
+                self.challenge = None;
+                self.credentials = None;
+                self.phase = Phase::Connecting;
+            }
             "ssh_latency_updated" | "mosh_latency_updated" => self.latency_ms = event.latency_ms,
             "host_key_unknown" => {
                 self.phase = Phase::HostKey;
@@ -162,7 +186,8 @@ impl ConnectionState {
                 self.fingerprint = event.fingerprint.clone();
                 self.message = event.message.clone();
             }
-            "auth_failed"
+            "auth_credentials_required"
+            | "auth_failed"
             | "auth_passphrase_required"
             | "auth_password_rejected"
             | "auth_password_failed"
@@ -181,7 +206,11 @@ impl ConnectionState {
                     self.message = event.message.clone();
                 }
             }
-            "auth_success" => self.phase = Phase::Connecting,
+            "auth_success" => {
+                self.challenge = None;
+                self.credentials = None;
+                self.phase = Phase::Connecting;
+            }
             "connected" => {
                 self.phase = Phase::Completing;
                 self.message = "Connected".into();
@@ -194,6 +223,12 @@ impl ConnectionState {
                     self.phase = Phase::Exited;
                     self.message = event.message.clone();
                 }
+            }
+            "error" if self.challenge.is_some() || self.credentials.is_some() => {
+                self.challenge = None;
+                self.credentials = None;
+                self.phase = Phase::Failed;
+                self.message = event.message.clone();
             }
             "error"
                 if !matches!(self.phase, Phase::HostKey | Phase::Authentication)
@@ -352,6 +387,32 @@ mod tests {
         assert!(state.changed_key);
         assert!(state.message.starts_with("host_key_changed"));
     }
+    #[test]
+    fn later_server_challenges_append_progress_instead_of_replacing_the_password_step() {
+        let mut state = ConnectionState::default();
+        let mut credentials = event("auth_credentials_required");
+        credentials.authentication_request_id = Some(1);
+        credentials.authentication_methods = Some(vec!["password".into()]);
+        state.apply(credentials);
+        assert_eq!(state.credentials.as_ref().unwrap().0, 1);
+        for id in [2, 3] {
+            let mut prompt = event("auth_interactive_request");
+            prompt.challenge = Some(
+                serde_json::from_value(serde_json::json!({
+                    "id": id, "name": "", "instructions": "",
+                    "prompts": [{"prompt": "Verification code:", "echo": false}]
+                }))
+                .unwrap(),
+            );
+            state.apply(prompt);
+            assert_eq!(state.challenge.as_ref().unwrap().id, id);
+            assert!(state.credentials.is_none());
+        }
+        assert_eq!(state.interventions.len(), 3);
+        state.apply(event("auth_success"));
+        assert!(state.challenge.is_none());
+    }
+
     #[test]
     fn auth_rejection_remains_actionable_and_success_requires_connected_event() {
         let mut state = ConnectionState::default();

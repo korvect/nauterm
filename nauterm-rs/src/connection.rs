@@ -97,6 +97,7 @@ pub struct Connection {
     pipeline: progress::Pipeline,
     title: String,
     platform: crate::avatar::Platform,
+    host_icon: Option<String>,
     dark: bool,
     terminal_palette: TerminalPalette,
     recording: Option<crate::recordings::Start>,
@@ -110,6 +111,9 @@ pub struct Connection {
     password: Entity<InputState>,
     passphrase: Entity<InputState>,
     fido2_pin: Entity<InputState>,
+    challenge_id: Option<u64>,
+    challenge_inputs: Vec<Entity<InputState>>,
+    challenge_subscriptions: Vec<Subscription>,
     logs: Entity<logs::View>,
     mode: AuthMode,
     auth: authentication::State,
@@ -156,10 +160,10 @@ fn action(id: &str, label: &str, primary: bool, compact: bool) -> Button {
         .when(!primary, |button| button.secondary())
 }
 
-fn auth_input(state: &Entity<InputState>, label: &'static str, secret: bool) -> Input {
+fn auth_input(state: &Entity<InputState>, label: &str, secret: bool) -> Input {
     Input::new(state)
         .large()
-        .aria_label(label)
+        .aria_label(label.to_owned())
         .when(secret, |input| input.mask_toggle())
 }
 
@@ -168,6 +172,11 @@ impl Connection {
         self.platform = platform;
         self
     }
+    pub fn set_host_icon(&mut self, icon: Option<String>, cx: &mut Context<Self>) {
+        self.host_icon = icon;
+        cx.notify();
+    }
+
     pub fn set_host_platform(&mut self, platform: crate::avatar::Platform, cx: &mut Context<Self>) {
         if self.platform != platform {
             self.platform = platform;
@@ -456,6 +465,7 @@ impl Connection {
             dark,
             in_drawer: false,
             platform: Default::default(),
+            host_icon: None,
             terminal_palette: presentation.terminal_palette,
             recording: presentation.recording,
             sftp_directory: presentation.directory,
@@ -467,6 +477,9 @@ impl Connection {
             password,
             passphrase,
             fido2_pin,
+            challenge_id: None,
+            challenge_inputs: vec![],
+            challenge_subscriptions: vec![],
             logs,
             mode: if has_saved_key {
                 AuthMode::PublicKey
@@ -849,9 +862,41 @@ impl Connection {
     }
 
     fn authentication(&self, cx: &mut Context<Self>) -> AnyElement {
+        if let Some(challenge) = &self.state.challenge {
+            return div()
+                .flex()
+                .flex_col()
+                .gap(px(12.))
+                .when(!challenge.instructions.trim().is_empty(), |view| {
+                    view.child(challenge.instructions.clone())
+                })
+                .children(challenge.prompts.iter().zip(&self.challenge_inputs).map(
+                    |(prompt, input)| {
+                        let label = prompt.prompt.trim();
+                        let label = if label.is_empty() {
+                            "Verification code"
+                        } else {
+                            label
+                        };
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(6.))
+                            .child(label.to_owned())
+                            .child(auth_input(input, label, !prompt.echo))
+                    },
+                ))
+                .when_some(self.error.clone(), |view, error| view.child(error))
+                .into_any_element();
+        }
         let Some(options) = self.target.ssh() else {
             return div().into_any_element();
         };
+        if options.username.is_empty() {
+            return auth_input(&self.username, "Username", false)
+                .disabled(self.auth.busy)
+                .into_any_element();
+        }
         let p = Palette::new(self.dark);
         if self.requires_fido2_pin() {
             return div()
@@ -882,48 +927,53 @@ impl Connection {
             .flex()
             .flex_col()
             .gap(px(20.))
-            .child(
-                crate::components::Segmented::new(
-                    "authentication-method",
-                    self.mode,
-                    [
-                        (AuthMode::Password, "Password".into()),
-                        (AuthMode::PublicKey, "Public Key".into()),
-                    ],
-                )
-                .sliding()
-                .height(if self.compact_controls() { 28. } else { 36. })
-                .icon(AuthMode::Password, IconName::Lock)
-                .icon(AuthMode::PublicKey, IconName::KeyRound)
-                .disabled(self.auth.busy)
-                .on_change({
-                    let owner = cx.weak_entity();
-                    move |mode, _, cx| {
-                        let _ = owner.update(cx, |this, cx| {
-                            if this.mode != *mode {
-                                this.mode = *mode;
-                                this.error = None;
-                                this.needs_auth_focus = true;
-                                cx.notify();
+            .when(
+                self.allowed_mode(AuthMode::Password) && self.allowed_mode(AuthMode::PublicKey),
+                |view| {
+                    view.child(
+                        crate::components::Segmented::new(
+                            "authentication-method",
+                            self.mode,
+                            [
+                                (AuthMode::Password, "Password".into()),
+                                (AuthMode::PublicKey, "Public Key".into()),
+                            ],
+                        )
+                        .sliding()
+                        .height(if self.compact_controls() { 28. } else { 36. })
+                        .icon(AuthMode::Password, IconName::Lock)
+                        .icon(AuthMode::PublicKey, IconName::KeyRound)
+                        .disabled(self.auth.busy)
+                        .on_change({
+                            let owner = cx.weak_entity();
+                            move |mode, _, cx| {
+                                let _ = owner.update(cx, |this, cx| {
+                                    if this.mode != *mode {
+                                        this.mode = *mode;
+                                        this.error = None;
+                                        this.needs_auth_focus = true;
+                                        cx.notify();
+                                    }
+                                });
                             }
-                        });
-                    }
-                }),
+                        }),
+                    )
+                },
             )
-            .when(options.username.is_empty(), |view| {
-                view.child(auth_input(&self.username, "Username", false).disabled(self.auth.busy))
-            })
             .when(self.mode == AuthMode::Password, |view| {
                 view.child(auth_input(&self.password, "Password", true).disabled(self.auth.busy))
             })
             .when(self.mode == AuthMode::PublicKey, |view| {
-                view.child(self.authentication_keys(cx))
-                    .when(self.needs_key_passphrase(), |view| {
-                        view.child(
-                            auth_input(&self.passphrase, "Key passphrase", true)
-                                .disabled(self.auth.busy),
-                        )
-                    })
+                view.when(
+                    options.private_key.is_empty() || !self.needs_key_passphrase(),
+                    |view| view.child(self.authentication_keys(cx)),
+                )
+                .when(self.needs_key_passphrase(), |view| {
+                    view.child(
+                        auth_input(&self.passphrase, "Key passphrase", true)
+                            .disabled(self.auth.busy),
+                    )
+                })
             })
             .when_some(self.error.clone(), |view, error| {
                 view.child(
@@ -958,6 +1008,14 @@ impl Render for Connection {
                 .child(editor.clone())
                 .into_any_element();
         }
+        self.sync_challenge_inputs(window, cx);
+        if !self.allowed_mode(self.mode) {
+            self.mode = if self.allowed_mode(AuthMode::Password) {
+                AuthMode::Password
+            } else {
+                AuthMode::PublicKey
+            };
+        }
         self.ensure_authentication(cx);
         let height = if self.viewport.height > px(0.) {
             self.viewport.height
@@ -972,7 +1030,9 @@ impl Render for Connection {
             && self.state.phase == Phase::Authentication
         {
             self.needs_auth_focus = false;
-            let input = if self.requires_fido2_pin() {
+            let input = if let Some(input) = self.challenge_inputs.first() {
+                input
+            } else if self.requires_fido2_pin() {
                 &self.fido2_pin
             } else if self
                 .target
@@ -988,7 +1048,8 @@ impl Render for Connection {
                 self.focus.focus(window, cx);
                 &self.username
             };
-            if self.mode != AuthMode::PublicKey
+            if !self.challenge_inputs.is_empty()
+                || self.mode != AuthMode::PublicKey
                 || self.requires_fido2_pin()
                 || self.needs_key_passphrase()
                 || self
@@ -1080,7 +1141,11 @@ impl Render for Connection {
                             .flex()
                             .items_center()
                             .gap(px(16.))
-                            .child(crate::avatar::host(&self.title).platform(self.platform.clone()))
+                            .child(
+                                crate::avatar::host(&self.title)
+                                    .platform(self.platform.clone())
+                                    .custom_icon(self.host_icon.as_deref()),
+                            )
                             .child(
                                 div()
                                     .flex_1()

@@ -41,6 +41,7 @@ impl Protocol {
 }
 pub struct ProtocolSelected {
     pub host_id: Id,
+    pub temporary: Option<Host>,
     pub uuid: Option<String>,
     pub protocol: Protocol,
     pub port: u16,
@@ -50,6 +51,7 @@ impl EventEmitter<ProtocolSelected> for Connection {}
 
 pub(super) struct Choice {
     host_id: Id,
+    temporary: Option<Host>,
     uuid: Option<String>,
     pub address: String,
     selected: Protocol,
@@ -83,6 +85,7 @@ impl Choice {
         });
         Self {
             host_id: host.id,
+            temporary: (host.id == 0).then(|| host.clone()),
             uuid: host.uuid,
             address: host.address,
             selected,
@@ -109,6 +112,7 @@ impl Connection {
         cx: &mut Context<Self>,
     ) -> Self {
         let platform = host.platform.clone();
+        let host_icon = host.icon.clone();
         let choice = Choice::new(host, window, cx);
         let mut this = Self::create_target(
             core,
@@ -126,6 +130,7 @@ impl Connection {
             cx,
         )
         .with_host_platform(platform);
+        this.host_icon = host_icon;
         let Target::Choice(choice) = &this.target else {
             unreachable!()
         };
@@ -214,6 +219,7 @@ impl Connection {
         choice.error = None;
         cx.emit(ProtocolSelected {
             host_id: choice.host_id,
+            temporary: choice.temporary.clone(),
             uuid: choice.uuid.clone(),
             protocol: choice.selected,
             port,

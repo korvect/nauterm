@@ -53,6 +53,7 @@ impl Fixture {
 
     fn config(&self, kind: &str, destination: u16) -> PortForwardConfig {
         PortForwardConfig {
+            ssh_compatibility_mode: false,
             id: 1,
             forward_type: kind.into(),
             ssh_host: self.address.ip().to_string(),

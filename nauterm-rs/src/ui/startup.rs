@@ -97,6 +97,7 @@ impl Nauterm {
                                     });
                                 }
                                 this.initialize_recovery(previous, window, cx);
+                                this.flush_connection_links(window, cx);
                                 if this.page == Page::Snippets {
                                     this.load_snippets(cx);
                                 }

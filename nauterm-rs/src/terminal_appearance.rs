@@ -105,6 +105,10 @@ pub struct Appearance {
     pub theme: ThemeId,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub custom_palette: Option<Palette>,
+    pub dark_theme: ThemeId,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dark_custom_palette: Option<Palette>,
+    pub follow_app_theme: bool,
     pub family: String,
     pub cjk_family: Option<String>,
     pub enable_ligatures: bool,
@@ -138,6 +142,9 @@ impl Default for Appearance {
         Self {
             theme: ThemeId::NysaLight,
             custom_palette: None,
+            dark_theme: ThemeId::NysaDark,
+            dark_custom_palette: None,
+            follow_app_theme: false,
             family: "monospace".into(),
             cjk_family: None,
             enable_ligatures: false,
@@ -192,7 +199,10 @@ impl Appearance {
             (1..=999).contains(&self.composer_max_suggestions),
             "Invalid composer suggestion limit"
         );
-        if let Some(palette) = self.custom_palette {
+        for palette in [self.custom_palette, self.dark_custom_palette]
+            .into_iter()
+            .flatten()
+        {
             palette.validate()?;
         }
         ensure!(
@@ -264,6 +274,26 @@ impl Appearance {
     pub fn cell_height(&self) -> f32 {
         (self.size * self.line_height).ceil()
     }
+    pub fn theme_for_mode(&self, dark: bool) -> (ThemeId, Option<Palette>) {
+        if dark {
+            (self.dark_theme, self.dark_custom_palette)
+        } else {
+            (self.theme, self.custom_palette)
+        }
+    }
+
+    pub fn palette_for_mode(&self, dark: bool) -> Palette {
+        let (theme, custom) = self.theme_for_mode(dark);
+        custom.unwrap_or_else(|| Palette::new(theme))
+    }
+
+    pub fn for_app_theme(&self, app_dark: bool) -> Self {
+        let mut resolved = self.clone();
+        (resolved.theme, resolved.custom_palette) =
+            self.theme_for_mode(self.follow_app_theme && app_dark);
+        resolved
+    }
+
     pub fn palette(&self) -> Palette {
         self.custom_palette
             .unwrap_or_else(|| Palette::new(self.theme))
@@ -272,9 +302,14 @@ impl Appearance {
         self.theme = theme;
         self.custom_palette = None;
     }
+    #[cfg(test)]
     pub fn change_color(&mut self, index: usize, color: u32) -> Result<()> {
+        self.change_mode_color(false, index, color)
+    }
+
+    pub fn change_mode_color(&mut self, dark: bool, index: usize, color: u32) -> Result<()> {
         ensure!(index < 23 && color <= 0xffffff, "Invalid terminal color");
-        let mut palette = self.palette();
+        let mut palette = self.palette_for_mode(dark);
         match index {
             0 => palette.accent = color,
             1 => palette.base.foreground = color,
@@ -285,7 +320,11 @@ impl Appearance {
             6 => palette.selection_text = color,
             _ => palette.ansi[index - 7] = color,
         }
-        self.custom_palette = Some(palette);
+        if dark {
+            self.dark_custom_palette = Some(palette);
+        } else {
+            self.custom_palette = Some(palette);
+        }
         Ok(())
     }
 }

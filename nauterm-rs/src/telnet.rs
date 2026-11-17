@@ -10,6 +10,7 @@ pub struct Profile {
     pub identity_id: Option<i64>,
     pub encoding: crate::host_session::Encoding,
     pub theme: Option<crate::terminal_appearance::ThemeId>,
+    pub dark_theme: Option<crate::terminal_appearance::ThemeId>,
     pub source: String,
     pub password_id: Option<String>,
 }
@@ -21,6 +22,7 @@ impl Default for Profile {
             identity_id: None,
             encoding: Default::default(),
             theme: None,
+            dark_theme: None,
             source: String::new(),
             password_id: None,
         }
@@ -42,6 +44,7 @@ impl Profile {
             identity_id,
             password_id: None,
             theme: theme.and_then(crate::terminal_appearance::ThemeId::from_id),
+            dark_theme: None,
             encoding: encoding
                 .and_then(|value| {
                     crate::host_session::Encoding::ALL
@@ -106,6 +109,7 @@ pub fn inherit_defaults(
         flags.encoding_configured = true;
     }
     profile.theme = profile.theme.or(parent.theme);
+    profile.dark_theme = profile.dark_theme.or(parent.dark_theme);
 }
 
 pub struct Resolved {
@@ -220,38 +224,6 @@ impl Options {
         } else {
             format!("{}:{}", self.host, self.port)
         }
-    }
-    /// Quick Connect accepts an endpoint only. Credentials come from a saved
-    /// profile or the interactive remote prompt, never a password-bearing URL.
-    pub fn from_uri(value: &str) -> Option<Self> {
-        let value = value.trim();
-        if value.chars().any(char::is_control) {
-            return None;
-        }
-        let uri = url::Url::parse(value).ok()?;
-        if uri.scheme() != "telnet"
-            || !uri.username().is_empty()
-            || uri.password().is_some()
-            || !matches!(uri.path(), "" | "/")
-            || uri.query().is_some()
-            || uri.fragment().is_some()
-        {
-            return None;
-        }
-        let host = match uri.host()? {
-            url::Host::Domain(host) => host.to_owned(),
-            url::Host::Ipv4(host) => host.to_string(),
-            url::Host::Ipv6(host) => host.to_string(),
-        };
-        let options = Self {
-            host,
-            port: uri.port().unwrap_or(23),
-            username: String::new(),
-            password: Zeroizing::new(String::new()),
-            encoding: Default::default(),
-        };
-        options.validate().ok()?;
-        Some(options)
     }
 }
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -452,27 +424,14 @@ mod tests {
         Ok(())
     }
     #[test]
-    fn explicit_endpoint_uris_validate_ports_ipv6_and_exclude_credentials() {
-        let options = Options::from_uri("telnet://[::1]:2323").unwrap();
-        assert_eq!(options.host, "::1");
-        assert_eq!(options.endpoint(), "[::1]:2323");
-        assert_eq!(Options::from_uri("telnet://localhost").unwrap().port, 23);
-        for value in [
-            "telnet://local\nhost",
-            "ssh://localhost",
-            "telnet://user@localhost",
-            "telnet://user:password@localhost",
-            "telnet://localhost:0",
-            "telnet://localhost/path",
-            "telnet://localhost?query",
-            "telnet://localhost#fragment",
-        ] {
-            assert!(Options::from_uri(value).is_none());
-        }
-    }
-    #[test]
     fn login_prompts_cross_chunks_are_bounded_and_each_credential_is_sent_once() {
-        let mut options = Options::from_uri("telnet://localhost").unwrap();
+        let mut options = Options {
+            host: "localhost".into(),
+            port: 23,
+            username: String::new(),
+            password: Default::default(),
+            encoding: Default::default(),
+        };
         options.username = " test-user ".into();
         options.password = Zeroizing::new("test-password".into());
         let mut login = Login::default();

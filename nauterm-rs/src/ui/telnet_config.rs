@@ -39,7 +39,8 @@ impl Draft {
             window,
             cx,
         );
-        let theme = host_themes::Draft::new(profile.theme, window, cx);
+        let mut theme = host_themes::Draft::new(profile.theme, window, cx);
+        theme.dark_selected = profile.dark_theme;
         let encoding = SelectModel::new(encoding_options(), Some(profile.encoding), window, cx);
         let events = vec![
             cx.subscribe(&port, |this, state, event: &InputEvent, _| {
@@ -92,6 +93,7 @@ impl Draft {
                 self.username.read(cx).value().trim().to_owned()
             },
             theme: self.theme.selected,
+            dark_theme: self.theme.dark_selected,
             ..self.profile.clone()
         })
     }
@@ -137,6 +139,7 @@ impl Draft {
             });
         }
         self.theme.selected = profile.theme;
+        self.theme.dark_selected = profile.dark_theme;
         self.profile = profile;
     }
 }

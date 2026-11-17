@@ -87,7 +87,6 @@ pub struct Entry {
     #[serde(default)]
     pub host_uuid: Option<String>,
     pub title: String,
-    pub theme_id: Option<String>,
     pub host: Option<String>,
     pub port: Option<u16>,
     pub username: Option<String>,
@@ -207,25 +206,18 @@ pub(crate) struct Start {
     pub service: Service,
     pub preferences: Preferences,
     pub title: String,
-    pub theme: crate::terminal_appearance::ThemeId,
     pub started_at: i64,
     pub generation: usize,
     pub host_id: Option<i64>,
     pub host_uuid: Option<String>,
 }
 impl Start {
-    pub fn new(
-        service: Service,
-        preferences: Preferences,
-        title: &str,
-        theme: crate::terminal_appearance::ThemeId,
-    ) -> Self {
+    pub fn new(service: Service, preferences: Preferences, title: &str) -> Self {
         let generation = service.generation();
         Self {
             service,
             preferences,
             title: title.into(),
-            theme,
             started_at: now(),
             generation,
             host_id: None,

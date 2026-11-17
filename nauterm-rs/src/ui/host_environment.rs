@@ -41,8 +41,8 @@ impl EnvironmentEditor {
 }
 #[derive(Clone, PartialEq, Eq)]
 enum Resource {
-    Host(Host),
-    Group(Group),
+    Host(Box<Host>),
+    Group(Box<Group>),
 }
 impl Resource {
     fn id(&self) -> Id {
@@ -64,13 +64,13 @@ impl Resource {
                 .iter()
                 .find(|saved| saved.id == host.id)
                 .cloned()
-                .map(Self::Host),
+                .map(|host| Self::Host(Box::new(host))),
             Self::Group(group) => data
                 .groups
                 .iter()
                 .find(|saved| saved.id == group.id)
                 .cloned()
-                .map(Self::Group),
+                .map(|group| Self::Group(Box::new(group))),
         }
     }
     fn setup_mut(&mut self) -> Option<&mut crate::host_session::Setup> {
@@ -114,12 +114,12 @@ impl Resource {
             Self::Host(host) => {
                 host.id = id;
                 data.hosts.retain(|saved| saved.id != id);
-                data.hosts.push(host.clone());
+                data.hosts.push(host.as_ref().clone());
             }
             Self::Group(group) => {
                 group.id = id;
                 data.groups.retain(|saved| saved.id != id);
-                data.groups.push(group.clone());
+                data.groups.push(group.as_ref().clone());
             }
         }
         id
@@ -425,7 +425,7 @@ impl Nauterm {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.save_connection_candidate(Resource::Host(host), window, cx);
+        self.save_connection_candidate(Resource::Host(Box::new(host)), window, cx);
     }
     pub(super) fn save_group_candidate(
         &mut self,
@@ -433,7 +433,7 @@ impl Nauterm {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.save_connection_candidate(Resource::Group(group), window, cx);
+        self.save_connection_candidate(Resource::Group(Box::new(group)), window, cx);
     }
     fn save_connection_candidate(
         &mut self,

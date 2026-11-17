@@ -1069,6 +1069,7 @@ mod tests {
     use super::*;
     fn spec() -> Spec {
         let options = SshOptions {
+            compatibility_mode: false,
             host: "example.test".into(),
             port: 22,
             username: "user".into(),

@@ -410,6 +410,7 @@ impl Nauterm {
             self.switch_drawer_page(Page::Hosts);
             self.overview = false;
         }
+        self.flush_connection_links(window, cx);
         cx.notify();
     }
     fn restored_layout(
@@ -611,6 +612,11 @@ impl Nauterm {
                         .find(|host| host.id == host_id)
                         .cloned()
                         .context("The saved host is no longer available")?;
+                    if host.kind == HostKind::Serial {
+                        let config = host.serial.context("Serial configuration is required.")?;
+                        self.install_serial_connection(id, core, config, window, cx);
+                        return Ok(());
+                    }
                     if !host.is_remote() {
                         return self.install_restored_local(
                             id,
@@ -727,7 +733,7 @@ impl Nauterm {
             directory.as_deref(),
             appearance.palette(),
         )?;
-        self.record_session(&mut session, &title, &appearance, host_id, cx);
+        self.record_session(&mut session, &title, host_id, cx);
         let terminal = cx.new(|cx| Terminal::new(session, vec![], appearance, None, window, cx));
         if self.session_auto_focus(id) {
             terminal.update(cx, |view, cx| view.focus(window, cx));

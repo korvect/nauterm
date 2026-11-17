@@ -1754,7 +1754,18 @@ impl TerminalEmulator for GhosttyTerminalEngine {
             3 => 3,
             _ => 1,
         };
+        // In libghostty-vt 1.0, SIZE_MAX disables the byte cap. Zero
+        // switches the primary screen to no-scrollback immediately.
+        let scrollback_bytes: usize = if runtime.scrollback_lines == 0 {
+            0
+        } else {
+            usize::MAX
+        };
         for (option, value) in [
+            (
+                TERMINAL_OPT_SCROLLBACK_MAX_BYTES,
+                &scrollback_bytes as *const _ as *const c_void,
+            ),
             (
                 TERMINAL_OPT_DEFAULT_CURSOR_STYLE,
                 &cursor_style as *const _ as *const c_void,

@@ -28,6 +28,7 @@ pub enum Target {
     SavedSsh(Host),
     SavedMosh(Host),
     Sftp(Host),
+    SftpUri(Host, String),
     Telnet(crate::telnet::Options),
 }
 impl Target {
@@ -38,7 +39,8 @@ impl Target {
             | Self::SavedSsh(host)
             | Self::SavedMosh(host)
             | Self::SavedTelnet(host)
-            | Self::Sftp(host) => &host.name,
+            | Self::Sftp(host)
+            | Self::SftpUri(host, _) => &host.name,
             Self::Telnet(options) => &options.host,
         }
     }
@@ -76,29 +78,148 @@ fn hosts<'a>(data: &'a AppState, query: &str) -> Vec<&'a Host> {
     hosts
 }
 fn direct(query: &str) -> Option<Host> {
-    if !query.contains('@') || query.trim().to_ascii_lowercase().starts_with("telnet:") {
+    let args = shlex::split(query)?;
+    let mut args = args.iter().peekable();
+    let command = args
+        .peek()
+        .is_some_and(|arg| arg.eq_ignore_ascii_case("ssh"));
+    if command {
+        args.next();
+    }
+    let (address, port, username) = command_address(args)?;
+    if !command && address.username.is_empty() && port.is_none() && username.is_none() {
         return None;
     }
-    let address = SshAddress::parse(query).ok()?;
+    let telnet_port = port.unwrap_or(if address.port == 22 { 23 } else { address.port });
+    let username = username.unwrap_or(address.username);
     Some(Host {
-        connections: Default::default(),
-        uuid: None,
-        platform: Default::default(),
-        kind: Default::default(),
-        shell_path: None,
-        work_dir: None,
-        ssh: Default::default(),
-        id: 0,
+        connections: crate::model::ConnectionProfiles {
+            mosh: !command,
+            telnet: (!command).then(|| crate::telnet::Profile {
+                port: telnet_port,
+                username: username.clone(),
+                ..Default::default()
+            }),
+            ..Default::default()
+        },
         name: address.host.clone(),
         address: address.host,
-        port: address.port,
-        username: address.username,
-        group_id: None,
-        tags: vec![],
-        credential: None,
-        proxy_id: None,
-        theme: None,
+        port: port.unwrap_or(address.port),
+        username,
+        ..Default::default()
     })
+}
+
+fn command_address<'a>(
+    args: impl Iterator<Item = &'a String>,
+) -> Option<(SshAddress, Option<u16>, Option<String>)> {
+    let mut args = args;
+    let mut endpoint = None;
+    let mut port = None;
+    let mut username = None;
+    let mut flags = true;
+    while let Some(arg) = args.next() {
+        if flags && arg == "--" {
+            flags = false;
+        } else if flags && arg == "-p" {
+            port = args
+                .next()
+                .and_then(|value| value.parse::<u16>().ok())
+                .filter(|value| *value != 0);
+        } else if flags && arg == "-l" {
+            username = args.next().cloned().filter(|value| !value.is_empty());
+        } else if flags && arg.starts_with('-') {
+            continue;
+        } else if endpoint.is_none() {
+            endpoint = SshAddress::parse(arg).ok();
+        } else if port.is_none() {
+            port = arg.parse::<u16>().ok().filter(|value| *value != 0);
+        }
+    }
+    Some((endpoint?, port, username))
+}
+
+fn telnet_command(query: &str) -> Option<crate::telnet::Options> {
+    let args = shlex::split(query)?;
+    let mut args = args.iter();
+    if !args.next()?.eq_ignore_ascii_case("telnet") {
+        return None;
+    }
+    let (address, port, username) = command_address(args)?;
+    Some(crate::telnet::Options {
+        host: address.host,
+        port: port.unwrap_or(if address.port == 22 { 23 } else { address.port }),
+        username: username.unwrap_or(address.username),
+        password: Default::default(),
+        encoding: Default::default(),
+    })
+}
+
+pub(crate) fn connection_url(value: &str) -> Option<Target> {
+    let value = value.trim();
+    let (_, authority_and_path) = value.split_once("://")?;
+    let authority = authority_and_path.split(['/', '?', '#']).next()?;
+    if authority.ends_with(':')
+        || value
+            .chars()
+            .any(|ch| ch.is_control() || ch.is_whitespace())
+    {
+        return None;
+    }
+    let uri = url::Url::parse(value).ok()?;
+    if uri.query().is_some() || uri.fragment().is_some() {
+        return None;
+    }
+    let host = uri
+        .host_str()?
+        .trim_start_matches('[')
+        .trim_end_matches(']')
+        .to_owned();
+    if host.is_empty() || host.contains(['/', '\\', '@', '#', '?']) {
+        return None;
+    }
+    let username = percent_encoding::percent_decode_str(uri.username())
+        .decode_utf8()
+        .ok()?
+        .into_owned();
+    let path = percent_encoding::percent_decode_str(uri.path())
+        .decode_utf8()
+        .ok()?
+        .into_owned();
+    if username.chars().chain(path.chars()).any(char::is_control) {
+        return None;
+    }
+    let protocol = uri.scheme();
+    if protocol != "sftp" && !matches!(path.as_str(), "" | "/") {
+        return None;
+    }
+    let port = uri
+        .port()
+        .unwrap_or(if protocol == "telnet" { 23 } else { 22 });
+    if port == 0 {
+        return None;
+    }
+    if protocol == "telnet" {
+        return Some(Target::Telnet(crate::telnet::Options {
+            host,
+            port,
+            username,
+            password: Default::default(),
+            encoding: Default::default(),
+        }));
+    }
+    let host = Host {
+        name: host.clone(),
+        address: host,
+        username,
+        port,
+        ..Default::default()
+    };
+    match protocol {
+        "ssh" => Some(Target::Host(host)),
+        "sftp" => Some(Target::SftpUri(host, path)),
+        _ => None,
+    }
 }
 fn address_label(host: &Host) -> String {
     let address = if host.address.contains(':') && !host.address.starts_with('[') {
@@ -175,7 +296,7 @@ fn empty_state(message: &'static str, p: Palette, cx: &App) -> Div {
 impl QuickConnect {
     pub fn new(data: AppState, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let search = cx.new(|cx| {
-            InputState::new(window, cx).placeholder("Search hosts, user@host, or telnet://host")
+            InputState::new(window, cx).placeholder("Search hosts or enter a connection command")
         });
         let events = cx.subscribe_in(&search, window, |this, _, event: &InputEvent, _, cx| {
             if matches!(event, InputEvent::Change) {
@@ -183,8 +304,10 @@ impl QuickConnect {
             }
             if matches!(event, InputEvent::PressEnter { .. }) {
                 let query = this.search.read(cx).value();
-                if let Some(options) = crate::telnet::Options::from_uri(&query) {
-                    cx.emit(QuickConnectEvent::connect(Target::Telnet(options)));
+                if let Some(target) =
+                    connection_url(&query).or_else(|| telnet_command(&query).map(Target::Telnet))
+                {
+                    cx.emit(QuickConnectEvent::connect(target));
                 } else if let Some(host) = direct(&query).or_else(|| {
                     hosts(&this.data, &query)
                         .first()
@@ -247,6 +370,7 @@ impl QuickConnect {
         }))
         .child(
             crate::avatar::host(&host.name)
+                .custom_icon(host.icon.as_deref())
                 .platform(host.platform.clone())
                 .dimension(36.),
         )
@@ -378,7 +502,16 @@ impl QuickConnect {
     }
     fn direct_row(&self, host: Host, cx: &mut Context<Self>) -> AnyElement {
         let p = Palette::new(self.data.dark);
-        let label = format!("{}@{}", host.username, address_label(&host));
+        let label = if host.username.is_empty() {
+            address_label(&host)
+        } else {
+            format!("{}@{}", host.username, address_label(&host))
+        };
+        let action = if host.connections.mosh {
+            "Connect"
+        } else {
+            "SSH"
+        };
         div()
             .id("quick-connect-direct-row")
             .w_full()
@@ -420,8 +553,8 @@ impl QuickConnect {
                     .primary()
                     .flex_shrink_0()
                     .px(px(12.))
-                    .label("SSH")
-                    .localized_accessibility_label(format!("Connect to {label} with SSH"))
+                    .label(action)
+                    .localized_accessibility_label(format!("Connect to {label}"))
                     .on_click(cx.listener(move |_, _, _, cx| {
                         cx.emit(QuickConnectEvent::connect(Target::Host(host.clone())))
                     })),
@@ -433,6 +566,13 @@ impl Render for QuickConnect {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = Palette::new(self.data.dark);
         let query = self.search.read(cx).value();
+        let url = connection_url(&query);
+        let telnet = telnet_command(&query);
+        let direct = if url.is_some() || telnet.is_some() {
+            None
+        } else {
+            direct(&query)
+        };
         let width = (f32::from(window.viewport_size().width) - PANEL_INSET * 2.).clamp(0., 500.);
         let height = (f32::from(window.viewport_size().height) - PANEL_INSET * 2.).clamp(0., 560.);
         // Account for the frame's border as well as its content padding. The
@@ -647,12 +787,27 @@ impl Render for QuickConnect {
                             })),
                     )
                     .child(section_label("Hosts").mt(px(14.)).mb(px(6.)))
-                    .when_some(direct(&query), |view, host| {
-                        view.child(self.direct_row(host, cx))
+                    .when_some(url, |view, target| match target {
+                        Target::Telnet(options) => view.child(self.telnet_row(options, cx)),
+                        Target::Host(host) => view.child(self.direct_row(host, cx)),
+                        Target::SftpUri(host, path) => view.child(
+                            Button::new("quick-direct-sftp")
+                                .outline()
+                                .h(px(52.))
+                                .label(format!("SFTP {}", address_label(&host)))
+                                .on_click(cx.listener(move |_, _, _, cx| {
+                                    cx.emit(QuickConnectEvent::connect(Target::SftpUri(
+                                        host.clone(),
+                                        path.clone(),
+                                    )));
+                                })),
+                        ),
+                        _ => view,
                     })
-                    .when_some(crate::telnet::Options::from_uri(&query), |view, options| {
+                    .when_some(telnet, |view, options| {
                         view.child(self.telnet_row(options, cx))
                     })
+                    .when_some(direct, |view, host| view.child(self.direct_row(host, cx)))
                     .when(host_count == 0, |view| {
                         view.child(empty_state("No hosts found.", p, cx))
                     })
@@ -662,6 +817,60 @@ impl Render for QuickConnect {
 }
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn quick_connect_parses_commands_and_protocol_choice() {
+        let ssh = super::direct("ssh -p 2022 -l 'admin' -- 'example.test'").unwrap();
+        assert_eq!(
+            (ssh.address.as_str(), ssh.port, ssh.username.as_str()),
+            ("example.test", 2022, "admin")
+        );
+        assert!(!ssh.connections.mosh);
+        assert!(ssh.connections.telnet.is_none());
+        let host = super::direct("user@example.test -p 8023").unwrap();
+        assert!(host.connections.mosh);
+        assert_eq!(host.port, 8023);
+        assert_eq!(host.connections.telnet.unwrap().port, 8023);
+        assert_eq!(
+            super::direct("user@example.test")
+                .unwrap()
+                .connections
+                .telnet
+                .unwrap()
+                .port,
+            23
+        );
+        let telnet = super::telnet_command("telnet example.test 2323").unwrap();
+        assert_eq!((telnet.host.as_str(), telnet.port), ("example.test", 2323));
+    }
+
+    #[test]
+    fn connection_urls_provide_endpoint_and_discard_password() {
+        let Some(super::Target::Telnet(options)) =
+            super::connection_url("telnet://qa:discard@[::1]:2323")
+        else {
+            panic!("a Telnet URL should produce a Telnet target");
+        };
+        assert_eq!(options.host, "::1");
+        assert_eq!(options.port, 2323);
+        assert_eq!(options.username, "qa");
+        assert!(options.password.is_empty());
+        let Some(super::Target::SftpUri(host, path)) =
+            super::connection_url("sftp://qa@example.test/work%20files")
+        else {
+            panic!("an SFTP URL should produce an SFTP target");
+        };
+        assert_eq!(host.port, 22);
+        assert_eq!(path, "/work files");
+        for invalid in [
+            "ssh://localhost:0",
+            "ssh://localhost/path",
+            "telnet://example.test?query",
+            "ssh://localhost:",
+        ] {
+            assert!(super::connection_url(invalid).is_none(), "{invalid}");
+        }
+    }
+
     use super::{address_label, direct, host_details, hosts, shell_columns};
     use crate::model::{AppState, CredentialRef, Group};
     #[test]

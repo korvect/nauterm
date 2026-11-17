@@ -1,6 +1,7 @@
 //! Keep the two action groups together, wrapping groups in narrow panes like
 //! Flutter's OverflowBar. This is independent of single-row management toolbars.
 use super::*;
+use crate::components::{management::ButtonGroup, menu::MenuItem};
 
 #[derive(Clone, Copy)]
 pub(crate) enum HostAction {
@@ -34,6 +35,18 @@ impl PreviousAttempt {
     }
 }
 impl Connection {
+    fn continue_host_key(&mut self, save: bool, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(options) = self.target.ssh_mut() {
+            options.trust = if save {
+                HostTrust::AcceptAndSave
+            } else {
+                HostTrust::AcceptOnce
+            };
+        }
+        self.auth.save = Some(save);
+        self.start(window, cx);
+    }
+
     pub(crate) fn previous_attempt(&self) -> PreviousAttempt {
         PreviousAttempt {
             logs: self.state.logs.clone(),
@@ -133,26 +146,37 @@ impl Connection {
                     .into_any_element(),
             );
         } else if self.state.phase == Phase::HostKey {
-            primary.push(
-                self.action("trust-once", "Continue", false)
-                    .on_click(cx.listener(|this, _, window, cx| {
-                        if let Some(options) = this.target.ssh_mut() {
-                            options.trust = HostTrust::AcceptOnce;
-                        }
-                        this.start(window, cx);
-                    }))
-                    .into_any_element(),
+            let save = self.auth.save.unwrap_or(false) && self.can_save_connection();
+            let confirm = self.action("trust-once", "Continue", true).on_click(
+                cx.listener(move |this, _, window, cx| this.continue_host_key(save, window, cx)),
             );
-            primary.push(
-                self.action("trust-save", "Add and continue", true)
-                    .on_click(cx.listener(|this, _, window, cx| {
-                        if let Some(options) = this.target.ssh_mut() {
-                            options.trust = HostTrust::AcceptAndSave;
-                        }
-                        this.start(window, cx);
-                    }))
-                    .into_any_element(),
-            );
+            if self.can_save_connection() && self.auth.save.is_none() {
+                let owner = cx.weak_entity();
+                primary.push(
+                    ButtonGroup::new()
+                        .controls()
+                        .button(confirm)
+                        .dropdown(
+                            self.action("trust-menu", "", true)
+                                .w(px(if self.compact_controls() { 24. } else { 30. }))
+                                .px_0()
+                                .icon(IconName::ChevronDown),
+                            move |menu, _, _| {
+                                let owner = owner.clone();
+                                menu.item(MenuItem::localized("Continue & Save").on_click(
+                                    move |_, window, cx| {
+                                        let _ = owner.update(cx, |this, cx| {
+                                            this.continue_host_key(true, window, cx)
+                                        });
+                                    },
+                                ))
+                            },
+                        )
+                        .into_any_element(),
+                );
+            } else {
+                primary.push(confirm.into_any_element());
+            }
         } else if self.state.phase == Phase::Authentication {
             primary.push(self.authentication_footer(cx));
         } else if self.can_start_over() {

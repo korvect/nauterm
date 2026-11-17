@@ -2,7 +2,7 @@ use super::*;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 pub(super) struct State {
-    pub theme: Option<crate::terminal_appearance::ThemeId>,
+    pub host_id: Option<Id>,
     cancel: Arc<AtomicBool>,
 }
 impl Drop for State {
@@ -23,14 +23,17 @@ impl Nauterm {
         let workspace = self.data.selected_workspace;
         let id = self.next_tab;
         self.next_tab += 1;
-        let theme = entry
-            .theme_id
+        let host_id = entry
+            .host_uuid
             .as_deref()
-            .and_then(crate::terminal_appearance::ThemeId::from_id);
-        let mut appearance = self.data.terminal.clone();
-        if let Some(theme) = theme {
-            appearance.select_theme(theme);
-        }
+            .and_then(|uuid| {
+                self.data
+                    .hosts
+                    .iter()
+                    .find(|host| host.uuid.as_deref() == Some(uuid))
+            })
+            .map(|host| host.id);
+        let appearance = self.data.terminal_for_host(host_id);
         let cancel = Arc::new(AtomicBool::new(false));
         self.terminals.push(TerminalTab {
             id,
@@ -49,7 +52,7 @@ impl Nauterm {
                     files: None,
                     tool_files: None,
                     replay: Some(State {
-                        theme,
+                        host_id,
                         cancel: cancel.clone(),
                     }),
                     _file_events: vec![],

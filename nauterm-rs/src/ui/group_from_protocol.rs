@@ -160,6 +160,7 @@ impl Nauterm {
                 source.credential = editor.credential;
                 source.proxy_id = editor.proxy_id;
                 source.theme = editor.theme.as_ref().and_then(|theme| theme.selected);
+                source.dark_theme = editor.theme.as_ref().and_then(|theme| theme.dark_selected);
                 source.ssh = draft.setup.clone();
                 source.connections.mosh = draft.mosh.enabled;
                 source.connections.mosh_command = draft.mosh.value(cx)?.unwrap_or_default().command;
@@ -336,7 +337,8 @@ impl Nauterm {
                 }
             }
         }
-        let theme = host_themes::Draft::new(seed.host.theme, window, cx);
+        let mut theme = host_themes::Draft::new(seed.host.theme, window, cx);
+        theme.dark_selected = seed.host.dark_theme;
         let editor = self.editor.as_mut().unwrap();
         editor.credential = seed.host.credential;
         editor.proxy_id = seed.host.proxy_id;
@@ -382,6 +384,7 @@ mod tests {
                 distro: Some("Ubuntu".into()),
             },
             ssh: crate::host_session::Setup {
+                compatibility_mode: false,
                 profile_source: Some(SSH.into()),
                 password_id: Some(SSH.into()),
                 environment_id: Some(SSH.into()),

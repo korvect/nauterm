@@ -346,7 +346,7 @@ impl Nauterm {
                     directory.as_deref(),
                     appearance.palette(),
                 )?;
-                self.record_session(&mut session, &title, &appearance, host_id, cx);
+                self.record_session(&mut session, &title, host_id, cx);
                 let terminal =
                     cx.new(|cx| Terminal::new(session, vec![], appearance, None, window, cx));
                 let metadata = self.terminal_subscriptions(&terminal, window, cx);

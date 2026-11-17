@@ -234,7 +234,7 @@ impl Backend for NativeBackend {
             owned.insert(spec.id, native);
         }
         let config = nauterm_core::port_forward::PortForwardConfig {
-            ssh_compatibility_mode: false,
+            ssh_compatibility_mode: options.compatibility_mode,
             id: native,
             forward_type: spec.kind.as_str().to_owned(),
             ssh_host: options.host.clone(),

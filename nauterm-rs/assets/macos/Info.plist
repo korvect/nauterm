@@ -14,6 +14,16 @@
   <key>LSApplicationCategoryType</key><string>public.app-category.developer-tools</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSSupportsAutomaticGraphicsSwitching</key><true/>
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key><string>com.korvect.nauterm.rs.connection</string>
+      <key>CFBundleURLSchemes</key>
+      <array><string>ssh</string><string>sftp</string><string>telnet</string></array>
+      <key>CFBundleTypeRole</key><string>Viewer</string>
+      <key>LSHandlerRank</key><string>Alternate</string>
+    </dict>
+  </array>
   <key>NSPrincipalClass</key><string>NSApplication</string>
 </dict>
 </plist>

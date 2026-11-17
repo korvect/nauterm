@@ -241,7 +241,7 @@ impl Vault {
         mut options: crate::native::SshOptions,
         mosh: bool,
     ) -> Result<crate::native::SshOptions> {
-        let saved_profile = setup.profile_source.is_some();
+        options.compatibility_mode = setup.compatibility_mode;
         let source = if let Some(reference) = setup
             .profile_source
             .as_deref()
@@ -286,9 +286,6 @@ impl Vault {
             }
             Some(reference) => options = self.apply_reference(reference, options).await?,
             None => {}
-        }
-        if saved_profile && options.username.trim().is_empty() {
-            options.username = "user".into();
         }
         if let Some(id) = proxy {
             options.proxy = Some(

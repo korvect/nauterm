@@ -53,7 +53,7 @@ pub mod settings {
     pub type Button = super::button::Button<true>;
     pub type Input = super::input::Input<true>;
 }
-pub use choice::{Checkbox, RadioGroup, Switch};
+pub use choice::{Checkbox, Switch};
 pub type WorkspaceSwitch = choice::Toggle<false>;
 pub use color::{RgbChange, RgbPicker, RgbState};
 pub use dialog::{Dialog, DialogColors, DialogFrame};

@@ -73,7 +73,7 @@ impl Stage {
                     let step = state
                         .interventions
                         .iter()
-                        .position(|item| *item == active)
+                        .rposition(|item| *item == active)
                         .map_or(1, |index| index + 1);
                     stage.reached = step - 1;
                     stage.moving = Some(step - 1);
@@ -157,9 +157,17 @@ impl Pipeline {
                 return destination;
             }
             let origin = (0..=index).rev().find_map(|anchor| {
+                let icon = next.icons[anchor];
+                let occurrence = next.icons[..anchor]
+                    .iter()
+                    .filter(|prior| **prior == icon)
+                    .count();
                 self.previous_icons
                     .iter()
-                    .position(|icon| *icon == next.icons[anchor])
+                    .enumerate()
+                    .filter(|(_, previous)| **previous == icon)
+                    .nth(occurrence)
+                    .map(|(index, _)| index)
             });
             origin.map_or(destination, |index| {
                 let from = index as f32 / (self.previous_icons.len() - 1).max(1) as f32;

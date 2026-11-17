@@ -460,12 +460,13 @@ impl Nauterm {
                 return;
             }
         };
-        let options = SshOptions::new(
+        let mut options = SshOptions::new(
             host.address,
             host.port,
             host.username,
             self.store.paths.known_hosts(),
         );
+        options.compatibility_mode = host.ssh.compatibility_mode;
         self.forward_states.insert(
             id,
             Runtime {

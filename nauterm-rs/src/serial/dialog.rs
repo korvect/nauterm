@@ -28,6 +28,7 @@ pub struct Connection {
     flow: SelectModel<Flow>,
     ports: Vec<Port>,
     scanning: bool,
+    embedded: bool,
     scan_error: Option<String>,
     error: Option<String>,
     validation_error: Option<String>,
@@ -41,6 +42,20 @@ impl Focusable for Connection {
 }
 impl Connection {
     pub fn new(core: Option<Arc<Core>>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        Self::with_config(core, None, false, window, cx)
+    }
+
+    pub fn embedded(config: Option<&Config>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        Self::with_config(None, config, true, window, cx)
+    }
+
+    fn with_config(
+        core: Option<Arc<Core>>,
+        config: Option<&Config>,
+        embedded: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
         crate::components::message::watch(window, cx, |view: &Self| {
             view.error
                 .clone()
@@ -51,15 +66,18 @@ impl Connection {
                 .clone()
                 .map(crate::components::message::Message::error)
         });
-        let path = cx.new(|cx| InputState::new(window, cx).default_value(default_port()));
-        let baud = cx.new(|cx| InputState::new(window, cx).default_value("115200"));
+        let path_value =
+            config.map_or_else(|| default_port().to_owned(), |config| config.path.clone());
+        let baud_value = config.map_or(115200, |config| config.baud);
+        let path = cx.new(|cx| InputState::new(window, cx).default_value(path_value));
+        let baud = cx.new(|cx| InputState::new(window, cx).default_value(baud_value.to_string()));
         let devices = SelectModel::editable(vec![], None, &path, window, cx);
         let rates = SelectModel::editable(
             [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200, 230400]
                 .into_iter()
                 .map(|rate| SelectOption::new(rate, rate.to_string()))
                 .collect(),
-            Some(115200),
+            Some(baud_value),
             &baud,
             window,
             cx,
@@ -68,7 +86,7 @@ impl Connection {
             (5..=8)
                 .map(|bits| SelectOption::new(bits, bits.to_string()))
                 .collect(),
-            Some(8),
+            Some(config.map_or(8, |config| config.data_bits)),
             window,
             cx,
         );
@@ -77,7 +95,7 @@ impl Connection {
                 SelectOption::localized(1, "1"),
                 SelectOption::localized(2, "2"),
             ],
-            Some(1),
+            Some(config.map_or(1, |config| config.stop_bits)),
             window,
             cx,
         );
@@ -87,7 +105,7 @@ impl Connection {
                 SelectOption::localized(Parity::Even, "Even"),
                 SelectOption::localized(Parity::Odd, "Odd"),
             ],
-            Some(Parity::None),
+            Some(config.map_or(Parity::None, |config| config.parity)),
             window,
             cx,
         );
@@ -97,7 +115,7 @@ impl Connection {
                 SelectOption::localized(Flow::Software, "Software"),
                 SelectOption::localized(Flow::Hardware, "Hardware"),
             ],
-            Some(Flow::None),
+            Some(config.map_or(Flow::None, |config| config.flow)),
             window,
             cx,
         );
@@ -125,12 +143,15 @@ impl Connection {
             flow,
             ports: vec![],
             scanning: false,
+            embedded,
             scan_error: None,
             error: None,
             validation_error: None,
             _inputs: inputs,
         };
-        view.scan(window, cx);
+        if !embedded {
+            view.scan(window, cx);
+        }
         view
     }
     pub fn core(&self) -> Option<Arc<Core>> {
@@ -162,7 +183,9 @@ impl Connection {
                     Ok((core, ports)) => {
                         view.core = Some(core);
                         let current = view.path.read(cx).value().trim().to_owned();
-                        let chosen = if current.is_empty() || current == default_port() {
+                        let chosen = if current.is_empty()
+                            || (!view.embedded && current == default_port())
+                        {
                             ports
                                 .first()
                                 .map(|port| port.path.clone())
@@ -194,24 +217,25 @@ impl Connection {
         .detach();
         cx.notify();
     }
+    pub fn configuration(&self, cx: &App) -> anyhow::Result<Config> {
+        let config = Config {
+            path: self.path.read(cx).value().trim().to_owned(),
+            baud: self.baud.read(cx).value().trim().parse().map_err(|_| {
+                anyhow::anyhow!("Baud rate must be a positive number up to {}.", u32::MAX)
+            })?,
+            data_bits: selected(&self.data_bits, 8, cx),
+            stop_bits: selected(&self.stop_bits, 1, cx),
+            parity: selected(&self.parity, Parity::None, cx),
+            flow: selected(&self.flow, Flow::None, cx),
+        };
+        config.validate()?;
+        Ok(config)
+    }
+
     fn submit(&mut self, cx: &mut Context<Self>) {
         self.error = None;
         self.validation_error = None;
-        let result = (|| {
-            let config = Config {
-                path: self.path.read(cx).value().trim().to_owned(),
-                baud: self.baud.read(cx).value().trim().parse().map_err(|_| {
-                    anyhow::anyhow!("Baud rate must be a positive number up to {}.", u32::MAX)
-                })?,
-                data_bits: selected(&self.data_bits, 8, cx),
-                stop_bits: selected(&self.stop_bits, 1, cx),
-                parity: selected(&self.parity, Parity::None, cx),
-                flow: selected(&self.flow, Flow::None, cx),
-            };
-            config.validate()?;
-            Ok::<_, anyhow::Error>(config)
-        })();
-        match result {
+        match self.configuration(cx) {
             Ok(config) => cx.emit(Event::Connect(config)),
             Err(error) => self.validation_error = Some(error.to_string()),
         }
@@ -243,85 +267,85 @@ impl Render for Connection {
                 .map(Port::label)
                 .unwrap_or_default()
         };
+        let fields = div()
+            .flex()
+            .flex_col()
+            .gap(px(12.))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(8.))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .child(self.devices.field("Serial port", false)),
+                    )
+                    .child(
+                        Button::new("refresh-serial-devices")
+                            .icon(IconName::RefreshCw)
+                            .large()
+                            .disabled(self.scanning)
+                            .loading(self.scanning)
+                            .tooltip("Refresh serial devices")
+                            .on_click(cx.listener(|this, _, window, cx| this.scan(window, cx))),
+                    ),
+            )
+            .when(!status.is_empty(), |view| {
+                view.child(
+                    div()
+                        .text_size(px(12.))
+                        .text_color(p.muted)
+                        .child(crate::localization::message(cx, &status)),
+                )
+            })
+            .child(self.rates.digits_field("Baud rate", false))
+            .child(
+                div()
+                    .flex()
+                    .gap(px(10.))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .child(self.data_bits.required_field("Data bits", false)),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .child(self.stop_bits.required_field("Stop bits", false)),
+                    ),
+            )
+            .child(
+                div()
+                    .flex()
+                    .gap(px(10.))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .child(self.parity.required_field("Parity", false)),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .child(self.flow.required_field("Flow control", false)),
+                    ),
+            )
+            .when_some(
+                crate::components::validation_message(self.validation_error.as_deref(), cx),
+                |view, error| view.child(error),
+            );
+        if self.embedded {
+            return fields.into_any_element();
+        }
         DialogFrame::new("serial-connection-dialog", "Serial connection")
             .width(460.)
             .colors(DialogColors::workspace(dark))
-            .content(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap(px(12.))
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(px(8.))
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .min_w_0()
-                                    .child(self.devices.field("Serial port", false)),
-                            )
-                            .child(
-                                Button::new("refresh-serial-devices")
-                                    .icon(IconName::RefreshCw)
-                                    .large()
-                                    .disabled(self.scanning)
-                                    .loading(self.scanning)
-                                    .tooltip("Refresh serial devices")
-                                    .on_click(
-                                        cx.listener(|this, _, window, cx| this.scan(window, cx)),
-                                    ),
-                            ),
-                    )
-                    .when(!status.is_empty(), |view| {
-                        view.child(
-                            div()
-                                .text_size(px(12.))
-                                .text_color(p.muted)
-                                .child(crate::localization::message(cx, &status)),
-                        )
-                    })
-                    .child(self.rates.digits_field("Baud rate", false))
-                    .child(
-                        div()
-                            .flex()
-                            .gap(px(10.))
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .min_w_0()
-                                    .child(self.data_bits.required_field("Data bits", false)),
-                            )
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .min_w_0()
-                                    .child(self.stop_bits.required_field("Stop bits", false)),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .gap(px(10.))
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .min_w_0()
-                                    .child(self.parity.required_field("Parity", false)),
-                            )
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .min_w_0()
-                                    .child(self.flow.required_field("Flow control", false)),
-                            ),
-                    )
-                    .when_some(
-                        crate::components::validation_message(self.validation_error.as_deref(), cx),
-                        |view, error| view.child(error),
-                    ),
-            )
+            .content(fields)
             .action(
                 Button::new("serial-cancel")
                     .ghost()
@@ -334,5 +358,6 @@ impl Render for Connection {
                     .label("Connect")
                     .on_click(cx.listener(|this, _, _, cx| this.submit(cx))),
             )
+            .into_any_element()
     }
 }
