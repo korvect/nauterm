@@ -3,7 +3,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/src/widgets/_window.dart';
 import 'package:nativeapi_flutter/nativeapi_flutter.dart' show DisplayManager;
 import 'package:nativeapi_flutter/windowing.dart';
@@ -21,7 +21,7 @@ class SettingsWindow extends StatefulWidget {
     required this.isContentMounted,
   });
 
-  final RegularWindowController controller;
+  final WindowController controller;
   final bool isContentMounted;
 
   @override
@@ -64,7 +64,7 @@ class _SettingsWindowState extends State<SettingsWindow> {
 
   @override
   Widget build(BuildContext context) {
-    return RegularWindow(
+    return Window(
       controller: widget.controller,
       child: _contentReady && widget.isContentMounted
           ? const NautermSettingsApp()
@@ -97,11 +97,11 @@ class _SettingsWindowPlaceholder extends StatelessWidget {
   }
 }
 
-RegularWindowController createSettingsWindowController({
+WindowController createSettingsWindowController({
   required VoidCallback onCloseRequested,
   required VoidCallback onDestroyed,
 }) {
-  final controller = RegularWindowController(
+  final controller = WindowController(
     size: settingsWindowSize,
     constraints: BoxConstraints(
       minWidth: settingsWindowMinSize.width,
@@ -123,7 +123,7 @@ RegularWindowController createSettingsWindowController({
   return controller;
 }
 
-class _SettingsWindowDelegate with RegularWindowControllerDelegate {
+class _SettingsWindowDelegate with WindowControllerDelegate {
   _SettingsWindowDelegate({
     required this.onCloseRequested,
     required this.onDestroyed,
@@ -133,7 +133,7 @@ class _SettingsWindowDelegate with RegularWindowControllerDelegate {
   final VoidCallback onDestroyed;
 
   @override
-  void onWindowCloseRequested(RegularWindowController controller) {
+  void onWindowCloseRequested(WindowController controller) {
     // Let the root unmount the settings view before destroying the window.
     onCloseRequested();
   }

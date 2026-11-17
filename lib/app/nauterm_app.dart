@@ -1,5 +1,4 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../terminal/terminal_config.dart';
@@ -38,9 +37,7 @@ class NautermApp extends StatelessWidget {
             supportedLocales: NautermLocalizations.supportedLocales,
             localizationsDelegates: const [
               NautermLocalizations.delegate,
-              GlobalMaterialLocalizations.delegate,
-              GlobalWidgetsLocalizations.delegate,
-              GlobalCupertinoLocalizations.delegate,
+              ...GlobalMaterialLocalizations.delegates,
             ],
             theme: nautermTheme(Brightness.light),
             darkTheme: nautermTheme(Brightness.dark),

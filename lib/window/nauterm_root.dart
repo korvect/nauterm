@@ -3,7 +3,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/src/widgets/_window.dart';
 import 'package:nativeapi_flutter/windowing.dart';
 
@@ -38,7 +38,7 @@ class _NautermRootState extends State<NautermRoot>
   bool _isMainWindowContentMounted = true;
   bool _isSettingsWindowMounted = false;
   bool _isSettingsWindowContentMounted = false;
-  RegularWindowController? _settingsWindowController;
+  WindowController? _settingsWindowController;
   bool _isClosingMainWindow = false;
   int _mainWindowVisibilityRevision = 0;
 
@@ -224,7 +224,7 @@ class _NautermRootState extends State<NautermRoot>
       return;
     }
 
-    late final RegularWindowController controller;
+    late final WindowController controller;
     controller = createSettingsWindowController(
       onCloseRequested: closeSettingsWindow,
       onDestroyed: () => _handleSettingsWindowDestroyed(controller),
@@ -249,7 +249,7 @@ class _NautermRootState extends State<NautermRoot>
     }
   }
 
-  void _handleSettingsWindowDestroyed(RegularWindowController controller) {
+  void _handleSettingsWindowDestroyed(WindowController controller) {
     if (!identical(_settingsWindowController, controller)) {
       return;
     }
