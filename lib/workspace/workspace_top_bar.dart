@@ -334,7 +334,7 @@ class _LinuxWindowControls extends StatelessWidget {
   Widget build(BuildContext context) {
     final isWindows = defaultTargetPlatform == TargetPlatform.windows;
     final regularWindowController = switch (WindowScope.maybeOf(context)) {
-      final RegularWindowController controller => controller,
+      final WindowController controller => controller,
       _ => null,
     };
 

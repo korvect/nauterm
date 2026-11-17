@@ -3,7 +3,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/src/widgets/_window.dart';
 import 'package:flutter/src/widgets/_window_linux.dart';
 import 'package:nativeapi_flutter/nativeapi_flutter.dart' show DisplayManager;
@@ -48,19 +48,18 @@ class _MainWindowState extends State<MainWindow> with WidgetsBindingObserver {
     return mainWindowSize;
   }
 
-  late final RegularWindowController _windowController =
-      RegularWindowController(
-        size: _resolvedWindowSize,
-        constraints: BoxConstraints(
-          minWidth: mainWindowMinSize.width,
-          minHeight: mainWindowMinSize.height,
-        ),
-        title: mainWindowTitle,
-        delegate: _MainWindowDelegate(
-          onCloseRequested: widget.onWindowCloseRequested,
-          onDestroyed: widget.onWindowDestroyed,
-        ),
-      );
+  late final WindowController _windowController = WindowController(
+    size: _resolvedWindowSize,
+    constraints: BoxConstraints(
+      minWidth: mainWindowMinSize.width,
+      minHeight: mainWindowMinSize.height,
+    ),
+    title: mainWindowTitle,
+    delegate: _MainWindowDelegate(
+      onCloseRequested: widget.onWindowCloseRequested,
+      onDestroyed: widget.onWindowDestroyed,
+    ),
+  );
 
   @override
   void initState() {
@@ -134,7 +133,7 @@ class _MainWindowState extends State<MainWindow> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    return RegularWindow(
+    return Window(
       controller: _windowController,
       child: widget.isContentMounted
           ? NautermApp(
@@ -150,7 +149,7 @@ class _MainWindowState extends State<MainWindow> with WidgetsBindingObserver {
   }
 }
 
-class _MainWindowDelegate with RegularWindowControllerDelegate {
+class _MainWindowDelegate with WindowControllerDelegate {
   _MainWindowDelegate({
     required this.onCloseRequested,
     required this.onDestroyed,
@@ -160,7 +159,7 @@ class _MainWindowDelegate with RegularWindowControllerDelegate {
   final VoidCallback onDestroyed;
 
   @override
-  void onWindowCloseRequested(RegularWindowController controller) {
+  void onWindowCloseRequested(WindowController controller) {
     unawaited(onCloseRequested());
   }
 

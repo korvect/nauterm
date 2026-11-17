@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -257,7 +257,16 @@ void main() {
         find.byKey(const ValueKey('host-icon-edit-indicator')),
         findsOneWidget,
       );
-      expect(find.byTooltip('Change icon'), findsOneWidget);
+      // find.byTooltip only checks the legacy Tooltip when semantics are excluded.
+      expect(
+        find.ancestor(
+          of: picker,
+          matching: find.byWidgetPredicate(
+            (widget) => widget is Tooltip && widget.message == 'Change icon',
+          ),
+        ),
+        findsOneWidget,
+      );
       await tester.tap(picker);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));

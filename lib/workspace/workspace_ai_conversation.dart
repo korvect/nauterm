@@ -647,18 +647,22 @@ class _AiConversationMessageState extends State<_AiConversationMessage> {
             ],
           )
         else if (assistant)
-          MarkdownBody(
-            data: message.content,
-            selectable: false,
-            softLineBreak: true,
-            styleSheet: markdownStyle,
-            onTapLink: (text, href, title) => _openAiExternalLink(href),
-            imageBuilder: (uri, title, alt) => Text(
-              alt ?? 'Image',
-              style: TextStyle(
-                color: colors.muted,
-                fontSize: 12,
-                letterSpacing: 0,
+          // flutter_markdown_plus still uses Flutter's legacy Material widgets.
+          // ignore: deprecated_member_use
+          MaterialUiCompatibilityBridge(
+            child: MarkdownBody(
+              data: message.content,
+              selectable: false,
+              softLineBreak: true,
+              styleSheet: markdownStyle,
+              onTapLink: (text, href, title) => _openAiExternalLink(href),
+              imageBuilder: (uri, title, alt) => Text(
+                alt ?? 'Image',
+                style: TextStyle(
+                  color: colors.muted,
+                  fontSize: 12,
+                  letterSpacing: 0,
+                ),
               ),
             ),
           )
