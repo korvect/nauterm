@@ -1,7 +1,7 @@
 # Nauterm Wayland native decorations
 
-This is gpui-pre-linux 0.3.10, from zed revision
-08cbb88a152c3751a43e853425a70e9f631a5918 (Apache-2.0).
+This is gpui-pre-linux 0.3.12, from zed revision
+d2a4fb6ded7c470be25d1541281da3882495b65b (Apache-2.0).
 The source is temporarily pinned here so the Wayland native-decoration change
 can be built and reviewed with Nauterm. Move the foundation change into the
 GPUI dependency fork before replacing this Cargo patch with a published revision.
