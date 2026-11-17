@@ -2050,15 +2050,21 @@ class _WorkspaceFieldFrame extends StatelessWidget {
                 horizontal: size.inputHorizontalPadding,
                 vertical: size.inputVerticalPadding,
               ),
+          // Centered strokes keep the label, gap and border center line fixed
+          // while the border width animates.
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(color: borderColor),
+            borderSide: BorderSide(
+              color: borderColor,
+              strokeAlign: BorderSide.strokeAlignCenter,
+            ),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
             borderSide: BorderSide(
               color: hasError ? errorColor : borderColor,
-              width: hasError ? 1.2 : 1,
+              width: hasError ? 1.2 : 1.0,
+              strokeAlign: BorderSide.strokeAlignCenter,
             ),
           ),
           focusedBorder: OutlineInputBorder(
@@ -2066,6 +2072,7 @@ class _WorkspaceFieldFrame extends StatelessWidget {
             borderSide: BorderSide(
               color: hasError ? errorColor : focusColor.withValues(alpha: 0.68),
               width: 1.6,
+              strokeAlign: BorderSide.strokeAlignCenter,
             ),
           ),
         ),

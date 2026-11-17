@@ -75,6 +75,76 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('focus border stays thick without shifting the label', (
+    tester,
+  ) async {
+    await _openHostEditor(tester);
+    // Check both the field states and the interpolated outline: equal endpoint
+    // offsets alone do not prevent drift when width and alignment both change.
+    var checked = 0;
+    for (final element in find.byType(InputDecorator).evaluate()) {
+      final decoration = (element.widget as InputDecorator).decoration;
+      if (decoration.labelText == null) continue;
+      final border = decoration.border;
+      if (border is! OutlineInputBorder) continue;
+      final enabled = decoration.enabledBorder as OutlineInputBorder?;
+      final focused = decoration.focusedBorder as OutlineInputBorder?;
+      final label = decoration.labelText;
+      final idleWidth = enabled?.borderSide.width ?? border.borderSide.width;
+      final focusWidth = focused?.borderSide.width ?? border.borderSide.width;
+      expect(
+        focusWidth,
+        greaterThan(idleWidth),
+        reason: 'focus width for $label',
+      );
+      expect(focusWidth, 1.6, reason: 'focus width for $label');
+
+      final strokeOffset = border.borderSide.strokeOffset;
+      for (final side in <BorderSide>[
+        border.borderSide,
+        if (enabled != null) enabled.borderSide,
+        if (focused != null) focused.borderSide,
+      ]) {
+        expect(
+          side.strokeOffset,
+          closeTo(strokeOffset, 0.001),
+          reason: 'strokeOffset for $label (width ${side.width})',
+        );
+      }
+      for (final t in <double>[0.25, 0.5, 0.75]) {
+        final interpolated =
+            ShapeBorder.lerp(enabled ?? border, focused ?? border, t)!
+                as OutlineInputBorder;
+        expect(
+          interpolated.borderSide.strokeOffset,
+          closeTo(strokeOffset, 0.001),
+          reason: 'animated strokeOffset for $label at $t',
+        );
+      }
+      checked++;
+    }
+    // The host editor contains both text inputs and selects.
+    expect(checked, greaterThanOrEqualTo(2));
+
+    final field = _textField('Name *');
+    await tester.enterText(field, 'Production');
+    await tester.pump();
+    final focusNode = tester.widget<TextField>(field).focusNode!;
+    focusNode.unfocus();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    final label = find.text('Name *');
+    final unfocusedRect = tester.getRect(label);
+
+    focusNode.requestFocus();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 60));
+    expect(tester.getRect(label).top, closeTo(unfocusedRect.top, 0.1));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(tester.getRect(label), unfocusedRect);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('input clear button fades without changing the text layout', (
     tester,
   ) async {
