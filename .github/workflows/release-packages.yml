@@ -245,6 +245,7 @@ jobs:
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
         with:
           version: ${{ env.ZIG_VERSION }}
+          use-cache: false
 
       - id: version
         run: |
@@ -292,6 +293,9 @@ jobs:
             ruby-dev \
             tmux
           sudo gem install fpm --version 1.17.0 --no-document
+
+      - name: Build libghostty-vt from release sources
+        run: bash scripts/ci/build_ghostty_linux.sh ${{ matrix.arch }}
 
       - name: Install pinned Rust toolchain
         run: |

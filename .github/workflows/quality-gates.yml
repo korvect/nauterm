@@ -36,6 +36,7 @@ jobs:
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
         with:
           version: ${{ env.ZIG_VERSION }}
+          use-cache: false
 
       - name: Install Linux native build dependencies
         run: |
@@ -69,6 +70,9 @@ jobs:
       - name: Analyze Flutter
         continue-on-error: true
         run: flutter analyze --no-pub
+
+      - name: Build libghostty-vt from release sources
+        run: bash scripts/ci/build_ghostty_linux.sh
 
       - name: Build native library for Flutter tests
         run: cargo build --manifest-path native/nauterm_ffi/Cargo.toml --locked --features test-credential-store
@@ -108,6 +112,7 @@ jobs:
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
         with:
           version: ${{ env.ZIG_VERSION }}
+          use-cache: ${{ runner.os != 'Linux' }}
 
       - uses: ilammy/msvc-dev-cmd@7defe9254715b088f12dddd9942945a3d75cdad5 # v1.9.0
         if: runner.os == 'Windows'
@@ -141,6 +146,10 @@ jobs:
 
       - name: Resolve Flutter dependencies
         run: flutter pub get
+
+      - name: Build libghostty-vt from release sources
+        if: runner.os == 'Linux'
+        run: bash scripts/ci/build_ghostty_linux.sh
 
       - name: Run native integration tests
         run: cargo test --manifest-path native/nauterm_ffi/Cargo.toml --locked --features integration-tests,test-credential-store -- --test-threads=1
