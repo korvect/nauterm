@@ -110,9 +110,14 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+        if: runner.os != 'macOS'
         with:
           version: ${{ env.ZIG_VERSION }}
           use-cache: ${{ runner.os != 'Linux' }}
+
+      - name: Install prebuilt libghostty-vt
+        if: runner.os == 'macOS'
+        run: bash scripts/ci/install_ghostty_macos.sh
 
       - uses: ilammy/msvc-dev-cmd@7defe9254715b088f12dddd9942945a3d75cdad5 # v1.9.0
         if: runner.os == 'Windows'
