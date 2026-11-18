@@ -828,7 +828,7 @@ pub(crate) async fn authenticate<H: client::Handler>(
         if remaining_methods.contains(&russh::MethodKind::KeyboardInteractive)
             && !(partially_authenticated && needs_credentials)
         {
-            return authenticate_keyboard_interactive(
+            match authenticate_keyboard_interactive(
                 handle,
                 username,
                 events,
@@ -839,7 +839,18 @@ pub(crate) async fn authenticate<H: client::Handler>(
                 // challenges via keyboard-interactive.
                 password,
             )
-            .await;
+            .await?
+            {
+                AuthResult::Success => return Ok(()),
+                AuthResult::Failure {
+                    remaining_methods: methods,
+                    partial_success,
+                } => {
+                    remaining_methods = methods;
+                    partially_authenticated |= partial_success;
+                    continue;
+                }
+            }
         }
         if needs_credentials {
             if let Some(interaction) = &host_key_verification.interaction {
@@ -1137,9 +1148,11 @@ fn is_saved_password_keyboard_prompt(prompt: &client::Prompt) -> bool {
         return false;
     }
     let lower = prompt.prompt.to_ascii_lowercase();
-    // Match FreeBSD/PAM "Password for user@host:" without claiming OTP/2FA
-    // ("Verification code") or password-change prompts.
-    lower.contains("password") && !lower.contains("new password") && !lower.contains("passphrase")
+    // Only answer a sign-in password prompt, including FreeBSD's "Password for …".
+    (lower.trim_start().starts_with("password:")
+        || lower.trim_start().starts_with("password for ")
+        || lower.trim() == "password")
+        && !super::auth_interactive::asks_for_verification_code(&prompt.prompt)
 }
 
 async fn authenticate_keyboard_interactive<H: client::Handler>(
@@ -1149,7 +1162,7 @@ async fn authenticate_keyboard_interactive<H: client::Handler>(
     wakeup: &Arc<Mutex<Option<WakeupCallback>>>,
     verification: &HostKeyVerification,
     saved_password: Option<&str>,
-) -> Result<(), String> {
+) -> Result<AuthResult, String> {
     verification.require_trusted(events, wakeup)?;
     let result = async {
         push_auth_event(
@@ -1160,6 +1173,7 @@ async fn authenticate_keyboard_interactive<H: client::Handler>(
             .authenticate_keyboard_interactive_start(username, None)
             .await
             .map_err(|error| error.to_string())?;
+        let mut tried_saved_password = false;
         loop {
             match response {
                 client::KeyboardInteractiveAuthResponse::Success => {
@@ -1167,17 +1181,31 @@ async fn authenticate_keyboard_interactive<H: client::Handler>(
                         events, wakeup, "auth_success", "keyboard-interactive",
                         "SSH keyboard-interactive authentication succeeded.",
                     );
-                    return Ok(());
+                    return Ok(AuthResult::Success);
                 }
-                client::KeyboardInteractiveAuthResponse::Failure { .. } => {
+                client::KeyboardInteractiveAuthResponse::Failure {
+                    remaining_methods,
+                    partial_success: true,
+                } => {
+                    push_auth_method_event(
+                        events, wakeup, "auth_partial_success", "keyboard-interactive",
+                        "SSH keyboard-interactive response accepted; further authentication is required.",
+                        &remaining_methods,
+                    );
+                    return Ok(AuthResult::Failure { remaining_methods, partial_success: true });
+                }
+                client::KeyboardInteractiveAuthResponse::Failure { partial_success: false, .. } => {
                     return Err("Server rejected SSH keyboard-interactive authentication.".to_owned());
                 }
                 client::KeyboardInteractiveAuthResponse::InfoRequest { name, instructions, prompts } => {
                     // Empty information requests still require an empty response.
                     let auto_password = saved_password.filter(|value| {
-                        !value.is_empty()
+                        !tried_saved_password
+                            && !value.is_empty()
                             && prompts.len() == 1
                             && is_saved_password_keyboard_prompt(&prompts[0])
+                            && !super::auth_interactive::asks_for_verification_code(&name)
+                            && !super::auth_interactive::asks_for_verification_code(&instructions)
                     });
                     let responses = if prompts.is_empty() && name.is_empty() && instructions.is_empty()
                     {
@@ -1185,6 +1213,7 @@ async fn authenticate_keyboard_interactive<H: client::Handler>(
                     } else if let Some(password) = auto_password {
                         // Single PAM-style password prompt: reuse the host's saved
                         // password without opening UI. OTP/2FA prompts stay interactive.
+                        tried_saved_password = true;
                         vec![password.to_owned()]
                     } else {
                         let interaction = verification.interaction.as_ref().ok_or_else(|| {
@@ -1234,6 +1263,28 @@ mod tests {
         atomic::{AtomicBool, Ordering},
         Arc, Mutex,
     };
+
+    #[test]
+    fn saved_password_is_only_used_for_a_hidden_sign_in_password_prompt() {
+        for (prompt, echo, expected) in [
+            ("Password: ", false, true),
+            ("Password for testuser@freebsd:", false, true),
+            ("Password: ", true, false),
+            ("Password: enter a passcode", false, false),
+            ("One-time password (OTP):", false, false),
+            ("New password:", false, false),
+            ("Enter verification code:", false, false),
+        ] {
+            assert_eq!(
+                super::is_saved_password_keyboard_prompt(&client::Prompt {
+                    prompt: prompt.into(),
+                    echo
+                }),
+                expected,
+                "{prompt}"
+            );
+        }
+    }
 
     fn private_key(seed: u8) -> PrivateKey {
         Ed25519Keypair::from_seed(&[seed; 32]).into()

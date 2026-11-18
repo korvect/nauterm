@@ -7,6 +7,38 @@ pub struct KeyboardInteractivePrompt {
     pub echo: bool,
 }
 
+impl KeyboardInteractivePrompt {
+    pub fn asks_for_verification_code(&self) -> bool {
+        asks_for_verification_code(&self.prompt)
+    }
+
+    pub fn asks_for_password(&self) -> bool {
+        words(&self.prompt).any(|word| word.eq_ignore_ascii_case("password"))
+            || ["密码", "口令"]
+                .iter()
+                .any(|part| self.prompt.contains(part))
+    }
+}
+
+fn words(prompt: &str) -> impl Iterator<Item = &str> {
+    prompt.split(|ch: char| !ch.is_alphanumeric())
+}
+
+pub(super) fn asks_for_verification_code(prompt: &str) -> bool {
+    let lower = prompt.to_ascii_lowercase();
+    words(&lower).any(|word| {
+        matches!(
+            word,
+            "code" | "otp" | "totp" | "token" | "passcode" | "verification" | "authenticator"
+        )
+    }) || ["one-time", "one time", "onetime"]
+        .iter()
+        .any(|part| lower.contains(part))
+        || ["验证码", "认证码", "动态", "一次性"]
+            .iter()
+            .any(|part| prompt.contains(part))
+}
+
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct KeyboardInteractiveChallenge {
     pub id: u64,
