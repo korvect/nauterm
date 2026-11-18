@@ -94,76 +94,109 @@ fn dispatch_connection_links(cx: &mut App) {
 }
 
 #[cfg(target_os = "macos")]
-pub(crate) fn menu_title(source: &str) -> objc2::rc::Retained<objc2_foundation::NSString> {
+pub(crate) const SERVICES_MENU_KEY: &str = "NMo-om-nkz.title";
+
+#[cfg(target_os = "macos")]
+pub(crate) fn menu_title(
+    key: &str,
+    fallback: &str,
+) -> objc2::rc::Retained<objc2_foundation::NSString> {
     use objc2_foundation::{NSBundle, NSString};
     NSBundle::mainBundle().localizedStringForKey_value_table(
-        &NSString::from_str(source),
-        None,
+        &NSString::from_str(key),
+        Some(&NSString::from_str(fallback)),
         Some(&NSString::from_str("MainMenu")),
     )
 }
 
 #[cfg(target_os = "macos")]
-fn menus(text: impl Fn(&'static str) -> SharedString) -> Vec<Menu> {
+fn menus(text: impl Fn(&'static str, &'static str) -> SharedString) -> Vec<Menu> {
     use gpui_kit::base::input::{Copy, Cut, Paste, Redo, SelectAll, Undo};
     vec![
         Menu::new("Nauterm RS").items([
-            MenuItem::action(text("About Nauterm RS"), About),
-            MenuItem::action(text("Check for Updates…"), CheckForUpdates),
+            MenuItem::action(text("5kV-Vb-QxS.title", "About Nauterm RS"), About),
+            MenuItem::action(
+                text("Nau-Upd-Che.title", "Check for Updates…"),
+                CheckForUpdates,
+            ),
             MenuItem::separator(),
-            MenuItem::action(text("Settings…"), Settings),
+            MenuItem::action(text("BOF-NM-1cW.title", "Settings…"), Settings),
             MenuItem::separator(),
             // The pinned gpui-pre-macos Services helper passes an NSMenuItem
             // where AppKit needs NSMenu. window_chrome attaches the native role.
-            MenuItem::submenu(Menu::new(text("Services"))),
+            MenuItem::submenu(Menu::new(text(SERVICES_MENU_KEY, "Services"))),
             MenuItem::separator(),
-            MenuItem::action(text("Hide Nauterm RS"), Hide),
-            MenuItem::action(text("Hide Others"), HideOthers),
-            MenuItem::action(text("Show All"), ShowAll),
+            MenuItem::action(text("Olw-nP-bQN.title", "Hide Nauterm RS"), Hide),
+            MenuItem::action(text("Vdr-fp-XzO.title", "Hide Others"), HideOthers),
+            MenuItem::action(text("Kd2-mp-pUS.title", "Show All"), ShowAll),
             MenuItem::separator(),
-            MenuItem::action(text("Quit Nauterm RS"), crate::ui::Quit),
+            MenuItem::action(text("4sb-4s-VLi.title", "Quit Nauterm RS"), crate::ui::Quit),
         ]),
-        Menu::new(text("File")).items([
-            MenuItem::action(text("New Connection…"), NewConnection),
-            MenuItem::action(text("New Local Terminal"), NewLocalTerminal),
+        Menu::new(text("3Lr-6F-vQ2.title", "File")).items([
+            MenuItem::action(
+                text("Nau-New-Connection.title", "New Connection…"),
+                NewConnection,
+            ),
+            MenuItem::action(
+                text("Nau-NL-Terminal.title", "New Local Terminal"),
+                NewLocalTerminal,
+            ),
             MenuItem::separator(),
-            MenuItem::action(text("Close Tab"), CloseTab),
-            MenuItem::action(text("Close Window"), CloseWindow),
+            MenuItem::action(text("Nau-Close-Tab.title", "Close Tab"), CloseTab),
+            MenuItem::action(text("Close-Window.title", "Close Window"), CloseWindow),
         ]),
-        Menu::new(text("Edit")).items([
-            MenuItem::os_action(text("Undo"), Undo, OsAction::Undo),
-            MenuItem::os_action(text("Redo"), Redo, OsAction::Redo),
+        Menu::new(text("5QF-Oa-p0T.title", "Edit")).items([
+            MenuItem::os_action(text("dRJ-4n-Yzg.title", "Undo"), Undo, OsAction::Undo),
+            MenuItem::os_action(text("6dh-zS-Vam.title", "Redo"), Redo, OsAction::Redo),
             MenuItem::separator(),
-            MenuItem::os_action(text("Cut"), Cut, OsAction::Cut),
-            MenuItem::os_action(text("Copy"), Copy, OsAction::Copy),
-            MenuItem::os_action(text("Paste"), Paste, OsAction::Paste),
-            MenuItem::os_action(text("Select All"), SelectAll, OsAction::SelectAll),
+            MenuItem::os_action(text("uRl-iY-unG.title", "Cut"), Cut, OsAction::Cut),
+            MenuItem::os_action(text("x3v-GG-iWU.title", "Copy"), Copy, OsAction::Copy),
+            MenuItem::os_action(text("gVA-U4-sdL.title", "Paste"), Paste, OsAction::Paste),
+            MenuItem::os_action(
+                text("Ruw-6m-B2m.title", "Select All"),
+                SelectAll,
+                OsAction::SelectAll,
+            ),
             MenuItem::separator(),
-            MenuItem::action(text("Find…"), Find),
+            MenuItem::action(text("Xz5-n4-O0W.title", "Find…"), Find),
         ]),
-        Menu::new(text("View")).items([
-            MenuItem::action(text("Previous Tab"), PreviousTab),
-            MenuItem::action(text("Next Tab"), NextTab),
+        Menu::new(text("H8h-7b-M4v.title", "View")).items([
+            MenuItem::action(text("Nau-Previous-Tab.title", "Previous Tab"), PreviousTab),
+            MenuItem::action(text("Nau-Next-Tab.title", "Next Tab"), NextTab),
             MenuItem::separator(),
-            MenuItem::action(text("Toggle Full Screen"), FullScreen),
+            MenuItem::action(
+                text("Toggle-Full-Screen.title", "Toggle Full Screen"),
+                FullScreen,
+            ),
         ]),
         // GPUI recognizes this exact name and calls NSApplication.setWindowsMenu.
         Menu::new("Window").items([
-            MenuItem::action(text("Minimize"), Minimize),
-            MenuItem::action(text("Zoom"), Zoom),
+            MenuItem::action(text("OY7-WF-poV.title", "Minimize"), Minimize),
+            MenuItem::action(text("R4o-n2-Eq4.title", "Zoom"), Zoom),
             MenuItem::separator(),
-            MenuItem::action(text("Bring All to Front"), BringAllToFront),
+            MenuItem::action(
+                text("LE2-aR-0XJ.title", "Bring All to Front"),
+                BringAllToFront,
+            ),
         ]),
         Menu::new("Help").items([
-            MenuItem::action(text("Nauterm Documentation"), Documentation),
-            MenuItem::action(text("Report an Issue…"), ReportIssue),
+            MenuItem::action(
+                text("Nau-Documentation.title", "Nauterm Documentation"),
+                Documentation,
+            ),
+            MenuItem::action(
+                text("Nau-Report-Issue.title", "Report an Issue…"),
+                ReportIssue,
+            ),
         ]),
     ]
 }
 
 #[cfg(target_os = "macos")]
 fn rebuild_menus(cx: &mut App) {
-    cx.set_menus(menus(|source| menu_title(source).to_string().into()));
+    cx.set_menus(menus(|key, fallback| {
+        menu_title(key, fallback).to_string().into()
+    }));
     crate::window_chrome::register_app_menus();
     // A rebuilt Window menu needs the existing native windows reattached.
     cx.defer(|cx| {
@@ -390,11 +423,11 @@ mod tests {
     #[test]
     fn native_menu_language_keeps_system_roles_and_the_same_command_actions() {
         use gpui_kit::MenuItem;
-        let english = menus(SharedString::from);
-        let translated = menus(|source| match source {
-            "File" => "文件".into(),
-            "Copy" => "复制".into(),
-            source => source.into(),
+        let english = menus(|_, fallback| SharedString::from(fallback));
+        let translated = menus(|key, fallback| match key {
+            "3Lr-6F-vQ2.title" => "文件".into(),
+            "x3v-GG-iWU.title" => "拷贝".into(),
+            _ => fallback.into(),
         });
         assert_eq!(english.len(), translated.len());
         for name in ["Window", "Help"] {
@@ -413,7 +446,7 @@ mod tests {
                 .collect::<Vec<_>>()
         };
         assert_eq!(actions(&english), actions(&translated));
-        assert!(translated.iter().flat_map(|menu| &menu.items).any(|item| matches!(item, MenuItem::Action { name, action, .. } if name == "复制" && action.as_any().is::<Copy>())));
+        assert!(translated.iter().flat_map(|menu| &menu.items).any(|item| matches!(item, MenuItem::Action { name, action, .. } if name == "拷贝" && action.as_any().is::<Copy>())));
     }
 
     #[test]

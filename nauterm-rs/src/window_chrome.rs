@@ -107,7 +107,7 @@ pub fn register_app_menus() {
     let Some(menu) = app.mainMenu() else {
         return;
     };
-    for source in ["Window", "Help"] {
+    for (source, key) in [("Window", "aUF-d1-5bR.title"), ("Help", "EPT-qC-fAb.title")] {
         // GPUI registers the Window role by this canonical internal name.
         // Translate its native display title only after that registration.
         if let Some(item) = menu.itemWithTitle(&objc2_foundation::NSString::from_str(source))
@@ -116,7 +116,7 @@ pub fn register_app_menus() {
             if source == "Help" {
                 app.setHelpMenu(Some(&submenu));
             }
-            let title = crate::app_menu::menu_title(source);
+            let title = crate::app_menu::menu_title(key, source);
             item.setTitle(&title);
             submenu.setTitle(&title);
         }
@@ -126,7 +126,12 @@ pub fn register_app_menus() {
     if let Some(item) = menu
         .itemWithTitle(&objc2_foundation::NSString::from_str("Nauterm RS"))
         .and_then(|item| item.submenu())
-        .and_then(|menu| menu.itemWithTitle(&crate::app_menu::menu_title("Services")))
+        .and_then(|menu| {
+            menu.itemWithTitle(&crate::app_menu::menu_title(
+                crate::app_menu::SERVICES_MENU_KEY,
+                "Services",
+            ))
+        })
     {
         let services = objc2_app_kit::NSMenu::new(main);
         services.setTitle(&item.title());
