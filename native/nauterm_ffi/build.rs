@@ -6,10 +6,10 @@ const REQUIRED_ZIG_VERSION: &str = "0.17.0";
 const GHOSTTY_REPOSITORY: &str = "https://github.com/ghostty-org/ghostty.git";
 /// libghostty-vt is released separately from the Ghostty app under `vt-X.Y.Z`
 /// tags. Pin the release tag commit, not a moving branch.
-const GHOSTTY_COMMIT: &str = "0fa3d577a5614150ff8e2c152de5fb9d5c6d2dec";
+const GHOSTTY_COMMIT: &str = "108cacb17ed8990840cd14abfce43d8ed8503ca1";
 /// The version of the pinned sources after their Git metadata is removed.
 /// An explicit source override keeps its own upstream version metadata.
-const GHOSTTY_LIB_VERSION: &str = "1.0.0";
+const GHOSTTY_LIB_VERSION: &str = "1.0.1";
 
 fn main() {
     println!("cargo:rerun-if-env-changed=NAUTERM_ZIG");

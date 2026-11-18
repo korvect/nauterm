@@ -5,7 +5,7 @@
       "license": "assets/licenses/manual/sparkle-LICENSE"
     },
     {
-      "packages": ["libghostty-vt 1.0.0"],
+      "packages": ["libghostty-vt 1.0.1"],
       "license": "assets/licenses/manual/ghostty-LICENSE"
     },
     {
