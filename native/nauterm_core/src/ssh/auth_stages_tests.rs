@@ -129,6 +129,15 @@ fn credentials_follow_server_stages_without_reconnecting() {
                     ],
                     true,
                 ),
+
+                (
+                    vec![
+                        MethodKind::KeyboardInteractive,
+                        MethodKind::Password,
+                        MethodKind::PublicKey,
+                    ],
+                    false,
+                ),
                 (vec![MethodKind::Password], false),
                 (vec![MethodKind::PublicKey], false),
             ] {

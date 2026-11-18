@@ -94,7 +94,7 @@ impl server::Handler for TestServer {
             } else if self.round == 1 {
                 vec![("Account: ".into(), true), ("Password: ".into(), false)].into()
             } else {
-                vec![("Verification code: ".into(), false)].into()
+                vec![("One-time password (OTP): ".into(), false)].into()
             },
         })
     }
@@ -205,6 +205,7 @@ async fn exercise(
                 } else if request.prompts.is_empty() {
                     Some(vec![])
                 } else {
+                    assert!(request.prompts[0].asks_for_verification_code());
                     Some(vec!["123456".into()])
                 };
                 assert!(interaction.respond(request.id, responses));
