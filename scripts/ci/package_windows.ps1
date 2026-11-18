@@ -8,11 +8,13 @@ $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $true
 
 $AppName = "Nauterm"
+$UrlRegistryId = "Nauterm"
 $BinaryName = "nauterm"
 $PackageName = "Nauterm"
 $AppGuid = "7A63A445-7F28-4336-B582-A10697D4CA53"
 if ($Client -eq "rs") {
   $AppName = "Nauterm RS"
+  $UrlRegistryId = "NautermRS"
   $PackageName = "Nauterm-RS"
   $BinaryName = "nauterm-rs"
   $AppGuid = "B1C17652-9DBB-45D5-A7BC-21C550E33241"
@@ -362,21 +364,21 @@ Name: "{autodesktop}\$AppName"; Filename: "{app}\$BinaryName.exe"; Tasks: deskto
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional icons:"
 
 [Registry]
-Root: HKA; Subkey: "Software\Classes\Nauterm.ssh"; ValueType: string; ValueData: "Nauterm SSH Connection"; Flags: uninsdeletekey
-Root: HKA; Subkey: "Software\Classes\Nauterm.ssh"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
-Root: HKA; Subkey: "Software\Classes\Nauterm.ssh\shell\open\command"; ValueType: string; ValueData: """{app}\$BinaryName.exe"" ""%1"""
-Root: HKA; Subkey: "Software\Classes\Nauterm.sftp"; ValueType: string; ValueData: "Nauterm SFTP Connection"; Flags: uninsdeletekey
-Root: HKA; Subkey: "Software\Classes\Nauterm.sftp"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
-Root: HKA; Subkey: "Software\Classes\Nauterm.sftp\shell\open\command"; ValueType: string; ValueData: """{app}\$BinaryName.exe"" ""%1"""
-Root: HKA; Subkey: "Software\Classes\Nauterm.telnet"; ValueType: string; ValueData: "Nauterm Telnet Connection"; Flags: uninsdeletekey
-Root: HKA; Subkey: "Software\Classes\Nauterm.telnet"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
-Root: HKA; Subkey: "Software\Classes\Nauterm.telnet\shell\open\command"; ValueType: string; ValueData: """{app}\$BinaryName.exe"" ""%1"""
-Root: HKA; Subkey: "Software\Nauterm\Capabilities"; ValueType: string; ValueName: "ApplicationName"; ValueData: "$AppName"; Flags: uninsdeletekey
-Root: HKA; Subkey: "Software\Nauterm\Capabilities"; ValueType: string; ValueName: "ApplicationDescription"; ValueData: "SSH, SFTP and Telnet connections"
-Root: HKA; Subkey: "Software\Nauterm\Capabilities\URLAssociations"; ValueType: string; ValueName: "ssh"; ValueData: "Nauterm.ssh"
-Root: HKA; Subkey: "Software\Nauterm\Capabilities\URLAssociations"; ValueType: string; ValueName: "sftp"; ValueData: "Nauterm.sftp"
-Root: HKA; Subkey: "Software\Nauterm\Capabilities\URLAssociations"; ValueType: string; ValueName: "telnet"; ValueData: "Nauterm.telnet"
-Root: HKA; Subkey: "Software\RegisteredApplications"; ValueType: string; ValueName: "$AppName"; ValueData: "Software\Nauterm\Capabilities"; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\${UrlRegistryId}.ssh"; ValueType: string; ValueData: "Nauterm SSH Connection"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\${UrlRegistryId}.ssh"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\${UrlRegistryId}.ssh\shell\open\command"; ValueType: string; ValueData: """{app}\$BinaryName.exe"" ""%1"""
+Root: HKA; Subkey: "Software\Classes\${UrlRegistryId}.sftp"; ValueType: string; ValueData: "Nauterm SFTP Connection"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\${UrlRegistryId}.sftp"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\${UrlRegistryId}.sftp\shell\open\command"; ValueType: string; ValueData: """{app}\$BinaryName.exe"" ""%1"""
+Root: HKA; Subkey: "Software\Classes\${UrlRegistryId}.telnet"; ValueType: string; ValueData: "Nauterm Telnet Connection"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\${UrlRegistryId}.telnet"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\${UrlRegistryId}.telnet\shell\open\command"; ValueType: string; ValueData: """{app}\$BinaryName.exe"" ""%1"""
+Root: HKA; Subkey: "Software\${UrlRegistryId}\Capabilities"; ValueType: string; ValueName: "ApplicationName"; ValueData: "$AppName"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\${UrlRegistryId}\Capabilities"; ValueType: string; ValueName: "ApplicationDescription"; ValueData: "SSH, SFTP and Telnet connections"
+Root: HKA; Subkey: "Software\${UrlRegistryId}\Capabilities\URLAssociations"; ValueType: string; ValueName: "ssh"; ValueData: "${UrlRegistryId}.ssh"
+Root: HKA; Subkey: "Software\${UrlRegistryId}\Capabilities\URLAssociations"; ValueType: string; ValueName: "sftp"; ValueData: "${UrlRegistryId}.sftp"
+Root: HKA; Subkey: "Software\${UrlRegistryId}\Capabilities\URLAssociations"; ValueType: string; ValueName: "telnet"; ValueData: "${UrlRegistryId}.telnet"
+Root: HKA; Subkey: "Software\RegisteredApplications"; ValueType: string; ValueName: "$AppName"; ValueData: "Software\${UrlRegistryId}\Capabilities"; Flags: uninsdeletevalue
 
 [Run]
 Filename: "{app}\$BinaryName.exe"; Description: "Launch $AppName"; Flags: nowait postinstall skipifsilent

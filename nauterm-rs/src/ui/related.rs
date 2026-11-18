@@ -1,7 +1,7 @@
 //! Resource drawers retain their actual editor state while creating references.
 use super::*;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(super) enum Target {
     ParentGroup,
     ProtocolGroup,
@@ -20,12 +20,36 @@ pub(super) struct Parent {
     target: Target,
     focus: FocusHandle,
 }
+impl Parent {
+    pub(super) fn retain_child(self, mut child: Editor, cx: &App) -> Editor {
+        let mut editor = *self.editor;
+        child.park_related_drawers(cx);
+        if child.has_draft(cx) {
+            editor.child_drafts.insert(self.target, child);
+        }
+        editor
+    }
+}
+
 pub(super) struct ProxyEditor {
     pub view: Entity<crate::proxies::Proxies>,
     _events: Subscription,
 }
 
 impl Editor {
+    pub(super) fn park_related_drawers(&mut self, cx: &App) {
+        if let Some(related) = self.related_credential.take()
+            && related.view.read(cx).has_draft(cx)
+        {
+            self.credential_drafts.insert(related.key, related);
+        }
+        if let Some(related) = self.related_proxy.take()
+            && related.view.read(cx).has_draft(cx)
+        {
+            self.proxy_draft = Some(related);
+        }
+    }
+
     pub(super) fn can_choose_group_parent(&self, data: &AppState) -> bool {
         self.kind != ItemKind::Group
             || (data.group_can_be_nested(self.group_exclusion())
@@ -88,13 +112,21 @@ impl Nauterm {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.resource_editor_busy()
+        if self.resource_editor_busy(cx)
             || !self.editor.as_ref().is_some_and(|editor| {
                 editor.host.is_some()
                     && editor.related_proxy.is_none()
                     && editor.related_credential.is_none()
             })
         {
+            return;
+        }
+        if let Some(related) = self.editor.as_mut().unwrap().proxy_draft.take() {
+            related
+                .view
+                .update(cx, |view, cx| view.resume_draft(window, cx));
+            self.editor.as_mut().unwrap().related_proxy = Some(related);
+            cx.notify();
             return;
         }
         let owner = self.ensure_proxies(cx);
@@ -130,7 +162,12 @@ impl Nauterm {
                         if let crate::proxies::RelatedEvent::Saved(id) = event {
                             editor.proxy_id = Some(*id);
                         }
-                        editor.related_proxy = None;
+                        let related = editor.related_proxy.take().unwrap();
+                        if matches!(event, crate::proxies::RelatedEvent::Cancelled)
+                            && view.read(cx).has_draft(cx)
+                        {
+                            editor.proxy_draft = Some(related);
+                        }
                         if let Some(selects) = &editor.selects {
                             selects
                                 .proxies
@@ -166,9 +203,17 @@ impl Nauterm {
             actions,
         )
     }
-    pub(super) fn resource_editor_busy(&self) -> bool {
+    pub(super) fn resource_editor_busy(&self, cx: &App) -> bool {
         self.editor.as_ref().is_some_and(|editor| {
             editor.host.as_ref().is_some_and(|draft| draft.busy)
+                || editor
+                    .related_credential
+                    .as_ref()
+                    .is_some_and(|related| related.view.read(cx).busy(cx))
+                || editor
+                    .related_proxy
+                    .as_ref()
+                    .is_some_and(|related| related.view.read(cx).editor_busy(cx))
                 || editor
                     .forward
                     .as_ref()
@@ -194,7 +239,7 @@ impl Nauterm {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.resource_editor_busy() || !self.resources_ready() {
+        if self.resource_editor_busy(cx) || !self.resources_ready() {
             return;
         }
         if !self.editor.as_ref().is_some_and(|editor| {
@@ -216,10 +261,17 @@ impl Nauterm {
             self.load_snippets(cx);
             return;
         }
-        let Some(parent) = self.editor.take() else {
+        let Some(mut parent) = self.editor.take() else {
             return;
         };
-        self.open_editor_in(target.kind(), None, None, None, window, cx);
+        let restored = parent.child_drafts.remove(&target);
+        let reopening = restored.is_some();
+        if reopening {
+            self.editor = restored;
+            self.focus_resource_editor(window, cx);
+        } else {
+            self.build_editor(target.kind(), None, None, None, window, cx);
+        }
         let Some(editor) = &mut self.editor else {
             self.editor = Some(parent);
             return;
@@ -229,9 +281,12 @@ impl Nauterm {
             target,
             focus,
         });
-        editor.fields[0]
-            .1
-            .update(cx, |field, cx| field.set_value(name, window, cx));
+        if !reopening {
+            editor.fields[0]
+                .1
+                .update(cx, |field, cx| field.set_value(name, window, cx));
+            editor.baseline = editor.fingerprint(cx);
+        }
         self.sync_resource_selection();
         cx.notify();
     }
@@ -247,7 +302,7 @@ impl Nauterm {
         {
             return false;
         }
-        if self.resource_editor_busy() {
+        if self.resource_editor_busy(cx) {
             return true;
         }
         self.restore_resource_parent(None, window, cx);
@@ -259,13 +314,18 @@ impl Nauterm {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let Some(parent) = self.editor.as_mut().and_then(|editor| editor.parent.take()) else {
-            return;
-        };
-        self.editor = Some(*parent.editor);
-        if let Some((_, id)) = saved.filter(|(kind, _)| *kind == parent.target.kind()) {
+        let mut child = self.editor.take().expect("a related editor is open");
+        let parent = child.parent.take().expect("a related editor has a parent");
+        let focus = parent.focus.clone();
+        let target = parent.target;
+        self.editor = Some(if saved.is_none() {
+            parent.retain_child(child, cx)
+        } else {
+            *parent.editor
+        });
+        if let Some((_, id)) = saved.filter(|(kind, _)| *kind == target.kind()) {
             let editor = self.editor.as_mut().unwrap();
-            match parent.target {
+            match target {
                 // Creating a protocol template does not select a parent Group.
                 Target::ProtocolGroup => {}
                 Target::ParentGroup => {
@@ -284,7 +344,7 @@ impl Nauterm {
             }
         }
         self.sync_resource_selection();
-        parent.focus.focus(window, cx);
+        focus.focus(window, cx);
         cx.notify();
     }
     pub(super) fn complete_resource_editor(

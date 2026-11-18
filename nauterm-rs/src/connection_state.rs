@@ -79,8 +79,55 @@ impl LogEntry {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Intervention {
+    Username,
     HostKey,
-    Authentication,
+    Passphrase,
+    SecurityKeyPin,
+    Password,
+    PublicKey,
+    VerificationCode,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct InterventionPage {
+    step: Intervention,
+    challenge_id: Option<u64>,
+    request_id: Option<u64>,
+}
+
+#[derive(Clone, Default)]
+pub struct ProgressHistory {
+    pub steps: Vec<Intervention>,
+    page: Option<InterventionPage>,
+}
+
+impl ProgressHistory {
+    fn observe(&mut self, page: InterventionPage, segmented: bool) {
+        if let Some(previous) = self.page {
+            if previous.step == page.step && previous.challenge_id == page.challenge_id {
+                self.page = Some(page);
+                return;
+            }
+            // Password and Public Key are two choices on one credential form.
+            // A different request (or any interactive challenge) is another page.
+            if segmented
+                && page.challenge_id.is_none()
+                && previous.challenge_id.is_none()
+                && previous.request_id == page.request_id
+                && matches!(
+                    previous.step,
+                    Intervention::Password | Intervention::PublicKey
+                )
+                && let Some(last) = self.steps.last_mut()
+            {
+                *last = page.step;
+                self.page = Some(page);
+                return;
+            }
+        }
+        self.steps.push(page.step);
+        self.page = Some(page);
+    }
 }
 
 #[derive(Clone, Default)]
@@ -90,30 +137,52 @@ pub struct ConnectionState {
     pub fingerprint: Option<String>,
     pub message: String,
     pub changed_key: bool,
-    pub interventions: Vec<Intervention>,
+    pub progress: ProgressHistory,
     pub latency_ms: Option<u32>,
     pub challenge: Option<nauterm_core::ssh::KeyboardInteractiveChallenge>,
     pub credentials: Option<(u64, Vec<String>)>,
 }
 
 impl ConnectionState {
-    pub fn remember_intervention(&mut self, intervention: Intervention) {
-        if !self.interventions.contains(&intervention) {
-            self.interventions.push(intervention);
-        }
+    pub fn observe_intervention(&mut self, step: Intervention, segmented: bool) {
+        self.progress.observe(
+            InterventionPage {
+                step,
+                challenge_id: self.challenge.as_ref().map(|challenge| challenge.id),
+                request_id: self.credentials.as_ref().map(|(id, _)| *id),
+            },
+            segmented,
+        );
     }
-    pub fn requires_fido2_pin(&self) -> bool {
+
+    fn key_unlock_request(&self) -> Option<Intervention> {
         if self.phase != Phase::Authentication {
-            return false;
+            return None;
         }
         for log in self.logs.iter().rev() {
             match log.event.kind.as_str() {
-                "auth_passphrase_required" => return log.event.method.as_deref() == Some("fido2"),
-                "connect_start" | "auth_success" | "connected" => return false,
+                "auth_passphrase_required" => {
+                    return Some(if log.event.method.as_deref() == Some("fido2") {
+                        Intervention::SecurityKeyPin
+                    } else {
+                        Intervention::Passphrase
+                    });
+                }
+                "auth_credentials_required"
+                | "auth_interactive_request"
+                | "connect_start"
+                | "auth_success"
+                | "connected" => return None,
                 _ => {}
             }
         }
-        false
+        None
+    }
+    pub fn requires_key_passphrase(&self) -> bool {
+        self.key_unlock_request() == Some(Intervention::Passphrase)
+    }
+    pub fn requires_fido2_pin(&self) -> bool {
+        self.key_unlock_request() == Some(Intervention::SecurityKeyPin)
     }
     pub fn latest_fido2_failure(&self) -> bool {
         self.phase == Phase::Authentication
@@ -154,12 +223,7 @@ impl ConnectionState {
             self.challenge = None;
         }
         match event.kind.as_str() {
-            "auth_interactive_request" => {
-                if self.challenge.as_ref().map(|challenge| challenge.id)
-                    != event.challenge.as_ref().map(|challenge| challenge.id)
-                {
-                    self.interventions.push(Intervention::Authentication);
-                }
+            "auth_interactive_request" if event.challenge.is_some() => {
                 self.credentials = None;
                 self.challenge = event.challenge.clone();
                 self.phase = Phase::Authentication;
@@ -173,7 +237,6 @@ impl ConnectionState {
             "ssh_latency_updated" | "mosh_latency_updated" => self.latency_ms = event.latency_ms,
             "host_key_unknown" => {
                 self.phase = Phase::HostKey;
-                self.remember_intervention(Intervention::HostKey);
                 self.fingerprint = event.fingerprint.clone();
                 self.message = event.message.clone();
             }
@@ -186,25 +249,13 @@ impl ConnectionState {
                 self.fingerprint = event.fingerprint.clone();
                 self.message = event.message.clone();
             }
-            "auth_credentials_required"
-            | "auth_failed"
-            | "auth_passphrase_required"
-            | "auth_password_rejected"
-            | "auth_password_failed"
-            | "auth_key_rejected"
-            | "auth_certificate_rejected"
-            | "auth_agent_unavailable"
-            | "auth_agent_failed"
-            | "auth_key_failed"
-            | "auth_certificate_failed" => {
-                let preserve_rejection = event.kind.starts_with("auth_agent")
-                    && self.phase == Phase::Authentication
-                    && !self.message.is_empty();
+            "auth_credentials_required" | "auth_failed" => {
                 self.phase = Phase::Authentication;
-                self.remember_intervention(Intervention::Authentication);
-                if !preserve_rejection {
-                    self.message = event.message.clone();
-                }
+                self.message = event.message.clone();
+            }
+            "auth_passphrase_required" if event.authentication_request_id.is_some() => {
+                self.phase = Phase::Authentication;
+                self.message = event.message.clone();
             }
             "auth_success" => {
                 self.challenge = None;
@@ -234,10 +285,17 @@ impl ConnectionState {
                 if !matches!(self.phase, Phase::HostKey | Phase::Authentication)
                     && !self.changed_key =>
             {
-                // The worker reports a transport error after rejecting a host key
-                // or exhausted auth. Preserve the actionable intervention UI.
-                self.phase = Phase::Failed;
-                self.message = event.message.clone();
+                // A transport without live authentication requests (such as
+                // an initial SFTP listing) can still retry an actionable error.
+                if self.phase == Phase::Connecting
+                    && let Some(message) = self.auth_error_for_retry()
+                {
+                    self.phase = Phase::Authentication;
+                    self.message = message;
+                } else {
+                    self.phase = Phase::Failed;
+                    self.message = event.message.clone();
+                }
             }
             _ => {}
         }
@@ -254,6 +312,31 @@ impl ConnectionState {
         if self.logs.len() > 2000 {
             self.logs.drain(..self.logs.len() - 2000);
         }
+    }
+
+    fn auth_error_for_retry(&self) -> Option<String> {
+        let mut agent = None;
+        for log in self.logs.iter().rev() {
+            match log.event.kind.as_str() {
+                "auth_interactive_start"
+                | "auth_interactive_failed"
+                | "auth_success"
+                | "auth_partial_success"
+                | "connect_start" => break,
+                "auth_agent_unavailable" | "auth_agent_failed" => {
+                    agent.get_or_insert(&log.event.message);
+                }
+                "auth_passphrase_required"
+                | "auth_password_rejected"
+                | "auth_password_failed"
+                | "auth_key_rejected"
+                | "auth_key_failed"
+                | "auth_certificate_rejected"
+                | "auth_certificate_failed" => return Some(log.event.message.clone()),
+                _ => {}
+            }
+        }
+        agent.cloned()
     }
 
     pub fn diagnostics(&self) -> String {
@@ -286,6 +369,7 @@ mod tests {
         let mut state = ConnectionState::default();
         let mut required = event("auth_passphrase_required");
         required.method = Some("fido2".into());
+        required.authentication_request_id = Some(1);
         state.apply(required.clone());
         assert!(state.requires_fido2_pin());
         state.begin_attempt();
@@ -387,29 +471,113 @@ mod tests {
         assert!(state.changed_key);
         assert!(state.message.starts_with("host_key_changed"));
     }
+    fn credentials(id: u64, methods: &[&str]) -> SessionEvent {
+        let mut request = event("auth_credentials_required");
+        request.authentication_request_id = Some(id);
+        request.authentication_methods =
+            Some(methods.iter().map(|method| method.to_string()).collect());
+        request
+    }
+
+    fn challenge(id: u64, prompt: &str) -> SessionEvent {
+        let mut request = event("auth_interactive_request");
+        request.challenge = Some(
+            serde_json::from_value(serde_json::json!({
+                "id": id, "name": "", "instructions": "",
+                "prompts": [{"prompt": prompt, "echo": false}]
+            }))
+            .unwrap(),
+        );
+        request
+    }
+
     #[test]
-    fn later_server_challenges_append_progress_instead_of_replacing_the_password_step() {
+    fn progress_follows_visible_forms_and_keeps_every_challenge_round() {
         let mut state = ConnectionState::default();
-        let mut credentials = event("auth_credentials_required");
-        credentials.authentication_request_id = Some(1);
-        credentials.authentication_methods = Some(vec!["password".into()]);
-        state.apply(credentials);
-        assert_eq!(state.credentials.as_ref().unwrap().0, 1);
-        for id in [2, 3] {
-            let mut prompt = event("auth_interactive_request");
-            prompt.challenge = Some(
-                serde_json::from_value(serde_json::json!({
-                    "id": id, "name": "", "instructions": "",
-                    "prompts": [{"prompt": "Verification code:", "echo": false}]
-                }))
-                .unwrap(),
-            );
-            state.apply(prompt);
+        state.observe_intervention(Intervention::Username, false);
+        state.begin_attempt();
+        state.apply(event("host_key_unknown"));
+        state.observe_intervention(Intervention::HostKey, false);
+        state.begin_attempt();
+        state.apply(event("auth_agent_unavailable"));
+        assert_eq!(state.phase, Phase::Connecting);
+
+        state.apply(credentials(1, &["password"]));
+        state.observe_intervention(Intervention::Password, false);
+        state.apply(event("auth_credentials_submitted"));
+        state.apply(credentials(2, &["publickey"]));
+        state.observe_intervention(Intervention::PublicKey, false);
+        state.apply(event("auth_credentials_submitted"));
+
+        for id in [3, 4] {
+            state.apply(challenge(id, "Verification code:"));
             assert_eq!(state.challenge.as_ref().unwrap().id, id);
             assert!(state.credentials.is_none());
+            state.observe_intervention(Intervention::VerificationCode, false);
+            // Renders, logs toggles and duplicate delivery keep the same node.
+            state.apply(challenge(id, "Verification code:"));
+            state.observe_intervention(Intervention::VerificationCode, false);
+            state.apply(event("auth_interactive_submitted"));
         }
-        assert_eq!(state.interventions.len(), 3);
+        assert_eq!(
+            state.progress.steps,
+            [
+                Intervention::Username,
+                Intervention::HostKey,
+                Intervention::Password,
+                Intervention::PublicKey,
+                Intervention::VerificationCode,
+                Intervention::VerificationCode,
+            ]
+        );
         state.apply(event("auth_success"));
+        assert!(state.challenge.is_none());
+    }
+
+    #[test]
+    fn switching_auth_segments_and_retrying_credentials_keep_the_current_node() {
+        let mut state = ConnectionState::default();
+        state.apply(credentials(1, &["password", "publickey"]));
+        state.observe_intervention(Intervention::Password, true);
+        state.observe_intervention(Intervention::PublicKey, true);
+        assert_eq!(state.progress.steps, [Intervention::PublicKey]);
+        state.apply(credentials(2, &["publickey"]));
+        state.observe_intervention(Intervention::PublicKey, false);
+        assert_eq!(state.progress.steps, [Intervention::PublicKey]);
+        state.apply(challenge(3, "Password:"));
+        state.observe_intervention(Intervention::Password, false);
+        assert_eq!(
+            state.progress.steps,
+            [Intervention::PublicKey, Intervention::Password]
+        );
+    }
+
+    #[test]
+    fn key_probe_logs_do_not_add_a_step_before_an_unlock_request() {
+        let mut state = ConnectionState::default();
+        let mut request = event("auth_passphrase_required");
+        request.method = Some("public_key".into());
+        state.apply(request.clone());
+        assert_eq!(state.phase, Phase::Connecting);
+        assert!(state.progress.steps.is_empty());
+        request.authentication_request_id = Some(1);
+        request.authentication_methods = Some(vec!["publickey".into()]);
+        state.apply(request);
+        assert!(state.requires_key_passphrase());
+        state.observe_intervention(Intervention::Passphrase, false);
+        assert_eq!(state.progress.steps, [Intervention::Passphrase]);
+    }
+
+    #[test]
+    fn rejected_otp_does_not_fall_back_to_an_older_password_prompt() {
+        let mut state = ConnectionState::default();
+        state.apply(event("auth_password_rejected"));
+        state.apply(event("auth_interactive_start"));
+        state.apply(challenge(1, "OTP:"));
+        state.apply(event("auth_interactive_submitted"));
+        state.apply(event("auth_interactive_failed"));
+        state.apply(event("error"));
+        assert_eq!(state.phase, Phase::Failed);
         assert!(state.challenge.is_none());
     }
 

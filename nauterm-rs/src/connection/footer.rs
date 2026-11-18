@@ -12,7 +12,7 @@ impl EventEmitter<HostAction> for Connection {}
 
 pub(crate) struct PreviousAttempt {
     logs: Vec<crate::connection_state::LogEntry>,
-    interventions: Vec<Intervention>,
+    history: crate::connection_state::ProgressHistory,
     pipeline: progress::Pipeline,
 }
 impl PreviousAttempt {
@@ -25,12 +25,7 @@ impl PreviousAttempt {
             log.sequence = sequence as u64;
         }
         state.logs = self.logs;
-        for intervention in state.interventions.drain(..) {
-            if !self.interventions.contains(&intervention) {
-                self.interventions.push(intervention);
-            }
-        }
-        state.interventions = self.interventions;
+        state.progress = self.history;
         self.pipeline
     }
 }
@@ -50,7 +45,7 @@ impl Connection {
     pub(crate) fn previous_attempt(&self) -> PreviousAttempt {
         PreviousAttempt {
             logs: self.state.logs.clone(),
-            interventions: self.state.interventions.clone(),
+            history: self.state.progress.clone(),
             pipeline: self.pipeline.clone(),
         }
     }
@@ -112,8 +107,8 @@ impl Connection {
                 .into_any_element(),
         ];
         if self.state.phase == Phase::Authentication
-            && self.mode == AuthMode::PublicKey
-            && !self.requires_fido2_pin()
+            && self.state.challenge.is_none()
+            && self.auth_step() == Intervention::PublicKey
         {
             secondary.push(
                 self.action("add-authentication-key", "Add key", false)
@@ -147,7 +142,8 @@ impl Connection {
             );
         } else if self.state.phase == Phase::HostKey {
             let save = self.auth.save.unwrap_or(false) && self.can_save_connection();
-            let confirm = self.action("trust-once", "Continue", true).on_click(
+            let label = if save { "Continue & Save" } else { "Continue" };
+            let confirm = self.action("trust-once", label, true).on_click(
                 cx.listener(move |this, _, window, cx| this.continue_host_key(save, window, cx)),
             );
             if self.can_save_connection() && self.auth.save.is_none() {
@@ -250,6 +246,7 @@ mod tests {
             message: "old trust prompt".into(),
             ..Default::default()
         });
+        old.observe_intervention(Intervention::HostKey, false);
         old.apply(SessionEvent {
             kind: "host_key_changed".into(),
             message: "old failure".into(),
@@ -258,7 +255,7 @@ mod tests {
         });
         let previous = PreviousAttempt {
             logs: old.logs,
-            interventions: old.interventions,
+            history: old.progress,
             pipeline: Default::default(),
         };
         let mut next = ConnectionState::default();
@@ -268,13 +265,14 @@ mod tests {
             ..Default::default()
         });
         let _ = previous.apply(&mut next);
+        next.observe_intervention(Intervention::Password, false);
         assert_eq!(next.phase, Phase::Authentication);
         assert!(!next.changed_key);
         assert!(next.fingerprint.is_none());
         assert_eq!(next.message, "new auth prompt");
         assert_eq!(
-            next.interventions,
-            [Intervention::HostKey, Intervention::Authentication]
+            next.progress.steps,
+            [Intervention::HostKey, Intervention::Password]
         );
         assert_eq!(
             next.logs
@@ -300,7 +298,7 @@ mod tests {
         }
         let previous = PreviousAttempt {
             logs: old.logs,
-            interventions: old.interventions,
+            history: old.progress,
             pipeline: Default::default(),
         };
         let mut next = ConnectionState::default();

@@ -1,4 +1,7 @@
-use gpui_kit::component::{ActiveTheme, Icon, Sizable};
+use gpui_kit::{
+    assets::IconName,
+    component::{ActiveTheme, Icon, Sizable},
+};
 use gpui_kit::{prelude::*, *};
 use serde::{Deserialize, Serialize};
 
@@ -165,6 +168,14 @@ pub(crate) const HOST_ICON_NAMES: &[(&str, &str)] = &[
     ("raspberrypi", "Raspberry Pi"),
 ];
 
+pub(crate) fn matches_host_icon(slug: &str, name: &str, query: &str) -> bool {
+    slug.contains(query)
+        || name.to_lowercase().contains(query)
+        || OS_ICONS.iter().any(|(aliases, asset, _)| {
+            *asset == slug && aliases.iter().any(|alias| alias.contains(query))
+        })
+}
+
 pub fn color(name: &str) -> u32 {
     if name.is_empty() {
         return 0x7b8f9a;
@@ -186,6 +197,7 @@ pub fn host(name: &str) -> HostAvatar {
         dimension: 40.,
         custom_icon: None,
         editing: false,
+        fallback: None,
     }
 }
 
@@ -208,6 +220,7 @@ pub struct HostAvatar {
     dimension: f32,
     custom_icon: Option<String>,
     editing: bool,
+    fallback: Option<(IconName, u32)>,
 }
 impl HostAvatar {
     pub fn custom_icon(mut self, icon: Option<&str>) -> Self {
@@ -216,6 +229,10 @@ impl HostAvatar {
     }
     pub fn editing(mut self) -> Self {
         self.editing = true;
+        self
+    }
+    pub fn fallback(mut self, icon: IconName, color: u32) -> Self {
+        self.fallback = Some((icon, color));
         self
     }
     pub fn platform(mut self, platform: Platform) -> Self {
@@ -258,6 +275,7 @@ impl RenderOnce for HostAvatar {
             })
             .or_else(|| self.platform.icon());
         let replace = mode == Mode::OsIcon && icon.is_some();
+        let fallback = self.fallback.filter(|_| self.name.trim().is_empty());
         let mut view = div()
             .size(px(dimension))
             .flex_shrink_0()
@@ -266,7 +284,7 @@ impl RenderOnce for HostAvatar {
             .bg(rgb(if replace {
                 icon.unwrap().1
             } else {
-                color(&self.name)
+                fallback.map_or_else(|| color(&self.name), |(_, color)| color)
             }))
             .text_color(rgb(0xffffff))
             .flex()
@@ -292,6 +310,8 @@ impl RenderOnce for HostAvatar {
                     .text_color(rgb(0xffffff))
                     .size(px(dimension * 0.6)),
             );
+        } else if let Some((icon, _)) = fallback {
+            view = view.child(Icon::new(icon).with_size(px(dimension * 0.55)));
         } else {
             view = view.child(initial);
         }

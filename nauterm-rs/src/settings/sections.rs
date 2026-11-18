@@ -40,7 +40,7 @@ pub(super) fn frame(
                         .role(Role::Heading)
                         .aria_label(caption.clone())
                         .text_color(rgb(0x6b7280))
-                        .child(TrackedText::new(caption, px(0.8))),
+                        .child(TrackedText::new(caption.to_uppercase(), px(0.8))),
                 )
                 .when_some(action, |header, action| {
                     header.child(div().flex_1()).child(action)

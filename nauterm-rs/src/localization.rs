@@ -69,7 +69,6 @@ pub fn install(language: Language, cx: &mut App) {
         .is_none_or(|active| active.0 != language)
     {
         cx.set_global(Active(language));
-        crate::app_menu::refresh_language(cx);
         cx.refresh_windows();
     }
 }

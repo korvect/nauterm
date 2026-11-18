@@ -20,7 +20,11 @@ use gpui_kit::{
     prelude::*,
     *,
 };
-use std::{collections::BTreeSet, path::PathBuf};
+use std::{
+    collections::{BTreeSet, HashMap},
+    hash::{DefaultHasher, Hash, Hasher},
+    path::PathBuf,
+};
 mod related;
 pub use related::RelatedEvent;
 
@@ -32,6 +36,9 @@ struct RelatedIdentity {
     _events: Subscription,
 }
 struct Editor {
+    baseline: u64,
+    _draft_changes: Vec<Subscription>,
+    related_draft: Option<RelatedIdentity>,
     scroll: ScrollHandle,
     id: Option<i64>,
     uuid: Option<String>,
@@ -49,6 +56,31 @@ struct Editor {
     validation_error: Option<String>,
     related: Option<RelatedIdentity>,
     _events: Vec<Subscription>,
+}
+impl Editor {
+    fn fingerprint(&self, cx: &App) -> u64 {
+        let mut hash = DefaultHasher::new();
+        for field in [
+            &self.name,
+            &self.host,
+            &self.port,
+            &self.username,
+            &self.password,
+        ] {
+            field.read(cx).value().hash(&mut hash);
+        }
+        self.kind.label().hash(&mut hash);
+        self.identity.hash(&mut hash);
+        hash.finish()
+    }
+    fn has_draft(&self, cx: &App) -> bool {
+        self.related_draft.is_some()
+            || self
+                .related
+                .as_ref()
+                .is_some_and(|related| related.view.read(cx).has_draft(cx))
+            || self.fingerprint(cx) != self.baseline
+    }
 }
 pub struct Proxies {
     database_path: PathBuf,
@@ -73,7 +105,9 @@ pub struct Proxies {
     navigation: crate::management::navigation::Navigation<i64>,
     deletion: Option<Vec<i64>>,
     editor: Option<Editor>,
-    drawer_motion: crate::components::panel::Presence<Box<Editor>>,
+    drafts: HashMap<Option<i64>, Editor>,
+    drawer_motion:
+        crate::components::panel::Presence<crate::editor_drafts::Retired<Option<i64>, Editor>>,
     parent_width: Option<f32>,
     error: Option<String>,
     reference_error: Option<String>,
@@ -128,20 +162,53 @@ impl Proxies {
     }
     fn retire_editor(&mut self) {
         if let Some(editor) = self.editor.take() {
-            self.drawer_motion.retire(Box::new(editor));
+            self.drawer_motion
+                .retire(crate::editor_drafts::Retired::Closed(Box::new(editor)));
         }
+    }
+    fn dismiss_editor(&mut self, cx: &App) {
+        if let Some(mut editor) = self.editor.take() {
+            if let Some(related) = editor.related.take()
+                && related.view.read(cx).has_draft(cx)
+            {
+                editor.related_draft = Some(related);
+            }
+            let key = editor.has_draft(cx).then_some(editor.id);
+            let form = crate::editor_drafts::Retired::put_form(key, editor, &mut self.drafts);
+            self.drawer_motion.retire(form);
+        }
+    }
+    pub(crate) fn has_draft(&self, cx: &App) -> bool {
+        !self.drafts.is_empty()
+            || self
+                .editor
+                .as_ref()
+                .is_some_and(|editor| editor.has_draft(cx))
+    }
+    pub(crate) fn resume_draft(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.editor.is_none() {
+            self.editor = self.drafts.remove(&None);
+        }
+        self.focus_editor(window, cx);
+        cx.notify();
     }
     fn display_drawer(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         if self.editor.is_some() {
             self.drawer_motion.take_retired();
             return self.drawer(window, cx);
         }
-        let Some(editor) = self.drawer_motion.take_retired() else {
+        let Some((key, editor)) = self
+            .drawer_motion
+            .take_retired()
+            .and_then(|form| form.take_form(&mut self.drafts))
+        else {
             return div().into_any_element();
         };
-        self.editor = Some(*editor);
+        self.editor = Some(editor);
         let content = self.drawer(window, cx);
-        self.retire_editor();
+        let editor = self.editor.take().unwrap();
+        let form = crate::editor_drafts::Retired::put_form(key, editor, &mut self.drafts);
+        self.drawer_motion.retire(form);
         content
     }
 }
@@ -214,6 +281,7 @@ impl Proxies {
             navigation: Default::default(),
             deletion: None,
             editor: None,
+            drafts: HashMap::new(),
             drawer_motion: Default::default(),
             parent_width: None,
             error: None,
@@ -261,6 +329,8 @@ impl Proxies {
     }
     fn set_catalog(&mut self, catalog: super::Catalog, cx: &mut Context<Self>) {
         self.entries = catalog.entries;
+        self.drafts
+            .retain(|id, _| id.is_none_or(|id| self.entries.iter().any(|entry| entry.id == id)));
         if !catalog.deletions.is_empty() {
             self.reference_pending = true;
             cx.emit(ReferencesDeleted(catalog.deletions));
@@ -326,11 +396,11 @@ impl Proxies {
         self.close_editor(window, cx);
     }
     pub fn close_editor(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.saving {
+        if self.editor_busy(cx) {
             return;
         }
         self.revision += 1;
-        self.retire_editor();
+        self.dismiss_editor(cx);
         self.selection.clear();
         if self.active {
             self.focus.focus(window, cx);
@@ -401,6 +471,14 @@ impl Proxies {
         })
         .detach();
         cx.notify();
+    }
+    pub(crate) fn editor_busy(&self, cx: &App) -> bool {
+        self.saving
+            || self
+                .editor
+                .as_ref()
+                .and_then(|editor| editor.related.as_ref())
+                .is_some_and(|related| related.view.read(cx).busy(cx))
     }
     fn busy(&self) -> bool {
         self.loading || self.saving || !self.ready
@@ -534,11 +612,18 @@ impl Proxies {
         entries
     }
     pub fn create(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.busy() {
+        if self.busy() || self.editor_busy(cx) {
             return;
         }
         self.revision += 1;
         self.selection.clear();
+        self.dismiss_editor(cx);
+        if let Some(editor) = self.drafts.remove(&None) {
+            self.editor = Some(editor);
+            self.focus_editor(window, cx);
+            cx.notify();
+            return;
+        }
         self.install_editor(
             Record {
                 port: 1080,
@@ -572,7 +657,7 @@ impl Proxies {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.busy() {
+        if self.busy() || self.editor_busy(cx) {
             return;
         }
         let Some(vault) = self.vault.clone() else {
@@ -581,6 +666,15 @@ impl Proxies {
         self.revision += 1;
         let revision = self.revision;
         self.selection = BTreeSet::from([id]);
+        self.dismiss_editor(cx);
+        if let Some(editor) = self.drafts.remove(&Some(id)) {
+            self.editor = Some(editor);
+            if !keep_focus {
+                self.focus_editor(window, cx);
+            }
+            cx.notify();
+            return;
+        }
         cx.spawn_in(window, async move |view, cx| {
             let result = vault.proxy(id).await;
             let _ = view.update_in(cx, |view, window, cx| {
@@ -715,7 +809,14 @@ impl Proxies {
                 }
             },
         );
+        let draft_changes = [&name, &host, &port, &username, &password]
+            .into_iter()
+            .map(|field| cx.observe(field, |_, _, cx| cx.notify()))
+            .collect();
         self.editor = Some(Editor {
+            baseline: 0,
+            related_draft: None,
+            _draft_changes: draft_changes,
             scroll: ScrollHandle::new(),
             id: record.id,
             uuid: record.uuid.clone(),
@@ -741,7 +842,13 @@ impl Proxies {
                 identity_create,
             ],
         });
+        self.reset_draft_baseline(cx);
         cx.notify();
+    }
+    fn reset_draft_baseline(&mut self, cx: &App) {
+        if let Some(editor) = &mut self.editor {
+            editor.baseline = editor.fingerprint(cx);
+        }
     }
     fn create_related_identity(
         &mut self,
@@ -754,11 +861,19 @@ impl Proxies {
         }
         let Some(editor) = self
             .editor
-            .as_ref()
+            .as_mut()
             .filter(|editor| editor.related.is_none())
         else {
             return;
         };
+        if let Some(related) = editor.related_draft.take() {
+            related.view.update(cx, |view, cx| {
+                view.resume_draft(crate::keychain::Kind::Identity, window, cx)
+            });
+            editor.related = Some(related);
+            cx.notify();
+            return;
+        }
         let username = if editor.identity.is_some() {
             String::new()
         } else {
@@ -809,7 +924,12 @@ impl Proxies {
                         .password
                         .update(cx, |field, cx| field.set_value("", window, cx));
                 }
-                editor.related = None;
+                let related = editor.related.take().unwrap();
+                if matches!(event, crate::keychain::RelatedEvent::Cancelled)
+                    && view.read(cx).has_draft(cx)
+                {
+                    editor.related_draft = Some(related);
+                }
                 editor
                     .identities
                     .state
@@ -927,6 +1047,7 @@ impl Proxies {
                                 view.revision += 1;
                                 cx.emit(RelatedEvent::Saved(id));
                             } else {
+                                view.retire_editor();
                                 view.close_editor(window, cx);
                                 view.selection = BTreeSet::from([id]);
                             }
@@ -1280,6 +1401,7 @@ impl Proxies {
             section("Authentication", authentication).into_any_element(),
         ];
         crate::components::DrawerFrame::new("proxy-editor", title, self.dark)
+            .unsaved(editor.has_draft(cx), cx)
             .scroll_handle(&editor.scroll)
             .when(self.owner.is_some(), |frame| {
                 frame.leading(

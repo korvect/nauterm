@@ -14,6 +14,7 @@ mod connection;
 mod connection_state;
 mod directory_follow;
 mod editor_config;
+mod editor_drafts;
 mod export_request;
 mod external_application;
 mod fido2;
@@ -92,6 +93,7 @@ mod transfer_history;
 mod transfer_queue;
 mod typography;
 mod ui;
+mod url_handlers;
 mod vault;
 mod window_chrome;
 mod working_directory;
@@ -105,11 +107,10 @@ fn main() -> anyhow::Result<()> {
         return platform_diagnostics::open_with();
     }
     let store = std::sync::Arc::new(store::Store::discover()?);
-    let loaded = theme_catalog::load(&store.paths);
-    for warning in &loaded.warnings {
-        eprintln!("Terminal theme: {warning}");
-    }
-    theme_catalog::publish(loaded);
+    let launch_links: Vec<_> = std::env::args_os()
+        .skip(1)
+        .filter_map(|arg| arg.into_string().ok())
+        .collect();
     let (recovery, recovery_error) = match recovery::Journal::begin(&store.state_directory) {
         Ok(recovery) => (Some(recovery), None),
         Err(error)
@@ -118,6 +119,10 @@ fn main() -> anyhow::Result<()> {
                 Some(std::fs::TryLockError::WouldBlock)
             ) =>
         {
+            #[cfg(any(target_os = "linux", target_os = "windows"))]
+            if url_handlers::dispatch::forward(&store.state_directory, &launch_links)? {
+                return Ok(());
+            }
             return Err(error);
         }
         Err(error) => (
@@ -127,17 +132,28 @@ fn main() -> anyhow::Result<()> {
             )),
         ),
     };
+    let loaded = theme_catalog::load(&store.paths);
+    for warning in &loaded.warnings {
+        eprintln!("Terminal theme: {warning}");
+    }
+    theme_catalog::publish(loaded);
     let quit_journal = recovery.as_ref().map(|recovery| recovery.journal.clone());
     let reopen_journal = quit_journal.clone();
     let application = gpui_kit::application().with_assets(assets::Assets);
     let (url_tx, url_rx) = async_channel::unbounded();
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    let pending = recovery.as_ref().and_then(|_| {
+        match url_handlers::dispatch::Pending::watch(&store.state_directory) {
+            Ok(pending) => Some((pending, url_tx.clone())),
+            Err(error) => {
+                eprintln!("Could not watch for incoming connection links: {error:#}");
+                None
+            }
+        }
+    });
     application.on_open_urls(move |urls| {
         let _ = url_tx.try_send(urls);
     });
-    let launch_links = std::env::args_os()
-        .skip(1)
-        .filter_map(|arg| arg.into_string().ok())
-        .collect();
     application.on_reopen(app_menu::reopen);
     application.run(move |cx| {
         gpui_kit::init(cx);
@@ -232,6 +248,11 @@ fn main() -> anyhow::Result<()> {
         }
         cx.activate(true);
         app_menu::open_connection_links(launch_links, cx);
+        #[cfg(any(target_os = "linux", target_os = "windows"))]
+        if let Some(((pending, wake), send)) = pending {
+            cx.spawn(async move |_| pending.consume(wake, send).await)
+                .detach();
+        }
         cx.spawn(async move |cx| {
             while let Ok(urls) = url_rx.recv().await {
                 cx.update(|cx| app_menu::open_connection_links(urls, cx));

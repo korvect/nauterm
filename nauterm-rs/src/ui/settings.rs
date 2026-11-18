@@ -178,6 +178,7 @@ impl Nauterm {
                             crate::ai::invalidate_providers();
                             this.retire_editor();
                             this.saved_drawers.clear();
+                            this.editor_drafts.clear();
                             this.retire_history();
                             this.history_events = None;
                             this.card_navigation.reset();

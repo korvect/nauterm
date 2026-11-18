@@ -29,6 +29,7 @@ mod assistant;
 mod card_menu;
 mod dialogs;
 mod drawer_motion;
+mod editor_drafts;
 mod exit;
 mod forwards;
 mod group_config;
@@ -38,6 +39,7 @@ mod host_config;
 mod host_connection;
 mod host_credentials;
 mod host_environment;
+mod host_icons;
 mod host_import;
 mod host_name;
 mod host_platform;
@@ -95,6 +97,13 @@ enum RemoteMode {
 }
 
 struct Editor {
+    baseline: u64,
+    draft_key: Option<editor_drafts::Key>,
+    child_drafts: HashMap<related::Target, Editor>,
+    credential_drafts:
+        HashMap<(host_credentials::Target, crate::keychain::Kind), host_credentials::Related>,
+    proxy_draft: Option<related::ProxyEditor>,
+    _draft_changes: Vec<Subscription>,
     scroll: ScrollHandle,
     kind: ItemKind,
     id: Option<Id>,
@@ -342,7 +351,7 @@ enum CloseTarget {
 }
 
 enum RetiredDrawer {
-    Editor(Box<Editor>),
+    Editor(crate::editor_drafts::Retired<editor_drafts::Key, Editor>),
     History(Entity<history::History>),
 }
 
@@ -367,6 +376,7 @@ pub struct Nauterm {
     card_navigation: crate::management::navigation::Navigation<(ItemKind, Id)>,
     editor: Option<Editor>,
     saved_drawers: HashMap<Page, drawer_motion::PageDrawer>,
+    editor_drafts: HashMap<editor_drafts::Key, Editor>,
     drawer_motion: crate::components::panel::Presence<RetiredDrawer>,
     sidebar_width: f32,
     child_drawer_open: bool,
@@ -645,6 +655,7 @@ impl Nauterm {
             card_navigation: Default::default(),
             editor: None,
             saved_drawers: HashMap::new(),
+            editor_drafts: HashMap::new(),
             drawer_motion: Default::default(),
             sidebar_width: layout::SIDEBAR_WIDTH,
             child_drawer_open: false,
@@ -1371,49 +1382,14 @@ impl Nauterm {
         cx.notify();
     }
 
-    fn search_target(&self, cx: &App) -> Option<Host> {
-        let query = self
-            .searches
-            .get(&Page::Hosts)?
-            .read(cx)
-            .value()
-            .to_string();
-        if let Some(host) = self
-            .data
-            .hosts
-            .iter()
-            .find(|h| h.name.eq_ignore_ascii_case(query.trim()))
-        {
-            return Some(host.clone());
-        }
-        let address = crate::ssh_address::SshAddress::parse(&query).ok()?;
-        Some(Host {
-            serial: None,
-            icon: None,
-            dark_theme: None,
-            connections: Default::default(),
-            uuid: None,
-            platform: Default::default(),
-            kind: Default::default(),
-            shell_path: None,
-            work_dir: None,
-            ssh: Default::default(),
-            id: 0,
-            name: address.host.clone(),
-            address: address.host,
-            port: address.port,
-            username: address.username,
-            group_id: None,
-            tags: vec![],
-            credential: None,
-            proxy_id: None,
-            theme: None,
-        })
+    fn search_target(&self, cx: &App) -> Option<crate::quick_connect::Target> {
+        let query = self.searches.get(&Page::Hosts)?.read(cx).value();
+        crate::quick_connect::search_target(&self.data, &query)
     }
 
     fn connect_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(host) = self.search_target(cx) {
-            self.open_ssh(host, window, cx);
+        if let Some(target) = self.search_target(cx) {
+            self.connect_quick_target_here(target, window, cx);
         }
     }
 
@@ -1822,6 +1798,41 @@ impl Nauterm {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.resource_editor_busy(cx) || !self.resources_ready() {
+            return;
+        }
+        let key = editor_drafts::Key::new(kind, id, initial_group, initial_package);
+        if self.editor.as_ref().is_some_and(|editor| {
+            editor.draft_key == Some(key)
+                && editor.related_credential.is_none()
+                && editor.related_proxy.is_none()
+        }) {
+            return;
+        }
+        self.dismiss_editor(cx);
+        self.prune_editor_drafts();
+        if let Some(editor) = self.editor_drafts.remove(&key) {
+            self.retire_history();
+            self.editor = Some(editor);
+            self.focus_resource_editor(window, cx);
+            cx.notify();
+            return;
+        }
+        self.build_editor(kind, id, initial_group, initial_package, window, cx);
+        if let Some(editor) = &mut self.editor {
+            editor.draft_key = Some(key);
+        }
+    }
+
+    fn build_editor(
+        &mut self,
+        kind: ItemKind,
+        id: Option<Id>,
+        initial_group: Option<Id>,
+        initial_package: Option<Id>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if !self.resources_ready() {
             return;
         }
@@ -2163,7 +2174,32 @@ impl Nauterm {
                 cx,
             )
         });
+        let mut draft_changes: Vec<_> = fields
+            .iter()
+            .map(|(_, field)| {
+                cx.subscribe(field, |_, _, event: &InputEvent, cx| {
+                    if matches!(event, InputEvent::Change) {
+                        cx.notify();
+                    }
+                })
+            })
+            .collect();
+        if let Some(host) = &host {
+            draft_changes.extend([
+                cx.observe(&host.directory, |_, _, cx| cx.notify()),
+                cx.observe(&host.serial, |_, _, cx| cx.notify()),
+                cx.observe(&host.telnet.port, |_, _, cx| cx.notify()),
+                cx.observe(&host.telnet.username, |_, _, cx| cx.notify()),
+                cx.observe(&host.mosh.command, |_, _, cx| cx.notify()),
+            ]);
+        }
         self.editor = Some(Editor {
+            baseline: 0,
+            draft_key: None,
+            child_drafts: HashMap::new(),
+            credential_drafts: HashMap::new(),
+            proxy_draft: None,
+            _draft_changes: draft_changes,
             scroll: ScrollHandle::new(),
             kind,
             id,
@@ -2212,6 +2248,14 @@ impl Nauterm {
                 .automatic_name = Some(automatic);
             self.refresh_host_name(false, window, cx);
         }
+        if let Some(editor) = &mut self.editor {
+            editor.baseline = editor.fingerprint(cx);
+        }
+        self.focus_resource_editor(window, cx);
+        cx.notify();
+    }
+
+    fn focus_resource_editor(&self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some((_, field)) = self.editor.as_ref().and_then(|editor| {
             let remote = editor.kind == ItemKind::Host
                 && editor
@@ -2222,7 +2266,6 @@ impl Nauterm {
         }) {
             field.update(cx, |field, cx| field.focus(window, cx));
         }
-        cx.notify();
     }
 
     fn save_editor(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -3606,7 +3649,9 @@ impl Nauterm {
                 "Try another search or clear tag filters."
             })
             .on_click(cx.listener(|this, _, window, cx| {
-                this.retire_editor();
+                if !this.dismiss_editor(cx) {
+                    return;
+                }
                 this.selection.clear();
                 this.selection_kind = None;
                 this.focus.focus(window, cx);
@@ -3631,9 +3676,11 @@ impl Nauterm {
         div()
             .id("collection-scroll")
             .on_click(cx.listener(|this, _: &ClickEvent, window, cx| {
+                if !this.dismiss_editor(cx) {
+                    return;
+                }
                 this.selection.clear();
                 this.selection_kind = None;
-                this.retire_editor();
                 this.focus.focus(window, cx);
                 cx.notify();
             }))
@@ -3890,12 +3937,13 @@ impl Nauterm {
                     .ghost()
                     .icon(IconName::ArrowLeft)
                     .tooltip("Back")
-                    .disabled(self.resource_editor_busy())
+                    .disabled(self.resource_editor_busy(cx))
                     .on_click(cx.listener(|this, _, window, cx| {
                         this.back_related_resource(window, cx);
                     })),
             )
         })
+        .unsaved(editor.has_draft(cx), cx)
         .actions(self.host_editor_actions(editor, cx))
         .scroll_handle(&editor.scroll)
         .actions(self.forward_editor_actions(editor, cx))
@@ -3924,7 +3972,9 @@ impl Nauterm {
                     .icon(IconName::ArrowRightToLine)
                     .tooltip("Close editor")
                     .on_click(cx.listener(|this, _, window, cx| {
-                        this.retire_editor();
+                        if !this.dismiss_editor(cx) {
+                            return;
+                        }
                         this.selection.clear();
                         this.focus.focus(window, cx);
                         cx.notify();
@@ -4302,7 +4352,9 @@ impl Render for Nauterm {
                 if this.back_related_resource(window, cx) {
                     return;
                 }
-                this.retire_editor();
+                if !this.dismiss_editor(cx) {
+                    return;
+                }
                 this.retire_history();
                 this.selection.clear();
                 this.delete_pending = false;

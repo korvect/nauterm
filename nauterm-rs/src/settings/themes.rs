@@ -230,9 +230,8 @@ impl Settings {
                 .child(self.color_row(range, true))
         };
         div()
-            .flex_1()
-            .min_h_0()
             .w_full()
+            .flex_shrink_0()
             .rounded(px(10.))
             .border_1()
             .border_color(p.border)
@@ -281,14 +280,18 @@ impl Settings {
         } else {
             0
         };
-        div().w_full().flex().gap(px(24.)).when(compact, |view| view.flex_col())
-            .child(div().flex_1().min_w_0().h(px(620.)).flex().flex_col().gap(px(14.))
-                .child(self.row("settings.terminal.followTheme.title", "settings.terminal.followTheme.description",
-                    Switch::new("follow-terminal-appearance", "Switch themes automatically", self.values.terminal.follow_app_theme)
-                        .on_change(cx.listener(|this, value, window, cx| {
-                            this.values.terminal.follow_app_theme = *value;
-                            this.changed(window, cx);
-                        }))))
+        div().w_full().flex().flex_col().gap(px(14.))
+            .child(self.row("settings.terminal.followTheme.title", "settings.terminal.followTheme.description",
+                Switch::new("follow-terminal-appearance", "Switch themes automatically", self.values.terminal.follow_app_theme)
+                    .on_change(cx.listener(|this, value, window, cx| {
+                        this.values.terminal.follow_app_theme = *value;
+                        this.changed(window, cx);
+                    }))))
+            .child(div().w_full().flex().items_start().gap(px(24.)).when(compact, |view| view.flex_col())
+            .child(div().min_w_0()
+                .when(compact, |view| view.w_full())
+                .when(!compact, |view| view.flex_1())
+                .flex().flex_col().gap(px(14.))
                 .child(div().flex().gap(px(8.)).children([false, true].into_iter().map(|dark| {
                     let (theme, custom) = self.values.terminal.theme_for_mode(dark);
                     let title = if custom.is_some() { "Custom".into() } else { theme.label() };
@@ -304,7 +307,10 @@ impl Settings {
                             })))
                 })))
                 .child(self.inspector()))
-            .child(div().flex_1().min_w_0().h(px(620.)).rounded(px(10.)).border_1().border_color(p.border).bg(p.sidebar).p(px(10.)).flex().flex_col().gap(px(10.))
+            .child(div().min_w_0().h(px(620.))
+                .when(compact, |view| view.w_full())
+                .when(!compact, |view| view.flex_1())
+                .rounded(px(10.)).border_1().border_color(p.border).bg(p.sidebar).p(px(10.)).flex().flex_col().gap(px(10.))
                 .child(Input::new(&self.theme_search).small().aria_label(crate::localization::text(cx, "Search themes")).cleanable(true).prefix(Icon::new(IconName::Search).with_size(px(14.))))
                 .child(div().flex_1().min_h_0().overflow_hidden()
                     .when(!ready, |view| view.flex().items_center().justify_center().child(crate::components::Spinner::new()))
@@ -324,7 +330,7 @@ impl Settings {
                                     }))
                                     .children((end - start..columns).map(|_| div().flex_1().min_w_0()))
                             }).collect()
-                        })).track_scroll(&self.theme_scroll).size_full(), &self.theme_scroll)))))
+                        })).track_scroll(&self.theme_scroll).size_full(), &self.theme_scroll))))))
             .into_any_element()
     }
 }

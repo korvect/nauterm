@@ -58,5 +58,9 @@ objc2-core-graphics = { version = "=0.3.2", default-features = false, features =
 objc2-core-text = { version = "=0.3.2", default-features = false, features = ["std", "CTFontManager", "CTFontManagerErrors", "objc2-core-graphics"] }
 objc2-app-kit = { version = "=0.3.2", default-features = false, features = ["std", "block2", "NSApplication", "NSButton", "NSEvent", "NSImage", "NSImageRep", "NSBitmapImageRep", "NSGraphics", "NSGraphicsContext", "objc2-core-graphics", "NSView", "NSOpenPanel", "NSPanel", "NSResponder", "NSRunningApplication", "NSSavePanel", "NSWindow", "NSWorkspace"] }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+gio = "0.21"
+
 [target.'cfg(target_os = "windows")'.dependencies]
+same-file = "1"
 windows = { version = "=0.62.2", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_Storage_FileSystem", "Win32_System_Com", "Win32_System_Registry", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }

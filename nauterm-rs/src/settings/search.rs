@@ -9,6 +9,7 @@ pub(super) enum Section {
     Appearance,
     Window,
     Behavior,
+    UrlHandlers,
     Theme,
     Font,
     Cursor,
@@ -31,10 +32,11 @@ pub(super) enum Section {
     About,
 }
 impl Section {
-    const ALL: [Self; 23] = [
+    const ALL: [Self; 24] = [
         Self::Appearance,
         Self::Window,
         Self::Behavior,
+        Self::UrlHandlers,
         Self::Theme,
         Self::Font,
         Self::Cursor,
@@ -58,7 +60,7 @@ impl Section {
     ];
     pub fn page(self) -> Page {
         match self {
-            Self::Appearance | Self::Window | Self::Behavior => Page::General,
+            Self::Appearance | Self::Window | Self::Behavior | Self::UrlHandlers => Page::General,
             Self::SftpWorkspace | Self::Editors | Self::Transfers | Self::Files => Page::Sftp,
             Self::Keyboard | Self::Bindings => Page::Shortcuts,
             Self::AiProviders | Self::AiContext => Page::Ai,
@@ -72,6 +74,7 @@ impl Section {
             Self::Appearance => "APPEARANCE",
             Self::Window => "WINDOW",
             Self::Behavior => "BEHAVIOR",
+            Self::UrlHandlers => "settings.general.defaultUrlHandler.title",
             Self::Theme => "THEME",
             Self::Font => "FONT",
             Self::Cursor => "CURSOR",
@@ -149,6 +152,12 @@ impl Entry {
 }
 use Section as S;
 const ENTRIES: &[Entry] = &[
+    Entry::new(
+        S::UrlHandlers,
+        "settings.general.defaultUrlHandler.title",
+        "settings.general.defaultUrlHandler.description",
+        "uri scheme ssh:// sftp:// telnet:// links 链接 协议 默认",
+    ),
     Entry::new(
         S::Appearance,
         "settings.general.language.label",

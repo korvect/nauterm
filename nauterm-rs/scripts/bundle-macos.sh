@@ -52,6 +52,11 @@ app="$staging/Nauterm RS.app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources/licenses" "$app/Contents/Frameworks"
 python3 "$repository/scripts/stage_rs_mosh.py" --project "$repository" --executable "$executable" --destination "$app/Contents/Frameworks" >&2
 install -m 755 "$executable" "$app/Contents/MacOS/nauterm-rs"
+for localization in "$client"/assets/macos/*.lproj; do
+  install -d "$app/Contents/Resources/${localization##*/}"
+  install -m 644 "$localization/MainMenu.strings" \
+    "$app/Contents/Resources/${localization##*/}/MainMenu.strings"
+done
 # Use the same Icon Composer document as Flutter's Xcode target. actool emits
 # Assets.car and the legacy fallback, plus the matching bundle declarations.
 xcrun --sdk macosx actool \

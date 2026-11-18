@@ -14,7 +14,7 @@ use gpui_kit::{
 use std::sync::Arc;
 
 pub enum Event {
-    Connect(Config),
+    Connect { config: Config, save_as_host: bool },
 }
 pub struct Connection {
     core: Option<Arc<Core>>,
@@ -29,6 +29,7 @@ pub struct Connection {
     ports: Vec<Port>,
     scanning: bool,
     embedded: bool,
+    allow_save: bool,
     scan_error: Option<String>,
     error: Option<String>,
     validation_error: Option<String>,
@@ -144,6 +145,7 @@ impl Connection {
             ports: vec![],
             scanning: false,
             embedded,
+            allow_save: false,
             scan_error: None,
             error: None,
             validation_error: None,
@@ -153,6 +155,10 @@ impl Connection {
             view.scan(window, cx);
         }
         view
+    }
+    pub fn allow_save(mut self, allowed: bool) -> Self {
+        self.allow_save = allowed;
+        self
     }
     pub fn core(&self) -> Option<Arc<Core>> {
         self.core.clone()
@@ -217,6 +223,15 @@ impl Connection {
         .detach();
         cx.notify();
     }
+    pub(crate) fn hash_fields(&self, cx: &App, hash: &mut impl std::hash::Hasher) {
+        use std::hash::Hash;
+        self.path.read(cx).value().hash(hash);
+        self.baud.read(cx).value().hash(hash);
+        selected(&self.data_bits, 8, cx).hash(hash);
+        selected(&self.stop_bits, 1, cx).hash(hash);
+        (selected(&self.parity, Parity::None, cx) as u32).hash(hash);
+        (selected(&self.flow, Flow::None, cx) as u32).hash(hash);
+    }
     pub fn configuration(&self, cx: &App) -> anyhow::Result<Config> {
         let config = Config {
             path: self.path.read(cx).value().trim().to_owned(),
@@ -232,11 +247,14 @@ impl Connection {
         Ok(config)
     }
 
-    fn submit(&mut self, cx: &mut Context<Self>) {
+    fn submit(&mut self, save_as_host: bool, cx: &mut Context<Self>) {
         self.error = None;
         self.validation_error = None;
         match self.configuration(cx) {
-            Ok(config) => cx.emit(Event::Connect(config)),
+            Ok(config) => cx.emit(Event::Connect {
+                config,
+                save_as_host,
+            }),
             Err(error) => self.validation_error = Some(error.to_string()),
         }
         cx.notify();
@@ -251,54 +269,61 @@ fn selected<V: Copy + PartialEq + 'static>(model: &SelectModel<V>, default: V, c
         .flatten()
         .unwrap_or(default)
 }
+impl Connection {
+    pub(crate) fn device_field(&self, cx: &mut Context<Self>) -> AnyElement {
+        div()
+            .flex()
+            .items_center()
+            .gap(px(8.))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .child(self.devices.field("Serial port", false)),
+            )
+            .child(
+                Button::new("refresh-serial-devices")
+                    .icon(IconName::RefreshCw)
+                    .large()
+                    .disabled(self.scanning)
+                    .loading(self.scanning)
+                    .tooltip("Refresh serial devices")
+                    .on_click(cx.listener(|this, _, window, cx| this.scan(window, cx))),
+            )
+            .into_any_element()
+    }
+}
+
 impl Render for Connection {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let dark = cx.theme().is_dark();
         let p = Palette::new(dark);
-        let path = self.path.read(cx).value();
-        let status = if self.scanning {
-            "Scanning serial devices…".into()
-        } else if self.ports.is_empty() {
-            "No serial devices found. Enter a path manually.".into()
-        } else {
-            self.ports
-                .iter()
-                .find(|port| port.path == path.trim())
-                .map(Port::label)
-                .unwrap_or_default()
-        };
         let fields = div()
             .flex()
             .flex_col()
             .gap(px(12.))
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(8.))
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .child(self.devices.field("Serial port", false)),
-                    )
-                    .child(
-                        Button::new("refresh-serial-devices")
-                            .icon(IconName::RefreshCw)
-                            .large()
-                            .disabled(self.scanning)
-                            .loading(self.scanning)
-                            .tooltip("Refresh serial devices")
-                            .on_click(cx.listener(|this, _, window, cx| this.scan(window, cx))),
-                    ),
-            )
-            .when(!status.is_empty(), |view| {
-                view.child(
-                    div()
-                        .text_size(px(12.))
-                        .text_color(p.muted)
-                        .child(crate::localization::message(cx, &status)),
-                )
+            .when(!self.embedded, |view| {
+                let path = self.path.read(cx).value();
+                let status = if self.scanning {
+                    "Scanning serial devices…".into()
+                } else if self.ports.is_empty() {
+                    "No serial devices found. Enter a path manually.".into()
+                } else {
+                    self.ports
+                        .iter()
+                        .find(|port| port.path == path.trim())
+                        .map(Port::label)
+                        .unwrap_or_default()
+                };
+                view.child(self.device_field(cx))
+                    .when(!status.is_empty(), |view| {
+                        view.child(
+                            div()
+                                .text_size(px(12.))
+                                .text_color(p.muted)
+                                .child(crate::localization::message(cx, &status)),
+                        )
+                    })
             })
             .child(self.rates.digits_field("Baud rate", false))
             .child(
@@ -352,11 +377,19 @@ impl Render for Connection {
                     .label("Cancel")
                     .on_click(|_, window, cx| crate::components::Modal::dismiss(window, cx)),
             )
+            .when(self.allow_save, |dialog| {
+                dialog.action(
+                    Button::new("serial-connect-and-save")
+                        .secondary()
+                        .label("workspace.label.connectSave")
+                        .on_click(cx.listener(|this, _, _, cx| this.submit(true, cx))),
+                )
+            })
             .action(
                 Button::new("serial-connect")
                     .primary()
                     .label("Connect")
-                    .on_click(cx.listener(|this, _, _, cx| this.submit(cx))),
+                    .on_click(cx.listener(|this, _, _, cx| this.submit(false, cx))),
             )
             .into_any_element()
     }

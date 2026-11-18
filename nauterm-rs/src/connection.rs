@@ -508,8 +508,6 @@ impl Connection {
             .is_some_and(|options| options.username.trim().is_empty())
         {
             this.state.phase = Phase::Authentication;
-            this.state
-                .remember_intervention(Intervention::Authentication);
             this.state.message = "Enter a username to connect.".into();
             this.needs_auth_focus = true;
             if this.auto_focus {
@@ -736,7 +734,11 @@ impl Connection {
     fn refresh(&mut self, cx: &mut Context<Self>) {
         let previous_phase = self.state.phase;
         if let Some(terminal) = self.attached.as_ref().and_then(WeakEntity::upgrade) {
-            self.state = terminal.read(cx).reconnect_snapshot();
+            let mut snapshot = terminal.read(cx).reconnect_snapshot();
+            // The terminal owns transport state; only this view observes
+            // which intervention forms the user actually saw.
+            snapshot.progress = std::mem::take(&mut self.state.progress);
+            self.state = snapshot;
         }
         let result = self
             .session
@@ -867,32 +869,39 @@ impl Connection {
                 .flex()
                 .flex_col()
                 .gap(px(12.))
+                .when(!challenge.name.trim().is_empty(), |view| {
+                    view.child(
+                        div()
+                            .text_size(px(15.))
+                            .font_weight(FontWeights::SEMIBOLD)
+                            .child(challenge.name.clone()),
+                    )
+                })
                 .when(!challenge.instructions.trim().is_empty(), |view| {
                     view.child(challenge.instructions.clone())
                 })
                 .children(challenge.prompts.iter().zip(&self.challenge_inputs).map(
                     |(prompt, input)| {
-                        let label = prompt.prompt.trim();
-                        let label = if label.is_empty() {
-                            "Verification code"
+                        let label = if prompt.asks_for_verification_code() {
+                            crate::localization::text(cx, "common.label.verificationCode")
                         } else {
-                            label
+                            prompt.prompt.trim().to_owned().into()
                         };
                         div()
                             .flex()
                             .flex_col()
                             .gap(px(6.))
-                            .child(label.to_owned())
-                            .child(auth_input(input, label, !prompt.echo))
+                            .child(label.clone())
+                            .child(auth_input(input, &label, !prompt.echo))
                     },
                 ))
                 .when_some(self.error.clone(), |view, error| view.child(error))
                 .into_any_element();
         }
-        let Some(options) = self.target.ssh() else {
+        if self.target.ssh().is_none() {
             return div().into_any_element();
-        };
-        if options.username.is_empty() {
+        }
+        if self.auth_step() == Intervention::Username {
             return auth_input(&self.username, "Username", false)
                 .disabled(self.auth.busy)
                 .into_any_element();
@@ -923,57 +932,69 @@ impl Connection {
                 })
                 .into_any_element();
         }
+        if self.needs_key_passphrase() {
+            return div()
+                .flex()
+                .flex_col()
+                .gap(px(12.))
+                .child(
+                    div()
+                        .text_size(px(14.))
+                        .font_weight(FontWeights::SEMIBOLD)
+                        .child(crate::localization::text(
+                            cx,
+                            "workspace.label.enterKeyPassphrase",
+                        )),
+                )
+                .child(auth_input(&self.passphrase, "Passphrase", true).disabled(self.auth.busy))
+                .when_some(self.error.clone(), |view, error| {
+                    view.child(
+                        div()
+                            .text_color(rgb(0xe05545))
+                            .child(crate::localization::message(cx, &error)),
+                    )
+                })
+                .into_any_element();
+        }
         div()
             .flex()
             .flex_col()
             .gap(px(20.))
-            .when(
-                self.allowed_mode(AuthMode::Password) && self.allowed_mode(AuthMode::PublicKey),
-                |view| {
-                    view.child(
-                        crate::components::Segmented::new(
-                            "authentication-method",
-                            self.mode,
-                            [
-                                (AuthMode::Password, "Password".into()),
-                                (AuthMode::PublicKey, "Public Key".into()),
-                            ],
-                        )
-                        .sliding()
-                        .height(if self.compact_controls() { 28. } else { 36. })
-                        .icon(AuthMode::Password, IconName::Lock)
-                        .icon(AuthMode::PublicKey, IconName::KeyRound)
-                        .disabled(self.auth.busy)
-                        .on_change({
-                            let owner = cx.weak_entity();
-                            move |mode, _, cx| {
-                                let _ = owner.update(cx, |this, cx| {
-                                    if this.mode != *mode {
-                                        this.mode = *mode;
-                                        this.error = None;
-                                        this.needs_auth_focus = true;
-                                        cx.notify();
-                                    }
-                                });
-                            }
-                        }),
+            .when(self.shows_auth_modes(), |view| {
+                view.child(
+                    crate::components::Segmented::new(
+                        "authentication-method",
+                        self.mode,
+                        [
+                            (AuthMode::Password, "Password".into()),
+                            (AuthMode::PublicKey, "Public Key".into()),
+                        ],
                     )
-                },
-            )
+                    .sliding()
+                    .height(if self.compact_controls() { 28. } else { 36. })
+                    .icon(AuthMode::Password, IconName::Lock)
+                    .icon(AuthMode::PublicKey, IconName::KeyRound)
+                    .disabled(self.auth.busy)
+                    .on_change({
+                        let owner = cx.weak_entity();
+                        move |mode, _, cx| {
+                            let _ = owner.update(cx, |this, cx| {
+                                if this.mode != *mode {
+                                    this.mode = *mode;
+                                    this.error = None;
+                                    this.needs_auth_focus = true;
+                                    cx.notify();
+                                }
+                            });
+                        }
+                    }),
+                )
+            })
             .when(self.mode == AuthMode::Password, |view| {
                 view.child(auth_input(&self.password, "Password", true).disabled(self.auth.busy))
             })
             .when(self.mode == AuthMode::PublicKey, |view| {
-                view.when(
-                    options.private_key.is_empty() || !self.needs_key_passphrase(),
-                    |view| view.child(self.authentication_keys(cx)),
-                )
-                .when(self.needs_key_passphrase(), |view| {
-                    view.child(
-                        auth_input(&self.passphrase, "Key passphrase", true)
-                            .disabled(self.auth.busy),
-                    )
-                })
+                view.child(self.authentication_keys(cx))
             })
             .when_some(self.error.clone(), |view, error| {
                 view.child(
@@ -1009,12 +1030,12 @@ impl Render for Connection {
                 .into_any_element();
         }
         self.sync_challenge_inputs(window, cx);
-        if !self.allowed_mode(self.mode) {
-            self.mode = if self.allowed_mode(AuthMode::Password) {
-                AuthMode::Password
-            } else {
-                AuthMode::PublicKey
-            };
+        if !self.allowed_mode(self.mode)
+            && let Some(mode) = [AuthMode::Password, AuthMode::PublicKey]
+                .into_iter()
+                .find(|mode| self.allowed_mode(*mode))
+        {
+            self.mode = mode;
         }
         self.ensure_authentication(cx);
         let height = if self.viewport.height > px(0.) {
@@ -1030,38 +1051,37 @@ impl Render for Connection {
             && self.state.phase == Phase::Authentication
         {
             self.needs_auth_focus = false;
-            let input = if let Some(input) = self.challenge_inputs.first() {
-                input
-            } else if self.requires_fido2_pin() {
-                &self.fido2_pin
-            } else if self
-                .target
-                .ssh()
-                .is_some_and(|options| options.username.is_empty())
-            {
-                &self.username
-            } else if self.mode == AuthMode::Password {
-                &self.password
-            } else if self.needs_key_passphrase() {
-                &self.passphrase
+            let input = if self.state.challenge.is_some() {
+                self.challenge_inputs.first()
+            } else {
+                match self.auth_step() {
+                    Intervention::Username => Some(&self.username),
+                    Intervention::SecurityKeyPin => Some(&self.fido2_pin),
+                    Intervention::Passphrase => Some(&self.passphrase),
+                    Intervention::Password => Some(&self.password),
+                    _ => None,
+                }
+            };
+            if let Some(input) = input {
+                input.update(cx, |input, cx| input.focus(window, cx));
             } else {
                 self.focus.focus(window, cx);
-                &self.username
-            };
-            if !self.challenge_inputs.is_empty()
-                || self.mode != AuthMode::PublicKey
-                || self.requires_fido2_pin()
-                || self.needs_key_passphrase()
-                || self
-                    .target
-                    .ssh()
-                    .is_some_and(|options| options.username.is_empty())
-            {
-                input.update(cx, |input, cx| input.focus(window, cx));
             }
         }
         let choosing = matches!(self.target, Target::Choice(_));
         let page = PageState::new(self.state.phase, choosing, self.show_logs);
+        if matches!(page.body, Body::Mode) {
+            match self.state.phase {
+                Phase::HostKey => self
+                    .state
+                    .observe_intervention(Intervention::HostKey, false),
+                Phase::Authentication => {
+                    self.state
+                        .observe_intervention(self.auth_step(), self.shows_auth_modes());
+                }
+                _ => {}
+            }
+        }
         self.logs.update(cx, |logs, cx| {
             logs.configure(
                 &self.state.logs,

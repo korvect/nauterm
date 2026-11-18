@@ -276,6 +276,7 @@ impl Nauterm {
                 });
                 match result {
                     Ok(()) => {
+                        this.prune_editor_drafts();
                         this.in_drawer_page(page, window, cx, |this, _, _| {
                             this.selection.clear();
                             this.selection_kind = None;
