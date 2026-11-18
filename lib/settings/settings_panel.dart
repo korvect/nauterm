@@ -13,7 +13,6 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter/services.dart';
-import 'package:flutter/src/widgets/_window.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -1219,19 +1218,6 @@ class _SettingsPanelState extends State<SettingsPanel> {
     }
   }
 
-  void _closeSettingsWindow(BuildContext context) {
-    if (defaultTargetPlatform != TargetPlatform.linux) {
-      final windowController = WindowScope.maybeOf(context);
-      if (windowController is RegularWindowController) {
-        hideSettingsNativeWindow();
-        windowController.destroy();
-        return;
-      }
-    }
-
-    hideSettingsWindow();
-  }
-
   @override
   void dispose() {
     nautermSyncStatusRevision.removeListener(_reloadSyncStatus);
@@ -1322,7 +1308,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
                                     : null,
                                 onResetAll: () =>
                                     unawaited(_resetSettings(all: true)),
-                                onDone: () => _closeSettingsWindow(context),
+                                onDone: closeSettingsWindow,
                               ),
                               Expanded(child: _buildContent()),
                             ],

@@ -22,7 +22,7 @@ abstract interface class NautermRootController {
 
   void showSettingsWindow();
 
-  void hideSettingsWindow();
+  void closeSettingsWindow();
 
   void closeSelectedTerminalTab();
 
@@ -327,8 +327,8 @@ void forgetMainWindow() {
   fullscreenNotifier.value = false;
 }
 
-void hideSettingsWindow() {
-  _rootController?.hideSettingsWindow();
+void closeSettingsWindow() {
+  _rootController?.closeSettingsWindow();
 }
 
 void markSettingsWindowRequested(bool requested) {

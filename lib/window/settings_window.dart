@@ -134,13 +134,8 @@ class _SettingsWindowDelegate with RegularWindowControllerDelegate {
 
   @override
   void onWindowCloseRequested(RegularWindowController controller) {
-    if (defaultTargetPlatform == TargetPlatform.linux) {
-      onCloseRequested();
-      return;
-    }
-
-    hideSettingsNativeWindow();
-    controller.destroy();
+    // Let the root unmount the settings view before destroying the window.
+    onCloseRequested();
   }
 
   @override

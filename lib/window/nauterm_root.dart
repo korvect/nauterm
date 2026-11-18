@@ -5,6 +5,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/src/widgets/_window.dart';
+import 'package:nativeapi_flutter/windowing.dart';
 
 import '../settings/settings_panel.dart';
 import '../data/nauterm_paths.dart';
@@ -225,7 +226,7 @@ class _NautermRootState extends State<NautermRoot>
 
     late final RegularWindowController controller;
     controller = createSettingsWindowController(
-      onCloseRequested: hideSettingsWindow,
+      onCloseRequested: closeSettingsWindow,
       onDestroyed: () => _handleSettingsWindowDestroyed(controller),
     );
     setState(() {
@@ -233,6 +234,19 @@ class _NautermRootState extends State<NautermRoot>
       _isSettingsWindowMounted = true;
       _isSettingsWindowContentMounted = true;
     });
+    if (defaultTargetPlatform == TargetPlatform.windows) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !identical(_settingsWindowController, controller)) {
+          return;
+        }
+        final window = controller.nativeWindow;
+        if (window != null && !window.isVisible) {
+          // The show hook can leave a recreated Win32 window hidden. Activate
+          // the HWND directly after its Flutter view is mounted.
+          controller.activate();
+        }
+      });
+    }
   }
 
   void _handleSettingsWindowDestroyed(RegularWindowController controller) {
@@ -250,7 +264,7 @@ class _NautermRootState extends State<NautermRoot>
   }
 
   @override
-  void hideSettingsWindow() {
+  void closeSettingsWindow() {
     markSettingsWindowRequested(false);
 
     final controller = _settingsWindowController;
