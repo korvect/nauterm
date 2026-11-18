@@ -19,9 +19,38 @@ use std::{
 pub(super) const TRAVEL: Duration = Duration::from_millis(300);
 const LAYOUT: Duration = Duration::from_millis(320);
 
+#[derive(Clone, Copy)]
+struct Marker {
+    icon: IconName,
+    label: Option<&'static str>,
+}
+
+impl Marker {
+    fn endpoint(icon: IconName) -> Self {
+        Self { icon, label: None }
+    }
+    fn intervention(step: Intervention) -> Self {
+        let (icon, label) = match step {
+            Intervention::Username => (IconName::UserRound, "common.label.username"),
+            Intervention::HostKey => (IconName::FingerprintPattern, "common.label.hostKey"),
+            Intervention::Passphrase => (IconName::LockOpen, "common.label.passphrase"),
+            Intervention::SecurityKeyPin => (IconName::Hash, "PIN"),
+            Intervention::Password => (IconName::Lock, "common.label.password"),
+            Intervention::PublicKey => (IconName::KeyRound, "workspace.label.publicKey"),
+            Intervention::VerificationCode => {
+                (IconName::SquareAsterisk, "common.label.verificationCode")
+            }
+        };
+        Self {
+            icon,
+            label: Some(label),
+        }
+    }
+}
+
 #[derive(Clone)]
 struct Stage {
-    icons: Vec<IconName>,
+    markers: Vec<Marker>,
     reached: usize,
     spinning: Option<usize>,
     moving: Option<usize>,
@@ -35,20 +64,19 @@ impl Stage {
         destination: IconName,
         choosing: bool,
     ) -> Self {
-        let mut icons = vec![protocol];
-        icons.extend(
+        let mut markers = vec![Marker::endpoint(protocol)];
+        markers.extend(
             state
-                .interventions
+                .progress
+                .steps
                 .iter()
-                .map(|intervention| match intervention {
-                    Intervention::HostKey => IconName::FingerprintPattern,
-                    Intervention::Authentication => IconName::KeyRound,
-                }),
+                .copied()
+                .map(Marker::intervention),
         );
-        icons.push(destination);
-        let last = icons.len() - 1;
+        markers.push(Marker::endpoint(destination));
+        let last = markers.len() - 1;
         let mut stage = Self {
-            icons,
+            markers,
             reached: last - 1,
             spinning: None,
             moving: None,
@@ -64,21 +92,13 @@ impl Stage {
                     stage.moving = Some(stage.reached);
                     stage.traveling = Some(last);
                 }
-                Phase::HostKey | Phase::Authentication => {
-                    let active = if state.phase == Phase::HostKey {
-                        Intervention::HostKey
-                    } else {
-                        Intervention::Authentication
-                    };
-                    let step = state
-                        .interventions
-                        .iter()
-                        .rposition(|item| *item == active)
-                        .map_or(1, |index| index + 1);
+                Phase::HostKey | Phase::Authentication if last > 1 => {
+                    let step = last - 1;
                     stage.reached = step - 1;
                     stage.moving = Some(step - 1);
                     stage.traveling = Some(step);
                 }
+                Phase::HostKey | Phase::Authentication => stage.spinning = Some(0),
                 Phase::Failed | Phase::Exited => {}
             }
         }
@@ -89,13 +109,13 @@ impl Stage {
 #[derive(Clone, Default)]
 pub(super) struct Pipeline {
     stage: Option<Stage>,
-    previous_icons: Vec<IconName>,
+    previous_count: usize,
     layout_started: Option<Instant>,
     travel_started: Option<Instant>,
     travel_value: f32,
 }
 struct Node {
-    icon: IconName,
+    marker: Marker,
     position: f32,
     active: bool,
     spinning: bool,
@@ -118,8 +138,8 @@ fn stage_curve(value: f32) -> f32 {
 impl Pipeline {
     fn sample(&mut self, next: Stage, now: Instant, reduced: bool) -> Frame {
         if let Some(old) = &self.stage {
-            if old.icons != next.icons {
-                self.previous_icons = old.icons.clone();
+            if old.markers.len() != next.markers.len() {
+                self.previous_count = old.markers.len();
                 self.layout_started = Some(now);
                 // A newly inserted node travels with the layout. Do not also
                 // animate a duplicate traveler along its moving segment.
@@ -127,16 +147,14 @@ impl Pipeline {
                 self.travel_value = f32::from(next.moving.is_some());
             } else if old.moving != next.moving || old.traveling != next.traveling {
                 let layout_active = elapsed(self.layout_started, now, LAYOUT) < 1.;
-                if self.travel_started.is_some() {
-                    self.travel_value = elapsed(self.travel_started, now, TRAVEL);
-                }
-                self.travel_started = (!layout_active && next.moving.is_some()).then_some(now);
-                if self.travel_started.is_some() {
-                    self.travel_value = 0.;
-                }
+                let advances = next
+                    .traveling
+                    .is_some_and(|index| index > old.traveling.unwrap_or(old.reached));
+                self.travel_started = (!layout_active && advances).then_some(now);
+                self.travel_value = f32::from(self.travel_started.is_none());
             }
         } else {
-            self.previous_icons = next.icons.clone();
+            self.previous_count = next.markers.len();
             self.travel_started = next.moving.is_some().then_some(now);
         }
         let layout = if reduced {
@@ -152,27 +170,19 @@ impl Pipeline {
             self.travel_value
         };
         let node_position = |index: usize| {
-            let destination = index as f32 / (next.icons.len() - 1).max(1) as f32;
+            let last = next.markers.len() - 1;
+            let destination = index as f32 / last as f32;
             if layout >= 1. {
                 return destination;
             }
-            let origin = (0..=index).rev().find_map(|anchor| {
-                let icon = next.icons[anchor];
-                let occurrence = next.icons[..anchor]
-                    .iter()
-                    .filter(|prior| **prior == icon)
-                    .count();
-                self.previous_icons
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, previous)| **previous == icon)
-                    .nth(occurrence)
-                    .map(|(index, _)| index)
-            });
-            origin.map_or(destination, |index| {
-                let from = index as f32 / (self.previous_icons.len() - 1).max(1) as f32;
-                from + (destination - from) * stage_curve(layout)
-            })
+            let previous_last = self.previous_count - 1;
+            let anchor = if index == last {
+                previous_last
+            } else {
+                index.min(previous_last - 1)
+            };
+            let from = anchor as f32 / previous_last as f32;
+            from + (destination - from) * stage_curve(layout)
         };
         let progress = if next.failed {
             1.
@@ -184,15 +194,15 @@ impl Pipeline {
             node_position(next.reached)
         };
         let nodes = next
-            .icons
+            .markers
             .iter()
             .enumerate()
             .filter(|(index, _)| Some(*index) != next.traveling || layout < 1.)
-            .map(|(index, icon)| {
+            .map(|(index, marker)| {
                 let spinning =
                     Some(index) == next.spinning || (Some(index) == next.traveling && layout < 1.);
                 Node {
-                    icon: *icon,
+                    marker: *marker,
                     position: node_position(index),
                     active: next.failed || index <= next.reached || spinning,
                     spinning,
@@ -200,7 +210,7 @@ impl Pipeline {
             })
             .collect();
         let traveler = next.traveling.filter(|_| layout >= 1.).map(|index| Node {
-            icon: next.icons[index],
+            marker: next.markers[index],
             position: progress,
             active: true,
             spinning: true,
@@ -282,6 +292,12 @@ fn dot(
         .left(relative(node.position))
         .ml(px(-36. * node.position))
         .size(px(36.))
+        .when_some(node.marker.label, |view, label| {
+            view.tooltip(move |_, cx| {
+                let title = crate::localization::text(cx, label);
+                cx.new(|_| crate::components::Tooltip::new(title)).into()
+            })
+        })
         .flex()
         .items_center()
         .justify_center()
@@ -295,7 +311,7 @@ fn dot(
                 .flex()
                 .items_center()
                 .justify_center()
-                .child(Icon::new(node.icon).with_size(px(14.))),
+                .child(Icon::new(node.marker.icon).with_size(px(14.))),
         )
 }
 
@@ -363,7 +379,7 @@ mod tests {
         let mut state = ConnectionState::default();
         pipeline.sample(stage(&state), now, false);
         state.phase = Phase::Authentication;
-        state.remember_intervention(Intervention::Authentication);
+        state.observe_intervention(Intervention::PublicKey, false);
         let start = pipeline.sample(stage(&state), now, false);
         assert_eq!(start.nodes[1].position, 0.);
         assert!(start.nodes[1].spinning);
@@ -373,12 +389,14 @@ mod tests {
         let end = pipeline.sample(stage(&state), now + LAYOUT, false);
         assert_eq!(end.progress, 0.5);
         assert_eq!(end.traveler.unwrap().position, 0.5);
-        state.remember_intervention(Intervention::HostKey);
-        state.remember_intervention(Intervention::Authentication);
+        state.observe_intervention(Intervention::HostKey, false);
         state.phase = Phase::HostKey;
         let next = stage(&state);
         assert_eq!(
-            next.icons,
+            next.markers
+                .iter()
+                .map(|marker| marker.icon)
+                .collect::<Vec<_>>(),
             vec![
                 IconName::Power,
                 IconName::KeyRound,
@@ -387,6 +405,23 @@ mod tests {
             ]
         );
         assert_eq!(next.traveling, Some(2));
+    }
+    #[test]
+    fn reused_node_stays_reached_after_resubmitting_or_switching_segments() {
+        let now = Instant::now();
+        let mut state = ConnectionState::default();
+        let mut pipeline = Pipeline::default();
+        state.phase = Phase::Authentication;
+        state.observe_intervention(Intervention::Password, true);
+        pipeline.sample(stage(&state), now, true);
+        state.phase = Phase::Connecting;
+        pipeline.sample(stage(&state), now + TRAVEL, false);
+        state.phase = Phase::Authentication;
+        state.observe_intervention(Intervention::PublicKey, true);
+        let current = pipeline.sample(stage(&state), now + TRAVEL, false);
+        assert_eq!(current.progress, 0.5);
+        assert!(!current.moving);
+        assert_eq!(current.traveler.unwrap().marker.icon, IconName::KeyRound);
     }
     #[test]
     fn completion_travels_once_and_failure_or_reduced_motion_settles_immediately() {

@@ -19,7 +19,11 @@ use gpui_kit::{
     prelude::*,
     *,
 };
-use std::{collections::BTreeSet, path::PathBuf};
+use std::{
+    collections::{BTreeSet, HashMap},
+    hash::{DefaultHasher, Hash, Hasher},
+    path::PathBuf,
+};
 mod creation;
 mod fido2;
 mod files;
@@ -32,19 +36,27 @@ pub use files::Message;
 pub use related::RelatedEvent;
 use selector::{KeyKind, KeySelector};
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Kind {
     Key,
     Generate,
     Certificate,
     Identity,
 }
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct Item {
     key: bool,
     id: i64,
 }
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum DraftKey {
+    New(Kind),
+    Existing(Item),
+}
 struct Editor {
+    baseline: u64,
+    _draft_changes: Vec<Subscription>,
+    related_drafts: HashMap<Kind, related::Nested>,
     scroll: ScrollHandle,
     kind: Kind,
     fido: Option<fido2::Draft>,
@@ -76,6 +88,34 @@ struct Editor {
     related: Option<related::Nested>,
 }
 impl Editor {
+    fn draft_key(&self) -> DraftKey {
+        self.item()
+            .map_or(DraftKey::New(self.kind), DraftKey::Existing)
+    }
+    fn fingerprint(&self, cx: &App) -> u64 {
+        let mut hash = DefaultHasher::new();
+        for field in [&self.name, &self.username, &self.password, &self.passphrase] {
+            field.read(cx).value().hash(&mut hash);
+        }
+        for field in [&self.private, &self.public, &self.certificate] {
+            field.read(cx).value().hash(&mut hash);
+        }
+        self.key_id.hash(&mut hash);
+        self.method.hash(&mut hash);
+        self.generation.kind.label().hash(&mut hash);
+        self.generation.ecdsa_bits.hash(&mut hash);
+        self.generation.rsa_bits.hash(&mut hash);
+        hash.finish()
+    }
+    fn has_draft(&self, cx: &App) -> bool {
+        self.fido.is_none()
+            && (!self.related_drafts.is_empty()
+                || self
+                    .related
+                    .as_ref()
+                    .is_some_and(|related| related.view.read(cx).has_draft(cx))
+                || self.fingerprint(cx) != self.baseline)
+    }
     fn is_generating(&self) -> bool {
         self.kind == Kind::Generate
             || (self.id.is_none() && self.kind != Kind::Identity && self.method == Method::Generate)
@@ -97,7 +137,7 @@ impl Editor {
 pub struct Changed;
 type ExportDrawer = (Item, Entity<KeyExport>, Subscription);
 enum RetiredDrawer {
-    Editor(Box<Editor>),
+    Editor(crate::editor_drafts::Retired<DraftKey, Editor>),
     Export(ExportDrawer),
 }
 pub struct Keychain {
@@ -109,6 +149,7 @@ pub struct Keychain {
     dark: bool,
     focus: FocusHandle,
     editor: Option<Editor>,
+    drafts: HashMap<DraftKey, Editor>,
     export: Option<ExportDrawer>,
     drawer_motion: crate::components::panel::Presence<RetiredDrawer>,
     parent_width: Option<f32>,
@@ -167,9 +208,36 @@ impl Keychain {
     }
     fn retire_editor(&mut self) {
         if let Some(editor) = self.editor.take() {
-            self.drawer_motion
-                .retire(RetiredDrawer::Editor(Box::new(editor)));
+            self.drawer_motion.retire(RetiredDrawer::Editor(
+                crate::editor_drafts::Retired::Closed(Box::new(editor)),
+            ));
         }
+    }
+    fn dismiss_editor(&mut self, cx: &App) {
+        if let Some(mut editor) = self.editor.take() {
+            if let Some(related) = editor.related.take()
+                && related.view.read(cx).has_draft(cx)
+            {
+                editor.related_drafts.insert(related.kind, related);
+            }
+            let key = editor.has_draft(cx).then(|| editor.draft_key());
+            let form = crate::editor_drafts::Retired::put_form(key, editor, &mut self.drafts);
+            self.drawer_motion.retire(RetiredDrawer::Editor(form));
+        }
+    }
+    pub(crate) fn has_draft(&self, cx: &App) -> bool {
+        !self.drafts.is_empty()
+            || self
+                .editor
+                .as_ref()
+                .is_some_and(|editor| editor.has_draft(cx))
+    }
+    pub(crate) fn resume_draft(&mut self, kind: Kind, window: &mut Window, cx: &mut Context<Self>) {
+        if self.editor.is_none() {
+            self.editor = self.drafts.remove(&DraftKey::New(kind));
+        }
+        self.focus_editor(window, cx);
+        cx.notify();
     }
     fn retire_export(&mut self) {
         if let Some(export) = self.export.take() {
@@ -186,10 +254,15 @@ impl Keychain {
             return view.clone().into_any_element();
         }
         match self.drawer_motion.take_retired() {
-            Some(RetiredDrawer::Editor(editor)) => {
-                self.editor = Some(*editor);
+            Some(RetiredDrawer::Editor(form)) => {
+                let Some((key, editor)) = form.take_form(&mut self.drafts) else {
+                    return div().into_any_element();
+                };
+                self.editor = Some(editor);
                 let content = self.drawer(window, cx);
-                self.retire_editor();
+                let editor = self.editor.take().unwrap();
+                let form = crate::editor_drafts::Retired::put_form(key, editor, &mut self.drafts);
+                self.drawer_motion.retire(RetiredDrawer::Editor(form));
                 content
             }
             Some(RetiredDrawer::Export(export)) => {
@@ -245,6 +318,7 @@ impl Keychain {
             dark,
             focus: cx.focus_handle(),
             editor: None,
+            drafts: HashMap::new(),
             export: None,
             drawer_motion: Default::default(),
             parent_width: None,
@@ -295,8 +369,16 @@ impl Keychain {
             .as_ref()
             .is_some_and(|(_, view, _)| view.read(cx).has_connection())
     }
-    fn busy(&self, cx: &App) -> bool {
+    pub(crate) fn busy(&self, cx: &App) -> bool {
         self.saving
+            || self.editor.as_ref().is_some_and(|editor| {
+                editor.importing
+                    || editor.picking
+                    || editor
+                        .related
+                        .as_ref()
+                        .is_some_and(|related| related.view.read(cx).busy(cx))
+            })
             || self
                 .editor
                 .as_ref()
@@ -364,7 +446,7 @@ impl Keychain {
             this.close_editor(window, cx)
         });
         self.revision += 1;
-        self.retire_editor();
+        self.dismiss_editor(cx);
         self.selection = BTreeSet::from([item]);
         self.export = Some((item, view, events));
         cx.notify();
@@ -449,7 +531,7 @@ impl Keychain {
             return;
         }
         self.revision += 1;
-        self.retire_editor();
+        self.dismiss_editor(cx);
         self.retire_export();
         self.selection.clear();
         self.delete_pending = false;
@@ -465,8 +547,15 @@ impl Keychain {
         }
         self.revision += 1;
         self.selection.clear();
-        self.install_editor(kind, None, None, window, cx);
+        self.retire_export();
+        self.dismiss_editor(cx);
+        if let Some(editor) = self.drafts.remove(&DraftKey::New(kind)) {
+            self.editor = Some(editor);
+        } else {
+            self.install_editor(kind, None, None, window, cx);
+        }
         self.focus_editor(window, cx);
+        cx.notify();
     }
     fn focus_editor(&self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(editor) = &self.editor {
@@ -659,7 +748,10 @@ impl Keychain {
             )
         });
         let automatic_name = id.is_none() && name.read(cx).value().trim().is_empty();
-        let editor = Editor {
+        let mut editor = Editor {
+            baseline: 0,
+            related_drafts: HashMap::new(),
+            _draft_changes: vec![],
             scroll: ScrollHandle::new(),
             kind,
             fido: None,
@@ -711,12 +803,22 @@ impl Keychain {
             related: None,
             _key_creation: key_creation,
         };
+        editor._draft_changes = [&editor.password, &editor.passphrase]
+            .into_iter()
+            .map(|field| cx.observe(field, |_, _, cx| cx.notify()))
+            .collect();
         if let Some(item) = editor.item() {
             self.selection = BTreeSet::from([item]);
         }
         self.editor = Some(editor);
         self.refresh_automatic_name(window, cx);
+        self.reset_draft_baseline(cx);
         cx.notify();
+    }
+    fn reset_draft_baseline(&mut self, cx: &App) {
+        if let Some(editor) = &mut self.editor {
+            editor.baseline = editor.fingerprint(cx);
+        }
     }
     fn edit(&mut self, item: Item, window: &mut Window, cx: &mut Context<Self>) {
         self.edit_with_focus(item, false, window, cx);
@@ -738,6 +840,24 @@ impl Keychain {
         self.revision += 1;
         let revision = self.revision;
         self.selection = BTreeSet::from([item]);
+        self.dismiss_editor(cx);
+        let key = DraftKey::Existing(item);
+        let exists = if item.key {
+            self.inventory.keys.iter().any(|key| key.id == item.id)
+        } else {
+            self.inventory
+                .identities
+                .iter()
+                .any(|identity| identity.id == item.id)
+        };
+        if let Some(editor) = self.drafts.remove(&key).filter(|_| exists) {
+            self.editor = Some(editor);
+            if !keep_focus {
+                self.focus_editor(window, cx);
+            }
+            cx.notify();
+            return;
+        }
         cx.spawn_in(window, async move |this, cx| {
             let result = if item.key {
                 vault.key(item.id).await.map(|key| (Some(key), None))
@@ -1115,6 +1235,12 @@ impl Keychain {
             .map(|item| item.id)
             .collect();
         self.saving = true;
+        let deleted: BTreeSet<i64> = self
+            .selection
+            .iter()
+            .filter(|item| item.key == first.key)
+            .map(|item| item.id)
+            .collect();
         cx.spawn(async move |this, cx| {
             let result = vault.delete(first.key, ids).await;
             let _ = this.update(cx, |this, cx| {
@@ -1124,6 +1250,7 @@ impl Keychain {
                     Ok(()) => {
                         this.revision += 1;
                         this.selection.clear();
+                        this.drafts.retain(|key, _| !matches!(key, DraftKey::Existing(item) if item.key == first.key && deleted.contains(&item.id)));
                         this.retire_editor();
                         this.refresh(cx);
                     }
@@ -1602,6 +1729,7 @@ impl Keychain {
             );
         }
         crate::components::DrawerFrame::new("credential-editor", title, self.dark)
+            .unsaved(editor.has_draft(cx), cx)
             .scroll_handle(&editor.scroll)
             .actions(self.editor_actions(editor, cx))
             .when(self.related, |frame| {

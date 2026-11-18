@@ -137,19 +137,13 @@ fi
 
 create_desktop_file() {
   local path="$1"
-  local desktop_uri_arguments=''
-  local desktop_uri_mime_type=''
-  if [ "$CLIENT" = flutter ]; then
-    desktop_uri_arguments=' %U'
-    desktop_uri_mime_type='MimeType=x-scheme-handler/ssh;x-scheme-handler/sftp;x-scheme-handler/telnet;'
-  fi
   cat > "$path" <<EOF
 [Desktop Entry]
 Type=Application
 Name=$APP_LABEL
 Comment=$APP_DESCRIPTION
-Exec=$BINARY_NAME${desktop_uri_arguments}
-${desktop_uri_mime_type}
+Exec=$BINARY_NAME %U
+MimeType=x-scheme-handler/ssh;x-scheme-handler/sftp;x-scheme-handler/telnet;
 Icon=$APP_ID
 Categories=Network;RemoteAccess;TerminalEmulator;
 Terminal=false

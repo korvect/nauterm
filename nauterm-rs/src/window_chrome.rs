@@ -99,7 +99,7 @@ pub fn refresh_window_registration(window: &gpui_kit::Window) {
 }
 
 #[cfg(target_os = "macos")]
-pub fn register_app_menus(cx: &gpui_kit::App) {
+pub fn register_app_menus() {
     let Some(main) = objc2::MainThreadMarker::new() else {
         return;
     };
@@ -107,7 +107,7 @@ pub fn register_app_menus(cx: &gpui_kit::App) {
     let Some(menu) = app.mainMenu() else {
         return;
     };
-    for (source, key) in [("Window", "rs.appMenu.window"), ("Help", "rs.appMenu.help")] {
+    for source in ["Window", "Help"] {
         // GPUI registers the Window role by this canonical internal name.
         // Translate its native display title only after that registration.
         if let Some(item) = menu.itemWithTitle(&objc2_foundation::NSString::from_str(source))
@@ -116,7 +116,7 @@ pub fn register_app_menus(cx: &gpui_kit::App) {
             if source == "Help" {
                 app.setHelpMenu(Some(&submenu));
             }
-            let title = objc2_foundation::NSString::from_str(&crate::localization::text(cx, key));
+            let title = crate::app_menu::menu_title(source);
             item.setTitle(&title);
             submenu.setTitle(&title);
         }
@@ -126,11 +126,7 @@ pub fn register_app_menus(cx: &gpui_kit::App) {
     if let Some(item) = menu
         .itemWithTitle(&objc2_foundation::NSString::from_str("Nauterm RS"))
         .and_then(|item| item.submenu())
-        .and_then(|menu| {
-            menu.itemWithTitle(&objc2_foundation::NSString::from_str(
-                &crate::localization::text(cx, "rs.appMenu.services"),
-            ))
-        })
+        .and_then(|menu| menu.itemWithTitle(&crate::app_menu::menu_title("Services")))
     {
         let services = objc2_app_kit::NSMenu::new(main);
         services.setTitle(&item.title());

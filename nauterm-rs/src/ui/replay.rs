@@ -62,7 +62,9 @@ impl Nauterm {
                 false,
             ),
         });
-        self.retire_editor();
+        if !self.dismiss_editor(cx) {
+            return;
+        }
         self.retire_history();
         self.selection.clear();
         self.notice = None;

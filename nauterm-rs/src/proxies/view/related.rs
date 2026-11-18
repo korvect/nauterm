@@ -58,6 +58,7 @@ impl Proxies {
             .unwrap()
             .name
             .update(cx, |field, cx| field.set_value(name, window, cx));
+        view.reset_draft_baseline(cx);
         view
     }
 }

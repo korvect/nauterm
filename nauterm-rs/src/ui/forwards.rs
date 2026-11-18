@@ -28,6 +28,10 @@ fn host_options(hosts: &[Host]) -> Vec<SelectOption<Id>> {
         .collect()
 }
 impl ForwardSelects {
+    pub(super) fn draft_fields(&self) -> (&'static str, Option<Id>) {
+        (self.kind.label(), self.host)
+    }
+
     pub fn saving(&self) -> bool {
         self.saving
     }
@@ -44,11 +48,9 @@ impl Nauterm {
         cx: &mut Context<Self>,
     ) {
         self.open_editor(ItemKind::Forward, None, window, cx);
-        if let Some(forward) = self
-            .editor
-            .as_mut()
-            .filter(|editor| editor.kind == ItemKind::Forward && editor.id.is_none())
-            .and_then(|editor| editor.forward.as_mut())
+        if let Some(editor) = self.editor.as_mut().filter(|editor| {
+            editor.kind == ItemKind::Forward && editor.id.is_none() && !editor.has_draft(cx)
+        }) && let Some(forward) = &mut editor.forward
         {
             forward.kind = kind;
             forward.types.reconcile(
@@ -60,6 +62,7 @@ impl Nauterm {
                 window,
                 cx,
             );
+            editor.baseline = editor.fingerprint(cx);
         }
         cx.notify();
     }

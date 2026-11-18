@@ -244,16 +244,25 @@ impl Nauterm {
             return;
         }
         for link in std::mem::take(&mut self.pending_links) {
-            self.connect_quick_target(
-                QuickRequest {
-                    target: Box::new(link),
-                    destination: Some(self.data.selected_workspace),
-                    overview: false,
-                },
-                window,
-                cx,
-            );
+            self.connect_quick_target_here(link, window, cx);
         }
+    }
+
+    pub(super) fn connect_quick_target_here(
+        &mut self,
+        target: Target,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.connect_quick_target(
+            QuickRequest {
+                target: Box::new(target),
+                destination: Some(self.data.selected_workspace),
+                overview: false,
+            },
+            window,
+            cx,
+        );
     }
 
     fn connect_quick_target(

@@ -4,7 +4,7 @@ use crate::keychain::selector::{KeyKind, KeySelector};
 use crate::keychain::{Keychain, Kind, RelatedEvent};
 use crate::vault::Inventory;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub(super) enum Target {
     Ssh,
     Telnet,
@@ -318,6 +318,13 @@ impl Authentication {
         );
         crate::host_password::validate(&self.password.read(cx).value())
     }
+    pub(super) fn hash_password(&self, cx: &App, hash: &mut impl std::hash::Hasher) {
+        use std::hash::Hash;
+        self.changed.hash(hash);
+        if self.changed {
+            self.password.read(cx).value().hash(hash);
+        }
+    }
     pub fn password_change(&self, cx: &App) -> Option<zeroize::Zeroizing<String>> {
         self.changed
             .then(|| zeroize::Zeroizing::new(self.password.read(cx).value().to_string()))
@@ -348,6 +355,7 @@ impl Authentication {
 }
 
 pub(super) struct Related {
+    pub key: (Target, Kind),
     pub view: Entity<Keychain>,
     _events: Subscription,
 }
@@ -623,6 +631,20 @@ impl Nauterm {
         } else {
             editor.auth_username(target).read(cx).value().to_string()
         };
+        if let Some(related) = self
+            .editor
+            .as_mut()
+            .unwrap()
+            .credential_drafts
+            .remove(&(target, kind))
+        {
+            related
+                .view
+                .update(cx, |view, cx| view.resume_draft(kind, window, cx));
+            self.editor.as_mut().unwrap().related_credential = Some(related);
+            cx.notify();
+            return;
+        }
         let keychain = self.ensure_keychain(cx);
         let Some(source) = keychain.update(cx, |view, cx| view.related_source(cx)) else {
             self.editor.as_mut().unwrap().error =
@@ -669,7 +691,10 @@ impl Nauterm {
                             );
                         }
                         let editor = this.editor.as_mut().unwrap();
-                        editor.related_credential = None;
+                        let related = editor.related_credential.take().unwrap();
+                        if matches!(event, RelatedEvent::Cancelled) && view.read(cx).has_draft(cx) {
+                            editor.credential_drafts.insert(related.key, related);
+                        }
                         if let Some(auth) = editor.auth(target) {
                             let focus = if return_to_identity {
                                 auth.username.state.read(cx).focus_handle(cx)
@@ -684,6 +709,7 @@ impl Nauterm {
             },
         );
         self.editor.as_mut().unwrap().related_credential = Some(Related {
+            key: (target, kind),
             view,
             _events: events,
         });

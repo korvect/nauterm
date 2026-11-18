@@ -14,7 +14,11 @@ impl Keychain {
         let Some(vault) = self.vault.clone() else {
             return;
         };
-        self.create(Kind::Generate, window, cx);
+        self.revision += 1;
+        self.selection.clear();
+        self.retire_export();
+        self.dismiss_editor(cx);
+        self.install_editor(Kind::Generate, None, None, window, cx);
         let view = cx.new(|cx| Wizard::new(vault, self.dark, window, cx));
         let events = cx.subscribe_in(&view, window, |this, view, event: &Event, window, cx| {
             if !this

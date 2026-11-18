@@ -10,6 +10,7 @@ pub enum RelatedEvent {
 impl EventEmitter<RelatedEvent> for Keychain {}
 
 pub(super) struct Nested {
+    pub kind: Kind,
     pub view: Entity<Keychain>,
     _events: Subscription,
 }
@@ -73,6 +74,7 @@ impl Keychain {
                 .update(cx, |field, cx| field.set_value(username, window, cx));
         }
         this.refresh_automatic_name(window, cx);
+        this.reset_draft_baseline(cx);
         this
     }
 
@@ -83,8 +85,8 @@ impl Keychain {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.retire_editor();
         if self.related {
-            self.retire_editor();
             self.revision += 1;
             cx.emit(RelatedEvent::Saved(if identity {
                 CredentialRef::Identity(id)
@@ -111,6 +113,14 @@ impl Keychain {
         {
             return;
         }
+        if let Some(related) = self.editor.as_mut().unwrap().related_drafts.remove(&kind) {
+            related
+                .view
+                .update(cx, |view, cx| view.resume_draft(kind, window, cx));
+            self.editor.as_mut().unwrap().related = Some(related);
+            cx.notify();
+            return;
+        }
         let Some(source) = self.related_source(cx) else {
             return;
         };
@@ -118,7 +128,7 @@ impl Keychain {
         let events = cx.subscribe_in(
             &view,
             window,
-            |this, view, event: &RelatedEvent, window, cx| {
+            move |this, view, event: &RelatedEvent, window, cx| {
                 let Some(editor) = this.editor.as_mut().filter(|editor| {
                     editor
                         .related
@@ -130,7 +140,10 @@ impl Keychain {
                 if let RelatedEvent::Saved(CredentialRef::Key(id)) = event {
                     editor.key_id = Some(*id);
                 }
-                editor.related = None;
+                let related = editor.related.take().unwrap();
+                if matches!(event, RelatedEvent::Cancelled) && view.read(cx).has_draft(cx) {
+                    editor.related_drafts.insert(kind, related);
+                }
                 if let Some(select) = &editor.key_select {
                     select
                         .select
@@ -146,6 +159,7 @@ impl Keychain {
             },
         );
         self.editor.as_mut().unwrap().related = Some(Nested {
+            kind,
             view,
             _events: events,
         });

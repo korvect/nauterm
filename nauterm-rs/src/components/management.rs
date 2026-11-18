@@ -326,10 +326,27 @@ pub fn toolbar_search(
 pub(crate) fn drawer_header(
     title: impl Into<SharedString>,
     dark: bool,
+    status: Option<SharedString>,
     leading: Vec<AnyElement>,
     actions: Vec<AnyElement>,
+    window: &Window,
 ) -> Div {
     let p = Palette::new(dark);
+    let title = title.into();
+    let title_size = px(14.);
+    let status_size = px(10.);
+    let line_height = px(20.);
+    let status_offset = status.as_ref().map_or(px(0.), |status| {
+        let baseline = |text: SharedString, size, weight| {
+            let mut run = window.text_style().to_run(text.len());
+            run.font.weight = weight;
+            let line = window.text_system().shape_line(text, size, &[run], None);
+            (line_height + line.ascent - line.descent) / 2.
+        };
+        // Align the baselines of the shaped text within identical line boxes.
+        baseline(title.clone(), title_size, FontWeights::MEDIUM)
+            - baseline(status.clone(), status_size, FontWeights::REGULAR)
+    });
     div()
         .h(px(48.))
         .flex_shrink_0()
@@ -345,10 +362,30 @@ pub(crate) fn drawer_header(
             div()
                 .flex_1()
                 .min_w_0()
-                .text_size(px(14.))
-                .font_weight(FontWeights::MEDIUM)
-                .truncate()
-                .child(title.into()),
+                .flex()
+                .items_center()
+                .gap(px(8.))
+                .line_height(line_height)
+                .child(
+                    div()
+                        .min_w_0()
+                        .text_size(title_size)
+                        .font_weight(FontWeights::MEDIUM)
+                        .truncate()
+                        .child(title),
+                )
+                .when_some(status, |view, status| {
+                    view.child(
+                        div()
+                            .flex_shrink_0()
+                            .relative()
+                            .top(status_offset)
+                            .text_size(status_size)
+                            .font_weight(FontWeights::REGULAR)
+                            .text_color(p.muted)
+                            .child(status),
+                    )
+                }),
         )
         .children(actions)
 }
@@ -358,6 +395,7 @@ pub struct DrawerFrame {
     id: ElementId,
     title: SharedString,
     dark: bool,
+    status: Option<SharedString>,
     leading: Vec<AnyElement>,
     actions: Vec<AnyElement>,
     sections: Vec<AnyElement>,
@@ -370,6 +408,7 @@ impl DrawerFrame {
             id: id.into(),
             title: title.into(),
             dark,
+            status: None,
             leading: vec![],
             actions: vec![],
             sections: vec![],
@@ -379,6 +418,10 @@ impl DrawerFrame {
     }
     pub fn action(mut self, action: impl IntoElement) -> Self {
         self.actions.push(action.into_any_element());
+        self
+    }
+    pub fn unsaved(mut self, changed: bool, cx: &App) -> Self {
+        self.status = changed.then(|| crate::localization::text(cx, "workspace.label.unsaved"));
         self
     }
     pub fn scroll_handle(mut self, scroll: &ScrollHandle) -> Self {
@@ -407,7 +450,7 @@ impl DrawerFrame {
     }
 }
 impl RenderOnce for DrawerFrame {
-    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, _: &mut App) -> impl IntoElement {
         let p = Palette::new(self.dark);
         div()
             .w(px(crate::layout::DRAWER_WIDTH))
@@ -422,8 +465,10 @@ impl RenderOnce for DrawerFrame {
             .child(drawer_header(
                 self.title,
                 self.dark,
+                self.status,
                 self.leading,
                 self.actions,
+                window,
             ))
             .child(
                 div()

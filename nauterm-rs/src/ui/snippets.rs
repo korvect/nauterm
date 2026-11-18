@@ -40,6 +40,14 @@ pub(super) struct SnippetDraft {
     _script: Subscription,
 }
 impl SnippetDraft {
+    pub(super) fn hash_fields(&self, cx: &App, hash: &mut impl std::hash::Hasher) {
+        use std::hash::Hash;
+        self.script.read(cx).value().hash(hash);
+        self.groups.hash(hash);
+        self.hosts.hash(hash);
+        self.package_id.hash(hash);
+    }
+
     pub(super) fn select_package(&mut self, id: Id) {
         self.package_id = Some(id);
     }
@@ -803,10 +811,12 @@ impl Nauterm {
         }) {
             return;
         }
+        if !self.dismiss_editor(cx) {
+            return;
+        }
         self.snippet_state.package = package;
         self.selection.clear();
         self.selection_kind = None;
-        self.retire_editor();
         self.focus.focus(window, cx);
         cx.notify();
     }
@@ -893,6 +903,7 @@ impl Nauterm {
                 Ok(None)
             },
             |this, _, _, _| {
+                this.prune_editor_drafts();
                 this.selection.clear();
                 this.retire_editor();
                 this.delete_pending = false;
@@ -944,7 +955,7 @@ impl Nauterm {
         if let Some(terminal) =
             self.open_local_terminal_in(None, self.data.selected_workspace, false, window, cx)
         {
-            self.retire_editor();
+            self.dismiss_editor(cx);
             if let Err(error) = terminal.update(cx, |terminal, cx| {
                 terminal.apply_snippet(&snippet.command, true, window, cx)
             }) {

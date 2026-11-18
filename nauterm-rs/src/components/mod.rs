@@ -38,6 +38,7 @@ mod tab;
 pub use scrollbar::{ScrollbarsExt, uniform_scrollbar};
 pub use tab::Tab;
 mod tooltip;
+pub(crate) use tooltip::Tooltip;
 mod tracked_text;
 pub(crate) use tracked_text::TrackedText;
 

@@ -28,7 +28,9 @@ impl EventEmitter<Action> for History {}
 impl Nauterm {
     pub(super) fn open_shell_history(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.load_snippets(cx);
-        self.retire_editor();
+        if !self.dismiss_editor(cx) {
+            return;
+        }
         self.selection.clear();
         self.selection_kind = None;
         if let Some(view) = &self.history {

@@ -37,6 +37,7 @@ mod sftp;
 mod shortcuts;
 mod sync;
 mod themes;
+mod url_handlers;
 use search::Section;
 
 gpui_kit::actions!(settings, [Dismiss]);
@@ -188,6 +189,8 @@ pub struct Settings {
     _host_icon_events: Subscription,
     restore_behavior: SelectModel<RestoreBehavior>,
     _restore_behavior_events: Subscription,
+    url_handlers: url_handlers::State,
+    _url_handler_activation: Subscription,
     page: Page,
     page_generation: u64,
     search: search::State,
@@ -528,9 +531,19 @@ impl Settings {
         // Start discovery while the first settings page is usable, before the
         // user reaches SFTP. The saved selection is already in its control.
         cx.defer_in(window, |this, window, cx| this.detect_editors(window, cx));
+        cx.defer_in(window, |this, window, cx| {
+            this.refresh_url_handlers(window, cx)
+        });
+        let url_handler_activation = cx.observe_window_activation(window, |this, window, cx| {
+            if window.is_window_active() {
+                this.refresh_url_handlers(window, cx);
+            }
+        });
         Self {
             values,
             language,
+            url_handlers: url_handlers::State::default(),
+            _url_handler_activation: url_handler_activation,
             host_icons,
             _host_icon_events: host_icon_events,
             restore_behavior,
@@ -1043,6 +1056,7 @@ impl Settings {
                         ),
                 ),
             )
+            .child(self.url_handler_settings(cx))
             .into_any_element()
     }
     fn sftp(&self, cx: &mut Context<Self>) -> AnyElement {

@@ -223,8 +223,10 @@ impl Nauterm {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if !self.dismiss_editor(cx) {
+            return;
+        }
         self.group = group.filter(|id| self.data.groups.iter().any(|group| group.id == *id));
-        self.retire_editor();
         self.selection.clear();
         self.selection_kind = None;
         self.focus.focus(window, cx);
@@ -310,6 +312,7 @@ impl Nauterm {
         candidate.delete(kind, &self.selection);
         self.store.save(&mut candidate)?;
         self.data = candidate;
+        self.prune_editor_drafts();
         self.cleanup_host_environments(environments, cx);
         self.cleanup_host_passwords(passwords, cx);
         if self

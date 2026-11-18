@@ -40,6 +40,22 @@ impl State {
         self.busy = false;
     }
 }
+fn challenge_step(challenge: &nauterm_core::ssh::KeyboardInteractiveChallenge) -> Intervention {
+    if challenge
+        .prompts
+        .iter()
+        .any(|prompt| prompt.asks_for_password())
+        && !challenge
+            .prompts
+            .iter()
+            .any(|prompt| prompt.asks_for_verification_code())
+    {
+        Intervention::Password
+    } else {
+        Intervention::VerificationCode
+    }
+}
+
 impl Connection {
     pub(crate) fn uses_ssh_authentication(&self) -> bool {
         self.target.ssh().is_some()
@@ -77,7 +93,12 @@ impl Connection {
         cx.notify();
     }
     pub(super) fn ensure_authentication(&mut self, cx: &mut Context<Self>) {
-        if self.state.phase != Phase::Authentication || self.requires_fido2_pin() {
+        if self.state.phase != Phase::Authentication
+            || !matches!(
+                self.auth_step(),
+                Intervention::Username | Intervention::Password | Intervention::PublicKey
+            )
+        {
             return;
         }
         let keys = self.mode == AuthMode::PublicKey;
@@ -118,15 +139,44 @@ impl Connection {
         }));
     }
     pub(super) fn needs_key_passphrase(&self) -> bool {
-        self.state
-            .logs
-            .iter()
-            .rev()
-            .take_while(|log| log.event.kind != "connect_start")
-            .any(|log| {
-                log.event.kind == "auth_passphrase_required"
-                    && log.event.method.as_deref() != Some("fido2")
-            })
+        self.state.requires_key_passphrase()
+            && self
+                .target
+                .ssh()
+                .is_some_and(|options| !options.private_key.is_empty())
+    }
+
+    pub(super) fn auth_step(&self) -> Intervention {
+        if let Some(challenge) = &self.state.challenge {
+            return challenge_step(challenge);
+        }
+        if self
+            .target
+            .ssh()
+            .is_some_and(|options| options.username.is_empty())
+        {
+            return Intervention::Username;
+        }
+        if self.requires_fido2_pin() {
+            return Intervention::SecurityKeyPin;
+        }
+        if self.needs_key_passphrase() {
+            return Intervention::Passphrase;
+        }
+        match self.mode {
+            AuthMode::Password => Intervention::Password,
+            AuthMode::PublicKey => Intervention::PublicKey,
+        }
+    }
+
+    pub(super) fn shows_auth_modes(&self) -> bool {
+        self.state.challenge.is_none()
+            && matches!(
+                self.auth_step(),
+                Intervention::Password | Intervention::PublicKey
+            )
+            && self.allowed_mode(AuthMode::Password)
+            && self.allowed_mode(AuthMode::PublicKey)
     }
     pub(super) fn allowed_mode(&self, mode: AuthMode) -> bool {
         self.state.credentials.as_ref().is_none_or(|(_, methods)| {
@@ -151,14 +201,18 @@ impl Connection {
         if let Some(challenge) = challenge {
             self.error = None;
             self.needs_auth_focus = true;
-            for prompt in &challenge.prompts {
+            for (index, prompt) in challenge.prompts.iter().enumerate() {
                 let input = cx.new(|cx| InputState::new(window, cx).masked(!prompt.echo));
                 self.challenge_subscriptions.push(cx.subscribe_in(
                     &input,
                     window,
-                    |this, _, event: &InputEvent, window, cx| {
+                    move |this, _, event: &InputEvent, window, cx| {
                         if matches!(event, InputEvent::PressEnter { .. }) {
-                            this.authenticate(window, cx);
+                            if let Some(next) = this.challenge_inputs.get(index + 1) {
+                                next.update(cx, |input, cx| input.focus(window, cx));
+                            } else {
+                                this.authenticate(window, cx);
+                            }
                         }
                     },
                 ));
@@ -176,18 +230,15 @@ impl Connection {
             return false;
         }
         if self.state.challenge.is_some() {
-            return self.challenge_id.is_some();
+            return self.state.challenge.as_ref().is_some_and(|challenge| {
+                Some(challenge.id) == self.challenge_id
+                    && challenge.prompts.len() == self.challenge_inputs.len()
+            });
         }
         if self.requires_fido2_pin() {
             return !self.fido2_pin.read(cx).value().is_empty();
         }
-        if self.state.credentials.is_some()
-            && self.needs_key_passphrase()
-            && self
-                .target
-                .ssh()
-                .is_some_and(|options| !options.private_key.is_empty())
-        {
+        if self.needs_key_passphrase() {
             return !self.passphrase.read(cx).value().is_empty();
         }
         let username = self.username.read(cx).value();
@@ -236,6 +287,9 @@ impl Connection {
                 .and_then(|session| session.respond_to_authentication(challenge.id, responses));
             match result {
                 Ok(()) => {
+                    for input in &self.challenge_inputs {
+                        input.update(cx, |input, cx| input.set_value("", window, cx));
+                    }
                     self.state.challenge = None;
                     self.state.phase = Phase::Connecting;
                     self.challenge_inputs.clear();
@@ -264,17 +318,16 @@ impl Connection {
         };
         if options.username.is_empty() {
             options.username = self.username.read(cx).value().trim().to_owned();
-            self.auth.save = Some(save && self.can_save_connection());
-            if let Some(target) = self.target.ssh_mut() {
-                *target = options;
+            let save = save && self.can_save_connection();
+            self.auth.save = Some(save);
+            if save {
+                self.resolve_authentication(options, Credential::Username, true, window, cx);
+            } else {
+                self.finish_authentication(options, window, cx);
             }
-            self.start(window, cx);
             return;
         }
-        if self.state.credentials.is_some()
-            && self.needs_key_passphrase()
-            && !options.private_key.is_empty()
-        {
+        if self.needs_key_passphrase() {
             options.passphrase = Zeroizing::new(self.passphrase.read(cx).value().to_string());
             self.finish_authentication(options, window, cx);
             return;
@@ -302,13 +355,21 @@ impl Connection {
                 };
                 Credential::Key {
                     key,
-                    passphrase: self
-                        .needs_key_passphrase()
-                        .then(|| Zeroizing::new(self.passphrase.read(cx).value().to_string()))
-                        .filter(|passphrase| !passphrase.is_empty()),
+                    passphrase: None,
                 }
             }
         };
+        self.resolve_authentication(options, credential, save, window, cx);
+    }
+
+    fn resolve_authentication(
+        &mut self,
+        mut options: SshOptions,
+        credential: Credential,
+        save: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let save_target = if save {
             let Some(target) = self
                 .auth
@@ -593,13 +654,19 @@ impl Connection {
     }
     pub(super) fn authentication_footer(&self, cx: &mut Context<Self>) -> AnyElement {
         let can_continue = self.can_authenticate(cx);
-        if self.state.challenge.is_some()
-            || self.requires_fido2_pin()
-            || self.auth.binding.is_none()
-            || self.auth.save.is_some()
-        {
+        let unlock = self.state.challenge.is_some()
+            || matches!(
+                self.auth_step(),
+                Intervention::SecurityKeyPin | Intervention::Passphrase
+            );
+        if unlock || self.auth.binding.is_none() || self.auth.save.is_some() {
+            let label = if !unlock && self.auth.save == Some(true) && self.can_save_connection() {
+                "Continue & Save"
+            } else {
+                "Continue"
+            };
             return self
-                .action("authenticate", "Continue", true)
+                .action("authenticate", label, true)
                 .disabled(!can_continue)
                 .loading(self.auth.busy)
                 .on_click(cx.listener(|this, _, window, cx| this.authenticate(window, cx)))
@@ -607,14 +674,10 @@ impl Connection {
         }
         let owner = cx.weak_entity();
         let can_save = self
-            .target
-            .ssh()
-            .is_some_and(|options| options.username.is_empty())
-            || self
-                .auth
-                .catalog
-                .as_ref()
-                .is_some_and(|catalog| catalog.save_target.is_some());
+            .auth
+            .catalog
+            .as_ref()
+            .is_some_and(|catalog| catalog.save_target.is_some());
         ButtonGroup::new()
             .controls()
             .button(

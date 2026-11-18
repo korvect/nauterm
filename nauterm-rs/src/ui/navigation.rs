@@ -166,6 +166,9 @@ impl Nauterm {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.resource_editor_busy(cx) {
+            return;
+        }
         let sections = self.card_sections(window, cx);
         let Some(section) = sections
             .iter()

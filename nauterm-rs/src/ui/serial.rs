@@ -15,7 +15,9 @@ pub(super) struct SerialDialog {
 impl Nauterm {
     pub(super) fn open_serial_dialog(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let workspace = self.data.selected_workspace;
-        let view = cx.new(|cx| SerialConnection::new(self.core.clone(), window, cx));
+        let view = cx.new(|cx| {
+            SerialConnection::new(self.core.clone(), window, cx).allow_save(self.resources_ready())
+        });
         let events = cx.subscribe_in(
             &view,
             window,
@@ -27,11 +29,19 @@ impl Nauterm {
                 {
                     return;
                 }
-                let Event::Connect(config) = event;
+                let Event::Connect {
+                    config,
+                    save_as_host,
+                } = event;
                 let core = view.read(cx).core();
-                if let Err(error) =
-                    this.open_serial(config, core, (workspace, None, false), window, cx)
-                {
+                if let Err(error) = this.open_serial(
+                    config,
+                    core,
+                    (workspace, None, false),
+                    *save_as_host,
+                    window,
+                    cx,
+                ) {
                     view.update(cx, |view, cx| view.failed(error.to_string(), cx));
                 }
             },
@@ -43,6 +53,26 @@ impl Nauterm {
             _events: events,
         });
         cx.notify();
+    }
+    fn save_serial_host(&mut self, config: &Config) -> anyhow::Result<(Id, String)> {
+        anyhow::ensure!(self.resources_ready(), "Workspace storage is unavailable.");
+        let mut candidate = self.data.clone();
+        let id = candidate.allocate_id();
+        let name = config.path.clone();
+        candidate.hosts.push(Host {
+            id,
+            name: name.clone(),
+            kind: HostKind::Serial,
+            serial: Some(config.clone()),
+            connections: ConnectionProfiles {
+                ssh: false,
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+        self.store.save(&mut candidate)?;
+        self.data = candidate;
+        Ok((id, name))
     }
     pub(super) fn open_saved_serial(
         &mut self,
@@ -60,6 +90,7 @@ impl Nauterm {
             config,
             None,
             (workspace, Some((host.id, host.name)), overview),
+            false,
             window,
             cx,
         )
@@ -70,6 +101,7 @@ impl Nauterm {
         config: &Config,
         core: Option<Arc<Core>>,
         target: (Id, Option<(Id, String)>, bool),
+        save_as_host: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> anyhow::Result<()> {
@@ -83,6 +115,11 @@ impl Nauterm {
             .map(Ok)
             .unwrap_or_else(Core::discover)?;
         config.validate()?;
+        let host = if save_as_host {
+            Some(self.save_serial_host(config)?)
+        } else {
+            host
+        };
         let id = self.next_tab;
         self.next_tab += 1;
         self.terminals.push(TerminalTab {

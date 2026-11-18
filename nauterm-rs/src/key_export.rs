@@ -636,6 +636,7 @@ impl Render for KeyExport {
                 view.child(crate::components::management::drawer_header(
                     "Export Key",
                     self.data.dark,
+                    None,
                     vec![],
                     vec![
                         Button::new("close-key-export")
@@ -651,6 +652,7 @@ impl Render for KeyExport {
                             }))
                             .into_any_element(),
                     ],
+                    window,
                 ))
             })
             .child(body)

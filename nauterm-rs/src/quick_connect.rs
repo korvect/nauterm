@@ -77,9 +77,16 @@ fn hosts<'a>(data: &'a AppState, query: &str) -> Vec<&'a Host> {
     hosts.sort_by_key(|host| (host.name.to_lowercase(), host.id));
     hosts
 }
-fn direct(query: &str) -> Option<Host> {
+fn direct(query: &str, allow_bare_address: bool) -> Option<Host> {
     let args = shlex::split(query)?;
+    let bare_address = allow_bare_address && args.len() == 1;
     let mut args = args.iter().peekable();
+    if args
+        .peek()
+        .is_some_and(|arg| arg.eq_ignore_ascii_case("telnet"))
+    {
+        return None;
+    }
     let command = args
         .peek()
         .is_some_and(|arg| arg.eq_ignore_ascii_case("ssh"));
@@ -87,7 +94,12 @@ fn direct(query: &str) -> Option<Host> {
         args.next();
     }
     let (address, port, username) = command_address(args)?;
-    if !command && address.username.is_empty() && port.is_none() && username.is_none() {
+    if !command
+        && !bare_address
+        && address.username.is_empty()
+        && port.is_none()
+        && username.is_none()
+    {
         return None;
     }
     let telnet_port = port.unwrap_or(if address.port == 22 { 23 } else { address.port });
@@ -131,7 +143,21 @@ fn command_address<'a>(
         } else if flags && arg.starts_with('-') {
             continue;
         } else if endpoint.is_none() {
-            endpoint = SshAddress::parse(arg).ok();
+            let address = SshAddress::parse(arg).ok()?;
+            let authority = arg
+                .rsplit_once('@')
+                .map_or(arg.as_str(), |(_, authority)| authority);
+            // Ports in command/address input are supplied separately. IPv6
+            // literals still accept both bracketed and unbracketed spelling.
+            if authority != address.host
+                && authority
+                    .strip_prefix('[')
+                    .and_then(|text| text.strip_suffix(']'))
+                    != Some(&address.host)
+            {
+                return None;
+            }
+            endpoint = Some(address);
         } else if port.is_none() {
             port = arg.parse::<u16>().ok().filter(|value| *value != 0);
         }
@@ -153,6 +179,22 @@ fn telnet_command(query: &str) -> Option<crate::telnet::Options> {
         password: Default::default(),
         encoding: Default::default(),
     })
+}
+
+fn typed_target(query: &str, allow_bare_address: bool) -> Option<Target> {
+    connection_url(query)
+        .or_else(|| telnet_command(query).map(Target::Telnet))
+        .or_else(|| direct(query, allow_bare_address).map(Target::Host))
+}
+
+pub(crate) fn search_target(data: &AppState, query: &str) -> Option<Target> {
+    let query = query.trim();
+    data.hosts
+        .iter()
+        .find(|host| host.name.eq_ignore_ascii_case(query))
+        .cloned()
+        .map(Target::Host)
+        .or_else(|| typed_target(query, true))
 }
 
 pub(crate) fn connection_url(value: &str) -> Option<Target> {
@@ -304,16 +346,12 @@ impl QuickConnect {
             }
             if matches!(event, InputEvent::PressEnter { .. }) {
                 let query = this.search.read(cx).value();
-                if let Some(target) =
-                    connection_url(&query).or_else(|| telnet_command(&query).map(Target::Telnet))
-                {
-                    cx.emit(QuickConnectEvent::connect(target));
-                } else if let Some(host) = direct(&query).or_else(|| {
+                if let Some(target) = typed_target(&query, false).or_else(|| {
                     hosts(&this.data, &query)
                         .first()
-                        .map(|host| (*host).clone())
+                        .map(|host| Target::Host((*host).clone()))
                 }) {
-                    cx.emit(QuickConnectEvent::connect(Target::Host(host)));
+                    cx.emit(QuickConnectEvent::connect(target));
                 }
             }
             cx.notify();
@@ -566,13 +604,7 @@ impl Render for QuickConnect {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = Palette::new(self.data.dark);
         let query = self.search.read(cx).value();
-        let url = connection_url(&query);
-        let telnet = telnet_command(&query);
-        let direct = if url.is_some() || telnet.is_some() {
-            None
-        } else {
-            direct(&query)
-        };
+        let target = typed_target(&query, false);
         let width = (f32::from(window.viewport_size().width) - PANEL_INSET * 2.).clamp(0., 500.);
         let height = (f32::from(window.viewport_size().height) - PANEL_INSET * 2.).clamp(0., 560.);
         // Account for the frame's border as well as its content padding. The
@@ -787,7 +819,7 @@ impl Render for QuickConnect {
                             })),
                     )
                     .child(section_label("Hosts").mt(px(14.)).mb(px(6.)))
-                    .when_some(url, |view, target| match target {
+                    .when_some(target, |view, target| match target {
                         Target::Telnet(options) => view.child(self.telnet_row(options, cx)),
                         Target::Host(host) => view.child(self.direct_row(host, cx)),
                         Target::SftpUri(host, path) => view.child(
@@ -804,10 +836,6 @@ impl Render for QuickConnect {
                         ),
                         _ => view,
                     })
-                    .when_some(telnet, |view, options| {
-                        view.child(self.telnet_row(options, cx))
-                    })
-                    .when_some(direct, |view, host| view.child(self.direct_row(host, cx)))
                     .when(host_count == 0, |view| {
                         view.child(empty_state("No hosts found.", p, cx))
                     })
@@ -819,19 +847,19 @@ impl Render for QuickConnect {
 mod tests {
     #[test]
     fn quick_connect_parses_commands_and_protocol_choice() {
-        let ssh = super::direct("ssh -p 2022 -l 'admin' -- 'example.test'").unwrap();
+        let ssh = super::direct("ssh -p 2022 -l 'admin' -- 'example.test'", false).unwrap();
         assert_eq!(
             (ssh.address.as_str(), ssh.port, ssh.username.as_str()),
             ("example.test", 2022, "admin")
         );
         assert!(!ssh.connections.mosh);
         assert!(ssh.connections.telnet.is_none());
-        let host = super::direct("user@example.test -p 8023").unwrap();
+        let host = super::direct("user@example.test -p 8023", false).unwrap();
         assert!(host.connections.mosh);
         assert_eq!(host.port, 8023);
         assert_eq!(host.connections.telnet.unwrap().port, 8023);
         assert_eq!(
-            super::direct("user@example.test")
+            super::direct("user@example.test", false)
                 .unwrap()
                 .connections
                 .telnet
@@ -841,6 +869,48 @@ mod tests {
         );
         let telnet = super::telnet_command("telnet example.test 2323").unwrap();
         assert_eq!((telnet.host.as_str(), telnet.port), ("example.test", 2323));
+    }
+
+    #[test]
+    fn hosts_search_routes_commands_and_prefers_an_exact_saved_host() {
+        use super::{Target, search_target};
+
+        let mut data = AppState::default();
+        let Some(Target::Host(ssh)) = search_target(&data, "ssh -l test -p 2022 example.test")
+        else {
+            panic!("an SSH command should resolve");
+        };
+        assert_eq!(
+            (ssh.username.as_str(), ssh.port, ssh.connections.mosh),
+            ("test", 2022, false)
+        );
+        let Some(Target::Telnet(telnet)) = search_target(&data, "telnet -l test example.test 2323")
+        else {
+            panic!("a Telnet command should resolve");
+        };
+        assert_eq!((telnet.username.as_str(), telnet.port), ("test", 2323));
+        let Some(Target::Host(choice)) = search_target(&data, "test@example.test -p 22") else {
+            panic!("an unprefixed address should resolve");
+        };
+        assert!(choice.connections.ssh && choice.connections.mosh);
+        assert_eq!(choice.connections.telnet.unwrap().port, 22);
+        for filter in [
+            "telnet",
+            "ssh",
+            "ubuntu test",
+            "test@host:2200",
+            "host:production",
+        ] {
+            assert!(search_target(&data, filter).is_none(), "{filter}");
+        }
+
+        let mut saved = ssh;
+        saved.name = "Production".into();
+        saved.id = 12;
+        data.hosts.push(saved);
+        assert!(
+            matches!(search_target(&data, "production"), Some(Target::Host(host)) if host.id == 12)
+        );
     }
 
     #[test]
@@ -896,7 +966,7 @@ mod tests {
             parent: None,
             proxy_id: None,
         });
-        let mut host = direct("qa@[::1]:2022").unwrap();
+        let mut host = direct("qa@[::1] -p 2022", false).unwrap();
         host.group_id = Some(7);
         assert_eq!(address_label(&host), "[::1]:2022");
         assert_eq!(host_details(&data, &host), "qa  [::1]:2022  QA");
@@ -911,16 +981,16 @@ mod tests {
     }
     #[test]
     fn direct_requests_preserve_ipv6_port_and_never_inherit_saved_credentials() {
-        let host = direct("qa@[::1]:2022").unwrap();
+        let host = direct("qa@[::1] -p 2022", false).unwrap();
         assert_eq!(
             (host.address.as_str(), host.port, host.username.as_str()),
             ("::1", 2022, "qa")
         );
         assert_eq!(host.credential, None);
-        assert!(direct("qa:password@host").is_none());
-        assert!(direct("host:example").is_none());
+        assert!(direct("qa:password@host", false).is_none());
+        assert!(direct("host:example", false).is_none());
         let mut data = AppState::default();
-        let mut host = direct("qa@localhost").unwrap();
+        let mut host = direct("qa@localhost", false).unwrap();
         host.name = "B".into();
         host.credential = Some(CredentialRef::Identity(7));
         data.hosts.push(host);

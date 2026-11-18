@@ -2,7 +2,7 @@ use super::{Editor, Keychain, Kind};
 use gpui_kit::component::Disableable;
 use gpui_kit::{AnyElement, App, Context, IntoElement, Window};
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub(super) enum Method {
     Paste,
     Import,

@@ -203,7 +203,7 @@ impl Nauterm {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.resource_editor_busy() || !self.resources_ready() {
+        if self.resource_editor_busy(cx) || !self.resources_ready() {
             return;
         }
         let mut seed = match self.protocol_group_seed(target, cx) {

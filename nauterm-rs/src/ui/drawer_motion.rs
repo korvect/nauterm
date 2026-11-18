@@ -63,6 +63,7 @@ impl Nauterm {
                     .values_mut()
                     .filter_map(|saved| saved.editor.as_mut()),
             )
+            .chain(self.editor_drafts.values_mut())
             .find_map(|editor| editor.find_mut(matches))
     }
     /// Finish work in its owning drawer without changing the visible page/focus.
@@ -104,8 +105,9 @@ impl Nauterm {
 
     pub(super) fn retire_editor(&mut self) {
         if let Some(editor) = self.editor.take() {
-            self.drawer_motion
-                .retire(RetiredDrawer::Editor(Box::new(editor)));
+            self.drawer_motion.retire(RetiredDrawer::Editor(
+                crate::editor_drafts::Retired::Closed(Box::new(editor)),
+            ));
         }
     }
     pub(super) fn retire_history(&mut self) {
@@ -126,13 +128,22 @@ impl Nauterm {
             history.clone().into_any_element()
         } else {
             match self.drawer_motion.take_retired() {
-                Some(RetiredDrawer::Editor(editor)) => {
-                    // Paint with the former model, then remove it from the live
-                    // slot before events/async callbacks can be dispatched.
-                    self.editor = Some(*editor);
-                    let content = self.drawer(window, cx);
-                    self.retire_editor();
-                    content
+                Some(RetiredDrawer::Editor(form)) => {
+                    if let Some((key, editor)) = form.take_form(&mut self.editor_drafts) {
+                        // Only install the retired model for the duration of rendering.
+                        self.editor = Some(editor);
+                        let content = self.drawer(window, cx);
+                        let editor = self.editor.take().unwrap();
+                        let form = crate::editor_drafts::Retired::put_form(
+                            key,
+                            editor,
+                            &mut self.editor_drafts,
+                        );
+                        self.drawer_motion.retire(RetiredDrawer::Editor(form));
+                        content
+                    } else {
+                        div().into_any_element()
+                    }
                 }
                 Some(RetiredDrawer::History(history)) => {
                     let content = history.clone().into_any_element();

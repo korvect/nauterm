@@ -84,6 +84,7 @@ pub(crate) struct Catalog {
     pub save_error: Option<String>,
 }
 pub(crate) enum Credential {
+    Username,
     Password(Zeroizing<String>),
     Key {
         key: Key,
@@ -205,7 +206,9 @@ fn prepare_connection(
         !options.username.trim().is_empty() && !options.username.chars().any(char::is_control),
         "Enter a valid username."
     );
+    let username_only = matches!(credential, Credential::Username);
     let key_revision = match credential {
+        Credential::Username => None,
         Credential::Password(password) => {
             apply_password(&mut options, password)?;
             None
@@ -252,10 +255,26 @@ fn prepare_connection(
                 host.identity_uuid.as_deref() == Some(identity.uuid.as_str()),
                 "The saved Identity was replaced."
             );
-            patch_identity(&mut row.0, &options, key_revision.as_ref());
-            database.save_identity(&row.0)?;
+            if username_only {
+                if row
+                    .0
+                    .username
+                    .as_deref()
+                    .is_none_or(|value| value.trim().is_empty())
+                {
+                    row.0.username = Some(options.username.clone());
+                    database.save_identity(&row.0)?;
+                }
+            } else {
+                patch_identity(&mut row.0, &options, key_revision.as_ref());
+                database.save_identity(&row.0)?;
+            }
         } else {
-            patch_host(host, &options, key_revision.as_ref());
+            if username_only {
+                host.username = Some(options.username.clone());
+            } else {
+                patch_host(host, &options, key_revision.as_ref());
+            }
             database.save_host(host)?;
         }
     }
@@ -321,6 +340,35 @@ mod tests {
             "unused-known-hosts".into(),
         )
     }
+    #[test]
+    fn saving_username_keeps_other_connection_settings() -> Result<()> {
+        let mut database = NautermDatabase::open_in_memory()?;
+        let host: HostEntry = serde_json::from_value(json!({
+            "name":"Synthetic host", "type":"remote", "host":"example.invalid", "port":22,
+            "password":"existing-test-password", "config":{"ssh":{"compatibility_mode":true}},
+        }))?;
+        let id = database.save_host(&host)?;
+        let before = database.get_host(id)?.unwrap();
+        let binding = Binding {
+            reference: Reference {
+                kind: Kind::Host,
+                id,
+                uuid: before.uuid.clone().unwrap(),
+                protocol: Protocol::Ssh,
+            },
+            address: "example.invalid".into(),
+            port: 22,
+            credential: None,
+        };
+        let (target, _) = save_target(&database, binding)?;
+        prepare_connection(&mut database, options(), Credential::Username, Some(target))?;
+        let after = database.get_host(id)?.unwrap();
+        assert_eq!(after.username.as_deref(), Some("admin"));
+        assert_eq!(after.password, before.password);
+        assert_eq!(after.config, before.config);
+        Ok(())
+    }
+
     #[test]
     fn saving_a_certificate_preserves_the_exact_continue_authentication_request() -> Result<()> {
         let mut database = NautermDatabase::open_in_memory()?;

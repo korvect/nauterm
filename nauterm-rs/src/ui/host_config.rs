@@ -5,7 +5,7 @@ pub(super) struct Draft {
     pub automatic_name: Option<super::host_name::Draft>,
     pub kind: HostKind,
     pub serial: Entity<crate::serial::dialog::Connection>,
-    pub icon: SelectModel<String>,
+    icon: Entity<super::host_icons::Picker>,
     pub telnet: super::telnet_config::Draft,
     pub mosh: super::mosh_config::Draft,
     pub shell: Option<String>,
@@ -29,6 +29,16 @@ pub(super) struct Draft {
     shells: SelectModel<String>,
     _events: Vec<Subscription>,
 }
+fn host_icon_row(avatar: super::host_icons::Trigger, field: AnyElement) -> AnyElement {
+    div()
+        .flex()
+        .items_start()
+        .gap(px(12.))
+        .child(avatar)
+        .child(div().flex_1().min_w_0().child(field))
+        .into_any_element()
+}
+
 fn startup_options(snippets: &[Snippet], selected: Option<Id>) -> Vec<SelectOption<Id>> {
     let mut options = vec![];
     if let Some(id) = selected.filter(|id| !snippets.iter().any(|snippet| snippet.id == *id)) {
@@ -48,7 +58,10 @@ fn shell_options(
     shells: Vec<crate::shells::Shell>,
     selected: Option<&str>,
 ) -> Vec<SelectOption<String>> {
-    let mut options = vec![];
+    let mut options = vec![SelectOption::localized(
+        String::new(),
+        "workspace.label.systemDefaultShell",
+    )];
     if let Some(selected) = selected.filter(|path| !shells.iter().any(|shell| shell.path == *path))
     {
         options.push(SelectOption::new(selected.into(), selected.to_owned()));
@@ -144,7 +157,7 @@ impl Draft {
         );
         let shells = SelectModel::new(
             shell_options(vec![], shell.as_deref()),
-            shell.clone(),
+            Some(shell.clone().unwrap_or_default()),
             window,
             cx,
         );
@@ -163,14 +176,19 @@ impl Draft {
                 }
             },
         );
-        let shell_event = cx.subscribe(
+        let shell_event = cx.subscribe_in(
             &shells.state,
-            |this, state, event: &SelectEvent<String>, cx| {
+            window,
+            |this, state, event: &SelectEvent<String>, window, cx| {
                 let SelectEvent::Confirm(value) = event;
                 if let Some(draft) = this.editor.as_mut().and_then(|editor| editor.host.as_mut())
                     && draft.shells.state.entity_id() == state.entity_id()
                 {
-                    draft.shell = value.clone().flatten();
+                    let value = value.clone().flatten();
+                    if value.is_none() {
+                        draft.shells.set_selected(Some(String::new()), window, cx);
+                    }
+                    draft.shell = value.filter(|value| !value.is_empty());
                     cx.notify();
                 }
             },
@@ -192,7 +210,7 @@ impl Draft {
                 {
                     draft.shells.reconcile(
                         shell_options(available, draft.shell.as_deref()),
-                        draft.shell.clone(),
+                        Some(draft.shell.clone().unwrap_or_default()),
                         window,
                         cx,
                     );
@@ -201,19 +219,10 @@ impl Draft {
             });
         })
         .detach();
-        let icon = SelectModel::new(
-            std::iter::once(SelectOption::localized(String::new(), "Automatic"))
-                .chain(
-                    crate::avatar::HOST_ICON_NAMES
-                        .iter()
-                        .map(|(id, label)| SelectOption::new((*id).into(), *label)),
-                )
-                .collect(),
-            Some(host.and_then(|host| host.icon.clone()).unwrap_or_default()),
-            window,
-            cx,
-        );
-        let icon_event = cx.subscribe(&icon.state, |_, _, _: &SelectEvent<String>, cx| cx.notify());
+        let icon = cx.new(|cx| {
+            super::host_icons::Picker::new(host.and_then(|host| host.icon.clone()), window, cx)
+        });
+        let icon_event = cx.observe(&icon, |_, _, cx| cx.notify());
         Self {
             automatic_name: None,
             ssh_enabled: host.is_none_or(|host| host.connections.ssh),
@@ -267,10 +276,9 @@ impl Draft {
     }
     pub fn selected_icon<'a>(&self, cx: &'a App) -> Option<&'a str> {
         self.icon
-            .state
             .read(cx)
-            .selected_value()
-            .and_then(|value| value.as_deref())
+            .selected
+            .as_deref()
             .filter(|value| !value.is_empty())
     }
 
@@ -430,69 +438,58 @@ impl Nauterm {
             .as_ref()
             .expect("Host editor owns its configuration draft");
         let local = draft.kind == HostKind::Local;
-        let endpoint = if local {
-            draft.shells.filterable_field("Shell", draft.busy)
+        let serial = draft.kind == HostKind::Serial;
+        let platform = editor
+            .id
+            .and_then(|id| self.data.hosts.iter().find(|host| host.id == id))
+            .map(|host| host.platform.clone())
+            .unwrap_or_default();
+        let name = editor.fields[0].1.read(cx).value();
+        let fallback = match draft.kind {
+            HostKind::Remote => (IconName::Globe, 0xff5425),
+            HostKind::Local => (IconName::SquareTerminal, 0x075e92),
+            HostKind::Serial => (IconName::Usb, 0x369e75),
+        };
+        let avatar = super::host_icons::Trigger {
+            state: draft.icon.clone(),
+            avatar: crate::avatar::host(&name)
+                .editing()
+                .platform(platform)
+                .custom_icon(draft.selected_icon(cx))
+                .fallback(fallback.0, fallback.1),
+            dark: self.data.dark,
+            disabled: draft.busy,
+        };
+        let (endpoint_section, name_field) = if serial {
+            (
+                self.editor_section(
+                    &crate::localization::text(cx, "workspace.label.serialDevice"),
+                    vec![
+                        draft
+                            .serial
+                            .update(cx, |serial, cx| serial.device_field(cx)),
+                    ],
+                ),
+                host_icon_row(avatar, self.editor_field(editor, 0, "Name *")),
+            )
         } else {
-            self.editor_field(editor, 1, "Host")
+            let (title, field) = if local {
+                ("Shell", draft.shells.filterable_field("Shell", draft.busy))
+            } else {
+                ("Address", self.editor_field(editor, 1, "Host"))
+            };
+            (
+                self.editor_section(title, vec![host_icon_row(avatar, field)]),
+                self.editor_field(editor, 0, "Name *"),
+            )
         };
         let mut sections = vec![
-            self.editor_section(
-                if local { "Shell" } else { "Address" },
-                vec![
-                    div()
-                        .flex()
-                        .items_start()
-                        .gap(px(12.))
-                        .child(
-                            div()
-                                .size(px(40.))
-                                .flex_shrink_0()
-                                .rounded(px(10.))
-                                .bg(rgb(if local { 0x075e92 } else { 0xff5425 }))
-                                .text_color(rgb(0xffffff))
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .child(icon(if local {
-                                    IconName::Terminal
-                                } else {
-                                    IconName::Globe
-                                })),
-                        )
-                        .child(div().flex_1().min_w_0().child(endpoint))
-                        .into_any_element(),
-                ],
-            ),
+            endpoint_section,
             self.editor_section(
                 "General",
                 vec![
-                    self.editor_field(editor, 0, "Name *"),
+                    name_field,
                     draft.types.field("Type", draft.busy),
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap(px(8.))
-                        .child(
-                            crate::avatar::host(&editor.fields[0].1.read(cx).value())
-                                .editing()
-                                .platform(
-                                    editor
-                                        .id
-                                        .and_then(|id| {
-                                            self.data.hosts.iter().find(|host| host.id == id)
-                                        })
-                                        .map(|host| host.platform.clone())
-                                        .unwrap_or_default(),
-                                )
-                                .custom_icon(draft.selected_icon(cx)),
-                        )
-                        .child(
-                            div()
-                                .flex_1()
-                                .min_w_0()
-                                .child(draft.icon.filterable_field("Icon", draft.busy)),
-                        )
-                        .into_any_element(),
                     self.parent_group_field(editor),
                     editor
                         .tags
@@ -504,9 +501,7 @@ impl Nauterm {
                 ],
             ),
         ];
-        sections.swap(0, 1);
-        if draft.kind == HostKind::Serial {
-            sections.remove(1);
+        if serial {
             sections
                 .push(self.editor_section("Serial", vec![draft.serial.clone().into_any_element()]));
         } else if local {
@@ -535,25 +530,6 @@ impl Nauterm {
         let draft = editor.host.as_ref().unwrap();
         let selects = editor.selects.as_ref().unwrap();
         let mut fields = self.host_authentication_fields(editor, cx);
-        if editor.kind == ItemKind::Host {
-            fields.push(
-                crate::components::Switch::new(
-                    "ssh-compatibility-mode",
-                    "Compatibility Mode",
-                    draft.setup.compatibility_mode,
-                )
-                .disabled(draft.busy)
-                .on_change(cx.listener(|this, value, _, cx| {
-                    if let Some(draft) =
-                        this.editor.as_mut().and_then(|editor| editor.host.as_mut())
-                    {
-                        draft.setup.compatibility_mode = *value;
-                        cx.notify();
-                    }
-                }))
-                .into_any_element(),
-            );
-        }
         if draft.more {
             fields.push(draft.startup.field_with_actions(
                 "Startup snippet",
@@ -612,6 +588,9 @@ impl Nauterm {
             );
             fields.push(draft.encoding.field("Encoding", draft.busy));
             fields.extend(draft.mosh.fields(draft.busy));
+            if editor.kind == ItemKind::Host {
+                fields.push(self.ssh_compatibility_mode(draft, cx));
+            }
         }
         fields.push(
             div()
@@ -649,6 +628,55 @@ impl Nauterm {
             .gap(px(12.))
             .child(self.protocol_editor_header(editor, super::host_credentials::Target::Ssh, cx))
             .children(fields)
+            .into_any_element()
+    }
+
+    fn ssh_compatibility_mode(&self, draft: &Draft, cx: &mut Context<Self>) -> AnyElement {
+        let p = Palette::new(self.data.dark);
+        let label = "workspace.host.ssh.compatibilityMode.label";
+        let description = "workspace.host.ssh.compatibilityMode.description";
+        div()
+            .pt(px(12.))
+            .border_t_1()
+            .border_color(p.border)
+            .flex()
+            .items_center()
+            .justify_between()
+            .gap(px(8.))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(5.))
+                    .text_size(px(14.))
+                    .child(crate::localization::text(cx, label))
+                    .child(
+                        Button::new("ssh-compatibility-info")
+                            .ghost()
+                            .size(px(20.))
+                            .p_0()
+                            .icon(IconName::Info)
+                            .icon_size(px(14.))
+                            .text_color(p.muted)
+                            .tooltip(description),
+                    ),
+            )
+            .child(
+                crate::components::WorkspaceSwitch::new(
+                    "ssh-compatibility-mode",
+                    label,
+                    draft.setup.compatibility_mode,
+                )
+                .disabled(draft.busy)
+                .on_change(cx.listener(|this, value, _, cx| {
+                    if let Some(draft) =
+                        this.editor.as_mut().and_then(|editor| editor.host.as_mut())
+                    {
+                        draft.setup.compatibility_mode = *value;
+                        cx.notify();
+                    }
+                })),
+            )
             .into_any_element()
     }
 
