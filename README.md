@@ -218,7 +218,7 @@ not send these events.
 
 - Flutter `3.47.9`
 - Rust `1.97.0` with `rustfmt` and `clippy`
-- Zig `0.17.1` for the pinned `libghostty-vt 1.0.1` build
+- Zig `0.17.0` for the pinned `libghostty-vt 1.0.1` build
 - Git, CMake, and the native desktop toolchain for the target platform
 - Platform dependencies required by Flutter desktop
 

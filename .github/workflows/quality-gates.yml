@@ -22,7 +22,7 @@ permissions:
 env:
   FLUTTER_VERSION: 3.47.9
   RUST_TOOLCHAIN: 1.99.1
-  ZIG_VERSION: 0.17.1
+  ZIG_VERSION: 0.17.0
   CARGO_TERM_COLOR: always
 
 jobs:
