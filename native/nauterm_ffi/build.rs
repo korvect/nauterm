@@ -56,10 +56,13 @@ fn main() {
         "-Doptimize=ReleaseFast",
         &format!("-Dtarget={zig_target}"),
     ]);
-    // Cached sources live inside Nauterm's checkout. Without this override,
-    // upstream's Git detection can report Nauterm's revision as its own.
     if source_override.is_none() {
-        build.arg(format!("-Dlib-version-string={GHOSTTY_LIB_VERSION}"));
+        // Ghostty detects the app and library versions separately. The cached
+        // sources have no .git, so stop Git before it reaches Nauterm's tags.
+        build
+            .env("GIT_CEILING_DIRECTORIES", &cargo_out_dir)
+            .env_remove("GIT_DIR")
+            .arg(format!("-Dlib-version-string={GHOSTTY_LIB_VERSION}"));
     }
     let output = build
         .arg("--prefix")
