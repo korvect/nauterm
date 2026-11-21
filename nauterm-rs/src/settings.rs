@@ -1200,9 +1200,27 @@ impl Settings {
                                     },
                                 )),
                             ),
+                        )
+                        .child(
+                            self.row(
+                                "settings.terminal.composer.label",
+                                "rs.settings.terminal.composer.description",
+                                Switch::new(
+                                    "composer-enabled",
+                                    "Composer",
+                                    appearance.composer_enabled,
+                                )
+                                .on_change(cx.listener(
+                                    |this, value, window, cx| {
+                                        this.values.terminal.composer_enabled = *value;
+                                        this.changed(window, cx);
+                                    },
+                                )),
+                            ),
                         ),
                 ),
             )
+            .child(self.session_settings(cx))
             .child(
                 self.section(
                     Section::Input,
@@ -1223,6 +1241,23 @@ impl Settings {
                                 .on_change(cx.listener(
                                     |this, value, window, cx| {
                                         this.values.terminal.report_mouse_events = *value;
+                                        this.changed(window, cx);
+                                    },
+                                )),
+                            ),
+                        )
+                        .child(
+                            self.row(
+                                "settings.terminal.input.navigationKeysScroll.label",
+                                "settings.terminal.input.navigationKeysScroll.description",
+                                Switch::new(
+                                    "navigation-keys-scroll",
+                                    "Scroll with Navigation Keys",
+                                    appearance.navigation_keys_scroll,
+                                )
+                                .on_change(cx.listener(
+                                    |this, value, window, cx| {
+                                        this.values.terminal.navigation_keys_scroll = *value;
                                         this.changed(window, cx);
                                     },
                                 )),
@@ -1325,51 +1360,6 @@ impl Settings {
                 ),
             )
             .child(self.bell_settings(cx))
-            .child(self.session_settings(cx))
-            .child(
-                self.section(
-                    Section::Features,
-                    IconName::PanelsTopLeft,
-                    div()
-                        .flex()
-                        .flex_col()
-                        .gap(px(18.))
-                        .child(
-                            self.row(
-                                "settings.terminal.composer.label",
-                                "rs.settings.terminal.composer.description",
-                                Switch::new(
-                                    "composer-enabled",
-                                    "Composer",
-                                    appearance.composer_enabled,
-                                )
-                                .on_change(cx.listener(
-                                    |this, value, window, cx| {
-                                        this.values.terminal.composer_enabled = *value;
-                                        this.changed(window, cx);
-                                    },
-                                )),
-                            ),
-                        )
-                        .child(
-                            self.row(
-                                "settings.terminal.multipleTabs.label",
-                                "settings.terminal.multipleTabs.description",
-                                Switch::new(
-                                    "multiple-tabs",
-                                    "Multiple Tabs",
-                                    appearance.multiple_tabs,
-                                )
-                                .on_change(cx.listener(
-                                    |this, value, window, cx| {
-                                        this.values.terminal.multiple_tabs = *value;
-                                        this.changed(window, cx);
-                                    },
-                                )),
-                            ),
-                        ),
-                ),
-            )
             .child(self.recording_settings(cx))
             .into_any_element()
     }
