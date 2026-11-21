@@ -894,7 +894,7 @@
   "workspace.label.noHostsInGroup": "此分组中没有主机。",
   "workspace.label.noHostsYet": "暂无主机",
   "workspace.label.noKeychainItemsFound": "未找到密钥链项目。",
-  "workspace.label.noKeychainItemsYet": "钥匙串中暂无项目",
+  "workspace.label.noKeychainItemsYet": "密钥链中暂无项目",
   "workspace.label.noKnownHostsFound": "未找到已知主机。",
   "workspace.label.noKnownHostsYet": "暂无已知主机。",
   "workspace.label.noMatches": "无匹配项",
