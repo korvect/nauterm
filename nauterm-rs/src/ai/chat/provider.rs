@@ -113,7 +113,7 @@ impl Chat {
                         }
                         let configure = owner.clone();
                         menu.separator().item(
-                            MenuItem::localized("rs.ai.action.configureProviders")
+                            MenuItem::localized("ai.action.configureProviders")
                                 .icon(IconName::Settings)
                                 .on_click(move |_, _, cx| {
                                     let _ = configure.update(cx, |_, cx| cx.emit(Configure));

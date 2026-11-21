@@ -69,29 +69,29 @@ impl Section {
     }
     pub fn title(self) -> &'static str {
         match self {
-            Self::Appearance => "APPEARANCE",
-            Self::Window => "WINDOW",
-            Self::Behavior => "BEHAVIOR",
+            Self::Appearance => "common.label.appearance",
+            Self::Window => "common.label.window",
+            Self::Behavior => "common.label.behavior",
             Self::UrlHandlers => "settings.general.defaultUrlHandler.title",
-            Self::Theme => "THEME",
-            Self::Font => "FONT",
-            Self::Cursor => "CURSOR",
-            Self::Layout => "LAYOUT",
+            Self::Theme => "common.label.theme",
+            Self::Font => "common.label.font",
+            Self::Cursor => "common.label.cursor",
+            Self::Layout => "common.label.layout",
             Self::Session => "settings.terminal.session.title",
-            Self::Input => "INPUT",
+            Self::Input => "settings.terminal.input.title",
             Self::Selection => "settings.terminal.selection.title",
-            Self::Bell => "BELL",
-            Self::Recording => "HISTORY & STORAGE",
-            Self::SftpWorkspace => "WORKSPACE",
-            Self::Editors => "EDITORS",
-            Self::Transfers => "TRANSFERS",
-            Self::Files => "FILES",
-            Self::Keyboard => "KEYBOARD BEHAVIOR",
-            Self::Bindings => "KEY BINDINGS",
-            Self::AiProviders => "PROVIDERS",
-            Self::AiContext => "TERMINAL CONTEXT",
-            Self::Sync => "SYNC & BACKUP",
-            Self::About => "ABOUT",
+            Self::Bell => "settings.terminal.bell.title",
+            Self::Recording => "settings.terminal.recording.title",
+            Self::SftpWorkspace => "common.label.workspace",
+            Self::Editors => "common.label.editors",
+            Self::Transfers => "settings.sftp.transfers.label",
+            Self::Files => "common.label.files",
+            Self::Keyboard => "settings.label.keyboardBehavior",
+            Self::Bindings => "settings.label.keyBindings",
+            Self::AiProviders => "common.label.providers",
+            Self::AiContext => "settings.label.terminalContext",
+            Self::Sync => "settings.pages.sync.title",
+            Self::About => "common.label.about",
         }
     }
 }
@@ -266,7 +266,7 @@ const ENTRIES: &[Entry] = &[
     Entry::new(
         S::Layout,
         "settings.terminal.composer.label",
-        "rs.settings.terminal.composer.description",
+        "settings.terminal.composer.description",
         "multiline command input editor 命令 输入 编辑器",
     ),
     Entry::new(
@@ -319,14 +319,14 @@ const ENTRIES: &[Entry] = &[
     ),
     Entry::new(
         S::Input,
-        "rs.settings.terminal.openTarget.title",
-        "rs.settings.terminal.openTarget.description",
+        "settings.terminal.pointer.openTarget.title",
+        "settings.terminal.pointer.commandClickOpensTarget.description",
         "ctrl command hyperlink url path 文件 链接 路径",
     ),
     Entry::new(
         S::Input,
-        "rs.settings.terminal.clickMovesCursor.title",
-        "rs.settings.terminal.clickMovesCursor.description",
+        "settings.terminal.pointer.clickMovesCursor.title",
+        "settings.terminal.pointer.optionClickMovesCursor.description",
         "alt mouse caret 光标 点击",
     ),
     Entry::new(
@@ -344,7 +344,7 @@ const ENTRIES: &[Entry] = &[
     Entry::new(
         S::Selection,
         "settings.terminal.wordBoundaries.label",
-        "rs.settings.terminal.wordBoundaries.description",
+        "settings.terminal.wordBoundaries.description",
         "separator double click 双击 选词 单词 分隔符 边界",
     ),
     Entry::new(

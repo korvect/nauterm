@@ -173,10 +173,16 @@ impl Panel {
             dark: self.dark,
         }
     }
-    fn section(&self, title: &'static str, icon: IconName, body: impl IntoElement) -> AnyElement {
+    fn section(
+        &self,
+        title: &'static str,
+        icon: IconName,
+        body: impl IntoElement,
+        cx: &App,
+    ) -> AnyElement {
         sections::frame(
             title,
-            title.into(),
+            crate::localization::text(cx, title),
             icon,
             Palette::settings(self.dark),
             body,
@@ -374,7 +380,7 @@ impl Render for Panel {
             .track_focus(&self.focus)
             .child(
                 self.section(
-                    "APPLICATION",
+                    "common.label.application",
                     IconName::Info,
                     div()
                         .flex()
@@ -391,11 +397,12 @@ impl Render for Panel {
                             "Current operating system and architecture",
                             model::platform(),
                         )),
+                    cx,
                 ),
             )
             .child(
                 self.section(
-                    "LICENSE",
+                    "common.label.license",
                     IconName::Scale,
                     div()
                         .flex()
@@ -426,9 +433,10 @@ impl Render for Panel {
                                     })),
                             ),
                         ),
+                    cx,
                 ),
             )
-            .child(self.section("UPDATE", IconName::Download, updates));
+            .child(self.section("common.action.update", IconName::Download, updates, cx));
         if self
             .release
             .as_ref()
@@ -436,12 +444,13 @@ impl Render for Panel {
         {
             content = content.child(
                 self.section(
-                    "RELEASE NOTES",
+                    "settings.label.releaseNotes",
                     IconName::ScrollText,
                     Input::multiline(&self.notes)
                         .readonly(true)
                         .h(px(240.))
-                        .aria_label(crate::localization::text(cx, "Release notes")),
+                        .aria_label(crate::localization::text(cx, "settings.label.releaseNotes")),
+                    cx,
                 ),
             );
         }

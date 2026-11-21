@@ -171,7 +171,7 @@ impl Settings {
                 ))
                 .child(self.row(
                     "settings.terminal.emulation.label",
-                    "rs.settings.terminal.emulation.description",
+                    "settings.terminal.emulation.description",
                     controls.emulation.control("Emulation Type", cx),
                 ))
                 .child(

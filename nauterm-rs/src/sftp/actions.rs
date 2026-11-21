@@ -163,7 +163,7 @@ pub(super) fn browser_menu(menu: Menu, owner: WeakEntity<FilePane>, cx: &App) ->
                 }),
         )
         .item(
-            MenuItem::localized("rs.sftp.action.copyPath").on_click(move |_, _, cx| {
+            MenuItem::localized("sftp.action.copyAbsolutePath").on_click(move |_, _, cx| {
                 let _ = copy.update(cx, |pane, cx| {
                     cx.write_to_clipboard(ClipboardItem::new_string(
                         pane.display_path(&pane.history.path),

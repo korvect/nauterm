@@ -931,7 +931,7 @@ impl Providers {
                                             view.child(div().p(px(14.)).text_color(p.muted).child(
                                                 crate::localization::text(
                                                     cx,
-                                                    "rs.ui.copy.noMatchingProviders",
+                                                    "settings.ai.providerPreset.noMatches",
                                                 ),
                                             ))
                                         },
@@ -1188,7 +1188,10 @@ impl Render for Providers {
                         .ghost()
                         .text_color(rgb(0x8b5cf6))
                         .icon(IconName::Download)
-                        .tooltip(crate::localization::text(cx, "rs.ai.action.updatePresets"))
+                        .tooltip(crate::localization::text(
+                            cx,
+                            "settings.label.updatePresets",
+                        ))
                         .disabled(unavailable || self.presets_task.is_some())
                         .on_click(cx.listener(|this, _, _, cx| this.refresh_presets(cx))),
                 ),

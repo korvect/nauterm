@@ -1204,21 +1204,6 @@ impl FilePane {
                 }),
             )
             .context_menu(move |menu, _, cx| {
-                let owner = menu_owner.clone();
-                let menu = menu.item(MenuItem::localized("rs.sftp.action.copyPath").on_click(
-                    move |_, _, cx| {
-                        let _ = owner.update(cx, |this, cx| {
-                            cx.write_to_clipboard(ClipboardItem::new_string(
-                                this.selection
-                                    .paths
-                                    .iter()
-                                    .map(|path| this.display_path(path))
-                                    .collect::<Vec<_>>()
-                                    .join("\n"),
-                            ))
-                        });
-                    },
-                ));
                 let (selected, remote) = menu_owner
                     .upgrade()
                     .map(|pane| {
@@ -1226,6 +1211,34 @@ impl FilePane {
                         (pane.selected_entries().len(), pane.remote.is_some())
                     })
                     .unwrap_or_default();
+                let mut menu = menu;
+                for (key, absolute_path) in [
+                    ("sftp.action.copyName", false),
+                    ("sftp.action.copyAbsolutePath", true),
+                ] {
+                    let owner = menu_owner.clone();
+                    menu = menu.item(MenuItem::localized(key).disabled(selected == 0).on_click(
+                        move |_, _, cx| {
+                            let _ = owner.update(cx, |pane, cx| {
+                                let text = pane
+                                    .selected_entries()
+                                    .into_iter()
+                                    .map(|entry| {
+                                        if absolute_path {
+                                            pane.display_path(&entry.path)
+                                        } else {
+                                            entry.name
+                                        }
+                                    })
+                                    .collect::<Vec<_>>()
+                                    .join("\n");
+                                if !text.is_empty() {
+                                    cx.write_to_clipboard(ClipboardItem::new_string(text));
+                                }
+                            });
+                        },
+                    ));
+                }
                 actions::menu(menu, menu_owner.clone(), selected, remote, cx)
             })
             .when(self.compact, |button| {
@@ -1448,10 +1461,7 @@ impl Render for FilePane {
                         .max_w(px(290.))
                         .text_center()
                         .text_color(p.muted)
-                        .child(crate::localization::text(
-                            cx,
-                            "Start by connecting to a saved host\nto manage your files with SFTP.",
-                        )),
+                        .child(crate::localization::text(cx, "sftp.empty.description")),
                 )
                 .child(
                     Button::new("file-select-host")
