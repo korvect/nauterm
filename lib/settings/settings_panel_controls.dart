@@ -716,6 +716,7 @@ class _SettingsRow extends StatelessWidget {
     required this.trailing,
     this.showSubtitle = true,
     this.localizationKey,
+    this.labelLocalizationKey,
   });
 
   final String title;
@@ -723,16 +724,18 @@ class _SettingsRow extends StatelessWidget {
   final Widget trailing;
   final bool showSubtitle;
   final String? localizationKey;
+  final String? labelLocalizationKey;
 
   @override
   Widget build(BuildContext context) {
+    final labelKey =
+        labelLocalizationKey ??
+        (localizationKey == null ? null : '$localizationKey.label');
     final labels = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          localizationKey == null
-              ? tr(title)
-              : tr('$localizationKey.label', fallback: title),
+          labelKey == null ? tr(title) : tr(labelKey, fallback: title),
           style: TextStyle(
             color: _text,
             fontSize: 14,

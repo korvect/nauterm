@@ -1753,6 +1753,7 @@ Widget _buildSettingsMasterKeyContent(_SettingsPanelState state) {
         _SettingsSection(
           icon: LucideIcons.keyRound,
           title: 'Unlock Sync',
+          localizationKey: 'settings.label.unlockSync',
           child: ConstrainedBox(
             constraints: const BoxConstraints(
               maxWidth: _settingsContentMaxWidth,

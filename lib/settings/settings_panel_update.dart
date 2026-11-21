@@ -259,6 +259,7 @@ class _AboutSettingsPageState extends State<_AboutSettingsPage> {
           _SettingsSection(
             icon: LucideIcons.info,
             title: 'Application',
+            localizationKey: 'common.label.application',
             child: ConstrainedBox(
               constraints: const BoxConstraints(
                 maxWidth: _settingsContentMaxWidth,
@@ -329,6 +330,7 @@ class _AboutSettingsPageState extends State<_AboutSettingsPage> {
           _SettingsSection(
             icon: LucideIcons.scale,
             title: 'License',
+            localizationKey: 'common.label.license',
             child: ConstrainedBox(
               constraints: const BoxConstraints(
                 maxWidth: _settingsContentMaxWidth,
@@ -372,6 +374,7 @@ class _AboutSettingsPageState extends State<_AboutSettingsPage> {
           _SettingsSection(
             icon: LucideIcons.download,
             title: 'Update',
+            localizationKey: 'common.action.update',
             child: ConstrainedBox(
               constraints: const BoxConstraints(
                 maxWidth: _settingsContentMaxWidth,
@@ -472,6 +475,7 @@ class _AboutSettingsPageState extends State<_AboutSettingsPage> {
             _SettingsSection(
               icon: LucideIcons.scrollText,
               title: 'Release Notes',
+              localizationKey: 'settings.label.releaseNotes',
               child: ConstrainedBox(
                 constraints: const BoxConstraints(
                   maxWidth: _settingsContentMaxWidth,

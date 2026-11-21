@@ -257,7 +257,7 @@ const _settingsSearchEntries = <_SettingsSearchEntry>[
     page: _SettingsPage.terminal,
     section: 'terminal-layout',
     title: 'Composer',
-    subtitle: 'Show the command input bar below the terminal.',
+    subtitle: 'Show the command input bar by default in new terminal panes.',
     keywords: 'input suggestions autocomplete multiline editor 命令 输入 编辑器',
   ),
   _SettingsSearchEntry(
@@ -298,16 +298,17 @@ const _settingsSearchEntries = <_SettingsSearchEntry>[
   _SettingsSearchEntry(
     page: _SettingsPage.terminal,
     section: 'terminal-input',
-    title: 'Cmd-Click Opens Filename/URL',
-    subtitle: 'Open a recognized filename or URL with the default application.',
+    title: 'Open Links and Files',
+    subtitle: 'Open the recognized link or file in the default application.',
     keywords:
         'pointer mouse command cmd control click url filename link 文件 链接 路径',
   ),
   _SettingsSearchEntry(
     page: _SettingsPage.terminal,
     section: 'terminal-input',
-    title: 'Option-Click Moves Cursor',
-    subtitle: 'Move the terminal input cursor to the clicked position.',
+    title: 'Click to Move Cursor',
+    subtitle:
+        'Move the input cursor to the clicked position in the shell prompt.',
     keywords: 'pointer mouse option alt caret 光标 点击',
   ),
   _SettingsSearchEntry(

@@ -386,6 +386,7 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
           key: state._settingsSectionKey('terminal-theme'),
           icon: Icons.palette_outlined,
           title: 'Theme',
+          localizationKey: 'common.label.theme',
           child: ConstrainedBox(
             constraints: const BoxConstraints(
               maxWidth: _settingsContentMaxWidth,
@@ -398,6 +399,7 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
           key: state._settingsSectionKey('terminal-font'),
           icon: Icons.text_format,
           title: 'Font',
+          localizationKey: 'common.label.font',
           child: ConstrainedBox(
             constraints: const BoxConstraints(
               maxWidth: _settingsContentMaxWidth,
@@ -456,7 +458,7 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
                 _SettingsRow(
                   localizationKey: 'settings.terminal.cjkFont',
                   title: 'CJK Font',
-                  subtitle: 'Leave blank to follow the application language, then the system fallback.',
+                  subtitle: 'Fallback font for Chinese, Japanese, and Korean text. Automatic uses the application language to guide system font fallback.',
                   trailing: _SettingsSelect(
                     key: const ValueKey('settings-terminal-cjk-font-select'),
                     label: 'CJK Font',
@@ -464,7 +466,10 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
                     value: state._cjkFontFamily,
                     values: cjkFontOptions,
                     format: (value) => value.isEmpty
-                        ? tr('settings.terminal.cjkFont.auto', fallback: 'Auto')
+                        ? tr(
+                            'settings.terminal.cjkFont.auto',
+                            fallback: 'Automatic',
+                          )
                         : value,
                     localizeOptions: false,
                     optionPreviewBuilder: (value) =>
@@ -580,6 +585,7 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
           key: state._settingsSectionKey('terminal-cursor'),
           icon: Icons.text_fields_rounded,
           title: 'Cursor',
+          localizationKey: 'common.label.cursor',
           child: ConstrainedBox(
             constraints: const BoxConstraints(
               maxWidth: _settingsContentMaxWidth,
@@ -630,6 +636,7 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
           key: state._settingsSectionKey('terminal-layout'),
           icon: Icons.aspect_ratio_rounded,
           title: 'Layout',
+          localizationKey: 'common.label.layout',
           child: ConstrainedBox(
             constraints: const BoxConstraints(
               maxWidth: _settingsContentMaxWidth,
@@ -669,7 +676,7 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
                 _SettingsRow(
                   localizationKey: 'settings.terminal.composer',
                   title: 'Composer',
-                  subtitle: 'Show the command input bar below the terminal.',
+                  subtitle: 'Show the command input bar by default in new terminal panes.',
                   trailing: _SettingsSwitch(
                     value: state._composerEnabled,
                     onChanged: (value) {
@@ -742,8 +749,7 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
                 _SettingsRow(
                   localizationKey: 'settings.terminal.emulation',
                   title: 'Emulation Type',
-                  subtitle:
-                      'Controls color and feature support for the session.',
+                  subtitle: 'Set the TERM value for new terminal sessions.',
                   trailing: _SettingsSelect(
                     label: 'Emulation Type',
                     showLabel: false,
@@ -905,8 +911,11 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
                 _SettingsRow(
                   localizationKey:
                       'settings.terminal.pointer.commandClickOpensTarget',
-                  title: 'Cmd-Click Opens Filename/URL',
-                  subtitle: 'Open a recognized filename or URL with the default application.',
+                  labelLocalizationKey: Platform.isMacOS ? null : 'settings.terminal.pointer.controlClickOpensTarget.label',
+                  title: Platform.isMacOS
+                      ? 'Command-Click Opens Links and Files'
+                      : 'Ctrl-Click Opens Links and Files',
+                  subtitle: 'Open the recognized link or file in the default application.',
                   trailing: _SettingsSwitch(
                     value: terminalPointerConfig.commandClickOpensFilenameOrUrl,
                     onChanged: (value) {
@@ -922,9 +931,13 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
                 _SettingsRow(
                   localizationKey:
                       'settings.terminal.pointer.optionClickMovesCursor',
-                  title: 'Option-Click Moves Cursor',
-                  subtitle:
-                      'Move the terminal input cursor to the clicked position.',
+                  labelLocalizationKey: Platform.isMacOS
+                      ? null
+                      : 'settings.terminal.pointer.altClickMovesCursor.label',
+                  title: Platform.isMacOS
+                      ? 'Option-Click Moves Cursor'
+                      : 'Alt-Click Moves Cursor',
+                  subtitle: 'Move the input cursor to the clicked position in the shell prompt.',
                   trailing: _SettingsSwitch(
                     value: terminalPointerConfig.optionClickMovesCursor,
                     onChanged: (value) {
@@ -1348,6 +1361,7 @@ Widget _buildSettingsSftpContent(_SettingsPanelState state) {
           key: state._settingsSectionKey('sftp-workspace'),
           icon: Icons.tab_rounded,
           title: 'Workspace',
+          localizationKey: 'common.label.workspace',
           child: ConstrainedBox(
             constraints: const BoxConstraints(
               maxWidth: _settingsContentMaxWidth,
@@ -1372,6 +1386,7 @@ Widget _buildSettingsSftpContent(_SettingsPanelState state) {
           key: state._settingsSectionKey('sftp-editors'),
           icon: Icons.cloud_sync_rounded,
           title: 'Editors',
+          localizationKey: 'common.label.editors',
           child: ConstrainedBox(
             constraints: const BoxConstraints(
               maxWidth: _settingsContentMaxWidth,
@@ -1481,6 +1496,7 @@ Widget _buildSettingsSftpContent(_SettingsPanelState state) {
           key: state._settingsSectionKey('sftp-files'),
           icon: Icons.folder_outlined,
           title: 'Files',
+          localizationKey: 'common.label.files',
           child: ConstrainedBox(
             constraints: const BoxConstraints(
               maxWidth: _settingsContentMaxWidth,
@@ -1564,6 +1580,7 @@ Widget _buildSettingsShortcutsContent(_SettingsPanelState state) {
           key: state._settingsSectionKey('shortcuts-keyboard'),
           icon: Icons.keyboard_command_key_rounded,
           title: 'Keyboard Behavior',
+          localizationKey: 'settings.label.keyboardBehavior',
           child: ConstrainedBox(
             constraints: const BoxConstraints(
               maxWidth: _settingsContentMaxWidth,
@@ -1595,6 +1612,7 @@ Widget _buildSettingsShortcutsContent(_SettingsPanelState state) {
           key: state._settingsSectionKey('shortcuts-bindings'),
           icon: Icons.keyboard_rounded,
           title: 'Key Bindings',
+          localizationKey: 'settings.label.keyBindings',
           trailing: _ShortcutResetAllButton(
             onPressed: () =>
                 state._updateShortcutSettings(const TerminalShortcutConfig()),
@@ -1654,6 +1672,7 @@ Widget _buildSettingsAiContent(_SettingsPanelState state) {
           key: state._settingsSectionKey('ai-providers'),
           icon: LucideIcons.sparkles,
           title: 'Providers',
+          localizationKey: 'common.label.providers',
           child: ConstrainedBox(
             constraints: const BoxConstraints(
               maxWidth: _settingsContentMaxWidth,
@@ -1677,6 +1696,7 @@ Widget _buildSettingsAiContent(_SettingsPanelState state) {
           key: state._settingsSectionKey('ai-context'),
           icon: LucideIcons.squareTerminal,
           title: 'Terminal Context',
+          localizationKey: 'settings.label.terminalContext',
           child: ConstrainedBox(
             constraints: const BoxConstraints(
               maxWidth: _settingsContentMaxWidth,

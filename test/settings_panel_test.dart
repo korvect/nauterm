@@ -863,7 +863,7 @@ void main() {
       (query: 'multiple tabs', title: 'Multiple Tabs', section: 'SESSION'),
       (
         query: 'filename',
-        title: 'Cmd-Click Opens Filename/URL',
+        title: 'Open Links and Files',
         section: 'INPUT',
       ),
       (
