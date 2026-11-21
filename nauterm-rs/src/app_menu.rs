@@ -1,5 +1,7 @@
 //! Native application menus; product overlays remain separate controls.
 use gpui_kit::*;
+#[cfg(target_os = "macos")]
+mod native_edit;
 mod windows;
 #[cfg(target_os = "macos")]
 pub use windows::close_main_window;
@@ -18,6 +20,10 @@ gpui_kit::actions!(
         NextTab,
         CloseWindow,
         Find,
+        FindNext,
+        FindPrevious,
+        FindSelection,
+        JumpToSelection,
         Hide,
         HideOthers,
         ShowAll,
@@ -111,7 +117,10 @@ pub(crate) fn menu_title(
 
 #[cfg(target_os = "macos")]
 fn menus(text: impl Fn(&'static str, &'static str) -> SharedString) -> Vec<Menu> {
-    use gpui_kit::base::input::{Copy, Cut, Paste, Redo, SelectAll, Undo};
+    use gpui_kit::base::input::{Copy, Cut, Delete, Paste, Redo, SelectAll, Undo};
+    let (edit_key, edit_title) = native_edit::EDIT;
+    let (find_key, find_title) = native_edit::FIND;
+    let (paste_style_key, paste_style_title) = native_edit::PASTE_STYLE;
     vec![
         Menu::new("Nauterm RS").items([
             MenuItem::action(text("5kV-Vb-QxS.title", "About Nauterm RS"), About),
@@ -145,7 +154,7 @@ fn menus(text: impl Fn(&'static str, &'static str) -> SharedString) -> Vec<Menu>
             MenuItem::action(text("Nau-Close-Tab.title", "Close Tab"), CloseTab),
             MenuItem::action(text("Close-Window.title", "Close Window"), CloseWindow),
         ]),
-        Menu::new(text("5QF-Oa-p0T.title", "Edit")).items([
+        Menu::new(text(edit_key, edit_title)).items([
             MenuItem::os_action(text("dRJ-4n-Yzg.title", "Undo"), Undo, OsAction::Undo),
             MenuItem::os_action(text("6dh-zS-Vam.title", "Redo"), Redo, OsAction::Redo),
             MenuItem::separator(),
@@ -153,12 +162,30 @@ fn menus(text: impl Fn(&'static str, &'static str) -> SharedString) -> Vec<Menu>
             MenuItem::os_action(text("x3v-GG-iWU.title", "Copy"), Copy, OsAction::Copy),
             MenuItem::os_action(text("gVA-U4-sdL.title", "Paste"), Paste, OsAction::Paste),
             MenuItem::os_action(
+                text(paste_style_key, paste_style_title),
+                Paste,
+                OsAction::Paste,
+            ),
+            MenuItem::action(text("pa3-QI-u2k.title", "Delete"), Delete),
+            MenuItem::os_action(
                 text("Ruw-6m-B2m.title", "Select All"),
                 SelectAll,
                 OsAction::SelectAll,
             ),
             MenuItem::separator(),
-            MenuItem::action(text("Xz5-n4-O0W.title", "Find…"), Find),
+            MenuItem::submenu(Menu::new(text(find_key, find_title)).items([
+                MenuItem::action(text("Xz5-n4-O0W.title", "Find…"), Find),
+                MenuItem::action(text("q09-fT-Sye.title", "Find Next"), FindNext),
+                MenuItem::action(text("OwM-mh-QMV.title", "Find Previous"), FindPrevious),
+                MenuItem::action(
+                    text("buJ-ug-pKt.title", "Use Selection for Find"),
+                    FindSelection,
+                ),
+                MenuItem::action(
+                    text("S0p-oC-mLd.title", "Jump to Selection"),
+                    JumpToSelection,
+                ),
+            ])),
         ]),
         Menu::new(text("H8h-7b-M4v.title", "View")).items([
             MenuItem::action(text("Nau-Previous-Tab.title", "Previous Tab"), PreviousTab),
@@ -198,6 +225,7 @@ fn rebuild_menus(cx: &mut App) {
         menu_title(key, fallback).to_string().into()
     }));
     crate::window_chrome::register_app_menus();
+    native_edit::install();
     // A rebuilt Window menu needs the existing native windows reattached.
     cx.defer(|cx| {
         for handle in cx.windows() {
@@ -304,6 +332,10 @@ pub fn init(cx: &mut App) {
             KeyBinding::new("cmd-m", Minimize, None),
             KeyBinding::new("ctrl-cmd-f", FullScreen, None),
             KeyBinding::new("cmd-shift-w", CloseWindow, None),
+            KeyBinding::new("cmd-g", FindNext, Some("TerminalView")),
+            KeyBinding::new("cmd-shift-g", FindPrevious, Some("TerminalView")),
+            KeyBinding::new("cmd-e", FindSelection, Some("TerminalView")),
+            KeyBinding::new("cmd-j", JumpToSelection, Some("TerminalView")),
         ]);
         rebuild_menus(cx);
     }
@@ -435,17 +467,46 @@ mod tests {
             assert!(translated.iter().any(|menu| menu.name == name));
         }
         assert!(translated.iter().any(|menu| menu.name == "文件"));
-        let actions = |menus: &[gpui_kit::Menu]| {
-            menus
-                .iter()
-                .flat_map(|menu| &menu.items)
-                .filter_map(|item| match item {
-                    MenuItem::Action { action, .. } => Some(action.as_any().type_id()),
+        fn actions(items: &[MenuItem], output: &mut Vec<std::any::TypeId>) {
+            for item in items {
+                match item {
+                    MenuItem::Action { action, .. } => output.push(action.as_any().type_id()),
+                    MenuItem::Submenu(menu) => actions(&menu.items, output),
+                    _ => {}
+                }
+            }
+        }
+        let menu_actions = |menus: &[gpui_kit::Menu]| {
+            let mut ids = Vec::new();
+            for menu in menus {
+                actions(&menu.items, &mut ids);
+            }
+            ids
+        };
+        assert_eq!(menu_actions(&english), menu_actions(&translated));
+
+        let find = english
+            .iter()
+            .find(|menu| menu.name == "Edit")
+            .and_then(|menu| {
+                menu.items.iter().find_map(|item| match item {
+                    MenuItem::Submenu(menu) if menu.name == "Find" => Some(menu),
                     _ => None,
                 })
-                .collect::<Vec<_>>()
-        };
-        assert_eq!(actions(&english), actions(&translated));
+            })
+            .expect("Find submenu in Edit");
+        let mut find_actions = Vec::new();
+        actions(&find.items, &mut find_actions);
+        assert_eq!(
+            find_actions,
+            [
+                std::any::TypeId::of::<super::Find>(),
+                std::any::TypeId::of::<super::FindNext>(),
+                std::any::TypeId::of::<super::FindPrevious>(),
+                std::any::TypeId::of::<super::FindSelection>(),
+                std::any::TypeId::of::<super::JumpToSelection>(),
+            ]
+        );
         assert!(translated.iter().flat_map(|menu| &menu.items).any(|item| matches!(item, MenuItem::Action { name, action, .. } if name == "拷贝" && action.as_any().is::<Copy>())));
     }
 

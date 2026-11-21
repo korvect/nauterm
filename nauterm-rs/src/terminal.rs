@@ -1364,9 +1364,11 @@ impl Render for Terminal {
             .text_color(rgb(foreground))
             .key_context("TerminalView")
             .on_action(cx.listener(Self::find_from_shortcut))
-            .on_action(cx.listener(|this, _: &crate::app_menu::Find, window, cx| {
-                this.show_search(window, cx)
-            }))
+            .map(|view| {
+                #[cfg(target_os = "macos")]
+                let view = self.menu_search_actions(view, cx);
+                view
+            })
             .on_action(
                 cx.listener(|this, _: &gpui_kit::base::input::Copy, window, cx| {
                     if this.focus.is_focused(window) {
