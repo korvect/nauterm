@@ -600,6 +600,8 @@
   "settings.terminal.scrollbar.description": "Show a scrollbar when scrollback history is available.",
   "settings.terminal.selectCommandBlockOnClick.label": "Select Command Block on Click",
   "settings.terminal.selectCommandBlockOnClick.description": "Click a command or its output to select the block.",
+  "settings.terminal.selection.title": "Selection",
+  "settings.terminal.session.title": "Session",
   "settings.terminal.shell.label": "Shell",
   "settings.terminal.shell.description": "Shell used for new local terminal sessions.",
   "settings.terminal.shellExecutable.description": "Shell executable used for local sessions.",

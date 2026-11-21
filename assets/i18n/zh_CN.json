@@ -600,6 +600,8 @@
   "settings.terminal.scrollbar.description": "有回滚历史时显示滚动条。",
   "settings.terminal.selectCommandBlockOnClick.label": "单击选择命令块",
   "settings.terminal.selectCommandBlockOnClick.description": "单击命令或输出时，选择整个命令块。",
+  "settings.terminal.selection.title": "选择",
+  "settings.terminal.session.title": "会话",
   "settings.terminal.shell.label": "Shell",
   "settings.terminal.shell.description": "新本地终端会话使用的 Shell。",
   "settings.terminal.shellExecutable.description": "本地会话使用的 Shell 可执行文件。",

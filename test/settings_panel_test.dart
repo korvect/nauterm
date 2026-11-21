@@ -854,42 +854,47 @@ void main() {
     );
     await tester.pump();
 
-    await tester.enterText(
-      find.byKey(const ValueKey('settings-search-field')),
-      'autocomplete',
+    final searchField = find.byKey(const ValueKey('settings-search-field'));
+    final terminalScrollView = find.byKey(
+      const ValueKey('settings-terminal-scroll-view'),
     );
-    await tester.pump();
+    const cases = [
+      (query: 'autocomplete', title: 'Composer', section: 'LAYOUT'),
+      (query: 'multiple tabs', title: 'Multiple Tabs', section: 'SESSION'),
+      (
+        query: 'filename',
+        title: 'Cmd-Click Opens Filename/URL',
+        section: 'INPUT',
+      ),
+      (
+        query: 'command block',
+        title: 'Select Command Block on Click',
+        section: 'SELECTION',
+      ),
+    ];
+    for (final target in cases) {
+      await tester.enterText(searchField, target.query);
+      await tester.pump();
 
-    expect(find.text('Composer'), findsOneWidget);
-    expect(find.text('1 matching settings'), findsOneWidget);
-    await tester.tap(
-      find.byKey(const ValueKey('settings-search-result-terminal-Composer')),
-    );
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 16));
-    await tester.pump(const Duration(milliseconds: 300));
-    await tester.pump();
+      final result = find.byKey(
+        ValueKey('settings-search-result-terminal-${target.title}'),
+      );
+      expect(result, findsOneWidget);
+      expect(find.text('1 matching settings'), findsOneWidget);
+      await tester.tap(result);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 16));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump();
 
-    expect(find.text('Interaction'.toUpperCase()), findsOneWidget);
-    final terminalScrollable = tester.state<ScrollableState>(
-      find
-          .descendant(
-            of: find.byKey(const ValueKey('settings-terminal-scroll-view')),
-            matching: find.byType(Scrollable),
-          )
-          .first,
-    );
-    expect(terminalScrollable.position.pixels, greaterThan(0));
-    expect(find.byKey(const ValueKey('settings-search-field')), findsOneWidget);
-    expect(
-      tester
-          .widget<TextField>(
-            find.byKey(const ValueKey('settings-search-field')),
-          )
-          .controller
-          ?.text,
-      isEmpty,
-    );
+      final section = find.text(target.section);
+      expect(section, findsOneWidget);
+      expect(
+        tester.getRect(terminalScrollView).contains(tester.getCenter(section)),
+        isTrue,
+      );
+      expect(tester.widget<TextField>(searchField).controller?.text, isEmpty);
+    }
   });
 
   testWidgets('shell path uses a dropdown with system default first', (

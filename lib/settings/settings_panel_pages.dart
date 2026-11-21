@@ -577,9 +577,118 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
         ),
         SizedBox(height: 30),
         _SettingsSection(
-          key: state._settingsSectionKey('terminal-shell'),
-          icon: Icons.tune_rounded,
-          title: 'General',
+          key: state._settingsSectionKey('terminal-cursor'),
+          icon: Icons.text_fields_rounded,
+          title: 'Cursor',
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              maxWidth: _settingsContentMaxWidth,
+            ),
+            child: Column(
+              children: [
+                _SettingsRow(
+                  localizationKey: 'settings.terminal.cursorShape',
+                  title: 'Shape',
+                  subtitle: 'Cursor appearance in the terminal.',
+                  trailing: _SettingsSelect(
+                    label: 'Shape',
+                    showLabel: false,
+                    value: terminalCursorShape.name,
+                    values: TerminalCursorShape.values
+                        .map((s) => s.name)
+                        .toList(growable: false),
+                    format: _cursorShapeLabel,
+                    onChanged: (value) {
+                      final shape = TerminalCursorShape.values.firstWhere(
+                        (s) => s.name == value,
+                        orElse: () => TerminalCursorShape.block,
+                      );
+                      state._mutate(() => terminalCursorShape = shape);
+                      state._persistRuntimeSettings();
+                    },
+                  ),
+                ),
+                SizedBox(height: 18),
+                _SettingsRow(
+                  localizationKey: 'settings.terminal.cursorBlink',
+                  title: 'Blink',
+                  subtitle: 'Cursor blinks at regular intervals.',
+                  trailing: _SettingsSwitch(
+                    value: terminalCursorBlink,
+                    onChanged: (value) {
+                      state._mutate(() => terminalCursorBlink = value);
+                      state._persistRuntimeSettings();
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        SizedBox(height: 30),
+        _SettingsSection(
+          key: state._settingsSectionKey('terminal-layout'),
+          icon: Icons.aspect_ratio_rounded,
+          title: 'Layout',
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              maxWidth: _settingsContentMaxWidth,
+            ),
+            child: Column(
+              children: [
+                _SettingsRow(
+                  localizationKey: 'settings.terminal.padding',
+                  title: 'Padding',
+                  subtitle: 'Inner spacing around terminal content. Supports 1 to 4 values.',
+                  trailing: _TerminalPaddingControl(
+                    padding: state._terminalPadding,
+                    onChanged: (value) {
+                      state._mutate(() => state._terminalPadding = value);
+                      terminalPadding = value;
+                      terminalPaddingNotifier.value++;
+                      state._persistRuntimeSettings();
+                    },
+                  ),
+                ),
+                SizedBox(height: 18),
+                _SettingsRow(
+                  localizationKey: 'settings.terminal.scrollbar',
+                  title: 'Scrollbar',
+                  subtitle:
+                      'Show a scrollbar when scrollback history is available.',
+                  trailing: _SettingsSwitch(
+                    value: state._scrollbarEnabled,
+                    onChanged: (value) {
+                      state._mutate(() => state._scrollbarEnabled = value);
+                      terminalScrollbarEnabled = value;
+                      state._persistRuntimeSettings();
+                    },
+                  ),
+                ),
+                SizedBox(height: 18),
+                _SettingsRow(
+                  localizationKey: 'settings.terminal.composer',
+                  title: 'Composer',
+                  subtitle: 'Show the command input bar below the terminal.',
+                  trailing: _SettingsSwitch(
+                    value: state._composerEnabled,
+                    onChanged: (value) {
+                      state._mutate(() => state._composerEnabled = value);
+                      terminalComposerEnabled = value;
+                      state._persistRuntimeSettings();
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        SizedBox(height: 30),
+        _SettingsSection(
+          key: state._settingsSectionKey('terminal-session'),
+          icon: Icons.terminal_rounded,
+          localizationKey: 'settings.terminal.session.title',
+          title: 'Session',
           child: ConstrainedBox(
             constraints: const BoxConstraints(
               maxWidth: _settingsContentMaxWidth,
@@ -729,46 +838,17 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
                     },
                   ),
                 ),
-              ],
-            ),
-          ),
-        ),
-        SizedBox(height: 30),
-        _SettingsSection(
-          key: state._settingsSectionKey('terminal-layout'),
-          icon: Icons.aspect_ratio_rounded,
-          title: 'Layout',
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(
-              maxWidth: _settingsContentMaxWidth,
-            ),
-            child: Column(
-              children: [
-                _SettingsRow(
-                  localizationKey: 'settings.terminal.padding',
-                  title: 'Padding',
-                  subtitle: 'Inner spacing around terminal content. Supports 1 to 4 values.',
-                  trailing: _TerminalPaddingControl(
-                    padding: state._terminalPadding,
-                    onChanged: (value) {
-                      state._mutate(() => state._terminalPadding = value);
-                      terminalPadding = value;
-                      terminalPaddingNotifier.value++;
-                      state._persistRuntimeSettings();
-                    },
-                  ),
-                ),
                 SizedBox(height: 18),
                 _SettingsRow(
-                  localizationKey: 'settings.terminal.scrollbar',
-                  title: 'Scrollbar',
+                  localizationKey: 'settings.terminal.multipleTabs',
+                  title: 'Multiple Tabs',
                   subtitle:
-                      'Show a scrollbar when scrollback history is available.',
+                      'Allow multiple terminal sessions in the same pane.',
                   trailing: _SettingsSwitch(
-                    value: state._scrollbarEnabled,
+                    value: state._multiTabEnabled,
                     onChanged: (value) {
-                      state._mutate(() => state._scrollbarEnabled = value);
-                      terminalScrollbarEnabled = value;
+                      state._mutate(() => state._multiTabEnabled = value);
+                      terminalMultiTabEnabled = value;
                       state._persistRuntimeSettings();
                     },
                   ),
@@ -779,9 +859,10 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
         ),
         SizedBox(height: 30),
         _SettingsSection(
-          key: state._settingsSectionKey('terminal-cursor'),
-          icon: Icons.text_fields_rounded,
-          title: 'Cursor',
+          key: state._settingsSectionKey('terminal-input'),
+          icon: Icons.input_rounded,
+          localizationKey: 'settings.terminal.input.title',
+          title: 'Input',
           child: ConstrainedBox(
             constraints: const BoxConstraints(
               maxWidth: _settingsContentMaxWidth,
@@ -789,36 +870,135 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
             child: Column(
               children: [
                 _SettingsRow(
-                  localizationKey: 'settings.terminal.cursorShape',
-                  title: 'Shape',
-                  subtitle: 'Cursor appearance in the terminal.',
-                  trailing: _SettingsSelect(
-                    label: 'Shape',
-                    showLabel: false,
-                    value: terminalCursorShape.name,
-                    values: TerminalCursorShape.values
-                        .map((s) => s.name)
-                        .toList(growable: false),
-                    format: _cursorShapeLabel,
+                  localizationKey: 'settings.terminal.input.reportMouseEvents',
+                  title: 'Report Mouse Events',
+                  subtitle: 'Send mouse input to terminal applications that request it.',
+                  trailing: _SettingsSwitch(
+                    value: state._reportMouseEvents,
                     onChanged: (value) {
-                      final shape = TerminalCursorShape.values.firstWhere(
-                        (s) => s.name == value,
-                        orElse: () => TerminalCursorShape.block,
+                      state._updateKeyboardSettings(
+                        terminalKeyboardConfig.copyWith(
+                          reportMouseEvents: value,
+                        ),
                       );
-                      state._mutate(() => terminalCursorShape = shape);
+                    },
+                  ),
+                ),
+                SizedBox(height: 18),
+                _SettingsRow(
+                  localizationKey:
+                      'settings.terminal.input.navigationKeysScroll',
+                  title: 'Scroll with Navigation Keys',
+                  subtitle: 'Use navigation keys to scroll the terminal.',
+                  trailing: _SettingsSwitch(
+                    value: state._navigationKeysScrollOutsideInteractiveApps,
+                    onChanged: (value) {
+                      state._updateKeyboardSettings(
+                        terminalKeyboardConfig.copyWith(
+                          navigationKeysScrollOutsideInteractiveApps: value,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                SizedBox(height: 18),
+                _SettingsRow(
+                  localizationKey:
+                      'settings.terminal.pointer.commandClickOpensTarget',
+                  title: 'Cmd-Click Opens Filename/URL',
+                  subtitle: 'Open a recognized filename or URL with the default application.',
+                  trailing: _SettingsSwitch(
+                    value: terminalPointerConfig.commandClickOpensFilenameOrUrl,
+                    onChanged: (value) {
+                      state._mutate(
+                        () => terminalPointerConfig = terminalPointerConfig
+                            .copyWith(commandClickOpensFilenameOrUrl: value),
+                      );
                       state._persistRuntimeSettings();
                     },
                   ),
                 ),
                 SizedBox(height: 18),
                 _SettingsRow(
-                  localizationKey: 'settings.terminal.cursorBlink',
-                  title: 'Blink',
-                  subtitle: 'Cursor blinks at regular intervals.',
+                  localizationKey:
+                      'settings.terminal.pointer.optionClickMovesCursor',
+                  title: 'Option-Click Moves Cursor',
+                  subtitle:
+                      'Move the terminal input cursor to the clicked position.',
                   trailing: _SettingsSwitch(
-                    value: terminalCursorBlink,
+                    value: terminalPointerConfig.optionClickMovesCursor,
                     onChanged: (value) {
-                      state._mutate(() => terminalCursorBlink = value);
+                      state._mutate(
+                        () => terminalPointerConfig = terminalPointerConfig
+                            .copyWith(optionClickMovesCursor: value),
+                      );
+                      state._persistRuntimeSettings();
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        SizedBox(height: 30),
+        _SettingsSection(
+          key: state._settingsSectionKey('terminal-selection'),
+          icon: Icons.content_copy_rounded,
+          localizationKey: 'settings.terminal.selection.title',
+          title: 'Selection',
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              maxWidth: _settingsContentMaxWidth,
+            ),
+            child: Column(
+              children: [
+                _SettingsRow(
+                  localizationKey: 'settings.terminal.copyOnSelect',
+                  title: 'Copy on Select',
+                  subtitle:
+                      'Automatically copy selected text to the clipboard.',
+                  trailing: _SettingsSwitch(
+                    value: state._copyOnSelect,
+                    onChanged: (value) {
+                      state._mutate(() => state._copyOnSelect = value);
+                      terminalCopyOnSelect = value;
+                      state._persistRuntimeSettings();
+                    },
+                  ),
+                ),
+                SizedBox(height: 18),
+                _SettingsRow(
+                  localizationKey:
+                      'settings.terminal.selectCommandBlockOnClick',
+                  title: 'Select Command Block on Click',
+                  subtitle:
+                      'Click a command or its output to select the block.',
+                  trailing: _SettingsSwitch(
+                    key: const ValueKey(
+                      'settings-terminal-select-command-block-on-click-switch',
+                    ),
+                    value: state._selectCommandBlockOnClick,
+                    onChanged: (value) {
+                      state._mutate(
+                        () => state._selectCommandBlockOnClick = value,
+                      );
+                      terminalSelectCommandBlockOnClick = value;
+                      state._persistRuntimeSettings();
+                    },
+                  ),
+                ),
+                SizedBox(height: 18),
+                _SettingsRow(
+                  localizationKey: 'settings.terminal.wordBoundaries',
+                  title: 'Word Selection Boundaries',
+                  subtitle: r'Characters that separate words on double-click. Use \t for Tab and \\ for a backslash.',
+                  trailing: _SettingsTextField(
+                    key: const ValueKey('settings-terminal-word-boundaries'),
+                    controller: state._wordBoundariesController,
+                    onChanged: (value) {
+                      terminalWordBoundaries = parseTerminalWordBoundaries(
+                        value,
+                      );
                       state._persistRuntimeSettings();
                     },
                   ),
@@ -888,199 +1068,6 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
                           tabIndicator: value,
                         ),
                       );
-                      state._persistRuntimeSettings();
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        SizedBox(height: 30),
-        _SettingsSection(
-          key: state._settingsSectionKey('terminal-input'),
-          icon: Icons.input_rounded,
-          localizationKey: 'settings.terminal.input.title',
-          title: 'Input',
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(
-              maxWidth: _settingsContentMaxWidth,
-            ),
-            child: Column(
-              children: [
-                _SettingsRow(
-                  localizationKey: 'settings.terminal.input.reportMouseEvents',
-                  title: 'Report Mouse Events',
-                  subtitle: 'Send mouse input to terminal applications that request it.',
-                  trailing: _SettingsSwitch(
-                    value: state._reportMouseEvents,
-                    onChanged: (value) {
-                      state._updateKeyboardSettings(
-                        terminalKeyboardConfig.copyWith(
-                          reportMouseEvents: value,
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                SizedBox(height: 18),
-                _SettingsRow(
-                  localizationKey:
-                      'settings.terminal.input.navigationKeysScroll',
-                  title: 'Scroll with Navigation Keys',
-                  subtitle: 'Use navigation keys to scroll the terminal.',
-                  trailing: _SettingsSwitch(
-                    value: state._navigationKeysScrollOutsideInteractiveApps,
-                    onChanged: (value) {
-                      state._updateKeyboardSettings(
-                        terminalKeyboardConfig.copyWith(
-                          navigationKeysScrollOutsideInteractiveApps: value,
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        SizedBox(height: 30),
-        _SettingsSection(
-          key: state._settingsSectionKey('terminal-pointer'),
-          icon: Icons.mouse_outlined,
-          localizationKey: 'settings.terminal.pointer.title',
-          title: 'Pointer',
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(
-              maxWidth: _settingsContentMaxWidth,
-            ),
-            child: Column(
-              children: [
-                _SettingsRow(
-                  localizationKey:
-                      'settings.terminal.pointer.commandClickOpensTarget',
-                  title: 'Cmd-Click Opens Filename/URL',
-                  subtitle: 'Open a recognized filename or URL with the default application.',
-                  trailing: _SettingsSwitch(
-                    value: terminalPointerConfig.commandClickOpensFilenameOrUrl,
-                    onChanged: (value) {
-                      state._mutate(
-                        () => terminalPointerConfig = terminalPointerConfig
-                            .copyWith(commandClickOpensFilenameOrUrl: value),
-                      );
-                      state._persistRuntimeSettings();
-                    },
-                  ),
-                ),
-                SizedBox(height: 18),
-                _SettingsRow(
-                  localizationKey:
-                      'settings.terminal.pointer.optionClickMovesCursor',
-                  title: 'Option-Click Moves Cursor',
-                  subtitle:
-                      'Move the terminal input cursor to the clicked position.',
-                  trailing: _SettingsSwitch(
-                    value: terminalPointerConfig.optionClickMovesCursor,
-                    onChanged: (value) {
-                      state._mutate(
-                        () => terminalPointerConfig = terminalPointerConfig
-                            .copyWith(optionClickMovesCursor: value),
-                      );
-                      state._persistRuntimeSettings();
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        SizedBox(height: 30),
-        _SettingsSection(
-          key: state._settingsSectionKey('terminal-interaction'),
-          icon: Icons.content_copy_rounded,
-          title: 'Interaction',
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(
-              maxWidth: _settingsContentMaxWidth,
-            ),
-            child: Column(
-              children: [
-                _SettingsRow(
-                  localizationKey: 'settings.terminal.copyOnSelect',
-                  title: 'Copy on Select',
-                  subtitle:
-                      'Automatically copy selected text to the clipboard.',
-                  trailing: _SettingsSwitch(
-                    value: state._copyOnSelect,
-                    onChanged: (value) {
-                      state._mutate(() => state._copyOnSelect = value);
-                      terminalCopyOnSelect = value;
-                      state._persistRuntimeSettings();
-                    },
-                  ),
-                ),
-                SizedBox(height: 18),
-                _SettingsRow(
-                  localizationKey:
-                      'settings.terminal.selectCommandBlockOnClick',
-                  title: 'Select Command Block on Click',
-                  subtitle:
-                      'Click a command or its output to select the block.',
-                  trailing: _SettingsSwitch(
-                    key: const ValueKey(
-                      'settings-terminal-select-command-block-on-click-switch',
-                    ),
-                    value: state._selectCommandBlockOnClick,
-                    onChanged: (value) {
-                      state._mutate(
-                        () => state._selectCommandBlockOnClick = value,
-                      );
-                      terminalSelectCommandBlockOnClick = value;
-                      state._persistRuntimeSettings();
-                    },
-                  ),
-                ),
-                SizedBox(height: 18),
-                _SettingsRow(
-                  localizationKey: 'settings.terminal.wordBoundaries',
-                  title: 'Word Selection Boundaries',
-                  subtitle: r'Characters that separate words on double-click. Use \t for Tab and \\ for a backslash.',
-                  trailing: _SettingsTextField(
-                    key: const ValueKey('settings-terminal-word-boundaries'),
-                    controller: state._wordBoundariesController,
-                    onChanged: (value) {
-                      terminalWordBoundaries = parseTerminalWordBoundaries(
-                        value,
-                      );
-                      state._persistRuntimeSettings();
-                    },
-                  ),
-                ),
-                SizedBox(height: 18),
-                _SettingsRow(
-                  localizationKey: 'settings.terminal.composer',
-                  title: 'Composer',
-                  subtitle: 'Show the command input bar below the terminal.',
-                  trailing: _SettingsSwitch(
-                    value: state._composerEnabled,
-                    onChanged: (value) {
-                      state._mutate(() => state._composerEnabled = value);
-                      terminalComposerEnabled = value;
-                      state._persistRuntimeSettings();
-                    },
-                  ),
-                ),
-                SizedBox(height: 18),
-                _SettingsRow(
-                  localizationKey: 'settings.terminal.multipleTabs',
-                  title: 'Multiple Tabs',
-                  subtitle:
-                      'Allow multiple terminal sessions in the same pane.',
-                  trailing: _SettingsSwitch(
-                    value: state._multiTabEnabled,
-                    onChanged: (value) {
-                      state._mutate(() => state._multiTabEnabled = value);
-                      terminalMultiTabEnabled = value;
                       state._persistRuntimeSettings();
                     },
                   ),
