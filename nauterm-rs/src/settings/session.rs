@@ -147,7 +147,7 @@ impl Settings {
         }
         self.values.terminal_preferences.validate()
     }
-    pub(super) fn session_settings(&self, cx: &App) -> AnyElement {
+    pub(super) fn session_settings(&self, cx: &mut Context<Self>) -> AnyElement {
         let controls = self
             .session_controls
             .as_ref()
@@ -195,6 +195,23 @@ impl Settings {
                         Input::new(&controls.keepalive)
                             .digits_only()
                             .aria_label(crate::localization::text(cx, "SSH Keepalive Interval")),
+                    ),
+                )
+                .child(
+                    self.row(
+                        "settings.terminal.multipleTabs.label",
+                        "settings.terminal.multipleTabs.description",
+                        Switch::new(
+                            "multiple-tabs",
+                            "Multiple Tabs",
+                            self.values.terminal.multiple_tabs,
+                        )
+                        .on_change(cx.listener(
+                            |this, value, window, cx| {
+                                this.values.terminal.multiple_tabs = *value;
+                                this.changed(window, cx);
+                            },
+                        )),
                     ),
                 ),
         )

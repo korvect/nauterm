@@ -18,7 +18,6 @@ pub(super) enum Section {
     Input,
     Selection,
     Bell,
-    Features,
     Recording,
     SftpWorkspace,
     Editors,
@@ -32,7 +31,7 @@ pub(super) enum Section {
     About,
 }
 impl Section {
-    const ALL: [Self; 24] = [
+    const ALL: [Self; 23] = [
         Self::Appearance,
         Self::Window,
         Self::Behavior,
@@ -45,7 +44,6 @@ impl Section {
         Self::Input,
         Self::Selection,
         Self::Bell,
-        Self::Features,
         Self::Recording,
         Self::SftpWorkspace,
         Self::Editors,
@@ -79,11 +77,10 @@ impl Section {
             Self::Font => "FONT",
             Self::Cursor => "CURSOR",
             Self::Layout => "LAYOUT",
-            Self::Session => "SESSION",
+            Self::Session => "settings.terminal.session.title",
             Self::Input => "INPUT",
-            Self::Selection => "SELECTION",
+            Self::Selection => "settings.terminal.selection.title",
             Self::Bell => "BELL",
-            Self::Features => "FEATURES",
             Self::Recording => "HISTORY & STORAGE",
             Self::SftpWorkspace => "WORKSPACE",
             Self::Editors => "EDITORS",
@@ -267,6 +264,12 @@ const ENTRIES: &[Entry] = &[
         "scroll history 滚动条",
     ),
     Entry::new(
+        S::Layout,
+        "settings.terminal.composer.label",
+        "rs.settings.terminal.composer.description",
+        "multiline command input editor 命令 输入 编辑器",
+    ),
+    Entry::new(
         S::Session,
         "settings.terminal.shell.label",
         "settings.terminal.shell.description",
@@ -295,6 +298,12 @@ const ENTRIES: &[Entry] = &[
         "settings.terminal.sshPrediction.label",
         "settings.terminal.sshPrediction.description",
         "adaptive always off latency prediction echo input 预测 回显 延迟 本地 自适应",
+    ),
+    Entry::new(
+        S::Session,
+        "settings.terminal.multipleTabs.label",
+        "settings.terminal.multipleTabs.description",
+        "multi tab split 标签 多标签 分屏",
     ),
     Entry::new(
         S::Input,
@@ -355,18 +364,6 @@ const ENTRIES: &[Entry] = &[
         "settings.terminal.bell.tabIndicator.label",
         "settings.terminal.bell.tabIndicator.description",
         "notification alert indicator background 铃声 提醒 标签 后台 标记",
-    ),
-    Entry::new(
-        S::Features,
-        "settings.terminal.composer.label",
-        "rs.settings.terminal.composer.description",
-        "multiline command input editor 命令 输入 编辑器",
-    ),
-    Entry::new(
-        S::Features,
-        "settings.terminal.multipleTabs.label",
-        "settings.terminal.multipleTabs.description",
-        "multi tab split 标签 多标签 分屏",
     ),
     Entry::new(
         S::Recording,
@@ -851,6 +848,22 @@ mod tests {
         }
         for entry in ENTRIES {
             assert!(Section::ALL.contains(&entry.section));
+        }
+        for (title, section) in [
+            ("settings.terminal.composer.label", Section::Layout),
+            ("settings.terminal.multipleTabs.label", Section::Session),
+            (
+                "settings.terminal.input.navigationKeysScroll.label",
+                Section::Input,
+            ),
+        ] {
+            assert_eq!(
+                ENTRIES
+                    .iter()
+                    .find(|entry| entry.title == title)
+                    .map(|entry| entry.section),
+                Some(section),
+            );
         }
     }
 
