@@ -356,15 +356,17 @@ impl Terminal {
         }
         cx.stop_propagation();
     }
+    pub(super) fn selected_text(&self) -> Option<String> {
+        let selection = self.effective_selection()?;
+        let (start, end) = selection.native_offsets(self.frame.columns, self.frame.history_lines);
+        self.session
+            .selected_text(start, end)
+            .filter(|text| !text.is_empty())
+    }
+
     pub(super) fn copy_selection(&self, cx: &mut App) {
-        if let Some(selection) = self.effective_selection() {
-            let (start, end) =
-                selection.native_offsets(self.frame.columns, self.frame.history_lines);
-            if let Some(text) = self.session.selected_text(start, end)
-                && !text.is_empty()
-            {
-                cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string(text));
-            }
+        if let Some(text) = self.selected_text() {
+            cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string(text));
         }
     }
 }

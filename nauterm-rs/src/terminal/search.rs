@@ -268,6 +268,52 @@ impl Terminal {
         self.show_search(window, cx);
         cx.stop_propagation();
     }
+    #[cfg(target_os = "macos")]
+    pub(super) fn menu_search_actions(&self, view: Div, cx: &mut Context<Self>) -> Div {
+        use crate::app_menu as menu;
+
+        let has_query = !self.search.input.read(cx).value().is_empty();
+        let has_selection = self.effective_selection().is_some();
+        view.on_action(cx.listener(|this, _: &menu::Find, window, cx| {
+            this.show_search(window, cx);
+        }))
+        .when(has_query, |view| {
+            view.on_action(cx.listener(|this, _: &menu::FindNext, _, cx| {
+                this.search.visible = true;
+                this.run_search(Direction::Next, true, cx);
+            }))
+            .on_action(cx.listener(|this, _: &menu::FindPrevious, _, cx| {
+                this.search.visible = true;
+                this.run_search(Direction::Previous, true, cx);
+            }))
+        })
+        .when(has_selection, |view| {
+            view.on_action(cx.listener(|this, _: &menu::FindSelection, window, cx| {
+                if let Some(text) = this.selected_text() {
+                    this.search.input.update(cx, |input, cx| {
+                        input.set_value(text, window, cx);
+                    });
+                    this.show_search(window, cx);
+                }
+            }))
+            .on_action(cx.listener(|this, _: &menu::JumpToSelection, _, cx| {
+                let Some(selection) = this.effective_selection() else {
+                    return;
+                };
+                let row = selection.start / i64::from(this.frame.columns.max(1));
+                let target = (i64::from(this.frame.history_lines) - row
+                    + i64::from(this.frame.rows) / 2)
+                    .clamp(0, i64::from(this.frame.history_lines));
+                let lines = target - i64::from(this.frame.display_offset);
+                if lines != 0 {
+                    this.session
+                        .scroll(lines.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32);
+                    this.refresh(cx);
+                }
+            }))
+        })
+    }
+
     pub(super) fn close_search_action(
         &mut self,
         _: &crate::ui::CloseEditor,
