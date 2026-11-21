@@ -176,8 +176,8 @@ impl Panel {
                 cx,
             ));
         sections::frame(
-            "UNLOCK SYNC",
-            "UNLOCK SYNC".into(),
+            "settings.label.unlockSync",
+            crate::localization::text(cx, "settings.label.unlockSync"),
             IconName::Key,
             p,
             content,

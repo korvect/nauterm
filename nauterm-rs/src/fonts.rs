@@ -54,7 +54,10 @@ impl Default for Options {
                 SelectOption::new("monospace".into(), "monospace")
                     .font_preview(crate::terminal_appearance::platform_family()),
             ],
-            cjk: vec![SelectOption::localized(String::new(), "Auto")],
+            cjk: vec![SelectOption::localized(
+                String::new(),
+                "settings.terminal.cjkFont.auto",
+            )],
         }
     }
 }
@@ -100,7 +103,10 @@ pub(crate) fn options(text: &TextSystem) -> Options {
     names.sort_by_key(|name| name.to_lowercase());
     names.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
     let mut primary = vec!["monospace".to_owned()];
-    let mut cjk = vec![SelectOption::localized(String::new(), "Auto")];
+    let mut cjk = vec![SelectOption::localized(
+        String::new(),
+        "settings.terminal.cjkFont.auto",
+    )];
     for name in names {
         let face = font(name.clone());
         let id = text.resolve_font(&face);

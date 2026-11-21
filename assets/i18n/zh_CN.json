@@ -197,8 +197,6 @@
   "connection.uri.invalid": "无法打开此连接链接。请使用不包含查询参数或片段的 SSH、SFTP 或 Telnet 链接。",
   "language.english.autonym": "English",
   "language.simplifiedChinese.autonym": "简体中文",
-  "rs.ai.action.configureProviders": "配置提供商…",
-  "rs.ai.action.updatePresets": "更新预设",
   "rs.format.logDate": "%Y年%-m月%-d日",
   "rs.keychain.action.copyPublicKey": "复制公钥",
   "rs.keychain.action.exportToFile": "导出到文件",
@@ -226,21 +224,9 @@
   "rs.settings.search.sync.description": "提供商、自动同步、同步密钥、合并策略、版本和加密的本地备份。",
   "rs.settings.search.terminalFont.description": "字体、字号、行高、字间距和字重。",
   "rs.settings.search.transfers.description": "并发任务数及每个传输任务的并行请求数。",
-  "rs.settings.terminal.cjkFont.description": "中日韩文字的回退字体。选择 Auto 时使用系统默认字体。",
-  "rs.settings.terminal.clickMovesCursor.title": "单击移动光标",
-  "rs.settings.terminal.clickMovesCursor.description": "按住修饰键单击提示符输入区，将光标移到该位置。",
-  "rs.settings.terminal.clickMovesCursor.label.macos": "Option 单击移动光标",
-  "rs.settings.terminal.clickMovesCursor.label.other": "Alt 单击移动光标",
-  "rs.settings.terminal.composer.description": "在新终端面板中默认显示命令输入栏。",
-  "rs.settings.terminal.emulation.description": "新会话上报的 TERM 值。",
-  "rs.settings.terminal.openTarget.title": "打开链接和文件",
-  "rs.settings.terminal.openTarget.description": "按住修饰键单击文件名或 URL 即可打开。",
-  "rs.settings.terminal.openTarget.label.macos": "Command 单击打开文件名/URL",
-  "rs.settings.terminal.openTarget.label.other": "Ctrl 单击打开文件名/URL",
+  "rs.settings.terminal.cjkFont.description": "用于中日韩文字的回退字体。选择「自动」时使用系统默认字体。",
   "rs.settings.terminal.padding.description": "终端内容四周的内边距。可输入 1 至 4 个以逗号分隔的值。",
-  "rs.settings.terminal.scrollback.description": "可见屏幕上方保留的行数。设为 0 可禁用回滚。",
-  "rs.settings.terminal.wordBoundaries.description": "双击选词时用作分隔的字符。使用 \\t 表示 Tab。",
-  "rs.sftp.action.copyPath": "复制路径",
+  "rs.settings.terminal.scrollback.description": "滚动缓冲区保留的最大行数。设为 0 可禁用回滚。",
   "rs.sftp.action.withSudo": "使用 sudo",
   "rs.ui.copy.absoluteLocalFilePathRequired": "需要本地文件的绝对路径。",
   "rs.ui.copy.absoluteRemotePathRequired": "需要远程绝对路径。",
@@ -256,16 +242,16 @@
   "rs.ui.copy.aiAvailableAfterTerminal": "打开终端后即可使用 AI 助手。",
   "rs.ui.copy.aiMessage": "AI 消息",
   "rs.ui.copy.aiPresetsTooLarge": "AI 预设过大。",
-  "rs.ui.copy.aiProviderBlockedPrompt": "AI 提供商拦截了此提示词。",
-  "rs.ui.copy.aiProviderInterruptedToolCallsNo": "AI 提供商中断了工具调用，未生成待确认命令。",
-  "rs.ui.copy.aiProviderRepeatedCommandProposal": "AI 提供商重复发送了一批待确认命令。",
-  "rs.ui.copy.aiProviderRepeatedEarlierCommandID": "AI 提供商重复使用了先前的命令 ID。",
-  "rs.ui.copy.aiProviderReportedErrorWhile": "AI 提供商在流式响应期间报告错误。",
-  "rs.ui.copy.aiProviderReturnedHTTPCheckEndpoint": "AI 提供商返回 HTTP {}，请检查端点、模型和 API 密钥。",
-  "rs.ui.copy.aiProviderSentInvalidStreamEvent": "AI 提供商发送了无效的流事件。",
-  "rs.ui.copy.aiProviderSentInvalidToolCalls": "AI 提供商发送了无效的工具调用。",
-  "rs.ui.copy.aiProviderSentInvalidUTF8": "AI 提供商发送了无效的 UTF-8 数据。",
-  "rs.ui.copy.aiProviderStoreUnavailable": "AI 提供商存储不可用。",
+  "rs.ui.copy.aiProviderBlockedPrompt": "AI 服务商拦截了此提示词。",
+  "rs.ui.copy.aiProviderInterruptedToolCallsNo": "AI 服务商中断了工具调用，未生成待确认命令。",
+  "rs.ui.copy.aiProviderRepeatedCommandProposal": "AI 服务商重复发送了一批待确认命令。",
+  "rs.ui.copy.aiProviderRepeatedEarlierCommandID": "AI 服务商重复使用了先前的命令 ID。",
+  "rs.ui.copy.aiProviderReportedErrorWhile": "AI 服务商在流式响应期间报告错误。",
+  "rs.ui.copy.aiProviderReturnedHTTPCheckEndpoint": "AI 服务商返回 HTTP {}，请检查端点、模型和 API 密钥。",
+  "rs.ui.copy.aiProviderSentInvalidStreamEvent": "AI 服务商发送了无效的流事件。",
+  "rs.ui.copy.aiProviderSentInvalidToolCalls": "AI 服务商发送了无效的工具调用。",
+  "rs.ui.copy.aiProviderSentInvalidUTF8": "AI 服务商发送了无效的 UTF-8 数据。",
+  "rs.ui.copy.aiProviderStoreUnavailable": "AI 服务商存储不可用。",
   "rs.ui.copy.aiRequestTimedOut": "AI 请求超时。",
   "rs.ui.copy.aiResponseExceededOutputLimit": "AI 响应超过输出限制。",
   "rs.ui.copy.aiResponseInterrupted": "AI 响应中断。",
@@ -326,12 +312,9 @@
   "rs.ui.copy.baudRateMustBePositiveNumber": "波特率必须是正数。",
   "rs.ui.copy.baudRateMustBePositiveNumberUp": "波特率必须是正数且不超过 {}。",
   "rs.ui.copy.beam": "竖线",
-  "rs.ui.copy.between0And1": "介于 0 和 1 之间。",
   "rs.ui.copy.black": "黑色",
-  "rs.ui.copy.blankUsesProviderDefault": "留空使用提供商默认值。",
   "rs.ui.copy.block": "实心方块",
   "rs.ui.copy.bold": "粗体",
-  "rs.ui.copy.bright": "高亮",
   "rs.ui.copy.buildDoesNotIncludeSparkleUpdateFeed": "此构建未包含 Sparkle 更新源和公钥。",
   "rs.ui.copy.bundledLicenseInventoryIncomplete": "内置许可证清单不完整。",
   "rs.ui.copy.bundledNativeLicenseEmpty": "某个内置原生组件的许可证为空。",
@@ -396,8 +379,8 @@
   "rs.ui.copy.chooseModelBeforeSending": "发送前请选择模型。",
   "rs.ui.copy.chooseNonemptyRegularKeyFileSmaller": "请选择非空且小于 4 MB 的普通密钥文件。",
   "rs.ui.copy.chooseProtocolBeforeConnecting": "连接前请选择协议。",
-  "rs.ui.copy.chooseProvider": "选择提供商",
-  "rs.ui.copy.chooseProviderAndModelFirst": "请先选择提供商和模型。",
+  "rs.ui.copy.chooseProvider": "选择服务商",
+  "rs.ui.copy.chooseProviderAndModelFirst": "请先选择服务商和模型。",
   "rs.ui.copy.choosePuTTYRegistryExportReg": "选择 PuTTY 注册表导出文件（.reg）",
   "rs.ui.copy.chooseRegularFile": "请选择普通文件。",
   "rs.ui.copy.chooseRegularImageOrTextFile": "请选择普通图片或文本文件。",
@@ -436,7 +419,6 @@
   "rs.ui.copy.cloudVersionRestored": "云端版本已恢复",
   "rs.ui.copy.collapseComposer": "收起命令输入框",
   "rs.ui.copy.color": "{} {}颜色",
-  "rs.ui.copy.commaSeparatedFirstModelDefault": "以逗号分隔，第一个模型为默认模型。",
   "rs.ui.copy.commandBelongsAnotherSession": "命令属于另一个会话",
   "rs.ui.copy.commandBlock": "命令区块",
   "rs.ui.copy.commandChangedBeforeApproval": "命令在确认前发生了变化。",
@@ -460,7 +442,7 @@
   "rs.ui.copy.configurationChangedAnotherWindow": "配置已在其他窗口中更改，请重新加载后再保存",
   "rs.ui.copy.configurationChangedWhileSaving": "此配置在保存期间发生了变化，请重新打开后重试。",
   "rs.ui.copy.configure": "配置",
-  "rs.ui.copy.configureActiveAIProviderSettings": "请先在设置中配置活动的 AI 提供商。",
+  "rs.ui.copy.configureActiveAIProviderSettings": "请先在设置中配置活动的 AI 服务商。",
   "rs.ui.copy.configureSSHEditorSettingsFirst": "请先在设置中配置 SSH 编辑器。",
   "rs.ui.copy.configuredEditorExecutableCouldNotBe": "找不到配置的编辑器可执行文件。",
   "rs.ui.copy.configuredEditorNotExecutableOrNo": "配置的编辑器不可执行或已卸载。",
@@ -489,7 +471,7 @@
   "rs.ui.copy.conversationMovedAnotherScopeReload": "此对话已移动到其他范围，请重新加载历史记录后再删除。",
   "rs.ui.copy.conversationNoUUID": "对话缺少 UUID。",
   "rs.ui.copy.conversationNotBoundTerminal": "此对话未关联终端。",
-  "rs.ui.copy.conversationSProviderRemovedChoose": "此对话的提供商已被删除，请选择其他提供商。",
+  "rs.ui.copy.conversationSProviderRemovedChoose": "此对话的服务商已被删除，请选择其他服务商。",
   "rs.ui.copy.conversationTooManyItems": "此对话的项目过多。",
   "rs.ui.copy.conversationTooManyMessages": "此对话中的消息过多。",
   "rs.ui.copy.conversationUnavailable": "此对话不可用。",
@@ -503,7 +485,7 @@
   "rs.ui.copy.couldNotCheckKeyExportDestination": "无法检查密钥导出目标。",
   "rs.ui.copy.couldNotCheckLocalDownload": "无法检查本地下载目标。",
   "rs.ui.copy.couldNotCheckUpdatesCheckConnection": "无法检查更新，请检查网络连接后重试。",
-  "rs.ui.copy.couldNotConnectAIProvider": "无法连接 AI 提供商。",
+  "rs.ui.copy.couldNotConnectAIProvider": "无法连接 AI 服务商。",
   "rs.ui.copy.couldNotConsumeRecoveryPrevious": "无法应用恢复状态，已恢复先前的元数据",
   "rs.ui.copy.couldNotConsumeRecoveryRestoring": "无法应用恢复状态：{error}。恢复先前的元数据也失败：{rollback}",
   "rs.ui.copy.couldNotCreateFolder": "无法创建文件夹。",
@@ -600,7 +582,6 @@
   "rs.ui.copy.deleteFinishedLogS": "删除 {} 条已结束的会话日志？",
   "rs.ui.copy.deleteFromConversationHistory": "从对话历史中删除“{}”？",
   "rs.ui.copy.deleteKnownHostS": "删除 {} 个已知主机？",
-  "rs.ui.copy.deleteProvider": "删除提供商",
   "rs.ui.copy.deleteProxyProxies": "删除 {} 个代理？",
   "rs.ui.copy.deleteRemoteItemsWarning": "这会永久删除选中的远程文件或文件夹，且无法撤销。",
   "rs.ui.copy.deleteSelectedItemS": "删除所选的 {} 个项目？",
@@ -657,7 +638,6 @@
   "rs.ui.copy.editNotOpenedSudo": "此编辑并非以 sudo 打开。",
   "rs.ui.copy.editPath": "编辑路径",
   "rs.ui.copy.editPathCannotBeEncodedSFTP": "SFTP 无法编码此编辑路径。",
-  "rs.ui.copy.editProvider": "编辑提供商",
   "rs.ui.copy.editRequestAlreadyRunning": "已有编辑请求正在运行。",
   "rs.ui.copy.editRuleAndSelectAvailableSSHHost": "请编辑此规则并选择可用的 SSH 主机。",
   "rs.ui.copy.editSessionClosed": "编辑会话已关闭。",
@@ -688,7 +668,6 @@
   "rs.ui.copy.enterDestinationPath": "请输入目标路径。",
   "rs.ui.copy.enterDevicePin": "请输入设备 PIN 以继续。",
   "rs.ui.copy.enterDevicePinSsh": "请输入设备 PIN 以继续 SSH 身份验证。",
-  "rs.ui.copy.enterHTTPOrHTTPSAIBaseURL": "请输入 HTTP 或 HTTPS 的 AI 基础 URL。",
   "rs.ui.copy.enterMessageAtMost512KiB": "请输入不超过 512 KiB 的消息。",
   "rs.ui.copy.enterMessageOrKeepAttachment": "请输入消息或保留一个附件。",
   "rs.ui.copy.enterPasswordContinue": "请输入密码以继续。",
@@ -1000,7 +979,7 @@
   "rs.ui.copy.loadingLicenses": "正在加载许可证…",
   "rs.ui.copy.loadingLogs": "正在加载日志…",
   "rs.ui.copy.loadingPassword": "正在加载密码…",
-  "rs.ui.copy.loadingProviders": "正在加载提供商…",
+  "rs.ui.copy.loadingProviders": "正在加载服务商…",
   "rs.ui.copy.loadingProxies": "正在加载代理…",
   "rs.ui.copy.loadingSavedCredentials": "正在加载保存的凭据…",
   "rs.ui.copy.loadingShellHistory": "正在加载命令历史…",
@@ -1041,7 +1020,6 @@
   "rs.ui.copy.matchingKeySelected": " · 已选择匹配的密钥",
   "rs.ui.copy.matchingPrivateKeyCouldNotBeReadNext": "无法读取证书旁的匹配私钥。",
   "rs.ui.copy.maxTokensMustBePositiveWholeNumber": "最大 Token 数必须是正整数。",
-  "rs.ui.copy.maxTokensMustBePositiveWholeNumberOr": "最大 Token 数必须是正整数或留空。",
   "rs.ui.copy.medium": "中等",
   "rs.ui.copy.mergedKnownHostsFileWouldExceed4MiB": "合并后的 known_hosts 文件将超过 4 MiB。",
   "rs.ui.copy.missingSharedResourceID": "缺少共享资源 ID",
@@ -1070,11 +1048,10 @@
   "rs.ui.copy.newKeyActions": "新建密钥操作",
   "rs.ui.copy.newMasterKeyConfirmationDoesNotMatch": "两次输入的新主密钥不一致。",
   "rs.ui.copy.newMasterKeyMustBeDifferentFrom": "新主密钥必须与当前密钥不同。",
-  "rs.ui.copy.newProvider": "新提供商",
+  "rs.ui.copy.newProvider": "新服务商",
   "rs.ui.copy.nextMatch": "下一个匹配项 · Enter",
   "rs.ui.copy.no": "没有{}",
-  "rs.ui.copy.noAIProvidersYetAddOneUseAssistant": "暂无 AI 提供商，添加后即可使用 AI 助手。",
-  "rs.ui.copy.noActiveProvider": "没有活动提供商",
+  "rs.ui.copy.noActiveProvider": "没有活动服务商",
   "rs.ui.copy.noActiveTerminal": "没有活动终端",
   "rs.ui.copy.noBundledLicensesFound": "未找到内置许可证。",
   "rs.ui.copy.noCatalogIDsRemain": "没有可用的目录 ID",
@@ -1095,7 +1072,6 @@
   "rs.ui.copy.noMatchingForwardingRules": "没有匹配的转发规则",
   "rs.ui.copy.noMatchingHostsOrKeys": "没有匹配的主机或密钥。",
   "rs.ui.copy.noMatchingItems": "没有匹配的项目",
-  "rs.ui.copy.noMatchingProviders": "没有匹配的服务商。",
   "rs.ui.copy.noMatchingProxies": "没有匹配的代理",
   "rs.ui.copy.noMatchingTags": "没有匹配的标签",
   "rs.ui.copy.noMatchingThemes": "没有匹配的主题",
@@ -1112,10 +1088,9 @@
   "rs.ui.copy.noSyncDEKCachedDevice": "此设备未缓存同步 DEK",
   "rs.ui.copy.noTimestamp": "无时间戳",
   "rs.ui.copy.noWorkspaceIDsRemain": "没有可用的工作区 ID。",
-  "rs.ui.copy.normal": "标准",
   "rs.ui.copy.notSupportedImageOrTextFile": "{name} 不是支持的图片或文本文件。",
   "rs.ui.copy.onlyFilesAndFoldersCanBeUploadedNo": "只能上传文件和文件夹，未添加任何任务。",
-  "rs.ui.copy.onlyProviderAssistantStays": "这是唯一的提供商。添加其他提供商之前，AI 助手将不可用。",
+  "rs.ui.copy.onlyProviderAssistantStays": "这是唯一的服务商。添加其他服务商之前，AI 助手将不可用。",
   "rs.ui.copy.onlyRegularRemoteFilesCanBeEdited": "只能编辑普通远程文件。",
   "rs.ui.copy.onlyTerminalConversationsCanPropose": "只有终端对话可以生成待确认命令。",
   "rs.ui.copy.open": "打开 {name}",
@@ -1184,24 +1159,23 @@
   "rs.ui.copy.promptCursorMovementExceededLimit": "提示符光标移动超过限制",
   "rs.ui.copy.protocolNoLongerEnabledReopenHost": "此协议已禁用，请重新打开主机以刷新设置。",
   "rs.ui.copy.prototypeRSSnippetsNotAutomatically": "原型 RS 命令片段不会自动合并到共享的 Nauterm 数据中。",
-  "rs.ui.copy.providerActiveNextProviderList": "此提供商当前处于活动状态，列表中的下一个提供商将接替它。",
+  "rs.ui.copy.providerActiveNextProviderList": "此服务商当前处于活动状态，列表中的下一个服务商将接替它。",
   "rs.ui.copy.providerAlreadyRemoved": "提供商已被移除。",
-  "rs.ui.copy.providerChangedAnotherClientReload": "提供商已在其他客户端中更改，请重新加载后再保存。",
+  "rs.ui.copy.providerChangedAnotherClientReload": "服务商已在其他客户端中更改，请重新加载后再保存。",
   "rs.ui.copy.providerCouldNotComplete": "提供商无法完成授权，请重新登录。",
   "rs.ui.copy.providerDidNotReturnRefreshToken": "提供商未返回刷新令牌，请重新登录。",
   "rs.ui.copy.providerDidNotReturnUsable": "提供商未返回可用的授权令牌。",
-  "rs.ui.copy.providerDisplayName": "提供商显示名称",
-  "rs.ui.copy.providerFieldsTooLong": "提供商字段过长。",
-  "rs.ui.copy.providerName": "提供商名称",
-  "rs.ui.copy.providerNameRequired": "提供商名称为必填项。",
+  "rs.ui.copy.providerDisplayName": "服务商显示名称",
+  "rs.ui.copy.providerFieldsTooLong": "服务商字段过长。",
+  "rs.ui.copy.providerName": "服务商名称",
   "rs.ui.copy.providerNeedsAuthorization": "此提供商需要授权。",
-  "rs.ui.copy.providerNoDatabaseID": "提供商缺少数据库 ID。",
-  "rs.ui.copy.providerNotSaved": "提供商尚未保存。",
-  "rs.ui.copy.providerRemovedAnotherClientReload": "提供商已被其他客户端移除，请重新加载后继续。",
+  "rs.ui.copy.providerNoDatabaseID": "服务商缺少数据库 ID。",
+  "rs.ui.copy.providerNotSaved": "服务商尚未保存。",
+  "rs.ui.copy.providerRemovedAnotherClientReload": "服务商已被其他客户端移除，请重新加载后继续。",
   "rs.ui.copy.providerRemovedRefreshSyncPage": "此提供商已被移除，请刷新同步页面。",
-  "rs.ui.copy.providerRequiresAPIKey": "此提供商需要 API 密钥。",
+  "rs.ui.copy.providerRequiresAPIKey": "此服务商需要 API 密钥。",
   "rs.ui.copy.providerReturnedInvalidAuthorization": "提供商返回了无效的授权响应（HTTP {status}）。",
-  "rs.ui.copy.providerUsesUnsupportedAPIProtocol": "此提供商使用了不支持的 API 协议。",
+  "rs.ui.copy.providerUsesUnsupportedAPIProtocol": "此服务商使用了不支持的 API 协议。",
   "rs.ui.copy.providerUsesUnsupportedStorageScheme": "此提供商使用了不支持的存储协议，已保留保存的设置。",
   "rs.ui.copy.proxiesImportedButMigrationMetadata": "代理已导入，但无法保存迁移元数据：{error}。已保留原元数据，请刷新后重试。",
   "rs.ui.copy.proxyDeletionCompletedButWorkspace": "代理已删除，但无法保存工作区引用：{error}。请刷新后重试。",
@@ -1218,7 +1192,7 @@
   "rs.ui.copy.publicAndPrivateKey": "公钥和私钥",
   "rs.ui.copy.publicKeyExportPlaceholders": "使用 $1 表示位置、$2 表示文件名、$3 表示公钥。",
   "rs.ui.copy.publicKeyTooLarge": "公钥过大。",
-  "rs.ui.copy.putProviderCredentialsAPIKeyNotURL": "请将提供商凭据填入 API 密钥字段，不要写入 URL。",
+  "rs.ui.copy.putProviderCredentialsAPIKeyNotURL": "请将服务商凭据填入 API 密钥字段，不要写入 URL。",
   "rs.ui.copy.queued": "已排队 #{index}",
   "rs.ui.copy.queued2": "排队中",
   "rs.ui.copy.quickConnectSearch": "搜索主机、user@host 或 telnet://host",
@@ -1397,10 +1371,10 @@
   "rs.ui.copy.searchHostsOrEnterAConnectionCommand": "搜索主机或输入连接命令",
   "rs.ui.copy.searchHostsOrTags": "搜索主机或标签",
   "rs.ui.copy.searchPackages": "搜索软件包…",
-  "rs.ui.copy.searchProviders": "搜索提供商",
+  "rs.ui.copy.searchProviders": "搜索服务商",
   "rs.ui.copy.searchThirdPartyPackages": "搜索第三方软件包",
   "rs.ui.copy.select": "选择 {}",
-  "rs.ui.copy.selectAIProvider": "请选择 AI 提供商。",
+  "rs.ui.copy.selectAIProvider": "请选择 AI 服务商。",
   "rs.ui.copy.selectAtLeastOneFile": "请至少选择一个文件。",
   "rs.ui.copy.selectAtLeastOneSnippet": "请至少选择一个命令片段。",
   "rs.ui.copy.selectAvailableSSHHost": "请选择可用的 SSH 主机。",
@@ -1535,7 +1509,6 @@
   "rs.ui.copy.sshPort": "SSH 端口",
   "rs.ui.copy.sshPortMustBeBetween1And65535": "SSH 端口必须介于 1 和 65535 之间。",
   "rs.ui.copy.sshSessionNotConnected": "SSH 会话未连接",
-  "rs.ui.copy.startWithSavedHost": "先连接已保存的主机，\n即可使用 SFTP 管理文件。",
   "rs.ui.copy.started": "开始：{}",
   "rs.ui.copy.starting": "正在启动…",
   "rs.ui.copy.startingSignIn": "正在开始登录…",
@@ -1604,7 +1577,6 @@
   "rs.ui.copy.telnetProfilesDoNotDefineSSH": "Telnet 配置不定义 SSH 环境变量。",
   "rs.ui.copy.telnetSessionExited": "Telnet 会话已退出。",
   "rs.ui.copy.temperatureMustBeBetween0And1": "温度必须介于 0 和 1 之间。",
-  "rs.ui.copy.temperatureMustBeBetween0And1OrBlank": "温度必须介于 0 和 1 之间，或留空。",
   "rs.ui.copy.terminalCommandOutputExceededCapture": "终端命令输出超过捕获队列容量，无法追踪结果。",
   "rs.ui.copy.terminalConnectionChangedReviewNew": "终端连接已更改，请重新确认命令后再运行。",
   "rs.ui.copy.terminalCoreUnavailable": "终端内核不可用。",
@@ -2860,7 +2832,7 @@
     },
     {
       "pattern": "^([\\s\\S]*?) ([\\s\\S]*?)\\? ([\\s\\S]*?) Remote backup files will be retained\\.$",
-      "replacement": "{1} {1}？{1} 远程备份文件会保留。"
+      "replacement": "{1} {2}？{3} 远程备份文件会保留。"
     },
     {
       "pattern": "^Could not load bundled terminal symbols: ([\\s\\S]*?)$",
@@ -2940,11 +2912,11 @@
     },
     {
       "pattern": "^This operation runs with sudo on ([\\s\\S]*?)@([\\s\\S]*?)\\.$",
-      "replacement": "此操作在 {1}@{1} 上以 sudo 执行。"
+      "replacement": "此操作在 {1}@{2} 上以 sudo 执行。"
     },
     {
       "pattern": "^([\\s\\S]*?); encrypted draft cleanup failed: ([\\s\\S]*?)$",
-      "replacement": "{1}；清理加密草稿失败：{1}"
+      "replacement": "{1}；清理加密草稿失败：{2}"
     },
     {
       "pattern": "^Could not refresh terminal theme: ([\\s\\S]*?)$",
@@ -2956,7 +2928,7 @@
     },
     {
       "pattern": "^([\\s\\S]*?); restoring metadata also failed: ([\\s\\S]*?)$",
-      "replacement": "{1}；恢复元数据也失败：{1}"
+      "replacement": "{1}；恢复元数据也失败：{2}"
     },
     {
       "pattern": "^Could not load default settings: ([\\s\\S]*?)$",
@@ -3272,7 +3244,7 @@
     },
     {
       "pattern": "^Exported ([\\s\\S]*?) key ([\\s\\S]*?) to ([\\s\\S]*?)\\.$",
-      "replacement": "已将 {1} 密钥 {1} 导出到 {1}。"
+      "replacement": "已将 {1} 密钥 {2} 导出到 {3}。"
     },
     {
       "pattern": "^Recording cleanup: ([\\s\\S]*?)$",
@@ -3352,11 +3324,11 @@
     },
     {
       "pattern": "^Workspace ([\\s\\S]*?) — ([0-9]+) ([\\s\\S]*?)$",
-      "replacement": "工作区 {1} — {2} {1}"
+      "replacement": "工作区 {1} — {2} {3}"
     },
     {
       "pattern": "^([\\s\\S]*?) baud, ([\\s\\S]*?)([\\s\\S]*?)([\\s\\S]*?), flow ([\\s\\S]*?)$",
-      "replacement": "{1} 波特，{1}{3}{1}，流控制 {5}"
+      "replacement": "{1} 波特，{2}{3}{4}，流控制 {5}"
     },
     {
       "pattern": "^Save paused · ([\\s\\S]*?)$",
@@ -3376,7 +3348,7 @@
     },
     {
       "pattern": "^([\\s\\S]*?)\nLocal copy: ([\\s\\S]*?)$",
-      "replacement": "{1}\n本地副本：{1}"
+      "replacement": "{1}\n本地副本：{2}"
     },
     {
       "pattern": "^Available on ([\\s\\S]*?)$",
@@ -3476,7 +3448,7 @@
     },
     {
       "pattern": "^([\\s\\S]*?) free / ([\\s\\S]*?)$",
-      "replacement": "{1} 可用 / {1}"
+      "replacement": "{1} 可用 / {2}"
     },
     {
       "pattern": "^Sort by (.+)$",
@@ -3504,7 +3476,7 @@
     },
     {
       "pattern": "^([\\s\\S]*?) ([\\s\\S]*?) color$",
-      "replacement": "{1} {1}颜色"
+      "replacement": "{1} {2}颜色"
     },
     {
       "pattern": "^Keys \\(([\\s\\S]*?)\\)$",
@@ -3584,7 +3556,7 @@
     },
     {
       "pattern": "^([\\s\\S]*?)d ([\\s\\S]*?)h ([\\s\\S]*?)m$",
-      "replacement": "{1} 天 {1} 小时 {1} 分钟"
+      "replacement": "{1} 天 {2} 小时 {3} 分钟"
     },
     {
       "pattern": "^SFTP (.+)$",

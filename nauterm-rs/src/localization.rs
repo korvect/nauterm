@@ -358,6 +358,20 @@ mod tests {
             "printf '%s' Host"
         );
         assert_eq!(
+            catalog().translate(
+                Locale::Chinese,
+                "This operation runs with sudo on admin@prod.example."
+            ),
+            "此操作在 admin@prod.example 上以 sudo 执行。"
+        );
+        assert_eq!(
+            catalog().translate(
+                Locale::Chinese,
+                "Exported ED25519 key laptop to /tmp/laptop."
+            ),
+            "已将 ED25519 密钥 laptop 导出到 /tmp/laptop。"
+        );
+        assert_eq!(
             interpolate("{query}: {count}", &[("query", "{count}"), ("count", "2")]),
             "{count}: 2"
         );

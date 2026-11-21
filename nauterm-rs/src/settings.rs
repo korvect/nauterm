@@ -1204,7 +1204,7 @@ impl Settings {
                         .child(
                             self.row(
                                 "settings.terminal.composer.label",
-                                "rs.settings.terminal.composer.description",
+                                "settings.terminal.composer.description",
                                 Switch::new(
                                     "composer-enabled",
                                     "Composer",
@@ -1266,11 +1266,11 @@ impl Settings {
                         .child(
                             self.row(
                                 if cfg!(target_os = "macos") {
-                                    "rs.settings.terminal.openTarget.label.macos"
+                                    "settings.terminal.pointer.commandClickOpensTarget.label"
                                 } else {
-                                    "rs.settings.terminal.openTarget.label.other"
+                                    "settings.terminal.pointer.controlClickOpensTarget.label"
                                 },
-                                "rs.settings.terminal.openTarget.description",
+                                "settings.terminal.pointer.commandClickOpensTarget.description",
                                 Switch::new(
                                     "command-click-opens-filename-or-url",
                                     "Open Filename/URL",
@@ -1288,11 +1288,11 @@ impl Settings {
                         .child(
                             self.row(
                                 if cfg!(target_os = "macos") {
-                                    "rs.settings.terminal.clickMovesCursor.label.macos"
+                                    "settings.terminal.pointer.optionClickMovesCursor.label"
                                 } else {
-                                    "rs.settings.terminal.clickMovesCursor.label.other"
+                                    "settings.terminal.pointer.altClickMovesCursor.label"
                                 },
-                                "rs.settings.terminal.clickMovesCursor.description",
+                                "settings.terminal.pointer.optionClickMovesCursor.description",
                                 Switch::new(
                                     "option-click-moves-cursor",
                                     "Click Moves Cursor",
@@ -1352,7 +1352,7 @@ impl Settings {
                         )
                         .child(self.row(
                             "settings.terminal.wordBoundaries.label",
-                            "rs.settings.terminal.wordBoundaries.description",
+                            "settings.terminal.wordBoundaries.description",
                             Input::new(&self.word_boundaries).w_full().aria_label(
                                 crate::localization::text(cx, "Word Selection Boundaries"),
                             ),

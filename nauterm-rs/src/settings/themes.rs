@@ -213,7 +213,7 @@ impl Settings {
                 .my(px(16.))
                 .bg(p.border)
         };
-        let ansi = |title, range| {
+        let ansi = |title: &'static str, range| {
             div()
                 .w_full()
                 .flex_shrink_0()
@@ -225,7 +225,7 @@ impl Settings {
                         .text_size(px(12.))
                         .line_height(px(17.))
                         .font_weight(FontWeights::MEDIUM)
-                        .child(crate::localization::view(title)),
+                        .child(title),
                 )
                 .child(self.color_row(range, true))
         };
