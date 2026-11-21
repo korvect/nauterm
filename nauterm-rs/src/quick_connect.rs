@@ -16,6 +16,7 @@ use gpui_kit::{
 };
 
 const PANEL_INSET: f32 = 18.;
+const PANEL_MIN_HEIGHT: f32 = 360.;
 const PANEL_PADDING: f32 = 14.;
 const SHELL_GAP: f32 = 6.;
 const SHELL_HEIGHT: f32 = 36.;
@@ -606,7 +607,8 @@ impl Render for QuickConnect {
         let query = self.search.read(cx).value();
         let target = typed_target(&query, false);
         let width = (f32::from(window.viewport_size().width) - PANEL_INSET * 2.).clamp(0., 500.);
-        let height = (f32::from(window.viewport_size().height) - PANEL_INSET * 2.).clamp(0., 560.);
+        let max_height =
+            (f32::from(window.viewport_size().height) - PANEL_INSET * 2.).clamp(0., 560.);
         // Account for the frame's border as well as its content padding. The
         // grid itself uses flex slots so partial last rows keep the same widths.
         let available = (width - 2. - PANEL_PADDING * 2.).max(0.);
@@ -657,9 +659,9 @@ impl Render for QuickConnect {
         div()
             .id("quick-connect-panel")
             .w(px(width))
-            .max_h(px(height))
+            .min_h(px(PANEL_MIN_HEIGHT.min(max_height)))
+            .max_h(px(max_height))
             .min_w_0()
-            .min_h_0()
             .rounded(px(10.))
             .border_1()
             .border_color(p.border)
