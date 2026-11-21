@@ -6,7 +6,7 @@ mod presentation;
 mod progress;
 use crate::components::ScrollbarsExt;
 use crate::{
-    components::{Button, ButtonCustomVariant, Input},
+    components::{Button, ButtonCustomVariant, Field, Input},
     connection_state::{ConnectionState, Intervention, Phase},
     layout::ConnectionMetrics,
     native::{Core, HostTrust, Session, SshOptions},
@@ -421,11 +421,7 @@ impl Connection {
                 .placeholder("Password")
                 .masked(true)
         });
-        let passphrase = cx.new(|cx| {
-            InputState::new(window, cx)
-                .placeholder("Key passphrase (optional)")
-                .masked(true)
-        });
+        let passphrase = cx.new(|cx| InputState::new(window, cx).masked(true));
         let logs = cx.new(logs::View::new);
         let fido2_pin = cx.new(|cx| InputState::new(window, cx).placeholder("PIN").masked(true));
         let mut inputs = vec![];
@@ -946,7 +942,11 @@ impl Connection {
                             "workspace.label.enterKeyPassphrase",
                         )),
                 )
-                .child(auth_input(&self.passphrase, "Passphrase", true).disabled(self.auth.busy))
+                .child(
+                    Field::input(&self.passphrase, "common.label.passphrase")
+                        .secret(true)
+                        .disabled(self.auth.busy),
+                )
                 .when_some(self.error.clone(), |view, error| {
                     view.child(
                         div()

@@ -307,11 +307,11 @@ impl Wizard {
                         crate::localization::text(cx, "rs.ui.copy.privateKeyStrength"),
                     ))
                     .child(toggle(
-                        "Save passphrase",
+                        "workspace.keys.label.savePassphrase",
                         "",
                         WorkspaceSwitch::new(
                             "fido2-save-passphrase",
-                            "Save passphrase",
+                            "workspace.keys.label.savePassphrase",
                             self.save_passphrase,
                         )
                         .disabled(disabled)

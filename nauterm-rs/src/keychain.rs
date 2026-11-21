@@ -1,7 +1,7 @@
 use crate::components::ScrollbarsExt;
 use crate::components::menu::{ContextMenuExt, DropdownMenu, MenuItem};
 use crate::{
-    components::{Button, Field, SelectEvent, Spinner},
+    components::{Button, Field, SelectEvent, Spinner, WorkspaceSwitch},
     key_export::{ExportClosed, KeyExport},
     keygen::{self, KeyType, Parameters},
     layout,
@@ -35,6 +35,8 @@ use creation::Method;
 pub use files::Message;
 pub use related::RelatedEvent;
 use selector::{KeyKind, KeySelector};
+
+const CREDENTIAL_FIELD_GAP: f32 = 10.;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Kind {
@@ -105,6 +107,7 @@ impl Editor {
         self.generation.kind.label().hash(&mut hash);
         self.generation.ecdsa_bits.hash(&mut hash);
         self.generation.rsa_bits.hash(&mut hash);
+        self.generation.save_passphrase.hash(&mut hash);
         hash.finish()
     }
     fn has_draft(&self, cx: &App) -> bool {
@@ -767,16 +770,14 @@ impl Keychain {
                 window,
                 cx,
             ),
-            passphrase: cx.new(|cx| {
-                InputState::new(window, cx)
-                    .default_value(
-                        key.as_ref()
-                            .and_then(|k| k.passphrase.clone())
-                            .unwrap_or_default(),
-                    )
-                    .placeholder("Passphrase")
-                    .masked(true)
-            }),
+            passphrase: input(
+                key.as_ref()
+                    .and_then(|k| k.passphrase.clone())
+                    .unwrap_or_default(),
+                true,
+                window,
+                cx,
+            ),
             private,
             public,
             certificate,
@@ -943,12 +944,11 @@ impl Keychain {
             private_key: optional(editor.private.read(cx).value().to_string()),
             public_key: optional(editor.public.read(cx).value().trim().to_owned()),
             certificate: optional(editor.certificate.read(cx).value().trim().to_owned()),
-            // Paste/Import preserve only an existing record's stored passphrase.
-            // A new generation draft's passphrase must not follow a method switch
-            // into a new pasted/imported record (the reference keeps it transient).
             passphrase: editor
-                .id
-                .and_then(|_| optional(editor.passphrase.read(cx).value().to_string())),
+                .requires_passphrase(cx)
+                .then(|| editor.passphrase.read(cx).value())
+                .filter(|value| !value.is_empty())
+                .map(|value| value.to_string()),
         };
         let is_identity = editor.kind == Kind::Identity;
         if !is_identity && let Err(error) = key.validate() {
@@ -1589,39 +1589,46 @@ impl Keychain {
             Kind::Certificate => "Key",
             Kind::Identity => "Identity",
         };
+        let detected_passphrase = self.detected_passphrase_field(editor, window, cx);
         let section = div()
             .rounded(px(10.))
             .bg(p.surface)
             .p(px(16.))
             .flex()
             .flex_col()
-            .gap(px(10.))
+            .gap(px(CREDENTIAL_FIELD_GAP))
             .child(div().font_weight(FontWeights::MEDIUM).child(kind_label))
             .child(
                 div()
                     .flex()
-                    .items_center()
-                    .gap(px(10.))
-                    .when(editor.kind != Kind::Identity, |view| {
-                        view.child(
-                            div()
-                                .size(px(40.))
-                                .rounded(px(8.))
-                                .bg(rgb(0x075e92))
-                                .text_color(rgb(0xffffff))
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .child(icon(IconName::KeyRound)),
-                        )
-                    })
+                    .flex_col()
                     .child(
-                        div().flex_1().min_w_0().child(
-                            Field::input(&editor.name, "Name")
-                                .disabled(self.saving)
-                                .error(editor.name_error.clone()),
-                        ),
-                    ),
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(10.))
+                            .when(editor.kind != Kind::Identity, |view| {
+                                view.child(
+                                    div()
+                                        .size(px(40.))
+                                        .rounded(px(8.))
+                                        .bg(rgb(0x075e92))
+                                        .text_color(rgb(0xffffff))
+                                        .flex()
+                                        .items_center()
+                                        .justify_center()
+                                        .child(icon(IconName::KeyRound)),
+                                )
+                            })
+                            .child(
+                                div().flex_1().min_w_0().child(
+                                    Field::input(&editor.name, "Name")
+                                        .disabled(self.saving)
+                                        .error(editor.name_error.clone()),
+                                ),
+                            ),
+                    )
+                    .children(detected_passphrase),
             )
             .when(editor.kind == Kind::Identity, |view| {
                 view.child(
@@ -1712,6 +1719,7 @@ impl Keychain {
             );
         }
         if editor.is_generating() {
+            let save_passphrase = "workspace.keys.label.savePassphrase";
             sections.push(
                 div()
                     .p(px(16.))
@@ -1724,7 +1732,31 @@ impl Keychain {
                         cx,
                         "workspace.keys.section.security",
                     ))
-                    .child(self.field("Passphrase", &editor.passphrase, true))
+                    .child(self.field("common.label.passphrase", &editor.passphrase, true))
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .justify_between()
+                            .gap(px(12.))
+                            .child(crate::localization::text(cx, save_passphrase))
+                            .child(
+                                WorkspaceSwitch::new(
+                                    "save-generated-key-passphrase",
+                                    save_passphrase,
+                                    editor.generation.save_passphrase,
+                                )
+                                .disabled(self.saving)
+                                .on_change(cx.listener(
+                                    |this, value, _, cx| {
+                                        if let Some(editor) = &mut this.editor {
+                                            editor.generation.save_passphrase = *value;
+                                            cx.notify();
+                                        }
+                                    },
+                                )),
+                            ),
+                    )
                     .into_any_element(),
             );
         }

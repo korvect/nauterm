@@ -36,6 +36,7 @@ pub struct Parameters {
     pub kind: KeyType,
     pub ecdsa_bits: usize,
     pub rsa_bits: usize,
+    pub save_passphrase: bool,
 }
 impl Default for Parameters {
     fn default() -> Self {
@@ -43,6 +44,7 @@ impl Default for Parameters {
             kind: KeyType::Ecdsa,
             ecdsa_bits: 521,
             rsa_bits: 4096,
+            save_passphrase: false,
         }
     }
 }
@@ -97,8 +99,8 @@ pub fn generate(
         private_key: Some(private.to_string()),
         public_key: Some(public),
         certificate: None,
-        // The passphrase encrypts the private key; it is NOT saved alongside it.
-        passphrase: None,
+        passphrase: (parameters.save_passphrase && !passphrase.is_empty())
+            .then(|| passphrase.to_string()),
     })
 }
 
@@ -136,6 +138,7 @@ mod tests {
         let ed25519 = generate(
             Parameters {
                 kind: KeyType::Ed25519,
+                save_passphrase: true,
                 ..Parameters::default()
             },
             " Test key ".into(),
@@ -181,30 +184,33 @@ mod tests {
     }
 
     #[test]
-    fn encryption_requires_the_passphrase_and_does_not_store_it() {
-        let record = generate(
-            Parameters {
-                kind: KeyType::Ed25519,
-                ..Parameters::default()
-            },
-            "Encrypted test".into(),
-            Zeroizing::new("test-only-passphrase".into()),
-        )
-        .unwrap();
-        let encrypted = PrivateKey::from_openssh(record.private_key.as_deref().unwrap()).unwrap();
-        assert!(encrypted.is_encrypted());
-        assert!(encrypted.decrypt("wrong-passphrase").is_err());
-        let decrypted = encrypted.decrypt("test-only-passphrase").unwrap();
-        assert_eq!(
-            decrypted.public_key().to_openssh().unwrap(),
-            record.public_key.as_deref().unwrap()
-        );
-        assert!(record.passphrase.is_none());
-        assert!(
-            !serde_json::to_string(&record)
-                .unwrap()
-                .contains("test-only-passphrase")
-        );
+    fn passphrase_encrypts_the_generated_key_and_is_saved_only_on_request() {
+        let passphrase = " test-only-passphrase ";
+        for save_passphrase in [false, true] {
+            let record = generate(
+                Parameters {
+                    kind: KeyType::Ed25519,
+                    save_passphrase,
+                    ..Parameters::default()
+                },
+                "Encrypted test".into(),
+                Zeroizing::new(passphrase.into()),
+            )
+            .unwrap();
+            let encrypted =
+                PrivateKey::from_openssh(record.private_key.as_deref().unwrap()).unwrap();
+            assert!(encrypted.is_encrypted());
+            assert!(encrypted.decrypt("wrong-passphrase").is_err());
+            let decrypted = encrypted.decrypt(passphrase).unwrap();
+            assert_eq!(
+                decrypted.public_key().to_openssh().unwrap(),
+                record.public_key.as_deref().unwrap()
+            );
+            assert_eq!(
+                record.passphrase.as_deref(),
+                save_passphrase.then_some(passphrase)
+            );
+        }
     }
 
     #[test]
