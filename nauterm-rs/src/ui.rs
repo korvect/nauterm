@@ -3644,7 +3644,7 @@ impl Nauterm {
                 self.data.dark,
             )
             .description(if !filtered {
-                "Save your hosts to connect to them quickly from any workspace."
+                "workspace.empty.hosts.description"
             } else {
                 "Try another search or clear tag filters."
             })
