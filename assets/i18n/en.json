@@ -1063,7 +1063,6 @@
   "rs.ui.copy.noHosts": "No hosts",
   "rs.ui.copy.noImportableHostsOrKeysFound": "No importable Hosts or keys were found.",
   "rs.ui.copy.noKeyMaterialAvailableExport": "No key material is available to export.",
-  "rs.ui.copy.noKeychainItemsFound": "No keychain items found",
   "rs.ui.copy.noKnownHostsFound": "No known hosts found",
   "rs.ui.copy.noKnownHostsYet": "No known hosts yet",
   "rs.ui.copy.noLiveSSHSession": "No live SSH session",

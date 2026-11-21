@@ -1876,7 +1876,7 @@ impl Render for Keychain {
                     .when(show_keys, |view| view.child(crate::components::management::collection_section("Keys", cx).child(keys)))
                     .when(show_identities, |view| view.child(crate::components::management::collection_section("Identities", cx).child(identities)))
                     .when(!self.loading && !show_keys && !show_identities && self.error.is_none(), |view| view.child({
-                        let empty = crate::components::EmptyState::new(IconName::KeyRound, if query.is_empty() { "No keychain items yet" } else { "No keychain items found" }, self.dark).description("Add keys and identities once, then reuse them across your saved hosts.");
+                        let empty = crate::components::EmptyState::new(IconName::KeyRound, if query.is_empty() { "No keychain items yet" } else { "No keychain items found." }, self.dark).description("Add keys and identities once, then reuse them across your saved hosts.");
                         if query.is_empty() { empty.action(Button::new("empty-add-key").primary().icon(crate::assets::icon(IconName::Plus)).label("Add key").on_click(cx.listener(|this, _, window, cx| this.create(Kind::Key, window, cx)))) } else { empty }
                     }))))
             .children(drawer)
