@@ -58,7 +58,7 @@ impl Settings {
     pub(super) fn padding_row(&self, cx: &App) -> AnyElement {
         self.row(
             "settings.terminal.padding.label",
-            "rs.settings.terminal.padding.description",
+            "settings.terminal.padding.description",
             Input::new(
                 &self
                     .padding_control

@@ -314,7 +314,7 @@ impl Settings {
                 .child(Input::new(&self.theme_search).small().aria_label(crate::localization::text(cx, "Search themes")).cleanable(true).prefix(Icon::new(IconName::Search).with_size(px(14.))))
                 .child(div().flex_1().min_h_0().overflow_hidden()
                     .when(!ready, |view| view.flex().items_center().justify_center().child(crate::components::Spinner::new()))
-                    .when(ready && row_count == 0, |view| view.flex().items_center().justify_center().text_color(p.muted).child(crate::localization::text(cx, "rs.ui.copy.noMatchingThemes")))
+                    .when(ready && row_count == 0, |view| view.flex().items_center().justify_center().text_color(p.muted).child(crate::localization::text(cx, "workspace.description.noMatchingThemes")))
                     .when(row_count > 0, |view| view.child(crate::components::uniform_scrollbar("theme-grid-scrollbar", uniform_list("terminal-theme-grid", row_count,
                         cx.processor(move |this, rows: std::ops::Range<usize>, _, cx| {
                             rows.map(|row| {

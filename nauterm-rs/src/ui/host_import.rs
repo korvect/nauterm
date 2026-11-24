@@ -188,7 +188,7 @@ impl Nauterm {
                         state.refilter("");
                         state.scroll.scroll_to_item(0, ScrollStrategy::Nearest);
                         if state.rows.is_empty() && state.keys.is_empty() {
-                            state.error = Some("No importable Hosts or keys were found.".into());
+                            state.error = Some("No supported hosts or keys were found.".into());
                         }
                     }
                     Ok(None) => {}

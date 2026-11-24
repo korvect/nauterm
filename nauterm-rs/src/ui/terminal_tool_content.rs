@@ -300,7 +300,7 @@ impl Nauterm {
                         .p(px(16.))
                         .text_color(p.muted)
                         .child(crate::localization::view(if query.is_empty() {
-                            "No shell history yet"
+                            "No shell history recorded yet."
                         } else {
                             "No matching commands"
                         })),
@@ -477,7 +477,10 @@ impl Nauterm {
                     div()
                         .p(px(INSET))
                         .text_color(p.muted)
-                        .child(crate::localization::text(cx, "rs.ui.copy.noMatchingThemes")),
+                        .child(crate::localization::text(
+                            cx,
+                            "workspace.description.noMatchingThemes",
+                        )),
                 )
                 .into_any_element();
         }

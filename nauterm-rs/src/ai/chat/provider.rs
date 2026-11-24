@@ -18,7 +18,7 @@ impl Chat {
                         if selected.is_some() {
                             "Unavailable provider"
                         } else {
-                            "Choose provider"
+                            "Select Provider"
                         },
                     )
                     .to_string()

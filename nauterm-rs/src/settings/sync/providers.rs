@@ -333,7 +333,7 @@ impl Panel {
                 0
             };
             let hint = if field.key == "gist_id" {
-                "Leave empty to create a private gist on first sync."
+                "Leave empty to create a new private gist on the first sync."
             } else {
                 ""
             };

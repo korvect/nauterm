@@ -71,10 +71,9 @@ void main() {
       expect(
         chinese.tr(
           'settings.terminal.padding.description',
-          fallback:
-              'Inner spacing around terminal content. Supports 1 to 4 values.',
+          fallback: 'Inner spacing around terminal content. Enter 1 to 4 comma-separated values.',
         ),
-        '终端内容周围的内边距。支持 1 到 4 个值。',
+        '终端内容四周的内边距。可输入 1 至 4 个以逗号分隔的值。',
       );
       expect(
         chinese.tr('missing.namespaced.key', fallback: 'Readable fallback'),
@@ -164,6 +163,15 @@ void main() {
       expect(chinese.tr('settings.sync.mergeStrategy.label'), '合并策略');
       expect(chinese.tr('settings.sync.automatic.unit'), '分钟');
       expect(
+        chinese.tr('settings.search.noMatches', args: const {'query': 'SSH'}),
+        '没有与“SSH”匹配的设置。',
+      );
+      expect(chinese.tr('settings.search.singleResult'), '1 个结果');
+      expect(
+        chinese.tr('settings.search.resultCount', args: const {'count': 3}),
+        '3 个结果',
+      );
+      expect(
         chinese.tr('settings.sync.key.localAvailable.label'),
         '同步 DEK 已在本地可用',
       );
@@ -190,7 +198,7 @@ void main() {
         chinese.tr('Search host:, group:, username:, tag:, or user@host'),
         '搜索 host:、group:、username:、tag: 或 user@host',
       );
-      expect(chinese.tr('Saving...'), '正在保存…');
+      expect(chinese.tr('Saving…'), '正在保存…');
       expect(
         chinese.tr('Untranslated future text'),
         'Untranslated future text',
@@ -265,7 +273,7 @@ void main() {
             'VS Code',
             'https://s3.example.com',
             'github_pat_...',
-                        'sel',
+            'sel',
           }.contains(entry.value),
         ),
         isEmpty,

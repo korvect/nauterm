@@ -273,7 +273,7 @@ pub(super) fn menu(
             }
         }
         menu = menu.separator().item(
-            MenuItem::localized("rs.sftp.action.withSudo")
+            MenuItem::localized("sftp.action.withSudo")
                 .destructive(true)
                 .submenu(elevated),
         );

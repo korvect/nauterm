@@ -115,6 +115,7 @@ struct Entry {
     title: &'static str,
     description: &'static str,
     keywords: &'static str,
+    index_description: bool,
 }
 impl Entry {
     const fn new(
@@ -128,20 +129,30 @@ impl Entry {
             title,
             description,
             keywords,
+            index_description: true,
         }
+    }
+    const fn without_description_index(mut self) -> Self {
+        self.index_description = false;
+        self
     }
     fn matches(&self, terms: &[&str], language: crate::localization::Language) -> bool {
         use crate::localization::{Language, text_for};
         let page = self.section.page().label();
+        let description = |language| {
+            self.index_description
+                .then(|| text_for(language, self.description))
+                .unwrap_or_default()
+        };
         let haystack = format!(
             "{} {} {} {} {} {} {}",
             text_for(Language::English, page),
             text_for(Language::English, self.title),
-            text_for(Language::English, self.description),
+            description(Language::English),
             self.keywords,
             text_for(language, page),
             text_for(language, self.title),
-            text_for(language, self.description),
+            description(language),
         )
         .to_lowercase();
         terms.iter().all(|term| haystack.contains(term))
@@ -164,19 +175,19 @@ const ENTRIES: &[Entry] = &[
     Entry::new(
         S::About,
         "rs.settings.pages.about.title",
-        "rs.settings.search.about.description",
+        "settings.pages.about.description",
         "release source third party license update build version platform 关于 版本 更新 许可证 开源 构建 平台",
     ),
     Entry::new(
         S::Sync,
         "settings.pages.sync.title",
-        "rs.settings.search.sync.description",
+        "settings.pages.sync.description",
         "cloud github gist s3 webdav local restore backup merge encryption master key rotate forget automatic interval minutes schedule 同步 备份 恢复 云端 加密 密钥 清除 修改 自动 间隔 分钟 调度",
     ),
     Entry::new(
         S::AiProviders,
         "settings.label.aiProviders",
-        "rs.settings.search.aiProviders.description",
+        "settings.ai.providers.summary",
         "openai anthropic google gemini ollama token temperature presets AI 提供商 模型 密钥 预设",
     ),
     Entry::new(
@@ -230,9 +241,10 @@ const ENTRIES: &[Entry] = &[
     Entry::new(
         S::Font,
         "settings.label.terminalFont",
-        "rs.settings.search.terminalFont.description",
-        "monospace normal bold typography 字体 字重 字号 行高 间距",
-    ),
+        "settings.terminal.font.summary",
+        "family families size weight line height spacing monospace normal bold typography 字体 系列 字重 字号 行高 间距",
+    )
+    .without_description_index(),
     Entry::new(
         S::Font,
         "settings.terminal.cjkFont.label",
@@ -259,7 +271,7 @@ const ENTRIES: &[Entry] = &[
     ),
     Entry::new(
         S::Layout,
-        "rs.settings.search.scrollbar.title",
+        "settings.terminal.scrollbar.label",
         "settings.terminal.scrollbar.description",
         "scroll history 滚动条",
     ),
@@ -278,7 +290,7 @@ const ENTRIES: &[Entry] = &[
     Entry::new(
         S::Session,
         "settings.label.terminalEmulation",
-        "rs.settings.search.emulation.description",
+        "settings.terminal.emulator.summary",
         "ghostty alacritty xterm vt 模拟 引擎",
     ),
     Entry::new(
@@ -314,7 +326,7 @@ const ENTRIES: &[Entry] = &[
     Entry::new(
         S::Input,
         "settings.terminal.input.navigationKeysScroll.label",
-        "rs.settings.search.navigationKeys.description",
+        "settings.terminal.input.navigationKeysScroll.description",
         "paging keyboard interactive alternate 导航 翻页 滚动",
     ),
     Entry::new(
@@ -367,8 +379,8 @@ const ENTRIES: &[Entry] = &[
     ),
     Entry::new(
         S::Recording,
-        "rs.settings.search.recording.title",
-        "rs.settings.search.recording.description",
+        "settings.terminal.recording.title",
+        "settings.terminal.recording.summary",
         "capture replay logs 历史 录制 回放 日志",
     ),
     Entry::new(
@@ -392,7 +404,7 @@ const ENTRIES: &[Entry] = &[
     Entry::new(
         S::Transfers,
         "settings.sftp.transfers.label",
-        "rs.settings.search.transfers.description",
+        "settings.sftp.transfers.summary",
         "parallel threads upload download 并发 上传 下载 传输",
     ),
     Entry::new(
@@ -409,8 +421,8 @@ const ENTRIES: &[Entry] = &[
     ),
     Entry::new(
         S::Bindings,
-        "rs.settings.search.shortcuts.title",
-        "rs.settings.search.shortcuts.description",
+        "settings.label.keyBindings",
+        "settings.pages.shortcuts.description",
         "cmd ctrl copy paste select all search find quick connect edit duplicate ssh sftp close previous next split local tab 快捷键 复制 粘贴 全选 查找 连接 分屏",
     ),
 ];
@@ -704,13 +716,15 @@ impl Settings {
                     .child(if self.search.matches.is_empty() {
                         crate::localization::format_for(
                             self.values.general.language,
-                            "rs.settings.search.noMatches",
+                            "settings.search.noMatches",
                             &[("query", &self.search.query)],
                         )
+                    } else if self.search.matches.len() == 1 {
+                        self.text("settings.search.singleResult")
                     } else {
                         crate::localization::format_for(
                             self.values.general.language,
-                            "rs.settings.search.resultCount",
+                            "settings.search.resultCount",
                             &[("count", &self.search.matches.len().to_string())],
                         )
                     }),
@@ -802,6 +816,8 @@ mod tests {
                 .collect::<Vec<_>>()
         };
         assert_eq!(titles(" terminal LiGAtuRes "), ["Ligatures"]);
+        assert_eq!(titles("连字"), ["Ligatures"]);
+        assert_eq!(titles("font size"), ["Terminal Font"]);
         assert_eq!(titles("cjk 汉字"), ["CJK Font"]);
         assert_eq!(titles("sftp parallel"), ["Transfers"]);
         assert_eq!(titles("terminal sound"), ["Sound"]);

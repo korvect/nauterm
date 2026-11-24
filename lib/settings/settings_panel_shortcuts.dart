@@ -542,7 +542,7 @@ class _ShortcutBindingRowWidgetState extends State<_ShortcutBindingRowWidget> {
                               child: Text(
                                 tr(
                                   'settings.shortcuts.recording.prompt',
-                                  fallback: 'Press shortcut...',
+                                  fallback: 'Press shortcut…',
                                 ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,

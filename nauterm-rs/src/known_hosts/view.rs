@@ -432,7 +432,7 @@ impl Render for KnownHosts {
                 .when(!entries.is_empty(), |view| view.child(crate::components::management::section_title("Known Hosts", cx).mb(px(crate::components::management::COLLECTION_TITLE_GAP))))
                 .child(crate::components::card_grid(grid).children(entries.iter().cloned().map(|entry| self.card(entry, cx))))
                 .when(entries.is_empty(), |view| view.child({
-                    let empty = crate::components::EmptyState::new(IconName::FingerprintPattern, if self.loading { "Loading known hosts…" } else if self.search.read(cx).value().is_empty() { "No known hosts yet" } else { "No known hosts found" }, self.dark)
+                    let empty = crate::components::EmptyState::new(IconName::FingerprintPattern, if self.loading { "Loading known hosts…" } else if self.search.read(cx).value().is_empty() { "No known hosts yet." } else { "No known hosts found." }, self.dark)
                         .description("Saved host keys let you verify the identity of your SSH servers.");
                     if !self.loading && self.search.read(cx).value().is_empty() { empty.action(Button::new("empty-import-known-hosts").primary().icon(crate::assets::icon(IconName::Plus)).label("Import known hosts").disabled(self.busy).on_click(cx.listener(|view, _, window, cx| view.import(window, cx)))) } else { empty }
                 })))

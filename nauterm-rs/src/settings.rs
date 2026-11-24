@@ -1390,7 +1390,7 @@ impl Render for Settings {
             Page::Ai => ("settings.pages.ai.title", "settings.pages.ai.description"),
             Page::Shortcuts => (
                 "settings.pages.shortcuts.title",
-                "rs.settings.pages.shortcuts.description",
+                "settings.pages.shortcuts.description",
             ),
             Page::About => (
                 "rs.settings.pages.about.title",
@@ -1398,11 +1398,11 @@ impl Render for Settings {
             ),
             Page::Sync => {
                 if self.sync.read(cx).requires_master_key() {
-                    ("Master Key", "rs.settings.pages.sync.masterKey.description")
+                    ("Master Key", "settings.sync.masterKey.description")
                 } else {
                     (
                         "settings.pages.sync.title",
-                        "rs.settings.pages.sync.description",
+                        "settings.pages.sync.description",
                     )
                 }
             }

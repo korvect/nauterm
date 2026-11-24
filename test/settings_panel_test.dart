@@ -854,13 +854,12 @@ void main() {
       const ValueKey('settings-terminal-scroll-view'),
     );
     const cases = [
+      (query: 'font size', title: 'Terminal Font', section: 'FONT'),
+      (query: 'ligatures', title: 'Ligatures', section: 'FONT'),
+      (query: '连字', title: 'Ligatures', section: 'FONT'),
       (query: 'autocomplete', title: 'Composer', section: 'LAYOUT'),
       (query: 'multiple tabs', title: 'Multiple Tabs', section: 'SESSION'),
-      (
-        query: 'filename',
-        title: 'Open Links and Files',
-        section: 'INPUT',
-      ),
+      (query: 'filename', title: 'Open Links and Files', section: 'INPUT'),
       (
         query: 'command block',
         title: 'Select Command Block on Click',
@@ -875,7 +874,7 @@ void main() {
         ValueKey('settings-search-result-terminal-${target.title}'),
       );
       expect(result, findsOneWidget);
-      expect(find.text('1 matching settings'), findsOneWidget);
+      expect(find.text('1 result'), findsOneWidget);
       await tester.tap(result);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 16));
@@ -1203,11 +1202,11 @@ void main() {
 
     await tester.tap(recorder);
     await tester.pump();
-    expect(find.text('Press shortcut...'), findsOneWidget);
+    expect(find.text('Press shortcut…'), findsOneWidget);
 
     await tester.tap(find.text('Shortcuts').last);
     await tester.pump();
-    expect(find.text('Press shortcut...'), findsNothing);
+    expect(find.text('Press shortcut…'), findsNothing);
   });
 
   testWidgets('data sync page exposes storage providers and their settings', (

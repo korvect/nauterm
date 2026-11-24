@@ -335,9 +335,9 @@ mod tests {
         assert_eq!(
             catalog.translate(
                 Locale::English,
-                &catalog.translate(Locale::Chinese, "Search providers")
+                &catalog.translate(Locale::Chinese, "settings.search.providers.hint")
             ),
-            "Search providers"
+            "Search providers..."
         );
     }
     #[test]

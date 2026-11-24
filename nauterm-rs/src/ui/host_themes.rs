@@ -205,7 +205,7 @@ impl Nauterm {
                 div().p(px(12.)).flex_shrink_0().child(
                     Input::new(&draft.search)
                         .prefix(icon(IconName::Search))
-                        .aria_label(crate::localization::text(cx, "Search host themes")),
+                        .aria_label(crate::localization::text(cx, "common.label.searchThemes")),
                 ),
             )
             .when(count == 0, |v| {
@@ -213,7 +213,10 @@ impl Nauterm {
                     div()
                         .p(px(16.))
                         .text_color(p.muted)
-                        .child(crate::localization::text(cx, "rs.ui.copy.noMatchingThemes")),
+                        .child(crate::localization::text(
+                            cx,
+                            "workspace.description.noMatchingThemes",
+                        )),
                 )
             })
             .when(count > 0, |v| {

@@ -154,6 +154,7 @@ class _SettingsSearchEntry {
     required this.title,
     required this.subtitle,
     this.keywords = '',
+    this.indexSubtitle = true,
   });
 
   final _SettingsPage page;
@@ -161,9 +162,12 @@ class _SettingsSearchEntry {
   final String title;
   final String subtitle;
   final String keywords;
+  final bool indexSubtitle;
 
   bool matches(String query) {
-    final haystack = '${page.name} $title $subtitle $keywords'.toLowerCase();
+    final searchableSubtitle = indexSubtitle ? subtitle : '';
+    final haystack = '${page.name} $title $searchableSubtitle $keywords'
+        .toLowerCase();
     return query
         .toLowerCase()
         .split(RegExp(r'\s+'))
@@ -235,8 +239,17 @@ const _settingsSearchEntries = <_SettingsSearchEntry>[
     page: _SettingsPage.terminal,
     section: 'terminal-font',
     title: 'Terminal Font',
-    subtitle: 'Primary and CJK font families, size, weight, and ligatures.',
-    keywords: 'text typography cjk chinese japanese korean line height spacing',
+    subtitle:
+        'Font families, size, weight, line height, spacing, and ligatures.',
+    keywords: 'text typography primary family families size weight cjk chinese japanese korean line height spacing 字体 字号 字重 行高 间距',
+    indexSubtitle: false,
+  ),
+  _SettingsSearchEntry(
+    page: _SettingsPage.terminal,
+    section: 'terminal-font',
+    title: 'Ligatures',
+    subtitle: 'Enable font ligatures (e.g. -> => !=).',
+    keywords: 'font 连字',
   ),
   _SettingsSearchEntry(
     page: _SettingsPage.terminal,
@@ -270,7 +283,7 @@ const _settingsSearchEntries = <_SettingsSearchEntry>[
     page: _SettingsPage.terminal,
     section: 'terminal-session',
     title: 'Terminal Emulation',
-    subtitle: 'TERM emulation and scrollback settings.',
+    subtitle: 'Emulation engine and TERM type for new sessions.',
     keywords: 'xterm scrollback ssh keepalive',
   ),
   _SettingsSearchEntry(
@@ -291,7 +304,7 @@ const _settingsSearchEntries = <_SettingsSearchEntry>[
     page: _SettingsPage.terminal,
     section: 'terminal-input',
     title: 'Scroll with Navigation Keys',
-    subtitle: 'Use navigation keys to scroll the terminal.',
+    subtitle: 'Use Page Up/Down and Home/End to scroll terminal history.',
     keywords: 'input paging page up down home end scroll vim less emacs',
   ),
   _SettingsSearchEntry(
@@ -363,7 +376,7 @@ const _settingsSearchEntries = <_SettingsSearchEntry>[
     page: _SettingsPage.sftp,
     section: 'sftp-transfers',
     title: 'Transfers',
-    subtitle: 'Concurrent tasks and per-task transfer concurrency.',
+    subtitle: 'Concurrent tasks and parallel requests per transfer.',
     keywords: 'parallel concurrency upload performance',
   ),
   _SettingsSearchEntry(
@@ -377,7 +390,7 @@ const _settingsSearchEntries = <_SettingsSearchEntry>[
     page: _SettingsPage.ai,
     section: 'ai-providers',
     title: 'AI Providers',
-    subtitle: 'Provider, endpoint, model, and API key.',
+    subtitle: 'Protocol, endpoint, models, API key, and generation settings.',
     keywords: 'openai anthropic base url',
   ),
   _SettingsSearchEntry(
@@ -391,7 +404,7 @@ const _settingsSearchEntries = <_SettingsSearchEntry>[
     page: _SettingsPage.shortcuts,
     section: 'shortcuts-keyboard',
     title: 'Use Option as Meta Key',
-    subtitle: 'Send Option key combinations with an Escape prefix.',
+    subtitle: 'Send Option/Alt key combinations with an Escape prefix.',
     keywords: 'alt escape keyboard',
   ),
   _SettingsSearchEntry(
@@ -412,14 +425,15 @@ const _settingsSearchEntries = <_SettingsSearchEntry>[
     page: _SettingsPage.sync,
     section: null,
     title: 'Sync & Backup',
-    subtitle: 'Configure backup providers, conflict handling, and automation.',
+    subtitle:
+        'Configure encrypted backups, automatic sync, and conflict handling.',
     keywords: 'github gist webdav s3 google drive onedrive backup',
   ),
   _SettingsSearchEntry(
     page: _SettingsPage.about,
     section: null,
     title: 'About Nauterm',
-    subtitle: 'Application information, version, and updates.',
+    subtitle: 'Version, build, platform, licenses, and updates.',
     keywords: 'build platform license download upgrade',
   ),
 ];

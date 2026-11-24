@@ -207,7 +207,7 @@ class _GenerateKeyEditorContentState extends State<_GenerateKeyEditorContent>
         'workspace.keys.generateAndSave',
         fallback: 'Generate & save',
       ),
-      savingLabel: tr('workspace.keys.generating', fallback: 'Generating...'),
+      savingLabel: tr('workspace.keys.generating', fallback: 'Generating…'),
       children: [
         _WorkspaceFormSection(
           title: tr('common.label.key', fallback: 'Key'),
@@ -1040,8 +1040,8 @@ class _KeyEditorContentState extends State<_KeyEditorContent>
           ? tr('workspace.keys.generateAndSave', fallback: 'Generate & save')
           : tr('common.action.save', fallback: 'Save'),
       savingLabel: _isGenerating
-          ? tr('workspace.keys.generating', fallback: 'Generating...')
-          : tr('common.label.saving', fallback: 'Saving...'),
+          ? tr('workspace.keys.generating', fallback: 'Generating…')
+          : tr('common.label.saving', fallback: 'Saving…'),
       headerActions: initial?.id == null || _saving || _generating
           ? const []
           : [
@@ -1350,7 +1350,7 @@ class _KeyFileImportPanel extends StatelessWidget {
         SizedBox(height: _workspaceFormFieldGap),
         _WorkspaceButton(
           label: importing
-              ? tr('workspace.keys.import.importing', fallback: 'Importing...')
+              ? tr('workspace.keys.import.importing', fallback: 'Importing…')
               : tr(
                   'workspace.keys.import.fromFile',
                   fallback: 'Import from key file',

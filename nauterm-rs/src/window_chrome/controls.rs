@@ -33,7 +33,7 @@ pub fn window_controls(
                         IconName::WindowMinimize,
                         WindowControlArea::Min,
                         foreground,
-                        crate::localization::text(cx, "rs.window.minimize"),
+                        crate::localization::text(cx, "common.label.minimize"),
                         |_, window, _| window.minimize_window(),
                     ))
                 })

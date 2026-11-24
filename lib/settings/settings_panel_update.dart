@@ -250,8 +250,7 @@ class _AboutSettingsPageState extends State<_AboutSettingsPage> {
           Text(
             tr(
               'settings.pages.about.description',
-              fallback:
-                  'Application information, release details, and updates.',
+              fallback: 'Version, build, platform, licenses, and updates.',
             ),
             style: TextStyle(color: _mutedText, fontSize: 12),
           ),
@@ -814,7 +813,7 @@ class _ThirdPartyLicensesDialogState extends State<_ThirdPartyLicensesDialog> {
         decoration: InputDecoration(
           hintText: tr(
             'settings.search.packages.hint',
-            fallback: 'Search packages...',
+            fallback: 'Search packages…',
           ),
           hintStyle: TextStyle(color: _faintText, fontSize: 12),
           prefixIcon: Icon(LucideIcons.search, size: 15, color: _faintText),
@@ -914,7 +913,7 @@ class _ThirdPartyLicensesDialogState extends State<_ThirdPartyLicensesDialog> {
         child: Text(
           tr(
             'settings.about.licenses.selectPrompt',
-            fallback: 'Select a package to view its license.',
+            fallback: 'Select a package to view its licenses.',
           ),
           style: TextStyle(color: _mutedText, fontSize: 12),
         ),

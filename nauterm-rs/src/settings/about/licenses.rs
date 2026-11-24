@@ -231,7 +231,7 @@ impl Panel {
                     );
             } else {
                 detail = detail.child(div().p(px(12.)).text_color(p.muted).child(
-                    crate::localization::text(cx, "rs.ui.copy.selectPackageLicenses"),
+                    crate::localization::text(cx, "settings.about.licenses.selectPrompt"),
                 ));
             }
             body = body.child(

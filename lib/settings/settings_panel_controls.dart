@@ -539,12 +539,19 @@ Widget _buildSettingsSearchResults(_SettingsPanelState state) {
         ),
       ),
       SizedBox(height: 3),
-      Text(
-        matches.isEmpty
-            ? 'No settings match “${state._settingsSearchQuery}”.'
-            : '${matches.length} matching settings',
-        style: TextStyle(color: _mutedText, fontSize: 12),
-      ),
+      Text(switch (matches.length) {
+        0 => tr(
+          'settings.search.noMatches',
+          fallback: 'No settings match “{query}”.',
+          args: {'query': state._settingsSearchQuery},
+        ),
+        1 => tr('settings.search.singleResult', fallback: '1 result'),
+        _ => tr(
+          'settings.search.resultCount',
+          fallback: '{count} results',
+          args: {'count': matches.length},
+        ),
+      }, style: TextStyle(color: _mutedText, fontSize: 12)),
       SizedBox(height: 22),
       for (final entry in matches)
         Padding(

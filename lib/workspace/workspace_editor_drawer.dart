@@ -813,7 +813,7 @@ class _EditorShell extends StatelessWidget {
     this.saving = false,
     this.error,
     this.saveLabel = 'Save',
-    this.savingLabel = 'Saving...',
+    this.savingLabel = 'Saving…',
     this.headerActions = const [],
   });
 

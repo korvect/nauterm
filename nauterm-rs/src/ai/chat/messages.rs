@@ -741,7 +741,7 @@ impl Chat {
                                 .border_1()
                                 .border_color(palette.border)
                                 .bg(palette.surface)
-                                .tooltip("Back to bottom")
+                                .tooltip("Scroll to bottom")
                                 .when(generating, |button| {
                                     button.child(typing_dots(palette, cx.reduce_motion()))
                                 })

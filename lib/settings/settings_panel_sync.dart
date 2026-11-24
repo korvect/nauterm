@@ -1389,7 +1389,7 @@ class _SyncPreferencesPanel extends StatelessWidget {
           SizedBox(height: 14),
           _SettingsRow(
             title: 'Local Backups',
-            subtitle: 'Create an encrypted backup before each sync.',
+            subtitle: 'Keep an encrypted local backup before each sync.',
             trailing: Row(
               children: [
                 Expanded(

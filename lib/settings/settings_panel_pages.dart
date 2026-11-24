@@ -646,7 +646,7 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
                 _SettingsRow(
                   localizationKey: 'settings.terminal.padding',
                   title: 'Padding',
-                  subtitle: 'Inner spacing around terminal content. Supports 1 to 4 values.',
+                  subtitle: 'Inner spacing around terminal content. Enter 1 to 4 comma-separated values.',
                   trailing: _TerminalPaddingControl(
                     padding: state._terminalPadding,
                     onChanged: (value) {
@@ -895,7 +895,7 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
                   localizationKey:
                       'settings.terminal.input.navigationKeysScroll',
                   title: 'Scroll with Navigation Keys',
-                  subtitle: 'Use navigation keys to scroll the terminal.',
+                  subtitle: 'Use Page Up/Down and Home/End to scroll terminal history.',
                   trailing: _SettingsSwitch(
                     value: state._navigationKeysScrollOutsideInteractiveApps,
                     onChanged: (value) {
@@ -1566,7 +1566,8 @@ Widget _buildSettingsShortcutsContent(_SettingsPanelState state) {
         Text(
           tr(
             'settings.pages.shortcuts.description',
-            fallback: 'Configure terminal keyboard behavior and review active bindings.',
+            fallback:
+                'Customize keyboard shortcuts for the workspace and terminal.',
           ),
           style: TextStyle(
             color: _mutedText,
@@ -1591,7 +1592,7 @@ Widget _buildSettingsShortcutsContent(_SettingsPanelState state) {
                   localizationKey: 'settings.shortcuts.optionAsMeta',
                   title: 'Use Option as Meta Key',
                   subtitle:
-                      'Send Option key combinations with an Escape prefix.',
+                      'Send Option/Alt key combinations with an Escape prefix.',
                   trailing: _SettingsSwitch(
                     value: state._useOptionAsMetaKey,
                     onChanged: (value) {

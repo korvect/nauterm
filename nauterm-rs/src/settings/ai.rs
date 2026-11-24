@@ -149,7 +149,7 @@ impl Providers {
             },
         ));
         let preset_search =
-            cx.new(|cx| InputState::new(window, cx).placeholder("Search providers"));
+            cx.new(|cx| InputState::new(window, cx).placeholder("settings.search.providers.hint"));
         events.push(cx.subscribe(&preset_search, |_, _, _: &InputEvent, cx| cx.notify()));
         Self {
             service,
@@ -909,11 +909,9 @@ impl Providers {
                             .flex()
                             .flex_col()
                             .gap(px(12.))
-                            .child(
-                                Input::new(&self.preset_search)
-                                    .cleanable(true)
-                                    .aria_label(crate::localization::text(cx, "Search providers")),
-                            )
+                            .child(Input::new(&self.preset_search).cleanable(true).aria_label(
+                                crate::localization::text(cx, "settings.search.providers.hint"),
+                            ))
                             .child(
                                 div()
                                     .id("ai-preset-list")

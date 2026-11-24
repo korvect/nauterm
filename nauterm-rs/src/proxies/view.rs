@@ -1508,7 +1508,7 @@ impl Render for Proxies {
                     .child(crate::components::card_grid(grid).children(entries.iter().cloned().map(|entry| self.card(entry, cx))))
                     .when(entries.is_empty(), |view| view.child({
                         let empty = crate::components::EmptyState::new(IconName::Network, if self.loading { "Loading proxies…" } else if self.search.read(cx).value().is_empty() { "No proxies yet" } else { "No matching proxies" }, self.dark)
-                            .description("Route SSH connections through an HTTP or SOCKS5 proxy.");
+                            .description("Add a proxy once and reuse it across hosts that share the same route.");
                         if !self.loading && self.search.read(cx).value().is_empty() { empty.action(Button::new("empty-add-proxy").primary().icon(crate::assets::icon(IconName::Plus)).label("Add proxy").disabled(self.busy()).on_click(cx.listener(|view, _, window, cx| view.create(window, cx)))) } else { empty }
                     }))))
             .children(drawer)

@@ -89,8 +89,8 @@ void main() {
 
     await tester.tap(find.byIcon(LucideIcons.arrowDownAZ));
     await tester.pump();
-    expect(find.text('Name Z-a'), findsOneWidget);
-    await tester.tap(find.text('Name Z-a'));
+    expect(find.text('Name Z–A'), findsOneWidget);
+    await tester.tap(find.text('Name Z–A'));
     await tester.pump();
     expect(find.byIcon(LucideIcons.arrowDownZA), findsOneWidget);
 

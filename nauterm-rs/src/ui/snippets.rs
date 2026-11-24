@@ -1478,7 +1478,7 @@ impl Nauterm {
                 if query.is_empty() {
                     "No snippets yet"
                 } else {
-                    "No snippets found"
+                    "No snippets found."
                 },
                 self.data.dark,
             )
