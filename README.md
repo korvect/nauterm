@@ -216,7 +216,7 @@ not send these events.
 
 ### Prerequisites
 
-- Flutter `3.50.0` (Dart `3.14`)
+- Flutter `3.50.1` (Dart `3.14`)
 - Rust `1.97.0` with `rustfmt` and `clippy`
 - Zig `0.17.0` for the pinned `libghostty-vt 1.0.1` build
 - Git, CMake, and the native desktop toolchain for the target platform
