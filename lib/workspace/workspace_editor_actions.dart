@@ -2346,10 +2346,9 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
 
   Future<void> _deleteTerminalLog(TerminalLogEntry log) async {
     final confirmed = await _confirmDelete(
-      title: 'Delete terminal history?',
-      message:
-          'This permanently deletes the session metadata and its encrypted '
-          'capture file.',
+      title: 'workspace.dialog.deleteTerminalHistory',
+      message: 'workspace.dialog.deleteFinishedLogs.description',
+      messageArgs: const {'count': 1},
     );
     if (!confirmed) return;
 

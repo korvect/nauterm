@@ -856,6 +856,9 @@ impl<const S: bool> RenderOnce for Button<S> {
                     }
                     if let Some((color, width)) = selection_outline {
                         let mut border = outline(bounds, color, BorderStyle::Solid);
+                        // Keep the border tint as alpha fades at its inner edge.
+                        // Interpolating against transparent black darkens the corners.
+                        border.background = color.opacity(0.).into();
                         border.corner_radii = corners;
                         border.border_widths = width.into();
                         window.paint_quad(border);

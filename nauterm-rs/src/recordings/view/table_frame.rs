@@ -112,6 +112,7 @@ impl Element for TableFrame {
         });
         window.paint_layer(bounds, |window| {
             let mut border = outline(bounds, self.palette.border, BorderStyle::Solid);
+            border.background = self.palette.border.opacity(0.).into();
             border.corner_radii = Corners::all(radius);
             border.border_widths = px(1.).into();
             window.paint_quad(border);

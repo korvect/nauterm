@@ -1,7 +1,7 @@
 //! Reference log-row labels, independent of GPUI and database access.
 use super::Entry;
 use crate::management::SortOrder;
-use chrono::{DateTime, Local, NaiveDateTime};
+use chrono::{DateTime, Datelike, Local, NaiveDateTime};
 
 /// Build the table's public index only when its data/query/order changes.
 /// Scroll repainting can retain the same catalog and index without cloning or
@@ -90,28 +90,30 @@ fn time_range(
     start: NaiveDateTime,
     end: NaiveDateTime,
     language: crate::localization::Language,
-) -> String {
+) -> (String, Option<String>) {
     let days = end.date().signed_duration_since(start.date()).num_days();
-    let suffix = if days > 0 {
-        crate::localization::format_for(language, " (+{days}d)", &[("days", &days.to_string())])
-            .to_string()
-    } else {
-        String::new()
-    };
-    format!(
-        "{} - {}{suffix}",
-        start.format("%H:%M"),
-        end.format("%H:%M")
+    let suffix = (days > 0).then(|| {
+        crate::localization::format_for(
+            language,
+            "workspace.logs.date.dayOffset",
+            &[("days", &days.to_string())],
+        )
+        .to_string()
+    });
+    (
+        format!("{} - {}", start.format("%H:%M"), end.format("%H:%M")),
+        suffix,
     )
 }
 pub(super) fn date_range(
     entry: &Entry,
     language: crate::localization::Language,
-) -> (String, String) {
+) -> (String, String, Option<String>) {
     let Some(start) = DateTime::from_timestamp_millis(entry.started_at) else {
         return (
             crate::localization::text_for(language, "Unknown date").to_string(),
             String::new(),
+            None,
         );
     };
     let start = start.with_timezone(&Local).naive_local();
@@ -120,14 +122,21 @@ pub(super) fn date_range(
         .and_then(DateTime::from_timestamp_millis)
         .map(|end| end.with_timezone(&Local).naive_local())
         .unwrap_or_else(|| Local::now().naive_local());
+    let (range, offset) = time_range(start, end, language);
     (
-        start
-            .format(&crate::localization::text_for(
-                language,
-                "rs.format.logDate",
-            ))
-            .to_string(),
-        time_range(start, end, language),
+        crate::localization::format_for(
+            language,
+            "workspace.logs.date.label",
+            &[
+                ("year", &start.year().to_string()),
+                ("month", &start.month().to_string()),
+                ("monthName", &start.format("%b").to_string()),
+                ("day", &start.day().to_string()),
+            ],
+        )
+        .to_string(),
+        range,
+        offset,
     )
 }
 
@@ -185,7 +194,7 @@ mod tests {
                 at(24, 2, 54),
                 crate::localization::Language::English
             ),
-            "22:03 - 02:54 (+1d)"
+            ("22:03 - 02:54".into(), Some("(+1d)".into()))
         );
         assert_eq!(
             time_range(
@@ -193,7 +202,7 @@ mod tests {
                 at(25, 22, 2),
                 crate::localization::Language::English
             ),
-            "22:03 - 22:02 (+2d)"
+            ("22:03 - 22:02".into(), Some("(+2d)".into()))
         );
         assert_eq!(
             time_range(
@@ -201,7 +210,7 @@ mod tests {
                 at(23, 5, 8),
                 crate::localization::Language::English
             ),
-            "02:03 - 05:08"
+            ("02:03 - 05:08".into(), None)
         );
         assert_eq!(
             time_range(
@@ -209,7 +218,7 @@ mod tests {
                 at(24, 2, 54),
                 crate::localization::Language::Chinese
             ),
-            "22:03 - 02:54（+1 天）"
+            ("22:03 - 02:54".into(), Some("（+1 天）".into()))
         );
         assert_eq!(at(3, 2, 3).format("%b %-d, %Y").to_string(), "Oct 3, 2026");
     }

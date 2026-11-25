@@ -2,7 +2,7 @@ use super::{Catalog, Entry, Event, Service, presentation};
 use crate::{
     components::{
         Button, ButtonCustomVariant, DialogColors, DialogFrame, Modal,
-        menu::{ContextMenuExt, DropdownMenu, MenuItem},
+        menu::{ContextMenuExt, DropdownMenu, Menu, MenuItem},
     },
     management::{CollectionView, SortOrder},
     palette::Palette,
@@ -71,6 +71,33 @@ pub struct Logs {
 }
 pub struct ReplayRequested(pub Entry);
 impl EventEmitter<ReplayRequested> for Logs {}
+
+fn capture_export_menu(menu: Menu, owner: &WeakEntity<Logs>, entry: &Entry) -> Menu {
+    let text = owner.clone();
+    let raw = owner.clone();
+    let text_entry = entry.clone();
+    let raw_entry = entry.clone();
+    menu.width(232.)
+        .item(
+            MenuItem::localized("workspace.label.readableTextTxt")
+                .icon(IconName::FileText)
+                .on_click(move |_, window, cx| {
+                    let _ = text.update(cx, |view, cx| {
+                        view.export_text(text_entry.clone(), window, cx)
+                    });
+                }),
+        )
+        .item(
+            MenuItem::localized("workspace.label.rawTerminalStreamAnsi")
+                .icon(IconName::Code)
+                .on_click(move |_, window, cx| {
+                    let _ = raw.update(cx, |view, cx| {
+                        view.export_raw(raw_entry.clone(), window, cx)
+                    });
+                }),
+        )
+}
+
 fn date(time: i64) -> String {
     chrono::DateTime::from_timestamp_millis(time)
         .map(|time| {
@@ -384,24 +411,20 @@ impl Logs {
         .detach();
         cx.notify();
     }
-    fn export(&mut self, entry: Entry, output: bool, window: &mut Window, cx: &mut Context<Self>) {
+    fn export_raw(&mut self, entry: Entry, window: &mut Window, cx: &mut Context<Self>) {
         if self.busy || self.catalog.active.contains(&entry.id) {
             return;
         }
         self.busy = true;
         self.notice = None;
         self.error = None;
-        let suggested = format!(
-            "nauterm-{}.{}",
-            entry.id,
-            if output { "ansi" } else { "json" }
-        );
+        let suggested = format!("nauterm-{}.ansi", entry.id);
         let picker =
             cx.prompt_for_new_path(&crate::file_dialog::export_directory(), Some(&suggested));
         let service = self.service.clone();
         cx.spawn_in(window, async move |view, cx| {
             let result = match picker.await {
-                Ok(Ok(Some(path))) => service.export(entry, path, output).await.map(|_| true),
+                Ok(Ok(Some(path))) => service.export_raw(entry, path).await.map(|_| true),
                 Ok(Ok(None)) => Ok(false),
                 _ => Err(anyhow::anyhow!(
                     "Could not open the export destination picker."
@@ -483,6 +506,8 @@ impl Logs {
             .px(px(TABLE_INSET))
             .h(px(50.))
             .flex_shrink_0()
+            .text_size(px(12.))
+            .font_weight(FontWeights::MEDIUM)
             .flex()
             .items_center()
             .child(
@@ -545,10 +570,11 @@ impl Logs {
         let remove = entry.clone();
         let selected = self.selection.contains(&id);
         let live = self.catalog.active.contains(&id);
-        let can_read = !live && entry.capture_sha256.is_some();
+        let can_read = !live && !entry.capture_file.is_empty() && entry.capture_sha256.is_some();
         let owner = cx.weak_entity();
         let menu_owner = owner.clone();
-        let (day, range) = presentation::date_range(&entry, crate::localization::language(cx));
+        let (day, range, day_offset) =
+            presentation::date_range(&entry, crate::localization::language(cx));
         let (username, account) = presentation::account(&entry);
         let host_subtitle = presentation::subtitle(&entry);
         let host_icon = match presentation::kind(&entry) {
@@ -645,9 +671,13 @@ impl Logs {
                 date_column()
                     .flex()
                     .flex_col()
-                    .gap(px(4.))
+                    .gap(px(if day_offset.is_some() { 2. } else { 4. }))
+                    .line_height(px(15.))
                     .child(div().text_size(px(12.)).child(day))
-                    .child(div().text_size(px(11.)).text_color(p.muted).child(range)),
+                    .child(div().text_size(px(11.)).text_color(p.muted).child(range))
+                    .when_some(day_offset, |column, offset| {
+                        column.child(div().text_size(px(11.)).text_color(p.muted).child(offset))
+                    }),
             )
             .child(
                 user_column()
@@ -705,7 +735,7 @@ impl Logs {
                             .toolbar()
                             .ghost()
                             .icon(IconName::Play)
-                            .tooltip("Replay terminal recording")
+                            .tooltip("common.action.replay")
                             .disabled(!can_read)
                             .on_click(cx.listener(move |view, _, window, cx| {
                                 cx.stop_propagation();
@@ -717,32 +747,10 @@ impl Logs {
                             .toolbar()
                             .ghost()
                             .icon(IconName::Download)
-                            .tooltip("Export terminal capture")
+                            .tooltip("workspace.label.exportTerminalCapture")
                             .disabled(!can_read || self.busy)
                             .dropdown_menu(move |menu, _, _| {
-                                let text = owner.clone();
-                                let raw = owner.clone();
-                                let text_entry = entry.clone();
-                                let raw_entry = entry.clone();
-                                menu.width(232.)
-                                    .item(
-                                        MenuItem::localized("Readable text (.txt)")
-                                            .icon(IconName::FileText)
-                                            .on_click(move |_, window, cx| {
-                                                let _ = text.update(cx, |view, cx| {
-                                                    view.export_text(text_entry.clone(), window, cx)
-                                                });
-                                            }),
-                                    )
-                                    .item(
-                                        MenuItem::localized("Raw terminal stream (.ansi)")
-                                            .icon(IconName::Code)
-                                            .on_click(move |_, window, cx| {
-                                                let _ = raw.update(cx, |view, cx| {
-                                                    view.export(raw_entry.clone(), true, window, cx)
-                                                });
-                                            }),
-                                    )
+                                capture_export_menu(menu, &owner, &entry)
                             }),
                     )
                     .child(
@@ -750,7 +758,7 @@ impl Logs {
                             .toolbar()
                             .ghost()
                             .icon(IconName::Trash)
-                            .tooltip("Delete log and capture")
+                            .tooltip("workspace.label.deleteLogAndCapture")
                             .disabled(live || self.busy)
                             .on_click(cx.listener(move |view, _, _, cx| {
                                 cx.stop_propagation();
@@ -780,36 +788,67 @@ impl Logs {
                         .bg(p.accent),
                 )
             })
-            .context_menu(move |menu, _, _| {
+            .context_menu(move |menu, _, cx| {
+                let replay = menu_owner.clone();
                 let details = menu_owner.clone();
-                let history = menu_owner.clone();
                 let delete = menu_owner.clone();
                 let details_entry = context_entry.clone();
-                let history_entry = details_entry.clone();
+                let replay_entry = context_entry.clone();
+                let (blocked, delete_count, multiple) =
+                    menu_owner.upgrade().map_or((true, 0, false), |owner| {
+                        let view = owner.read(cx);
+                        let count = view
+                            .selection
+                            .iter()
+                            .filter(|id| !view.catalog.active.contains(*id))
+                            .count();
+                        (
+                            view.busy || view.loading || view.loading_more,
+                            count,
+                            view.selection.len() > 1,
+                        )
+                    });
                 menu.item(
-                    MenuItem::localized("rs.recordings.action.sessionDetails").on_click(
-                        move |_, _, cx| {
-                            let _ =
-                                details.update(cx, |view, cx| view.show(details_entry.clone(), cx));
-                        },
-                    ),
+                    MenuItem::localized("common.action.replay")
+                        .icon(IconName::Play)
+                        .disabled(!can_read || blocked)
+                        .on_click(move |_, window, cx| {
+                            let _ = replay.update(cx, |view, cx| {
+                                view.preview(replay_entry.clone(), window, cx)
+                            });
+                        }),
                 )
                 .item(
-                    MenuItem::localized("rs.recordings.action.exportHistory")
-                        .disabled(live)
-                        .on_click(move |_, window, cx| {
-                            let _ = history.update(cx, |view, cx| {
-                                view.export(history_entry.clone(), false, window, cx)
-                            });
+                    MenuItem::localized("workspace.label.exportTerminalCapture")
+                        .icon(IconName::Download)
+                        .disabled(!can_read || blocked)
+                        .submenu(capture_export_menu(
+                            Menu::default(),
+                            &menu_owner,
+                            &context_entry,
+                        )),
+                )
+                .item(
+                    MenuItem::localized("workspace.logs.action.sessionDetails")
+                        .icon(IconName::Info)
+                        .on_click(move |_, _, cx| {
+                            let _ =
+                                details.update(cx, |view, cx| view.show(details_entry.clone(), cx));
                         }),
                 )
                 .separator()
                 .item(
-                    MenuItem::localized("rs.recordings.action.deleteFinished")
-                        .destructive(true)
-                        .on_click(move |_, _, cx| {
-                            let _ = delete.update(cx, |view, cx| view.request_delete(false, cx));
-                        }),
+                    MenuItem::localized(if multiple {
+                        "workspace.logs.action.deleteFinished"
+                    } else {
+                        "workspace.label.deleteLogAndCapture"
+                    })
+                    .icon(IconName::Trash)
+                    .disabled(blocked || delete_count == 0)
+                    .destructive(true)
+                    .on_click(move |_, _, cx| {
+                        let _ = delete.update(cx, |view, cx| view.request_delete(false, cx));
+                    }),
                 )
             })
             .into_any_element()
@@ -883,33 +922,213 @@ impl Render for Logs {
         )
         .track_scroll(&self.scroll)
         .size_full();
-        div().size_full().min_h_0().flex().flex_col().bg(p.background).text_color(p.text).text_size(px(12.)).track_focus(&self.focus).key_context("Nauterm")
-            .on_action(cx.listener(|view, _: &SelectCards, window, cx| { if !crate::components::overlay::is_modal_open(window, cx) && !view.selection.is_empty() { view.selection = view.visible.iter().filter_map(|index| view.catalog.entries.get(*index)).map(|entry| entry.id.clone()).collect(); cx.notify(); } cx.stop_propagation(); }))
-            .on_action(cx.listener(|view, _: &DeleteCards, window, cx| { if !crate::components::overlay::is_modal_open(window, cx) && !view.selection.is_empty() { view.request_delete(false, cx); } cx.stop_propagation(); }))
+        div()
+            .size_full()
+            .min_h_0()
+            .flex()
+            .flex_col()
+            .bg(p.background)
+            .text_color(p.text)
+            .text_size(px(12.))
+            .track_focus(&self.focus)
+            .key_context("Nauterm")
+            .on_action(cx.listener(|view, _: &SelectCards, window, cx| {
+                if !crate::components::overlay::is_modal_open(window, cx)
+                    && !view.selection.is_empty()
+                {
+                    view.selection = view
+                        .visible
+                        .iter()
+                        .filter_map(|index| view.catalog.entries.get(*index))
+                        .map(|entry| entry.id.clone())
+                        .collect();
+                    cx.notify();
+                }
+                cx.stop_propagation();
+            }))
+            .on_action(cx.listener(|view, _: &DeleteCards, window, cx| {
+                if !crate::components::overlay::is_modal_open(window, cx)
+                    && !view.selection.is_empty()
+                {
+                    view.request_delete(false, cx);
+                }
+                cx.stop_propagation();
+            }))
             .child(self.header(cx))
-            .when(count > 0 || extra_row, |view| view.child(div().id("logs-table").relative().mx(px(TABLE_MARGIN)).flex_1().min_h_0().rounded(px(7.)).bg(p.surface)
-                .child(TableFrame::new(div().size_full().overflow_hidden().child(crate::components::uniform_scrollbar("logs-table-scrollbar", list, &self.scroll)), p))))
-            .when(count == 0 && !extra_row, |view| view.child(crate::components::EmptyState::new(IconName::Clock, if self.loading { "Loading logs…" } else { "No logs yet" }, self.dark).description("Session history appears here after opening a terminal. Enable output recording in Settings to save terminal contents.")))
-            .child(div().h(px(30.)).px(px(20.)).flex_shrink_0().flex().items_center().gap(px(7.)).text_size(px(11.)).text_color(p.muted).child(Icon::new(IconName::HardDrive).with_size(px(14.))).child(crate::localization::view(format!("Capture storage  {total}"))))
+            .child(
+                div()
+                    .id("logs-table")
+                    .relative()
+                    .mx(px(TABLE_MARGIN))
+                    .flex_1()
+                    .min_h_0()
+                    .rounded(px(7.))
+                    .bg(p.surface)
+                    .child(TableFrame::new(
+                        div().size_full().overflow_hidden().flex().flex_col().child(
+                            if count > 0 || extra_row {
+                                crate::components::uniform_scrollbar(
+                                    "logs-table-scrollbar",
+                                    list,
+                                    &self.scroll,
+                                )
+                                .into_any_element()
+                            } else {
+                                crate::components::EmptyState::new(
+                                    IconName::Clock,
+                                    if self.loading {
+                                        "Loading logs…"
+                                    } else {
+                                        "workspace.label.noTerminalSessionsRecorded"
+                                    },
+                                    self.dark,
+                                )
+                                .into_any_element()
+                            },
+                        ),
+                        p,
+                    )),
+            )
+            .child(
+                div()
+                    .h(px(30.))
+                    .px(px(20.))
+                    .flex_shrink_0()
+                    .flex()
+                    .items_center()
+                    .gap(px(7.))
+                    .text_size(px(11.))
+                    .text_color(p.muted)
+                    .child(Icon::new(IconName::HardDrive).with_size(px(14.)))
+                    .child(crate::localization::view(format!(
+                        "Capture storage  {total}"
+                    ))),
+            )
             .when_some(self.detail.as_ref(), |view, entry| {
-                let title = entry.title.clone();
-                let content = div().flex().flex_col().gap(px(10.)).child(entry.target()).child(crate::localization::view(format!("Started: {}", date(entry.started_at)))).child(crate::localization::view(format!("Ended: {}", entry.ended_at.map(date).unwrap_or_else(|| "Live".into()))))
-                    .when_some(entry.cwd.clone(), |view, cwd| view.child(crate::localization::view(format!("Directory: {cwd}"))))
-                    .when(self.detail_loading, |view| view.child(crate::localization::text(cx, "rs.ui.copy.loadingEvents")))
-                    .children(self.events.iter().map(|event| div().flex().flex_col().gap(px(4.)).child(div().text_size(px(11.)).text_color(p.muted).child(date(event.timestamp))).child(event.message.clone())));
-                view.child(Modal::new("log-details", title.clone()).return_focus(&self.focus)
-                    .on_dismiss(cx.listener(|view, _, _, cx| { view.detail = None; view.revision += 1; cx.notify(); }))
-                    .content(DialogFrame::new("log-details-frame", title).width(560.).colors(DialogColors::workspace(self.dark)).content(content)
-                        .action(Button::new("done-log-details").primary().label("Done").on_click(|_, window, cx| Modal::dismiss(window, cx)))))
+                use crate::localization::{format_for, language, text_for};
+                let language = language(cx);
+                let title = "workspace.logs.action.sessionDetails";
+                let ended = entry.ended_at.map_or_else(
+                    || text_for(language, "workspace.logs.details.live"),
+                    |time| {
+                        format_for(
+                            language,
+                            "workspace.logs.details.ended",
+                            &[("time", &date(time))],
+                        )
+                    },
+                );
+                let content = div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(10.))
+                    .child(
+                        div()
+                            .font_weight(FontWeights::SEMIBOLD)
+                            .child(entry.title.clone()),
+                    )
+                    .child(if entry.host.is_some() {
+                        entry.target().into()
+                    } else {
+                        text_for(language, "workspace.logs.details.localTerminal")
+                    })
+                    .child(format_for(
+                        language,
+                        "workspace.logs.details.started",
+                        &[("time", &date(entry.started_at))],
+                    ))
+                    .child(ended)
+                    .when_some(entry.cwd.as_deref(), |view, cwd| {
+                        view.child(format_for(
+                            language,
+                            "workspace.logs.details.directory",
+                            &[("cwd", cwd)],
+                        ))
+                    })
+                    .when(self.detail_loading, |view| {
+                        view.child(text_for(language, "workspace.logs.details.loadingEvents"))
+                    })
+                    .children(self.events.iter().map(|event| {
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(4.))
+                            .child(
+                                div()
+                                    .text_size(px(11.))
+                                    .text_color(p.muted)
+                                    .child(date(event.timestamp)),
+                            )
+                            .child(event.message.clone())
+                    }));
+                view.child(
+                    Modal::new("log-details", title)
+                        .return_focus(&self.focus)
+                        .on_dismiss(cx.listener(|view, _, _, cx| {
+                            view.detail = None;
+                            view.revision += 1;
+                            cx.notify();
+                        }))
+                        .content(
+                            DialogFrame::new("log-details-frame", title)
+                                .width(560.)
+                                .colors(DialogColors::workspace(self.dark))
+                                .content(content)
+                                .action(
+                                    Button::new("done-log-details")
+                                        .primary()
+                                        .label("Done")
+                                        .on_click(|_, window, cx| Modal::dismiss(window, cx)),
+                                ),
+                        ),
+                )
             })
             .when_some(self.deletion.as_ref(), |view, entries| {
-                let title = format!("Delete {} finished log(s)?", entries.len());
-                view.child(crate::components::Dialog::new("delete-logs-dialog", title.clone()).return_focus(&self.focus).dismissible(!self.busy)
-                    .on_dismiss(cx.listener(|view, _, _, cx| { view.deletion = None; if view.refresh_pending { view.refresh(cx); } cx.notify(); }))
-                    .content(DialogFrame::new("delete-logs-frame", title).width(400.).colors(DialogColors::workspace(self.dark))
-                        .content("The selected session history and recorded output will be permanently removed. Active sessions are kept.")
-                        .action(Button::new("cancel-delete-logs").ghost().label("Cancel").disabled(self.busy).on_click(|_, window, cx| Modal::dismiss(window, cx)))
-                        .action(Button::new("confirm-delete-logs").danger().label("Delete").disabled(self.busy).on_click(cx.listener(|view, _, _, cx| view.delete(cx))))))
+                use crate::localization::{format_for, language, text};
+                let title = text(
+                    cx,
+                    if entries.len() == 1 {
+                        "workspace.dialog.deleteTerminalHistory"
+                    } else {
+                        "workspace.dialog.deleteFinishedLogs"
+                    },
+                );
+                view.child(
+                    crate::components::Dialog::new("delete-logs-dialog", title.clone())
+                        .return_focus(&self.focus)
+                        .dismissible(!self.busy)
+                        .on_dismiss(cx.listener(|view, _, _, cx| {
+                            view.deletion = None;
+                            if view.refresh_pending {
+                                view.refresh(cx);
+                            }
+                            cx.notify();
+                        }))
+                        .content(
+                            DialogFrame::new("delete-logs-frame", title)
+                                .width(400.)
+                                .colors(DialogColors::workspace(self.dark))
+                                .content(format_for(
+                                    language(cx),
+                                    "workspace.dialog.deleteFinishedLogs.description",
+                                    &[("count", &entries.len().to_string())],
+                                ))
+                                .action(
+                                    Button::new("cancel-delete-logs")
+                                        .ghost()
+                                        .label("Cancel")
+                                        .disabled(self.busy)
+                                        .on_click(|_, window, cx| Modal::dismiss(window, cx)),
+                                )
+                                .action(
+                                    Button::new("confirm-delete-logs")
+                                        .danger()
+                                        .label("Delete")
+                                        .disabled(self.busy)
+                                        .on_click(cx.listener(|view, _, _, cx| view.delete(cx))),
+                                ),
+                        ),
+                )
             })
     }
 }

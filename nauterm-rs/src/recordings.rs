@@ -662,7 +662,7 @@ impl Service {
     }
     /// Export decrypted VT bytes only after the user selects a destination.
     /// Publication occurs only after the reader authenticates the entire file.
-    pub async fn export(&self, entry: Entry, destination: PathBuf, output: bool) -> Result<()> {
+    pub async fn export_raw(&self, entry: Entry, destination: PathBuf) -> Result<()> {
         self.dispatch(move |runtime| {
             ensure!(
                 !runtime.active.contains_key(&entry.id),
@@ -672,8 +672,10 @@ impl Service {
                 .entry(&entry.id)?
                 .context("This log no longer exists. Refresh and try again.")?;
             ensure!(
-                current.capture_file == entry.capture_file,
-                "The recording changed. Refresh and try again."
+                current.capture_file == entry.capture_file
+                    && current.capture_sha256.is_some()
+                    && current.capture_sha256 == entry.capture_sha256,
+                "The recording changed or has no finalized output. Refresh and try again."
             );
             let target = crate::file_commit::DownloadTarget::new(&destination, false)?;
             let mut file = fs::OpenOptions::new()
@@ -685,26 +687,15 @@ impl Service {
                 use std::os::unix::fs::PermissionsExt;
                 file.set_permissions(fs::Permissions::from_mode(0o600))?;
             }
-            if output {
-                ensure!(
-                    current.capture_sha256.is_some()
-                        && current.capture_sha256 == entry.capture_sha256,
-                    "The recording changed or has no finalized output. Refresh and try again."
-                );
-                let path = runtime.capture_path(&current)?;
-                let info = runtime.core.capture.read(&path, &current.id, |bytes| {
-                    file.write_all(bytes)?;
-                    Ok(())
-                })?;
-                info.verify(
-                    current.capture_sha256.as_deref().unwrap(),
-                    current.capture_bytes,
-                )?;
-            } else {
-                let events: Vec<Event> =
-                    runtime.db(json!({"op":"list_terminal_log_events", "log_id":current.id}))?;
-                serde_json::to_writer_pretty(&mut file, &json!({"log":current,"events":events}))?;
-            }
+            let path = runtime.capture_path(&current)?;
+            let info = runtime.core.capture.read(&path, &current.id, |bytes| {
+                file.write_all(bytes)?;
+                Ok(())
+            })?;
+            info.verify(
+                current.capture_sha256.as_deref().unwrap(),
+                current.capture_bytes,
+            )?;
             file.sync_all()?;
             drop(file);
             target.publish()
