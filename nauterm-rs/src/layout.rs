@@ -52,14 +52,16 @@ impl ConnectionMetrics {
     }
 }
 
-/// Available width after reserving right drawers, before laying out the
-/// sidebar. Keeping the decision independent of its current animated width
-/// prevents collapse/expand feedback at the breakpoint.
+/// Available width after reserving right drawers, before laying out the sidebar.
+pub fn sidebar_can_expand(available: f32) -> bool {
+    available >= 760.
+}
+
 pub fn sidebar_width(available: f32) -> f32 {
-    if available < 760. {
-        COLLAPSED_SIDEBAR_WIDTH
-    } else {
+    if sidebar_can_expand(available) {
         SIDEBAR_WIDTH
+    } else {
+        COLLAPSED_SIDEBAR_WIDTH
     }
 }
 

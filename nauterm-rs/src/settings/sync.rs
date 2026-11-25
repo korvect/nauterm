@@ -1,10 +1,11 @@
 //! Sync settings own transient views; configuration stays in RS config and
 //! provider/key/backup operations use the original encrypted shared database.
 use super::*;
-use crate::typography::{FontWeights, SettingsText};
 use crate::{
     components::{Dialog, DialogColors, DialogFrame, Modal, Spinner},
+    localization::Language,
     sync::{Backup, Overview, Preferences, Service, Strategy, SyncPlan},
+    typography::{FontWeights, SettingsText},
 };
 use anyhow::Context as _;
 use gpui_kit::component::Disableable;
@@ -37,6 +38,7 @@ pub struct Panel {
     service: Option<Service>,
     preferences: Preferences,
     dark: bool,
+    language: Language,
     opened: bool,
     overview: Option<Overview>,
     backups: Option<Vec<Backup>>,
@@ -73,6 +75,7 @@ impl Panel {
         service: Result<Service, String>,
         preferences: Preferences,
         dark: bool,
+        language: Language,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
@@ -152,6 +155,7 @@ impl Panel {
             service,
             preferences,
             dark,
+            language,
             opened: false,
             overview: None,
             backups: None,
@@ -193,10 +197,15 @@ impl Panel {
         &mut self,
         preferences: Preferences,
         dark: bool,
+        language: Language,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         self.dark = dark;
+        if self.language != language {
+            self.language = language;
+            cx.notify();
+        }
         if self.preferences != preferences {
             if self.preferences.interval != preferences.interval {
                 self.interval.update(cx, |input, cx| {
@@ -473,13 +482,13 @@ impl Panel {
                     .child(
                         SettingsText::Label
                             .apply(div())
-                            .child(crate::localization::view(title)),
+                            .child(crate::localization::text_for(self.language, title)),
                     )
                     .child(
                         SettingsText::Description
                             .apply(div())
                             .text_color(Palette::settings_faint(self.dark))
-                            .child(crate::localization::view(subtitle)),
+                            .child(crate::localization::text_for(self.language, subtitle)),
                     ),
             )
             .child(div().flex_1().min_w_0().child(control))
@@ -745,11 +754,15 @@ impl Render for Panel {
                                         .flex_shrink_0()
                                         .text_size(px(11.))
                                         .text_color(p.muted)
-                                        .child(crate::localization::view(if provider.connected {
-                                            provider.kind.to_string()
+                                        .child(if provider.connected {
+                                            provider.kind.clone().into()
                                         } else {
-                                            format!("{} · Credentials required", provider.kind)
-                                        })),
+                                            crate::localization::format_for(
+                                                self.language,
+                                                "settings.sync.provider.status.credentialsRequired",
+                                                &[("provider", provider.kind.as_str())],
+                                            )
+                                        }),
                                 ),
                         )
                         .child(if active {
@@ -782,7 +795,7 @@ impl Render for Panel {
                                     .small()
                                     .ghost()
                                     .icon(IconName::Clock)
-                                    .tooltip("Version History")
+                                    .tooltip("settings.sync.action.versionHistory")
                                     .disabled(!provider.connected || self.busy())
                                     .on_click(cx.listener(move |this, _, window, cx| {
                                         this.open_history(history_provider.clone(), window, cx)
@@ -794,7 +807,7 @@ impl Render for Panel {
                                 .small()
                                 .ghost()
                                 .icon(IconName::Settings)
-                                .tooltip("Configure")
+                                .tooltip("settings.sync.action.configureProvider")
                                 .disabled(self.busy())
                                 .on_click(cx.listener(move |this, _, window, cx| {
                                     this.open_provider_editor(edit_id.clone(), window, cx)
@@ -820,15 +833,15 @@ impl Render for Panel {
             _ => false,
         };
         let (status_color, status_label): (Rgba, &str) = if self.syncing {
-            (p.accent, "Syncing…")
+            (p.accent, "settings.sync.status.syncing")
         } else if self.error.is_some() {
-            (rgb(0xef4444), "Attention needed")
+            (rgb(0xef4444), "settings.sync.status.attentionNeeded")
         } else if active_name.is_none() {
-            (p.muted, "No active provider")
+            (p.muted, "settings.sync.status.noActiveProvider")
         } else if in_sync {
-            (rgb(0x22c55e), "Up to date")
+            (rgb(0x22c55e), "settings.sync.status.upToDate")
         } else {
-            (rgb(0xf59e0b), "Changes pending")
+            (rgb(0xf59e0b), "settings.sync.status.changesPending")
         };
         let group = |icon: IconName, title: &'static str, trailing: Option<AnyElement>| {
             div()
@@ -845,7 +858,7 @@ impl Render for Panel {
                         .text_size(px(11.))
                         .font_weight(FontWeights::SEMIBOLD)
                         .text_color(p.muted)
-                        .child(crate::localization::view(title)),
+                        .child(crate::localization::text_for(self.language, title).to_uppercase()),
                 )
                 .children(trailing)
         };
@@ -916,8 +929,15 @@ impl Render for Panel {
                                     .text_size(px(11.))
                                     .text_color(p.muted)
                                     .child(div().truncate().child(match &active_name {
-                                        Some(name) => format!("via {name}"),
-                                        None => "Add or activate a provider below".into(),
+                                        Some(name) => crate::localization::format_for(
+                                            self.language,
+                                            "settings.sync.status.viaProvider",
+                                            &[("provider", name.as_str())],
+                                        ),
+                                        None => crate::localization::text_for(
+                                            self.language,
+                                            "settings.sync.status.addOrActivateProvider",
+                                        ),
                                     }))
                                     .child("·")
                                     .child(version(
@@ -956,9 +976,9 @@ impl Render for Panel {
                                     .icon(IconName::KeyRound)
                                     .label("Key")
                                     .tooltip(if has_key {
-                                        "Sync key saved on this device"
+                                        "settings.sync.status.keySaved"
                                     } else {
-                                        "Sync key not saved on this device"
+                                        "settings.sync.status.keyNotSaved"
                                     })
                                     .disabled(self.busy())
                                     .on_click(cx.listener(|this, _, window, cx| {
@@ -983,7 +1003,7 @@ impl Render for Panel {
                         Button::new("refresh-sync-status")
                             .ghost()
                             .icon(IconName::RotateCcw)
-                            .tooltip("Refresh Status")
+                            .tooltip("settings.sync.action.refreshStatus")
                             .disabled(self.busy())
                             .on_click(cx.listener(|this, _, _, cx| this.refresh(cx))),
                     )
@@ -992,9 +1012,9 @@ impl Render for Panel {
                             .primary()
                             .icon(IconName::RefreshCw)
                             .label(if self.syncing {
-                                "Syncing…"
+                                "settings.sync.status.syncing"
                             } else {
-                                "Sync Now"
+                                "settings.sync.action.syncNow"
                             })
                             .disabled(
                                 self.busy()
@@ -1032,6 +1052,14 @@ impl Render for Panel {
                                     div().flex_1().min_w_0().child(
                                         Input::new(&self.interval)
                                             .digits_only()
+                                            .suffix(
+                                                div().text_size(px(12.)).text_color(p.muted).child(
+                                                    crate::localization::text_for(
+                                                        self.language,
+                                                        "settings.sync.automatic.unit",
+                                                    ),
+                                                ),
+                                            )
                                             .aria_label(crate::localization::text(
                                                 cx,
                                                 "Sync interval in minutes",
@@ -1039,9 +1067,6 @@ impl Render for Panel {
                                             .disabled(self.busy() || !self.preferences.automatic),
                                     ),
                                 )
-                                .child(div().text_size(px(12.)).text_color(p.muted).child(
-                                    crate::localization::text(cx, "settings.sync.automatic.unit"),
-                                ))
                                 .child(
                                     Switch::new(
                                         "automatic-sync",
@@ -1079,18 +1104,20 @@ impl Render for Panel {
                                     div().flex_1().min_w_0().child(
                                         Input::new(&self.retention)
                                             .digits_only()
+                                            .suffix(
+                                                div().text_size(px(12.)).text_color(p.muted).child(
+                                                    crate::localization::text_for(
+                                                        self.language,
+                                                        "settings.sync.localBackups.unit",
+                                                    ),
+                                                ),
+                                            )
                                             .aria_label(crate::localization::text(
                                                 cx,
                                                 "Local backups to keep",
                                             ))
                                             .disabled(self.busy()),
                                     ),
-                                )
-                                .child(
-                                    div()
-                                        .text_size(px(12.))
-                                        .text_color(p.muted)
-                                        .child(crate::localization::text(cx, "rs.ui.copy.copies")),
                                 )
                                 .child(
                                     Button::new("view-sync-backups")
@@ -1132,7 +1159,7 @@ impl Render for Panel {
                     .gap(px(10.))
                     .child(group(
                         IconName::Cloud,
-                        "PROVIDERS",
+                        "common.label.providers",
                         Some(
                             Button::new("add-sync-provider")
                                 .outline()
@@ -1158,6 +1185,7 @@ impl Render for Panel {
             .children(self.history_modal(cx))
             .children(self.version_restore_dialog(cx))
             .children(self.key_management_modal(cx))
+            .children(self.change_key_modal(cx))
             .children(self.forget_key_dialog(cx))
             .into_any_element()
     }
@@ -1169,7 +1197,13 @@ impl Settings {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         self.sync.update(cx, |panel, cx| {
-            panel.configure(self.values.sync, self.values.dark, window, cx)
+            panel.configure(
+                self.values.sync,
+                self.values.dark,
+                self.values.general.language,
+                window,
+                cx,
+            )
         });
         self.search.section(Section::Sync, self.sync.clone())
     }

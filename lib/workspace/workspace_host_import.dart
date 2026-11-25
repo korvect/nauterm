@@ -69,7 +69,7 @@ class _HostImportDialogState extends State<_HostImportDialog> {
         _hostsExpanded = true;
         _keysExpanded = true;
         if (bundle.hosts.isEmpty && bundle.keys.isEmpty) {
-          _error = tr(
+          _error = context.tr(
             'workspace.import.empty',
             fallback: 'No supported hosts or keys were found.',
           );
@@ -693,7 +693,7 @@ String _hostImportSourceLabel(HostImportSource source) => switch (source) {
     'workspace.import.source.csv.label',
     fallback: 'CSV file',
   ),
-  HostImportSource.openSsh => '~/.ssh',
+  HostImportSource.openSsh => 'OpenSSH',
   HostImportSource.putty => 'PuTTY',
   HostImportSource.mobaXterm => 'MobaXterm',
   HostImportSource.secureCrt => 'SecureCRT',
@@ -713,7 +713,10 @@ String _hostImportSourceDescription(HostImportSource source) =>
         'workspace.import.source.putty.description',
         fallback: 'Sessions from an exported .reg file',
       ),
-      HostImportSource.mobaXterm => '.mxtsessions or MobaXterm.ini',
+      HostImportSource.mobaXterm => tr(
+        'workspace.import.source.mobaXterm.description',
+        fallback: 'Sessions from a .mxtsessions or .ini file',
+      ),
       HostImportSource.secureCrt => tr(
         'workspace.import.source.secureCrt.description',
         fallback: 'Sessions from a SecureCRT folder',

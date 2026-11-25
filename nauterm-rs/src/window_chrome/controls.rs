@@ -50,9 +50,9 @@ pub fn window_controls(
                         crate::localization::text(
                             cx,
                             if maximized {
-                                "rs.window.restore"
+                                "common.action.restore"
                             } else {
-                                "rs.window.maximize"
+                                "common.action.maximize"
                             },
                         ),
                         |_, window, _| window.zoom_window(),

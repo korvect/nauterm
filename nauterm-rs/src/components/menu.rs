@@ -754,6 +754,8 @@ impl MenuState {
         let moved = cx.weak_entity();
         let fg = if item.destructive {
             rgb(0xef4444)
+        } else if item.checked == Some(true) {
+            p.accent
         } else {
             p.text
         };

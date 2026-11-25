@@ -17,15 +17,16 @@ pub(super) struct Management {
     phases: BTreeMap<String, Phase>,
     completed: Vec<Target>,
     focus: FocusHandle,
+    change_focus: FocusHandle,
     forget_focus: FocusHandle,
     _events: Vec<Subscription>,
 }
 impl Management {
     fn new(window: &mut Window, cx: &mut Context<Panel>) -> Self {
         let fields: Vec<_> = [
-            "Current Master Key",
-            "New Master Key",
-            "Confirm New Master Key",
+            "settings.label.currentMasterKey",
+            "settings.label.newMasterKey",
+            "settings.label.confirmNewMasterKey",
         ]
         .into_iter()
         .map(|label| cx.new(|cx| InputState::new(window, cx).masked(true).placeholder(label)))
@@ -53,13 +54,19 @@ impl Management {
             phases: BTreeMap::new(),
             completed: Vec::new(),
             focus: cx.focus_handle(),
+            change_focus: cx.focus_handle(),
             forget_focus: cx.focus_handle(),
             _events: events,
         }
     }
     fn clear_inputs(&mut self, window: &mut Window, cx: &mut Context<Panel>) {
         for field in [&self.current, &self.new, &self.confirm] {
-            field.update(cx, |field, cx| field.set_value("", window, cx));
+            field.update(cx, |field, cx| {
+                field.set_value("", window, cx);
+                if !field.presentation().is_masked() {
+                    field.toggle_masked(window, cx);
+                }
+            });
         }
         self.attempted = false;
     }

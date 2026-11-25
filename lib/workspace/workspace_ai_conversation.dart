@@ -801,7 +801,12 @@ class _AiConversationMessageState extends State<_AiConversationMessage> {
                 SizedBox(width: 5),
               ],
               _AiMessageActionButton(
-                tooltip: _copied ? 'Copied' : 'Copy message',
+                tooltip: _copied
+                    ? 'Copied'
+                    : context.tr(
+                        'ai.action.copyMessage',
+                        fallback: 'Copy message',
+                      ),
                 icon: _copied ? LucideIcons.check : LucideIcons.copy,
                 color: _copied ? widget.colors.accent : widget.colors.muted,
                 onPressed: widget.message.content.isEmpty ? null : _copyMessage,
@@ -1635,7 +1640,9 @@ class _AiCopyCommandButtonState extends State<_AiCopyCommandButton> {
   @override
   Widget build(BuildContext context) {
     return _AiMessageActionButton(
-      tooltip: _copied ? 'Copied' : 'Copy command',
+      tooltip: _copied
+          ? 'Copied'
+          : context.tr('ai.action.copyCommand', fallback: 'Copy command'),
       onPressed: _copy,
       icon: _copied ? LucideIcons.check : LucideIcons.copy,
       color: _copied ? widget.accent : widget.color,

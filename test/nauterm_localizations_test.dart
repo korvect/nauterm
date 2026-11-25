@@ -61,12 +61,11 @@ void main() {
         '浅色',
       );
       expect(
-        chinese.tr('settings.terminal.fontWeight.light', fallback: 'Light'),
-        '细体',
-      );
-      expect(
-        chinese.messages.containsKey('settings.terminal.fontWeight.light'),
-        isTrue,
+        chinese.tr(
+          'workspace.host.protocol.portLabel',
+          args: const {'protocol': 'SSH', 'port': 22},
+        ),
+        'SSH 使用 22 端口',
       );
       expect(
         chinese.tr(
@@ -285,6 +284,63 @@ void main() {
       }
     },
   );
+
+  test('export and bulk deletion use the shared bilingual messages', () async {
+    final english = await NautermLocalizations.load(const Locale('en'));
+    final chinese = await NautermLocalizations.load(const Locale('zh', 'CN'));
+    expect(english.tr('workspace.action.exportCsv'), 'Export CSV…');
+    expect(chinese.tr('workspace.action.exportCsv'), '导出 CSV…');
+    expect(chinese.tr('workspace.label.exportToFile'), '导出到文件');
+    for (final (kind, label) in [
+      ('Hosts', '主机'),
+      ('Keys', '密钥'),
+      ('Identities', '身份'),
+    ]) {
+      final key = 'workspace.dialog.delete$kind';
+      expect(english.tr(key), 'Delete $kind?');
+      expect(chinese.tr(key), '删除$label？');
+      expect(
+        chinese.tr('$key.description', args: {'count': 3}),
+        '删除 3 个$label？此操作无法撤销。',
+      );
+    }
+    expect(
+      chinese.tr(
+        'workspace.keys.export.filesSuccess',
+        args: {'count': 2, 'path': '/tmp/Key & Cert'},
+      ),
+      '已将 2 个密钥文件导出到 /tmp/Key & Cert。',
+    );
+  });
+
+  test('known hosts import uses shared action and result messages', () async {
+    final english = await NautermLocalizations.load(const Locale('en'));
+    final chinese = await NautermLocalizations.load(const Locale('zh', 'CN'));
+    expect(
+      english.tr('workspace.action.importKnownHosts'),
+      'Import known hosts',
+    );
+    expect(chinese.tr('workspace.action.importKnownHosts'), '导入已知主机');
+    expect(
+      english.tr('workspace.knownHosts.import.successOne'),
+      'Imported 1 known host.',
+    );
+    expect(
+      english.tr('workspace.knownHosts.import.success', args: {'count': 2}),
+      'Imported 2 known hosts.',
+    );
+    expect(
+      chinese.tr('workspace.knownHosts.import.success', args: {'count': 2}),
+      '已导入 2 个已知主机。',
+    );
+    expect(
+      chinese.tr(
+        'workspace.knownHosts.import.failure',
+        args: {'error': chinese.tr('workspace.knownHosts.import.fileRequired')},
+      ),
+      '导入已知主机失败：请选择普通 known_hosts 文件。',
+    );
+  });
 
   test('language names use autonyms in every interface language', () async {
     final english = await NautermLocalizations.load(const Locale('en'));

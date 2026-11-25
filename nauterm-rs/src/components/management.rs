@@ -1,7 +1,7 @@
 //! Workspace management surfaces, shared without imposing the Settings skin.
 use super::{
     Button, Input, ScrollbarsExt,
-    menu::{DropdownMenu, Menu},
+    menu::{DropdownMenu, Menu, MenuItem},
 };
 use crate::{palette::Palette, typography::FontWeights};
 use gpui_kit::{
@@ -16,6 +16,22 @@ type EmptyAction = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 
 pub const COLLECTION_SECTION_GAP: f32 = 28.;
 pub const COLLECTION_TITLE_GAP: f32 = 12.;
+
+pub fn view_mode_button(id: &'static str, list: bool) -> Button {
+    Button::new(id)
+        .toolbar()
+        .ghost()
+        .icon(if list {
+            IconName::List
+        } else {
+            IconName::LayoutGrid
+        })
+        .tooltip(if list {
+            "workspace.tooltip.listView"
+        } else {
+            "workspace.tooltip.gridView"
+        })
+}
 
 /// `_workspacePanePadding` is shared by every management collection.
 pub fn collection_padding<T: Styled>(view: T) -> T {
@@ -272,6 +288,7 @@ pub fn toolbar_search(
             .child(
                 Input::new(&state)
                     .palette(search_palette)
+                    .placeholder_color(crate::components::motion::mix(p.text, p.hover, 0.34))
                     .small()
                     .h(px(30.))
                     .pl(px(8.))
@@ -318,6 +335,20 @@ pub fn toolbar_search(
             .on_click(move |_, window, cx| toggle(true, window, cx))
             .into_any_element()
     }
+}
+
+pub fn editor_more_button(id: &'static str) -> Button {
+    Button::new(id)
+        .toolbar()
+        .ghost()
+        .icon(IconName::Ellipsis)
+        .tooltip("workspace.label.more")
+}
+
+pub fn discard_changes_item(has_draft: bool) -> MenuItem {
+    MenuItem::localized("workspace.action.discardChanges")
+        .icon(IconName::Undo2)
+        .disabled(!has_draft)
 }
 
 /// Standard editor drawer. Nested selection/gallery pages can use their own
@@ -430,10 +461,6 @@ impl DrawerFrame {
     }
     pub fn leading(mut self, element: impl IntoElement) -> Self {
         self.leading.push(element.into_any_element());
-        self
-    }
-    pub fn actions(mut self, actions: impl IntoIterator<Item = AnyElement>) -> Self {
-        self.actions.extend(actions);
         self
     }
     pub fn section(mut self, section: impl IntoElement) -> Self {

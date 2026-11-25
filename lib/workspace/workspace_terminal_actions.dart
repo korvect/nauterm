@@ -41,11 +41,9 @@ extension _NautermWorkspaceTerminalActions on _NautermWorkspaceState {
     _showWorkspaceDialog<bool>(
       builder: (context) {
         return _WorkspaceConfirmDialog(
-          title: Text(
-            tr('workspace.label.closeTerminal', fallback: 'Close Terminal'),
-          ),
-          message: 'Are you sure you want to close this terminal?',
-          confirmLabel: 'Close',
+          title: Text(context.tr('workspace.dialog.closeTerminal')),
+          message: 'workspace.dialog.areYouSureYouWantToCloseThisTerminal',
+          confirmLabel: 'common.action.close',
         );
       },
     ).then((confirmed) {
@@ -663,51 +661,35 @@ extension _NautermWorkspaceTerminalActions on _NautermWorkspaceState {
       return true;
     }
 
-    final message = switch ((tabCount, forwardCount)) {
-      (0, final forwards) => context.tr(
-        closeWindow
-            ? 'workspace.closeWindow.activeForwards'
-            : 'workspace.quit.activeForwards',
-        fallback: closeWindow
-            ? 'There are still {count} active port forwards. Close this window anyway?'
-            : 'There are still {count} active port forwards. Quit anyway?',
-        args: {'count': forwards},
-      ),
-      (final tabs, 0) => context.tr(
-        closeWindow
-            ? 'workspace.closeWindow.openTabs'
-            : 'workspace.quit.openTabs',
-        fallback: closeWindow
-            ? tabs == 1
-                  ? 'There is still 1 terminal tab open. Close this window anyway?'
-                  : 'There are still {count} terminal tabs open. Close this window anyway?'
-            : tabs == 1
-            ? 'There is still 1 terminal tab open. Quit anyway?'
-            : 'There are still {count} terminal tabs open. Quit anyway?',
-        args: {'count': tabs},
-      ),
-      (final tabs, final forwards) => context.tr(
-        closeWindow
-            ? 'workspace.closeWindow.openTabsAndForwards'
-            : 'workspace.quit.openTabsAndForwards',
-        fallback: closeWindow
-            ? 'There are still {tabs} terminal tabs and {forwards} active port forwards. Close this window anyway?'
-            : 'There are still {tabs} terminal tabs and {forwards} active port forwards. Quit anyway?',
-        args: {'tabs': tabs, 'forwards': forwards},
-      ),
+    final scope = closeWindow ? 'workspace.closeWindow' : 'workspace.quit';
+    final messageKey = switch ((tabCount, forwardCount)) {
+      (0, _) => 'activeForwards',
+      (1, 0) => 'openTab',
+      (_, 0) => 'openTabs',
+      _ => 'openTabsAndForwards',
     };
+    final message = context.tr(
+      '$scope.$messageKey',
+      args: {
+        'count': tabCount == 0 ? forwardCount : tabCount,
+        'tabs': tabCount,
+        'forwards': forwardCount,
+      },
+    );
     final result = await _showWorkspaceDialog<bool>(
       builder: (context) => _WorkspaceConfirmDialog(
         title: Text(
           context.tr(
             closeWindow
                 ? 'workspace.dialog.closeWindow'
-                : 'workspace.dialog.quitNauterm',
-            fallback: closeWindow ? 'Close window?' : 'Quit Nauterm?',
+                : 'workspace.dialog.quit',
+            args: const {'app': 'Nauterm'},
           ),
         ),
         message: message,
-        confirmLabel: closeWindow ? 'Close' : 'Quit',
+        confirmLabel: closeWindow
+            ? 'common.action.close'
+            : 'common.action.quit',
       ),
     );
     if (result != true) return false;
@@ -719,6 +701,7 @@ extension _NautermWorkspaceTerminalActions on _NautermWorkspaceState {
   Future<bool> _confirmDelete({
     required String title,
     required String message,
+    Map<String, Object?> messageArgs = const {},
     String confirmLabel = 'Delete',
     _AiAssistantColors? colors,
   }) async {
@@ -728,8 +711,9 @@ extension _NautermWorkspaceTerminalActions on _NautermWorkspaceState {
     final result = await _showWorkspaceDialog<bool>(
       builder: (context) {
         final dialog = _WorkspaceConfirmDialog(
-          title: Text(tr(title)),
+          title: Text(context.tr(title)),
           message: message,
+          messageArgs: messageArgs,
           confirmLabel: confirmLabel,
         );
         return colors == null

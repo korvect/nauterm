@@ -118,7 +118,7 @@ impl Settings {
                 _ => "Workspace",
             };
             let raw = self.values.shortcuts.raw(command);
-            let label = command.label();
+            let label = command.label(self.values.general.language);
             let recorder = Button::new(("record-shortcut", index))
                 .w_full()
                 .min_w_0()
@@ -159,7 +159,11 @@ impl Settings {
                         .active(p.accent.alpha(0.12).into())
                         .highlight(p.accent.alpha(0.08).into()),
                 )
-                .localized_accessibility_label(format!("Change {label} shortcut"))
+                .accessibility_label(crate::localization::format_for(
+                    self.values.general.language,
+                    "settings.shortcuts.changeShortcut",
+                    &[("label", &label)],
+                ))
                 .tooltip("Click to record a shortcut. Escape cancels recording.")
                 .when(recording, |button| {
                     button
@@ -233,7 +237,7 @@ impl Settings {
                             .line_height(px(18.))
                             .font_weight(FontWeights::MEDIUM)
                             .truncate()
-                            .child(crate::localization::view(label)),
+                            .child(label),
                     )
                     .child(column(3.).child(recorder))
                     .child(
@@ -291,21 +295,22 @@ impl Settings {
                 this.values.shortcuts.reset();
                 this.changed(window, cx);
             }));
+        let meta_key_label = if cfg!(target_os = "macos") {
+            "settings.shortcuts.optionAsMeta.label"
+        } else {
+            "settings.shortcuts.altAsMeta.label"
+        };
         sections::stack()
             .child(
                 self.section(
                     Section::Keyboard,
                     IconName::Keyboard,
                     self.row(
-                        if cfg!(target_os = "macos") {
-                            "Use Option as Meta Key"
-                        } else {
-                            "Use Alt as Meta Key"
-                        },
-                        "Send Option/Alt key combinations with an Escape prefix.",
+                        meta_key_label,
+                        "settings.shortcuts.optionAsMeta.description",
                         Switch::new(
                             "option-as-meta",
-                            "Use Option/Alt as Meta Key",
+                            meta_key_label,
                             self.values.terminal.use_option_as_meta_key,
                         )
                         .on_change(cx.listener(

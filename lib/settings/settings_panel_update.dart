@@ -297,7 +297,7 @@ class _AboutSettingsPageState extends State<_AboutSettingsPage> {
                   const SizedBox(height: 18),
                   _SettingsRow(
                     title: 'Platform',
-                    subtitle: 'Current operating system',
+                    subtitle: 'Current operating system and architecture',
                     trailing: Align(
                       alignment: Alignment.centerRight,
                       child: Text(
@@ -559,10 +559,19 @@ class _UpdateInstalledDialog extends StatelessWidget {
 }
 
 String get _platformName {
-  if (Platform.isMacOS) return 'macOS';
-  if (Platform.isWindows) return 'Windows';
-  if (Platform.isLinux) return 'Linux';
-  return Platform.operatingSystem;
+  final name = switch (Platform.operatingSystem) {
+    'macos' => 'macOS',
+    'windows' => 'Windows',
+    'linux' => 'Linux',
+    final other => other,
+  };
+  final abi = Abi.current().toString();
+  final architecture = switch (abi.substring(abi.indexOf('_') + 1)) {
+    'arm64' => 'aarch64',
+    'x64' => 'x86_64',
+    final other => other,
+  };
+  return '$name · $architecture';
 }
 
 class _ThirdPartyLicenseRecord {

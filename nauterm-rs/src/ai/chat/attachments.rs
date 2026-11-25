@@ -110,14 +110,19 @@ impl Chat {
         cx.notify();
     }
     pub(super) fn attach_button(&self, cx: &mut Context<Self>) -> Button {
+        let palette = self.palette();
         Button::new("ai-attach-files")
             .ghost()
-            .custom(ButtonCustomVariant::for_surface(self.palette()))
+            .custom(
+                ButtonCustomVariant::for_surface(palette).hover(
+                    crate::components::motion::mix(palette.control, palette.text, 0.10).into(),
+                ),
+            )
             .size(px(30.))
-            .rounded_full()
+            .rounded(px(7.))
             .icon_size(px(17.))
-            .text_color(self.palette().muted)
-            .icon(crate::assets::icon(IconName::Plus))
+            .text_color(palette.muted)
+            .icon(crate::assets::Glyph::PlusBold.icon())
             .tooltip(if self.picking_attachments {
                 "Loading attachments…"
             } else {

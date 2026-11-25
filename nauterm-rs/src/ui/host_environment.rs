@@ -129,6 +129,7 @@ struct PendingResource {
     value: Resource,
     before: Option<Resource>,
     editor: EntityId,
+    connect: bool,
     tag_ids: Option<BTreeSet<String>>,
 }
 impl Nauterm {
@@ -422,10 +423,11 @@ impl Nauterm {
     pub(super) fn save_host_candidate(
         &mut self,
         host: Host,
+        connect: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.save_connection_candidate(Resource::Host(Box::new(host)), window, cx);
+        self.save_connection_candidate(Resource::Host(Box::new(host)), connect, window, cx);
     }
     pub(super) fn save_group_candidate(
         &mut self,
@@ -433,11 +435,12 @@ impl Nauterm {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.save_connection_candidate(Resource::Group(Box::new(group)), window, cx);
+        self.save_connection_candidate(Resource::Group(Box::new(group)), false, window, cx);
     }
     fn save_connection_candidate(
         &mut self,
         mut resource: Resource,
+        connect: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -470,6 +473,7 @@ impl Nauterm {
         let pending = PendingResource {
             before: resource.current(&self.data),
             editor: editor.fields[0].1.entity_id(),
+            connect,
             value: resource.clone(),
             tag_ids: match &resource {
                 Resource::Host(host) => Some(crate::tags::ids(&self.data.tags, &host.tags)),
@@ -631,6 +635,11 @@ impl Nauterm {
                 self.notice = Some(error.to_string());
             }
         }
+        let connect = pending.connect
+            && self
+                .editor
+                .as_ref()
+                .is_some_and(|editor| editor.fields[0].1.entity_id() == pending.editor);
         self.with_editor_context(
             |editor| editor.fields[0].1.entity_id() == pending.editor,
             window,
@@ -657,6 +666,9 @@ impl Nauterm {
                 .collect(),
             cx,
         );
+        if connect && let Some(host) = self.data.hosts.iter().find(|host| host.id == id).cloned() {
+            self.open_ssh(host, window, cx);
+        }
         cx.notify();
         Ok(())
     }

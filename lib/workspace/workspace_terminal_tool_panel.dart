@@ -913,8 +913,14 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
     final composerHint = waitingForCommands
         ? 'Review terminal commands to continue'
         : widget.workspaceScope
-        ? 'Ask about this workspace...'
-        : 'Ask about this terminal...';
+        ? context.tr(
+            'ai.prompt.workspace',
+            fallback: 'Ask about this workspace...',
+          )
+        : context.tr(
+            'ai.prompt.terminal',
+            fallback: 'Ask about this terminal...',
+          );
     return Material(
       key: const ValueKey('ai-assistant-panel'),
       color: background,

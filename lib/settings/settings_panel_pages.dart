@@ -198,6 +198,20 @@ Widget _buildSettingsGeneralContent(_SettingsPanelState state) {
             child: Column(
               children: [
                 _SettingsRow(
+                  localizationKey: 'settings.general.confirmOnClose',
+                  title: 'Confirm on Close',
+                  subtitle:
+                      'Ask for confirmation before closing a terminal tab.',
+                  trailing: _SettingsSwitch(
+                    value: terminalConfirmOnClose,
+                    onChanged: (value) {
+                      state._mutate(() => terminalConfirmOnClose = value);
+                      state._persistRuntimeSettings();
+                    },
+                  ),
+                ),
+                SizedBox(height: 18),
+                _SettingsRow(
                   localizationKey: 'settings.general.workspacePage',
                   title: 'Workspace Page',
                   subtitle:
@@ -235,20 +249,6 @@ Widget _buildSettingsGeneralContent(_SettingsPanelState state) {
                         state._workspaceRestoreBehavior = behavior;
                         workspaceRestoreBehavior = behavior;
                       });
-                      state._persistRuntimeSettings();
-                    },
-                  ),
-                ),
-                SizedBox(height: 18),
-                _SettingsRow(
-                  localizationKey: 'settings.general.confirmOnClose',
-                  title: 'Confirm on Close',
-                  subtitle:
-                      'Ask for confirmation before closing a terminal tab.',
-                  trailing: _SettingsSwitch(
-                    value: terminalConfirmOnClose,
-                    onChanged: (value) {
-                      state._mutate(() => terminalConfirmOnClose = value);
                       state._persistRuntimeSettings();
                     },
                   ),
@@ -772,13 +772,16 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
                 _SettingsRow(
                   localizationKey: 'settings.terminal.scrollback',
                   title: 'Scrollback Lines',
-                  subtitle:
-                      'Maximum number of lines kept in the scroll buffer.',
+                  subtitle: 'Maximum number of lines kept in the scroll buffer. Set to 0 to disable scrollback.',
                   trailing: _SettingsTextField(
                     controller: state._scrollbackLinesController,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     onChanged: (value) {
                       final parsed = int.tryParse(value);
-                      if (parsed != null && parsed > 0) {
+                      if (parsed != null &&
+                          parsed >= 0 &&
+                          parsed <= 0xffffffff) {
                         state._scrollbackLines = parsed.toString();
                         terminalScrollbackLines = parsed;
                         state._persistRuntimeSettings();
@@ -1589,10 +1592,14 @@ Widget _buildSettingsShortcutsContent(_SettingsPanelState state) {
             child: Column(
               children: [
                 _SettingsRow(
-                  localizationKey: 'settings.shortcuts.optionAsMeta',
-                  title: 'Use Option as Meta Key',
-                  subtitle:
-                      'Send Option/Alt key combinations with an Escape prefix.',
+                  title: state.context.tr(
+                    defaultTargetPlatform == TargetPlatform.macOS
+                        ? 'settings.shortcuts.optionAsMeta.label'
+                        : 'settings.shortcuts.altAsMeta.label',
+                  ),
+                  subtitle: state.context.tr(
+                    'settings.shortcuts.optionAsMeta.description',
+                  ),
                   trailing: _SettingsSwitch(
                     value: state._useOptionAsMetaKey,
                     onChanged: (value) {

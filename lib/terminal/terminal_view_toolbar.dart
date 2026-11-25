@@ -489,8 +489,14 @@ class _TerminalComposer extends StatelessWidget {
                         child: IconButton(
                           key: const ValueKey('terminal-composer-expand'),
                           tooltip: controlsExpanded
-                              ? 'Collapse Composer'
-                              : 'Expand Composer',
+                              ? context.tr(
+                                  'terminal.action.collapseComposer',
+                                  fallback: 'Collapse Composer',
+                                )
+                              : context.tr(
+                                  'terminal.action.expandComposer',
+                                  fallback: 'Expand Composer',
+                                ),
                           padding: EdgeInsets.zero,
                           icon: Icon(
                             controlsExpanded
@@ -534,6 +540,27 @@ class _TerminalComposer extends StatelessWidget {
   KeyEventResult _handleSuggestionKey(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.numpadEnter) {
+      final value = controller.value;
+      if (value.isComposingRangeValid && !value.composing.isCollapsed) {
+        return KeyEventResult.ignored;
+      }
+      if (HardwareKeyboard.instance.isShiftPressed) {
+        if (!sensitive) {
+          final selection = value.selection.isValid
+              ? value.selection
+              : TextSelection.collapsed(offset: value.text.length);
+          controller.value = TextEditingValue(
+            text: value.text.replaceRange(selection.start, selection.end, '\n'),
+            selection: TextSelection.collapsed(offset: selection.start + 1),
+          );
+        }
+      } else if (event is KeyDownEvent) {
+        onSubmitted();
+      }
+      return KeyEventResult.handled;
     }
     if (event.logicalKey == LogicalKeyboardKey.escape) {
       return onCancelCompletion()

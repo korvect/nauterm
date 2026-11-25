@@ -227,6 +227,7 @@ pub struct Button<const SETTINGS: bool> {
     tooltip: Option<SharedString>,
     tooltip_localized: bool,
     children: Vec<AnyElement>,
+    press_content: Option<Box<dyn FnOnce(f32) -> AnyElement>>,
     hover_action: Option<Box<Self>>,
     list_menu_hint: bool,
     loading: bool,
@@ -273,6 +274,7 @@ impl<const S: bool> Button<S> {
             tooltip: None,
             tooltip_localized: true,
             children: vec![],
+            press_content: None,
             hover_action: None,
             list_menu_hint: false,
             loading: false,
@@ -380,6 +382,13 @@ impl<const S: bool> Button<S> {
     /// Paint a selection around the full surface without reserving a layout rim.
     pub fn selection_outline(mut self, color: Rgba, width: Pixels) -> Self {
         self.selection_outline = Some((color, width));
+        self
+    }
+    pub(super) fn press_content(
+        mut self,
+        content: impl FnOnce(f32) -> AnyElement + 'static,
+    ) -> Self {
+        self.press_content = Some(Box::new(content));
         self
     }
     pub fn on_click(mut self, f: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static) -> Self {
@@ -634,6 +643,9 @@ impl<const S: bool> RenderOnce for Button<S> {
                 .unwrap_or(px(7.).into())
                 .to_pixels(rem),
         };
+        if let Some(content) = self.press_content.take() {
+            self.children.push(content(press));
+        }
         let content = self.label.is_some() || !self.children.is_empty();
         let icon_size =
             self.icon_size

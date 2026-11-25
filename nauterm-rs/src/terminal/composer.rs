@@ -236,9 +236,9 @@ impl Terminal {
                 IconName::Maximize2
             })
             .tooltip(if expanded {
-                "Collapse Composer"
+                "terminal.action.collapseComposer"
             } else {
-                "Expand Composer"
+                "terminal.action.expandComposer"
             })
             .on_click(cx.listener(|this, _, window, cx| this.toggle_composer_expanded(window, cx)));
         let submit = Button::new("submit-command")

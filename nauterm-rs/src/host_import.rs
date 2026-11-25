@@ -41,13 +41,13 @@ impl Source {
     pub fn directory(self) -> bool {
         matches!(self, Self::OpenSsh | Self::SecureCrt)
     }
-    pub fn detail(self) -> &'static str {
+    pub fn description_key(self) -> &'static str {
         match self {
-            Self::Csv => "Import Hosts from a CSV file",
-            Self::OpenSsh => "Choose an SSH folder containing config, known_hosts and keys",
-            Self::Putty => "Choose a PuTTY registry export (.reg)",
-            Self::MobaXterm => "Choose a session export (.mxtsessions or .ini)",
-            Self::SecureCrt => "Choose a Sessions folder containing .ini files",
+            Self::Csv => "workspace.import.source.csv.description",
+            Self::OpenSsh => "workspace.import.source.openSsh.description",
+            Self::Putty => "workspace.import.source.putty.description",
+            Self::MobaXterm => "workspace.import.source.mobaXterm.description",
+            Self::SecureCrt => "workspace.import.source.secureCrt.description",
         }
     }
 }

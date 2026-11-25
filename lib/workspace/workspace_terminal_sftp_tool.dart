@@ -495,7 +495,7 @@ class _TerminalSftpBrowserState extends State<_TerminalSftpBrowser> {
                         'sftp.action.goToSshDirectory',
                         fallback: 'Go to SSH current directory',
                       ),
-                      icon: LucideIcons.folderInput,
+                      icon: LucideIcons.locateFixed,
                       colors: colors,
                       onPressed: widget.loading ? null : widget.onSshDirectory,
                     ),

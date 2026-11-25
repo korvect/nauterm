@@ -490,8 +490,16 @@ impl Settings {
                 cx.notify();
             },
         );
-        let sync =
-            cx.new(|cx| sync::Panel::new(sync_service, values.sync, values.dark, window, cx));
+        let sync = cx.new(|cx| {
+            sync::Panel::new(
+                sync_service,
+                values.sync,
+                values.dark,
+                values.general.language,
+                window,
+                cx,
+            )
+        });
         let about = cx.new(|cx| about::Panel::new(values.dark, update_directory, window, cx));
         let about_events =
             cx.subscribe_in(&about, window, |this, _, _: &about::Event, window, cx| {
@@ -821,7 +829,10 @@ impl Settings {
                 .collect::<Vec<_>>()
         };
         let options = [
-            (Field::Family, fonts.primary),
+            (
+                Field::Family,
+                crate::fonts::primary_options(&fonts, &self.values.terminal.family),
+            ),
             (Field::CjkFamily, fonts.cjk),
             (
                 Field::Size,
@@ -890,12 +901,12 @@ impl Settings {
             return;
         };
         for control in &mut self.controls {
+            let selected = control.field.value(&self.values.terminal);
             let mut options = match control.field {
-                Field::Family => fonts.primary.clone(),
+                Field::Family => crate::fonts::primary_options(fonts, &selected),
                 Field::CjkFamily => fonts.cjk.clone(),
                 _ => continue,
             };
-            let selected = control.field.value(&self.values.terminal);
             if !options
                 .iter()
                 .any(|option| option.value().as_ref() == Some(&selected))
@@ -1007,6 +1018,7 @@ impl Settings {
                 ),
             )
             .child(self.window_settings(window, cx))
+            .child(self.url_handler_settings(cx))
             .child(
                 self.section(
                     Section::Behavior,
@@ -1015,6 +1027,23 @@ impl Settings {
                         .flex()
                         .flex_col()
                         .gap(px(18.))
+                        .child(
+                            self.row(
+                                "settings.general.confirmOnClose.label",
+                                "settings.general.confirmOnClose.description",
+                                Switch::new(
+                                    "confirm-on-close",
+                                    "Confirm on Close",
+                                    self.values.general.confirm_on_close,
+                                )
+                                .on_change(cx.listener(
+                                    |this, value, window, cx| {
+                                        this.values.general.confirm_on_close = *value;
+                                        this.changed(window, cx);
+                                    },
+                                )),
+                            ),
+                        )
                         .child(
                             self.row(
                                 "settings.general.workspacePage.label",
@@ -1036,27 +1065,9 @@ impl Settings {
                             "settings.general.workspaceRestore.label",
                             "settings.general.workspaceRestore.description",
                             self.restore_behavior.control("Restore on startup", cx),
-                        ))
-                        .child(
-                            self.row(
-                                "settings.general.confirmOnClose.label",
-                                "settings.general.confirmOnClose.description",
-                                Switch::new(
-                                    "confirm-on-close",
-                                    "Confirm on Close",
-                                    self.values.general.confirm_on_close,
-                                )
-                                .on_change(cx.listener(
-                                    |this, value, window, cx| {
-                                        this.values.general.confirm_on_close = *value;
-                                        this.changed(window, cx);
-                                    },
-                                )),
-                            ),
-                        ),
+                        )),
                 ),
             )
-            .child(self.url_handler_settings(cx))
             .into_any_element()
     }
     fn sftp(&self, cx: &mut Context<Self>) -> AnyElement {
@@ -1121,12 +1132,12 @@ impl Settings {
                             ),
                         )
                         .child(self.row(
-                            "settings.terminal.weight.label",
+                            "Weight",
                             "settings.terminal.weight.description",
                             self.control(Field::Weight).control("Weight", cx),
                         ))
                         .child(self.row(
-                            "settings.terminal.boldWeight.label",
+                            "Bold Weight",
                             "settings.terminal.boldWeight.description",
                             self.control(Field::BoldWeight).control("Bold Weight", cx),
                         ))

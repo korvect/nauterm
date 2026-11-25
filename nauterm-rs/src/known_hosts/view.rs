@@ -4,6 +4,7 @@ use crate::{
         Button, DialogColors, DialogFrame, Modal, ScrollbarsExt,
         menu::{ContextMenuExt, DropdownMenu, MenuItem},
     },
+    localization::{format_for, language, message},
     management::{CollectionView, sort_menu},
     palette::Palette,
     ui::{DeleteCards, SelectCards},
@@ -240,7 +241,7 @@ impl KnownHosts {
                 files: true,
                 directories: false,
                 multiple: false,
-                prompt: Some("Import known_hosts".into()),
+                prompt: None,
             },
             Some(crate::file_dialog::InitialDirectory::SshImport),
             window,
@@ -253,7 +254,7 @@ impl KnownHosts {
                 _ => {
                     let _ = view.update(cx, |view, cx| {
                         view.busy = false;
-                        view.error = Some("Could not open the import file picker.".into());
+                        view.error = Some("workspace.import.filePickerFailed".into());
                         cx.notify();
                     });
                     return;
@@ -285,12 +286,30 @@ impl KnownHosts {
                         view.document = document;
                         view.selection.clear();
                         view.notice = Some(if added == 0 {
-                            "No new known hosts to import.".into()
+                            "workspace.knownHosts.import.empty".into()
                         } else {
-                            format!("Imported {added} known host(s).")
+                            format_for(
+                                language(cx),
+                                if added == 1 {
+                                    "workspace.knownHosts.import.successOne"
+                                } else {
+                                    "workspace.knownHosts.import.success"
+                                },
+                                &[("count", &added.to_string())],
+                            )
+                            .into()
                         });
                     }
-                    Err(error) => view.error = Some(error.to_string()),
+                    Err(error) => {
+                        view.error = Some(
+                            format_for(
+                                language(cx),
+                                "workspace.knownHosts.import.failure",
+                                &[("error", &message(cx, &error.to_string()))],
+                            )
+                            .into(),
+                        );
+                    }
                 }
                 cx.notify();
             });
@@ -396,54 +415,216 @@ impl Render for KnownHosts {
         );
         let sort = self.preferences.sort;
         let search_open = self.preferences.search_open || !self.search.read(cx).value().is_empty();
+        let import_label = crate::localization::text(cx, "workspace.action.importKnownHosts");
         let collapse_labels = crate::components::management::toolbar_labels_collapsed(
             self.parent_width
                 .unwrap_or_else(|| width - crate::layout::sidebar_width(width)),
-            &[("Import", false)],
+            &[(&import_label, false)],
             if search_open { 2 } else { 3 },
             search_open,
             window,
         );
         let owner = cx.weak_entity();
-        div().size_full().min_h_0().relative().flex().flex_col().track_focus(&self.focus).key_context("Nauterm")
+        div()
+            .size_full()
+            .min_h_0()
+            .relative()
+            .flex()
+            .flex_col()
+            .track_focus(&self.focus)
+            .key_context("Nauterm")
             .on_key_down(cx.listener(Self::navigate_cards))
             .on_action(cx.listener(|view, _: &SelectCards, window, cx| {
-                if !crate::components::overlay::is_modal_open(window, cx) && !view.selection.is_empty() {
-                    view.selection = view.visible(cx).iter().map(|entry| entry.index).collect(); cx.notify();
+                if !crate::components::overlay::is_modal_open(window, cx)
+                    && !view.selection.is_empty()
+                {
+                    view.selection = view.visible(cx).iter().map(|entry| entry.index).collect();
+                    cx.notify();
                 }
                 cx.stop_propagation();
             }))
             .on_action(cx.listener(|view, _: &DeleteCards, window, cx| {
-                if !crate::components::overlay::is_modal_open(window, cx) { view.request_delete(cx); }
+                if !crate::components::overlay::is_modal_open(window, cx) {
+                    view.request_delete(cx);
+                }
                 cx.stop_propagation();
             }))
-            .child(crate::components::management::toolbar(self.dark)
-                .child(Button::new("import-known-hosts").toolbar().label("Import").when(collapse_labels, |button| button.icon(IconName::Upload).label_collapsed(true)).disabled(self.loading || self.busy).on_click(cx.listener(|view, _, window, cx| view.import(window, cx))))
-                .child(div().flex_1())
-                .child(Button::new("sort-known-hosts").toolbar().ghost().icon(sort.icon()).tooltip(sort.label()).dropdown_menu(move |menu, _, _| {
-                    let owner = owner.clone();
-                    sort_menu(menu, sort, move |sort, _, cx| { let _ = owner.update(cx, |view, cx| { view.preferences.sort = sort; cx.notify(); }); })
-                }))
-                .child({ let owner = cx.weak_entity(); crate::components::management::toolbar_search("known-hosts-search", &self.search, self.preferences.search_open, move |open, window, cx| { let _ = owner.update(cx, |view, cx| { view.preferences.search_open = open; if open { view.search.update(cx, |input, cx| input.focus(window, cx)); } else { view.focus.focus(window, cx); } cx.notify(); }); }, cx) })
-                .child(Button::new("known-hosts-view").toolbar().ghost().icon(if self.preferences.list { IconName::LayoutGrid } else { IconName::List }).tooltip("Switch list/grid view").on_click(cx.listener(|view, _, _, cx| { view.preferences.list = !view.preferences.list; cx.notify(); }))))
-            .when(self.document.invalid_lines > 0, |view| view.child(div().px(px(26.)).text_size(px(12.)).text_color(p.muted).child(crate::localization::view(format!("{} unrecognized line(s) are preserved in the file.", self.document.invalid_lines)))))
-            .child(div().id("known-hosts-scroll").flex_1().min_h_0().overflow_y_scroll().scrollbars().map(crate::components::management::collection_padding).flex().flex_col()
-                .on_click(cx.listener(|view, _: &ClickEvent, window, cx| { view.selection.clear(); view.focus.focus(window, cx); cx.notify(); }))
-                .when(!entries.is_empty(), |view| view.child(crate::components::management::section_title("Known Hosts", cx).mb(px(crate::components::management::COLLECTION_TITLE_GAP))))
-                .child(crate::components::card_grid(grid).children(entries.iter().cloned().map(|entry| self.card(entry, cx))))
-                .when(entries.is_empty(), |view| view.child({
-                    let empty = crate::components::EmptyState::new(IconName::FingerprintPattern, if self.loading { "Loading known hosts…" } else if self.search.read(cx).value().is_empty() { "No known hosts yet." } else { "No known hosts found." }, self.dark)
-                        .description("Saved host keys let you verify the identity of your SSH servers.");
-                    if !self.loading && self.search.read(cx).value().is_empty() { empty.action(Button::new("empty-import-known-hosts").primary().icon(crate::assets::icon(IconName::Plus)).label("Import known hosts").disabled(self.busy).on_click(cx.listener(|view, _, window, cx| view.import(window, cx)))) } else { empty }
-                })))
+            .child(
+                crate::components::management::toolbar(self.dark)
+                    .child(
+                        Button::new("import-known-hosts")
+                            .toolbar()
+                            .raw_label(import_label)
+                            .when(collapse_labels, |button| {
+                                button.icon(IconName::Upload).label_collapsed(true)
+                            })
+                            .disabled(self.loading || self.busy)
+                            .on_click(cx.listener(|view, _, window, cx| view.import(window, cx))),
+                    )
+                    .child(div().flex_1())
+                    .child(
+                        Button::new("sort-known-hosts")
+                            .toolbar()
+                            .ghost()
+                            .icon(sort.icon())
+                            .tooltip(sort.label())
+                            .dropdown_menu(move |menu, _, _| {
+                                let owner = owner.clone();
+                                sort_menu(menu, sort, move |sort, _, cx| {
+                                    let _ = owner.update(cx, |view, cx| {
+                                        view.preferences.sort = sort;
+                                        cx.notify();
+                                    });
+                                })
+                            }),
+                    )
+                    .child({
+                        let owner = cx.weak_entity();
+                        crate::components::management::toolbar_search(
+                            "known-hosts-search",
+                            &self.search,
+                            self.preferences.search_open,
+                            move |open, window, cx| {
+                                let _ = owner.update(cx, |view, cx| {
+                                    view.preferences.search_open = open;
+                                    if open {
+                                        view.search.update(cx, |input, cx| input.focus(window, cx));
+                                    } else {
+                                        view.focus.focus(window, cx);
+                                    }
+                                    cx.notify();
+                                });
+                            },
+                            cx,
+                        )
+                    })
+                    .child(
+                        crate::components::management::view_mode_button(
+                            "known-hosts-view",
+                            self.preferences.list,
+                        )
+                        .on_click(cx.listener(|view, _, _, cx| {
+                            view.preferences.list = !view.preferences.list;
+                            cx.notify();
+                        })),
+                    ),
+            )
+            .when(self.document.invalid_lines > 0, |view| {
+                view.child(
+                    div()
+                        .px(px(26.))
+                        .text_size(px(12.))
+                        .text_color(p.muted)
+                        .child(crate::localization::view(format!(
+                            "{} unrecognized line(s) are preserved in the file.",
+                            self.document.invalid_lines
+                        ))),
+                )
+            })
+            .child(
+                div()
+                    .id("known-hosts-scroll")
+                    .flex_1()
+                    .min_h_0()
+                    .overflow_y_scroll()
+                    .scrollbars()
+                    .map(crate::components::management::collection_padding)
+                    .flex()
+                    .flex_col()
+                    .on_click(cx.listener(|view, _: &ClickEvent, window, cx| {
+                        view.selection.clear();
+                        view.focus.focus(window, cx);
+                        cx.notify();
+                    }))
+                    .when(!entries.is_empty(), |view| {
+                        view.child(
+                            crate::components::management::section_title("Known Hosts", cx)
+                                .mb(px(crate::components::management::COLLECTION_TITLE_GAP)),
+                        )
+                    })
+                    .child(
+                        crate::components::card_grid(grid)
+                            .children(entries.iter().cloned().map(|entry| self.card(entry, cx))),
+                    )
+                    .when(entries.is_empty(), |view| {
+                        view.child({
+                            let empty = crate::components::EmptyState::new(
+                                IconName::FingerprintPattern,
+                                if self.loading {
+                                    "Loading known hosts…"
+                                } else if self.search.read(cx).value().is_empty() {
+                                    "workspace.label.noKnownHostsYet"
+                                } else {
+                                    "workspace.label.noKnownHostsFound"
+                                },
+                                self.dark,
+                            );
+                            if !self.loading && self.search.read(cx).value().is_empty() {
+                                empty
+                                    .description("workspace.description.knownHosts")
+                                    .action(
+                                        Button::new("empty-import-known-hosts")
+                                            .primary()
+                                            .icon(crate::assets::icon(IconName::Plus))
+                                            .label("workspace.action.importKnownHosts")
+                                            .disabled(self.busy)
+                                            .on_click(cx.listener(|view, _, window, cx| {
+                                                view.import(window, cx)
+                                            })),
+                                    )
+                            } else {
+                                empty
+                            }
+                        })
+                    }),
+            )
             .when_some(self.deletion.as_ref(), |view, selected| {
-                let title = format!("Delete {} known host(s)?", selected.len());
-                view.child(crate::components::Dialog::new("delete-known-hosts-modal", title.clone()).return_focus(&self.focus).dismissible(!self.busy)
-                    .on_dismiss(cx.listener(|view, _, _, cx| { view.deletion = None; cx.notify(); }))
-                    .content(DialogFrame::new("delete-known-hosts-dialog", title).width(380.).colors(DialogColors::workspace(self.dark))
-                        .content("Future connections will need to verify these host keys again. Existing sessions are not closed.")
-                        .action(Button::new("cancel-delete-known-hosts").ghost().label("Cancel").disabled(self.busy).on_click(|_, window, cx| Modal::dismiss(window, cx)))
-                        .action(Button::new("confirm-delete-known-hosts").danger().label("Delete").disabled(self.busy).on_click(cx.listener(|view, _, _, cx| view.delete(cx))))))
+                use crate::localization::{format_for, language, text};
+                let count = selected.len();
+                let (title, message) = if count == 1 {
+                    (
+                        text(cx, "workspace.dialog.deleteKnownHost"),
+                        text(cx, "workspace.dialog.deleteKnownHost.description"),
+                    )
+                } else {
+                    (
+                        text(cx, "workspace.dialog.deleteKnownHosts"),
+                        format_for(
+                            language(cx),
+                            "workspace.dialog.deleteKnownHosts.description",
+                            &[("count", &count.to_string())],
+                        ),
+                    )
+                };
+                view.child(
+                    crate::components::Dialog::new("delete-known-hosts-modal", title.clone())
+                        .return_focus(&self.focus)
+                        .dismissible(!self.busy)
+                        .on_dismiss(cx.listener(|view, _, _, cx| {
+                            view.deletion = None;
+                            cx.notify();
+                        }))
+                        .content(
+                            DialogFrame::new("delete-known-hosts-dialog", title)
+                                .width(380.)
+                                .colors(DialogColors::workspace(self.dark))
+                                .content(message)
+                                .action(
+                                    Button::new("cancel-delete-known-hosts")
+                                        .ghost()
+                                        .label("Cancel")
+                                        .disabled(self.busy)
+                                        .on_click(|_, window, cx| Modal::dismiss(window, cx)),
+                                )
+                                .action(
+                                    Button::new("confirm-delete-known-hosts")
+                                        .danger()
+                                        .label("Delete")
+                                        .disabled(self.busy)
+                                        .on_click(cx.listener(|view, _, _, cx| view.delete(cx))),
+                                ),
+                        ),
+                )
             })
     }
 }

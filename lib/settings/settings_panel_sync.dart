@@ -611,7 +611,53 @@ Widget _buildSettingsSyncContent(_SettingsPanelState state) {
   if (!state._hasLocalSyncKey && !state._syncManagementUnlocked) {
     return _buildSettingsMasterKeyContent(state);
   }
-  final connectedCount = state._activeSyncProviderConnectedCount;
+  final busy = state._githubSyncRunning;
+  final providers = [
+    for (final provider in state._visibleBuiltInSyncProviders)
+      _SyncProviderRow(
+        key: ValueKey('settings-sync-provider-${provider.name}'),
+        name: provider.label,
+        kind: provider == _SyncProvider.s3Compatible
+            ? 'S3 Compatible'
+            : provider.label,
+        connected: state._isSyncProviderConnected(provider),
+        active:
+            state._activeSyncProviderId == state._builtInProviderId(provider),
+        busy: busy,
+        onOpen: () => state._openSyncProvider(provider),
+        onActivate: () => state._activateBuiltInProvider(provider),
+        onSync: switch (provider) {
+          _SyncProvider.githubRepository => state._runGithubSync,
+          _SyncProvider.githubGist => state._runGithubGistSync,
+          _SyncProvider.s3Compatible => state._runS3Sync,
+          _ => null,
+        },
+        onHistory: switch (provider) {
+          _SyncProvider.githubRepository => state._showGithubSyncHistory,
+          _SyncProvider.githubGist => state._showGithubGistHistory,
+          _SyncProvider.s3Compatible => state._showS3History,
+          _ => null,
+        },
+      ),
+    for (final provider in state._cloudProviders)
+      _SyncProviderRow(
+        key: ValueKey('settings-cloud-provider-${provider.id}'),
+        name: provider.name,
+        kind: provider.definition.label,
+        connected: provider.hasCredentials,
+        active: state._activeSyncProviderId == 'cloud:${provider.id}',
+        busy: busy,
+        onOpen: () => state._editCloudProvider(
+          definition: provider.definition,
+          provider: provider,
+        ),
+        onActivate: () => state._activateCloudProvider(provider),
+        onSync: () => state._runCloudProviderSync(provider),
+        onHistory: provider.supportsHistory
+            ? () => state._showCloudProviderHistory(provider)
+            : null,
+      ),
+  ];
   return Scrollbar(
     controller: state._contentScrollController,
     thumbVisibility: true,
@@ -626,154 +672,58 @@ Widget _buildSettingsSyncContent(_SettingsPanelState state) {
             fontSize: 20,
             height: 1.4,
             fontWeight: NautermFontWeights.semibold,
-            letterSpacing: 0,
           ),
         ),
-        SizedBox(height: 3),
+        const SizedBox(height: 3),
         Text(
           tr(
-            'Keep one active encrypted backup provider and control how changes are reconciled.',
+            'settings.pages.sync.description',
+            fallback: 'Configure encrypted backups, automatic sync, and conflict handling.',
           ),
-          style: TextStyle(
-            color: _mutedText,
-            fontSize: 12,
-            fontWeight: NautermFontWeights.regular,
-            letterSpacing: 0,
-          ),
+          style: TextStyle(color: _mutedText, fontSize: 12),
         ),
-        SizedBox(height: 24),
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: _settingsContentMaxWidth),
-          child: _SyncOverviewHeader(
-            connectedCount: connectedCount,
-            hasLocalSyncKey: state._hasLocalSyncKey,
-            onKeyDetails: state._showSyncKeyDetails,
-          ),
+        const SizedBox(height: 30),
+        _SyncOverviewHeader(
+          state: state,
+          activeProvider: providers
+              .where((provider) => provider.active)
+              .firstOrNull,
         ),
-        SizedBox(height: 18),
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: _settingsContentMaxWidth),
-          child: _SyncPreferencesPanel(state: state),
-        ),
-        SizedBox(height: 14),
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: _settingsContentMaxWidth),
-          child: Column(
-            children: [
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  const columnCount = 3;
-                  const spacing = 9.0;
-                  final cardWidth =
-                      (constraints.maxWidth - spacing * (columnCount - 1)) /
-                      columnCount;
-                  return Align(
-                    alignment: Alignment.centerLeft,
-                    child: Wrap(
-                      spacing: spacing,
-                      runSpacing: spacing,
-                      children: [
-                        for (final provider
-                            in state._visibleBuiltInSyncProviders)
-                          SizedBox(
-                            width: cardWidth,
-                            child: _SyncProviderRow(
-                              key: ValueKey(
-                                'settings-sync-provider-${provider.name}',
-                              ),
-                              provider: provider,
-                              connected: state._isSyncProviderConnected(
-                                provider,
-                              ),
-                              active:
-                                  state._activeSyncProviderId ==
-                                  state._builtInProviderId(provider),
-                              busy: state._githubSyncRunning,
-                              onOpen: () => state._openSyncProvider(provider),
-                              onActivate: () =>
-                                  state._activateBuiltInProvider(provider),
-                              onSync: state._isSyncProviderConnected(provider)
-                                  ? switch (provider) {
-                                      _SyncProvider.githubRepository =>
-                                        state._runGithubSync,
-                                      _SyncProvider.githubGist =>
-                                        state._runGithubGistSync,
-                                      _SyncProvider.s3Compatible =>
-                                        state._runS3Sync,
-                                      _ => null,
-                                    }
-                                  : null,
-                              onHistory:
-                                  state._isSyncProviderConnected(provider)
-                                  ? switch (provider) {
-                                      _SyncProvider.githubRepository =>
-                                        state._showGithubSyncHistory,
-                                      _SyncProvider.githubGist =>
-                                        state._showGithubGistHistory,
-                                      _SyncProvider.s3Compatible =>
-                                        state._showS3History,
-                                      _ => null,
-                                    }
-                                  : null,
-                            ),
-                          ),
-                        for (final provider in state._cloudProviders)
-                          SizedBox(
-                            width: cardWidth,
-                            child: _CloudProviderRow(
-                              key: ValueKey(
-                                'settings-cloud-provider-${provider.id}',
-                              ),
-                              provider: provider,
-                              busy: state._githubSyncRunning,
-                              active:
-                                  state._activeSyncProviderId ==
-                                  'cloud:${provider.id}',
-                              onOpen: () => state._editCloudProvider(
-                                definition: provider.definition,
-                                provider: provider,
-                              ),
-                              onSync: () =>
-                                  state._runCloudProviderSync(provider),
-                              onHistory: provider.supportsHistory
-                                  ? () => state._showCloudProviderHistory(
-                                      provider,
-                                    )
-                                  : null,
-                              onActivate: () =>
-                                  state._activateCloudProvider(provider),
-                            ),
-                          ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-              SizedBox(height: 9),
-              Align(
-                alignment: Alignment.centerRight,
-                child: _SettingsOutlineButton(
-                  label: 'Add Provider',
-                  onTap: state._githubSyncRunning
-                      ? null
-                      : state._showAddSyncProviderCatalog,
-                ),
-              ),
-            ],
-          ),
-        ),
-        if (state._githubSyncStatus != null) ...[
-          SizedBox(height: 12),
-          ConstrainedBox(
-            constraints: const BoxConstraints(
-              maxWidth: _settingsContentMaxWidth,
-            ),
-            child: _SyncStatusMessage(
-              message: state._githubSyncStatus!,
-              isError: state._githubSyncStatusIsError,
-            ),
+        const SizedBox(height: 12),
+        _SyncPreferencesPanel(state: state),
+        if (state._githubSyncStatus case final String message) ...[
+          const SizedBox(height: 12),
+          _SyncStatusMessage(
+            message: message,
+            isError: state._githubSyncStatusIsError,
           ),
         ],
+        const SizedBox(height: 20),
+        _SettingsSection(
+          icon: LucideIcons.cloud,
+          title: 'Providers',
+          localizationKey: 'common.label.providers',
+          trailing: _SettingsOutlineButton(
+            label: 'settings.label.addProvider',
+            leading: const Icon(LucideIcons.plus, size: 14),
+            onTap: busy ? null : state._showAddSyncProviderCatalog,
+          ),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: _softOutline),
+            ),
+            child: Column(
+              children: [
+                for (final (index, provider) in providers.indexed) ...[
+                  if (index > 0)
+                    Divider(height: 1, thickness: 1, color: _softOutline),
+                  provider,
+                ],
+              ],
+            ),
+          ),
+        ),
       ],
     ),
   );
@@ -965,120 +915,209 @@ Widget _buildGithubGistSettings(_SettingsPanelState state) {
 
 class _SyncOverviewHeader extends StatelessWidget {
   const _SyncOverviewHeader({
-    required this.connectedCount,
-    required this.hasLocalSyncKey,
-    required this.onKeyDetails,
+    required this.state,
+    required this.activeProvider,
   });
 
-  final int connectedCount;
-  final bool hasLocalSyncKey;
-  final VoidCallback onKeyDetails;
+  final _SettingsPanelState state;
+  final _SyncProviderRow? activeProvider;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    final remoteRevision = state._remoteSyncRevision;
+    final inSync =
+        remoteRevision != null && state._syncRevision == remoteRevision;
+    final busy = state._githubSyncRunning;
+    final refreshing = state._remoteSyncStatusRefreshing;
+    final (statusKey, color) = switch ((
+      busy,
+      state._githubSyncStatusIsError,
+      activeProvider != null,
+      inSync,
+    )) {
+      (true, _, _, _) => ('settings.sync.status.syncing', _primary),
+      (_, true, _, _) => (
+        'settings.sync.status.attentionNeeded',
+        const Color(0xffef4444),
+      ),
+      (_, _, false, _) => ('settings.sync.status.noActiveProvider', _mutedText),
+      (_, _, _, true) => ('settings.sync.status.upToDate', _secondary),
+      _ => ('settings.sync.status.changesPending', const Color(0xffd97706)),
+    };
+    final keyHint = tr(
+      state._hasLocalSyncKey
+          ? 'settings.sync.status.keySaved'
+          : 'settings.sync.status.keyNotSaved',
+    );
+    final details = Row(
       children: [
         Container(
-          width: 42,
-          height: 42,
+          width: 36,
+          height: 36,
           decoration: BoxDecoration(
-            color: _secondary.withValues(alpha: 0.1),
-            shape: BoxShape.circle,
+            color: color.withValues(alpha: 0.14),
+            borderRadius: BorderRadius.circular(10),
           ),
           alignment: Alignment.center,
-          child: Icon(LucideIcons.shieldCheck, size: 19, color: _secondary),
+          child: Icon(LucideIcons.cloud, size: 18, color: color),
         ),
-        SizedBox(width: 12),
+        const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
-                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    hasLocalSyncKey
-                        ? tr(
-                            'settings.sync.status.ready',
-                            fallback: 'Sync ready',
-                          )
-                        : tr(
-                            'settings.sync.status.unlocked',
-                            fallback: 'Sync unlocked',
-                          ),
-                    style: TextStyle(
-                      color: _text,
-                      fontSize: 14,
-                      fontWeight: NautermFontWeights.semibold,
+                  Flexible(
+                    child: Text(
+                      tr(statusKey),
+                      style: TextStyle(
+                        color: _text,
+                        fontSize: 14,
+                        fontWeight: NautermFontWeights.semibold,
+                      ),
                     ),
                   ),
-                  SizedBox(width: 7),
-                  Container(
-                    width: 7,
-                    height: 7,
-                    decoration: BoxDecoration(
-                      color: _secondary,
-                      shape: BoxShape.circle,
+                  const SizedBox(width: 6),
+                  _SyncStatusDot(color: color),
+                  if (refreshing) ...[
+                    const SizedBox(width: 6),
+                    const SizedBox.square(
+                      dimension: 12,
+                      child: CircularProgressIndicator(strokeWidth: 1.5),
                     ),
-                  ),
+                  ],
                 ],
               ),
-              SizedBox(height: 3),
-              Text(
-                tr(
-                  connectedCount == 1
-                      ? 'settings.sync.status.connectedProvider'
-                      : 'settings.sync.status.connectedProviders',
-                  fallback: connectedCount == 1
-                      ? '{count} provider connected'
-                      : '{count} providers connected',
-                  args: {'count': connectedCount},
-                ),
-                style: TextStyle(
-                  color: _mutedText,
-                  fontSize: 11,
-                  fontWeight: NautermFontWeights.regular,
-                ),
+              const SizedBox(height: 3),
+              Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 6,
+                runSpacing: 3,
+                children: [
+                  Text(
+                    activeProvider == null
+                        ? tr('settings.sync.status.addOrActivateProvider')
+                        : tr(
+                            'settings.sync.status.viaProvider',
+                            args: {'provider': activeProvider!.name},
+                          ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: _mutedText, fontSize: 11),
+                  ),
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 6,
+                    children: [
+                      _SyncVersionValue(
+                        labelKey: 'common.label.local',
+                        revision: state._syncRevision,
+                        snapshotId: state._syncSnapshotId,
+                      ),
+                      Icon(
+                        LucideIcons.arrowLeftRight,
+                        size: 11,
+                        color: _mutedText,
+                      ),
+                      _SyncVersionValue(
+                        labelKey: 'common.label.remote',
+                        revision: remoteRevision,
+                        snapshotId: state._remoteSyncSnapshotId,
+                        color: inSync || remoteRevision == null ? null : color,
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ],
           ),
         ),
-        _SyncHeaderAction(
-          icon: LucideIcons.keyRound,
-          label: 'Key details',
-          onTap: onKeyDetails,
+      ],
+    );
+    final actions = Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      alignment: WrapAlignment.end,
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        Tooltip(
+          message: keyHint,
+          child: TextButton.icon(
+            onPressed: busy ? null : state._showSyncKeyDetails,
+            style: TextButton.styleFrom(
+              foregroundColor: _text,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(7),
+              ),
+            ),
+            icon: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                const Icon(LucideIcons.keyRound, size: 16),
+                Positioned(
+                  right: -2,
+                  top: -2,
+                  child: _SyncStatusDot(
+                    color: state._hasLocalSyncKey
+                        ? _secondary
+                        : const Color(0xffd97706),
+                  ),
+                ),
+              ],
+            ),
+            label: Text(tr('common.label.key')),
+          ),
+        ),
+        _SyncRowAction(
+          icon: LucideIcons.rotateCcw,
+          labelKey: 'settings.sync.action.refreshStatus',
+          onTap: busy || refreshing
+              ? null
+              : () => state._refreshRemoteSyncStatus(manual: true),
+        ),
+        FilledButton.icon(
+          key: const ValueKey('settings-sync-now'),
+          onPressed: busy || refreshing || activeProvider?.connected != true
+              ? null
+              : activeProvider?.onSync,
+          style: FilledButton.styleFrom(
+            backgroundColor: _primary,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(7),
+            ),
+          ),
+          icon: const Icon(LucideIcons.refreshCw, size: 16),
+          label: Text(
+            tr(
+              busy
+                  ? 'settings.sync.status.syncing'
+                  : 'settings.sync.action.syncNow',
+            ),
+          ),
         ),
       ],
     );
-  }
-}
-
-class _SyncHeaderAction extends StatelessWidget {
-  const _SyncHeaderAction({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return TextButton.icon(
-      onPressed: onTap,
-      style: TextButton.styleFrom(
-        foregroundColor: _text,
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
-        textStyle: TextStyle(
-          fontSize: 12,
-          fontWeight: NautermFontWeights.medium,
-        ),
-      ),
-      icon: Icon(icon, size: 14),
-      label: Text(tr(label)),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 550) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              details,
+              const SizedBox(height: 8),
+              Align(alignment: Alignment.centerRight, child: actions),
+            ],
+          );
+        }
+        return Row(
+          children: [
+            Expanded(child: details),
+            const SizedBox(width: 12),
+            actions,
+          ],
+        );
+      },
     );
   }
 }
@@ -1086,7 +1125,8 @@ class _SyncHeaderAction extends StatelessWidget {
 class _SyncProviderRow extends StatelessWidget {
   const _SyncProviderRow({
     super.key,
-    required this.provider,
+    required this.name,
+    required this.kind,
     required this.connected,
     required this.active,
     required this.busy,
@@ -1096,152 +1136,106 @@ class _SyncProviderRow extends StatelessWidget {
     this.onHistory,
   });
 
-  final _SyncProvider provider;
+  final String name;
+  final String kind;
   final bool connected;
   final bool active;
   final bool busy;
   final VoidCallback onOpen;
   final VoidCallback onActivate;
-  final Future<void> Function()? onSync;
-  final Future<void> Function()? onHistory;
+  final VoidCallback? onSync;
+  final VoidCallback? onHistory;
 
   @override
   Widget build(BuildContext context) {
-    final statusKey = active
-        ? 'settings.sync.provider.status.connected'
-        : connected
-        ? 'settings.sync.provider.status.ready'
-        : 'settings.sync.provider.status.notConfigured';
-    final statusFallback = active
-        ? 'Connected'
-        : connected
-        ? 'Ready'
-        : 'Not configured';
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: onOpen,
-        borderRadius: BorderRadius.circular(10),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 72),
-          child: Ink(
-            padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
-            decoration: BoxDecoration(
-              color: active
-                  ? _primary.withValues(alpha: _settingsDark ? 0.13 : 0.06)
-                  : _surface,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: active ? _primary.withValues(alpha: 0.78) : _softOutline,
-                width: active ? 1.5 : 1,
+        onTap: busy ? null : onOpen,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          child: Row(
+            children: [
+              _SyncStatusDot(
+                color: !connected
+                    ? const Color(0xffd97706)
+                    : active
+                    ? _secondary
+                    : _mutedText,
               ),
-              boxShadow: active
-                  ? [
-                      BoxShadow(
-                        color: _primary.withValues(alpha: 0.1),
-                        blurRadius: 12,
-                        offset: const Offset(0, 3),
-                      ),
-                    ]
-                  : null,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
+              const SizedBox(width: 10),
+              Expanded(
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 2,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: active
-                            ? _primary.withValues(alpha: 0.09)
-                            : _surfaceContainer,
-                        borderRadius: BorderRadius.circular(9),
-                      ),
-                      alignment: Alignment.center,
-                      child: Icon(
-                        provider.icon,
-                        size: 18,
-                        color: active ? _primary : _mutedText,
+                    Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: _text,
+                        fontSize: 14,
+                        fontWeight: NautermFontWeights.medium,
                       ),
                     ),
-                    SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Flexible(
-                                child: Text(
-                                  provider.label,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: _text,
-                                    fontSize: 13,
-                                    fontWeight: NautermFontWeights.semibold,
-                                  ),
-                                ),
+                    if (kind != name || !connected)
+                      Text(
+                        connected
+                            ? kind
+                            : tr(
+                                'settings.sync.provider.status.credentialsRequired',
+                                args: {'provider': kind},
                               ),
-                              SizedBox(width: 7),
-                              _SyncProviderStatusDot(
-                                active: active,
-                                ready: connected,
-                              ),
-                            ],
-                          ),
-                          SizedBox(height: 3),
-                          Text(
-                            tr(statusKey, fallback: statusFallback),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: _mutedText,
-                              fontSize: 11,
-                              fontWeight: NautermFontWeights.regular,
-                            ),
-                          ),
-                        ],
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: _mutedText, fontSize: 11),
                       ),
-                    ),
                   ],
                 ),
-                SizedBox(height: 9),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Wrap(
-                    spacing: 4,
-                    runSpacing: 4,
-                    children: [
-                      if (active && onSync != null)
-                        _SyncRowAction(
-                          icon: LucideIcons.refreshCw,
-                          label: busy ? 'Syncing…' : 'Sync',
-                          onTap: busy ? null : () => onSync!(),
-                        ),
-                      if (active && onHistory != null)
-                        _SyncRowAction(
-                          icon: LucideIcons.history,
-                          label: 'History',
-                          onTap: () => onHistory!(),
-                        ),
-                      if (!active)
-                        _SettingsOutlineButton(
-                          label: 'Activate',
-                          onTap: connected ? onActivate : null,
-                        ),
-                      _SyncRowAction(
-                        icon: LucideIcons.settings,
-                        label: 'Settings',
-                        onTap: onOpen,
-                      ),
-                    ],
+              ),
+              const SizedBox(width: 6),
+              if (active)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 1,
                   ),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: _primary),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    tr('settings.ai.provider.active').toUpperCase(),
+                    style: TextStyle(color: _primary, fontSize: 10),
+                  ),
+                )
+              else
+                TextButton(
+                  onPressed: busy || !connected ? null : onActivate,
+                  style: TextButton.styleFrom(
+                    minimumSize: const Size(0, 30),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    foregroundColor: _text,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(7),
+                    ),
+                  ),
+                  child: Text(tr('settings.ai.provider.use')),
                 ),
-              ],
-            ),
+              if (onHistory != null)
+                _SyncRowAction(
+                  icon: LucideIcons.clock,
+                  labelKey: 'settings.sync.action.versionHistory',
+                  onTap: busy || !connected ? null : onHistory,
+                ),
+              _SyncRowAction(
+                icon: LucideIcons.settings,
+                labelKey: 'settings.sync.action.configureProvider',
+                onTap: busy ? null : onOpen,
+              ),
+            ],
           ),
         ),
       ),
@@ -1249,25 +1243,17 @@ class _SyncProviderRow extends StatelessWidget {
   }
 }
 
-class _SyncProviderStatusDot extends StatelessWidget {
-  const _SyncProviderStatusDot({required this.active, required this.ready});
+class _SyncStatusDot extends StatelessWidget {
+  const _SyncStatusDot({required this.color});
 
-  final bool active;
-  final bool ready;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       width: 6,
       height: 6,
-      decoration: BoxDecoration(
-        color: active
-            ? _secondary
-            : ready
-            ? _primary
-            : _faintText,
-        shape: BoxShape.circle,
-      ),
+      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
     );
   }
 }
@@ -1275,35 +1261,28 @@ class _SyncProviderStatusDot extends StatelessWidget {
 class _SyncRowAction extends StatelessWidget {
   const _SyncRowAction({
     required this.icon,
-    required this.label,
+    required this.labelKey,
     required this.onTap,
   });
 
   final IconData icon;
-  final String label;
+  final String labelKey;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
-      message: label,
-      child: SizedBox.square(
-        dimension: 28,
-        child: IconButton(
-          onPressed: onTap,
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints.tightFor(width: 28, height: 28),
-          style: IconButton.styleFrom(
-            foregroundColor: _text,
-            disabledForegroundColor: _faintText,
-            hoverColor: _text.withValues(alpha: 0.07),
-            highlightColor: _text.withValues(alpha: 0.1),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(7),
-            ),
-          ),
-          icon: Icon(icon, size: 14),
+    return SizedBox.square(
+      dimension: 30,
+      child: IconButton(
+        tooltip: tr(labelKey),
+        onPressed: onTap,
+        padding: EdgeInsets.zero,
+        style: IconButton.styleFrom(
+          foregroundColor: _text,
+          disabledForegroundColor: _faintText,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
         ),
+        icon: Icon(icon, size: 15),
       ),
     );
   }
@@ -1317,10 +1296,10 @@ class _SyncPreferencesPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: _surface,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: _softOutline),
       ),
       child: Column(
@@ -1352,7 +1331,7 @@ class _SyncPreferencesPanel extends StatelessWidget {
               },
             ),
           ),
-          SizedBox(height: 14),
+          const SizedBox(height: 10),
           _SettingsRow(
             localizationKey: 'settings.sync.automatic',
             title: 'Automatic Sync',
@@ -1386,7 +1365,7 @@ class _SyncPreferencesPanel extends StatelessWidget {
               ],
             ),
           ),
-          SizedBox(height: 14),
+          const SizedBox(height: 10),
           _SettingsRow(
             title: 'Local Backups',
             subtitle: 'Keep an encrypted local backup before each sync.',
@@ -1395,7 +1374,8 @@ class _SyncPreferencesPanel extends StatelessWidget {
                 Expanded(
                   child: _SettingsTextField(
                     controller: state._syncBackupCountController,
-                    hint: '10 copies',
+                    hint: '10',
+                    suffixText: tr('settings.sync.localBackups.unit'),
                     onChanged: (_) =>
                         state._scheduleSyncPreferencesSave(wakeAutoSync: false),
                     onSubmitted: (_) => state._persistSyncPreferences(),
@@ -1403,31 +1383,14 @@ class _SyncPreferencesPanel extends StatelessWidget {
                 ),
                 SizedBox(width: 8),
                 _SettingsOutlineButton(
-                  label: 'View',
-                  onTap: state._showLocalSyncBackups,
+                  label: 'common.action.browse',
+                  leading: const Icon(LucideIcons.clock, size: 14),
+                  onTap: state._githubSyncRunning
+                      ? null
+                      : state._showLocalSyncBackups,
                 ),
               ],
             ),
-          ),
-          SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(
-                child: _SyncVersionValue(
-                  label: 'Local Version',
-                  value: state._syncRevision,
-                  snapshotId: state._syncSnapshotId,
-                ),
-              ),
-              SizedBox(width: 8),
-              Expanded(
-                child: _SyncVersionValue(
-                  label: 'Remote Version',
-                  value: state._remoteSyncRevision,
-                  snapshotId: state._remoteSyncSnapshotId,
-                ),
-              ),
-            ],
           ),
         ],
       ),
@@ -1437,46 +1400,36 @@ class _SyncPreferencesPanel extends StatelessWidget {
 
 class _SyncVersionValue extends StatelessWidget {
   const _SyncVersionValue({
-    required this.label,
-    required this.value,
+    required this.labelKey,
+    required this.revision,
     required this.snapshotId,
+    this.color,
   });
 
-  final String label;
-  final int? value;
+  final String labelKey;
+  final int? revision;
   final String? snapshotId;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
-      decoration: BoxDecoration(
-        color: _surfaceContainer,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
+    final id = snapshotId;
+    return Text.rich(
+      TextSpan(
+        text: '${tr(labelKey)} ',
         children: [
-          Text(tr(label), style: TextStyle(color: _mutedText, fontSize: 10)),
-          const Spacer(),
-          if (snapshotId != null && snapshotId!.isNotEmpty) ...[
-            Text(
-              snapshotId!.length > 8
-                  ? snapshotId!.substring(0, 8)
-                  : snapshotId!,
-              style: TextStyle(color: _mutedText, fontSize: 10),
-            ),
-            const SizedBox(width: 8),
-          ],
-          Text(
-            value == null ? '—' : 'v$value',
+          TextSpan(
+            text: revision == null ? '—' : 'r$revision',
             style: TextStyle(
-              color: _text,
-              fontSize: 11,
+              color: color ?? _text,
               fontWeight: NautermFontWeights.semibold,
             ),
           ),
+          if (id != null && id.isNotEmpty)
+            TextSpan(text: ' ${id.length > 7 ? id.substring(0, 7) : id}'),
         ],
       ),
+      style: TextStyle(color: _mutedText, fontSize: 11),
     );
   }
 }
@@ -1829,9 +1782,10 @@ extension _SettingsSyncActions on _SettingsPanelState {
         100,
       );
 
-  Future<void> _refreshRemoteSyncStatus() async {
+  Future<void> _refreshRemoteSyncStatus({bool manual = false}) async {
     if (_remoteSyncStatusRefreshing) return;
-    _remoteSyncStatusRefreshing = true;
+    _mutate(() => _remoteSyncStatusRefreshing = true);
+    if (manual) _clearGithubSyncStatus();
     try {
       await _loadGithubSyncSettings();
       if (!mounted || _selectedPage != _SettingsPage.sync) return;
@@ -1855,8 +1809,9 @@ extension _SettingsSyncActions on _SettingsPanelState {
         error: error,
         stackTrace: stackTrace,
       );
+      if (manual) _setGithubSyncError(error.toString());
     } finally {
-      _remoteSyncStatusRefreshing = false;
+      if (mounted) _mutate(() => _remoteSyncStatusRefreshing = false);
     }
   }
 
@@ -2066,28 +2021,6 @@ extension _SettingsSyncActions on _SettingsPanelState {
       _SyncProvider.values.where(_isSyncProviderConnected).length +
       _cloudProviders.where((provider) => provider.hasCredentials).length;
 
-  int get _activeSyncProviderConnectedCount {
-    final activeProviderId = _activeSyncProviderId;
-    if (activeProviderId == null) {
-      return 0;
-    }
-    for (final provider in _SyncProvider.values) {
-      if (activeProviderId == _builtInProviderId(provider) &&
-          _isSyncProviderConnected(provider)) {
-        return 1;
-      }
-    }
-    if (activeProviderId.startsWith('cloud:')) {
-      final providerId = activeProviderId.substring('cloud:'.length);
-      if (_cloudProviders.any(
-        (provider) => provider.id == providerId && provider.hasCredentials,
-      )) {
-        return 1;
-      }
-    }
-    return 0;
-  }
-
   bool _isSyncProviderConnected(_SyncProvider provider) {
     return switch (provider) {
       _SyncProvider.githubRepository =>
@@ -2255,11 +2188,84 @@ extension _SettingsSyncActions on _SettingsPanelState {
               _ChangeSyncMasterKeyDialog(onChange: _changeSyncMasterKey),
         );
       case _SyncKeyAction.forgetMasterKey:
-        await _forgetSyncMasterKey();
+        final confirmed = await showNautermDialog<bool>(
+          context: context,
+          builder: (dialogContext) => _SyncDialogFrame(
+            icon: LucideIcons.keyRound,
+            title: dialogContext.tr(
+              'settings.sync.forgetKey.title',
+              fallback: 'Forget Master Key?',
+            ),
+            subtitle: dialogContext.tr(
+              'settings.sync.forgetKey.summary',
+              fallback: 'Clear the local sync key cache.',
+            ),
+            width: 400,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  dialogContext.tr(
+                    'settings.sync.forgetKey.description',
+                    fallback:
+                        'Enter the Master Key again the next time you sync. '
+                        'Your provider credentials, local data, and cloud files are kept.',
+                  ),
+                  style: TextStyle(color: _text, fontSize: 12, height: 1.45),
+                ),
+                const SizedBox(height: 18),
+                Wrap(
+                  alignment: WrapAlignment.end,
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _SettingsOutlineButton(
+                      label: dialogContext.tr(
+                        'common.action.cancel',
+                        fallback: 'Cancel',
+                      ),
+                      onTap: () => Navigator.of(dialogContext).pop(false),
+                    ),
+                    SizedBox(
+                      height: 30,
+                      child: FilledButton(
+                        key: const ValueKey('settings-sync-confirm-forget-key'),
+                        onPressed: () => Navigator.of(dialogContext).pop(true),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xffdc2626),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 11),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(7),
+                          ),
+                          textStyle: TextStyle(
+                            fontSize: 12,
+                            fontWeight: NautermFontWeights.medium,
+                          ),
+                        ),
+                        child: Text(
+                          dialogContext.tr(
+                            'settings.label.forgetMasterKey',
+                            fallback: 'Forget Master Key',
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+        if (confirmed == true && mounted) {
+          await _forgetSyncMasterKey();
+        }
     }
   }
 
   Future<void> _forgetSyncMasterKey() async {
+    if (_githubSyncRunning) return;
+    _mutate(() => _githubSyncRunning = true);
     try {
       await _forgetSyncKeyInBackground(_githubSyncDatabasePath);
       if (!mounted) return;
@@ -2281,6 +2287,8 @@ extension _SettingsSyncActions on _SettingsPanelState {
       notifyNautermSyncCompleted();
     } on Object catch (error) {
       if (mounted) _setGithubSyncError(error.toString());
+    } finally {
+      if (mounted) _mutate(() => _githubSyncRunning = false);
     }
   }
 

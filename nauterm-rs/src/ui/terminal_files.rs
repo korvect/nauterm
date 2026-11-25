@@ -329,7 +329,20 @@ impl Nauterm {
                 self.ensure_terminal_files(id, true, window, cx);
             }
         }
+        let history_session = self.terminals.iter().find_map(|tab| {
+            (self.page == Page::Sessions
+                && !self.overview
+                && Some(tab.id) == self.active_terminal()
+                && !tab.show_sftp
+                && tab.tools.history_visible())
+            .then(|| tab.active().id)
+        });
         for session in self.terminals.iter().flat_map(|tab| tab.tree.sessions()) {
+            if let TabContent::Terminal(view) = &session.content {
+                view.update(cx, |view, cx| {
+                    view.set_history_tool_visible(history_session == Some(session.id), cx);
+                });
+            }
             for (view, active) in [
                 (&session.files, selected == Some(session.id) && full),
                 (
@@ -679,7 +692,7 @@ impl Nauterm {
                                         ToolMode::SystemInfo => tab.tools.system.as_ref().map(|(_, tool)| tool.clone().into_any_element()).unwrap_or_else(|| {
                                             div().size_full().p(px(20.)).flex().flex_col().items_center().justify_center().gap(px(8.))
                                                 .child(icon(IconName::Activity)).child(crate::localization::text(cx, "workspace.label.noSshSession"))
-                                                .child(div().text_color(p.muted).text_center().child(crate::localization::text(cx, "rs.ui.copy.systemInformationAfterConnect")))
+                                                .child(div().text_color(p.muted).text_center().child(crate::localization::text(cx, "workspace.systemInfo.connectFirst")))
                                                 .into_any_element()
                                         }),
                                         ToolMode::Sftp => session

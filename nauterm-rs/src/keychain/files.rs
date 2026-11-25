@@ -2,17 +2,14 @@
 //! Secret contents never enter UI messages, public metadata or export receipts.
 use super::{Editor, Item, Keychain};
 use crate::{
-    components::{
-        Button,
-        menu::{DropdownMenu, MenuItem},
-    },
+    components::menu::{DropdownMenu, MenuItem},
     file_commit::DownloadTarget,
     vault::KeyRecord,
 };
 use anyhow::{Context as _, Result, ensure};
 use gpui_kit::{
-    AnyElement, Context, EventEmitter, PathPromptOptions, Window, assets::IconName,
-    component::Disableable, prelude::*,
+    Context, EventEmitter, PathPromptOptions, Window, assets::IconName, component::Disableable,
+    prelude::*,
 };
 use std::{
     collections::BTreeSet,
@@ -183,72 +180,84 @@ impl Keychain {
         &self,
         editor: &Editor,
         cx: &mut Context<Self>,
-    ) -> Vec<AnyElement> {
-        let Some(item) = editor.item() else {
-            return vec![];
-        };
+    ) -> impl IntoElement {
+        use crate::components::management::{discard_changes_item, editor_more_button};
+        let item = editor.item();
+        let token = editor.name.entity_id();
+        let has_draft = editor.has_draft(cx);
         let owner = cx.weak_entity();
-        vec![
-            Button::new("credential-editor-actions")
-                .toolbar()
-                .ghost()
-                .icon(IconName::Ellipsis)
-                .tooltip("Credential actions")
-                .disabled(self.busy(cx))
-                .dropdown_menu(move |menu, _, _| {
+        editor_more_button("credential-editor-more")
+            .disabled(self.busy(cx))
+            .dropdown_menu(move |menu, _, _| {
+                let discard = owner.clone();
+                let menu = menu.width(180.);
+                let menu = if let Some(item) = item {
                     let host = owner.clone();
                     let file = owner.clone();
                     let duplicate = owner.clone();
                     let delete = owner.clone();
-                    menu.width(180.)
-                        .when(item.key, |menu| {
-                            menu.item(
-                                MenuItem::localized("Export to host")
-                                    .icon(IconName::Upload)
-                                    .on_click(move |_, window, cx| {
-                                        let _ = host.update(cx, |this, cx| {
-                                            this.start_export(item, window, cx)
-                                        });
-                                    }),
-                            )
-                            .item(
-                                MenuItem::localized("Export to file")
-                                    .icon(IconName::Download)
-                                    .on_click(move |_, window, cx| {
-                                        let _ = file.update(cx, |this, cx| {
-                                            this.export_file(item, window, cx)
-                                        });
-                                    }),
-                            )
-                        })
+                    menu.when(item.key, |menu| {
+                        menu.item(
+                            MenuItem::localized("workspace.label.exportToHost")
+                                .icon(IconName::Upload)
+                                .on_click(move |_, window, cx| {
+                                    let _ = host
+                                        .update(cx, |this, cx| this.start_export(item, window, cx));
+                                }),
+                        )
                         .item(
-                            MenuItem::localized("Duplicate")
-                                .icon(IconName::Copy)
-                                .on_click(move |_, _, cx| {
-                                    let _ = duplicate.update(cx, |this, cx| {
+                            MenuItem::localized("workspace.label.exportToFile")
+                                .icon(IconName::Download)
+                                .on_click(move |_, window, cx| {
+                                    let _ = file
+                                        .update(cx, |this, cx| this.export_file(item, window, cx));
+                                }),
+                        )
+                    })
+                    .item(
+                        MenuItem::localized("Duplicate")
+                            .icon(IconName::Copy)
+                            .on_click(move |_, _, cx| {
+                                let _ = duplicate.update(cx, |this, cx| {
+                                    this.selection = BTreeSet::from([item]);
+                                    this.duplicate(cx);
+                                });
+                            }),
+                    )
+                    .item(
+                        MenuItem::localized("Delete")
+                            .icon(IconName::Trash)
+                            .destructive(true)
+                            .on_click(move |_, _, cx| {
+                                let _ = delete.update(cx, |this, cx| {
+                                    if !this.busy(cx) {
                                         this.selection = BTreeSet::from([item]);
-                                        this.duplicate(cx);
-                                    });
-                                }),
-                        )
-                        .separator()
-                        .item(
-                            MenuItem::localized("Delete")
-                                .icon(IconName::Trash)
-                                .destructive(true)
-                                .on_click(move |_, _, cx| {
-                                    let _ = delete.update(cx, |this, cx| {
-                                        if !this.busy(cx) {
-                                            this.selection = BTreeSet::from([item]);
-                                            this.delete_pending = true;
-                                            cx.notify();
-                                        }
-                                    });
-                                }),
-                        )
-                })
-                .into_any_element(),
-        ]
+                                        this.delete_pending = true;
+                                        cx.notify();
+                                    }
+                                });
+                            }),
+                    )
+                    .separator()
+                } else {
+                    menu
+                };
+                menu.item(
+                    discard_changes_item(has_draft).on_click(move |_, window, cx| {
+                        let _ = discard.update(cx, |this, cx| {
+                            if !this.busy(cx)
+                                && let Some(editor) = this.editor.as_ref().filter(|editor| {
+                                    editor.name.entity_id() == token && editor.has_draft(cx)
+                                })
+                            {
+                                this.drafts.remove(&editor.draft_key());
+                                this.retire_editor();
+                                this.close_editor(window, cx);
+                            }
+                        });
+                    }),
+                )
+            })
     }
     pub(super) fn export_file(&mut self, item: Item, window: &mut Window, cx: &mut Context<Self>) {
         if !item.key || self.busy(cx) {
@@ -263,7 +272,7 @@ impl Keychain {
                 files: false,
                 directories: true,
                 multiple: false,
-                prompt: Some("Export key".into()),
+                prompt: Some(crate::localization::text(cx, "common.action.export")),
             },
             Some(crate::file_dialog::InitialDirectory::SshExport),
             window,
@@ -287,23 +296,31 @@ impl Keychain {
                 )),
             };
             let _ = this.update(cx, |this, cx| {
+                use crate::localization::{format_for, language, message_for};
+                let language = language(cx);
                 this.exporting_file = false;
                 match result {
-                    Ok(Some(report)) => {
-                        cx.emit(Message(crate::components::message::Message::info(format!(
-                            "Exported {} key {} to {}.",
-                            report.files.len(),
+                    Ok(Some(report)) => cx.emit(Message(
+                        crate::components::message::Message::info(format_for(
+                            language,
                             if report.files.len() == 1 {
-                                "file"
+                                "workspace.keys.export.fileSuccess"
                             } else {
-                                "files"
+                                "workspace.keys.export.filesSuccess"
                             },
-                            report.directory.display()
-                        ))))
-                    }
+                            &[
+                                ("count", &report.files.len().to_string()),
+                                ("path", &report.directory.to_string_lossy()),
+                            ],
+                        )),
+                    )),
                     Ok(None) => {}
                     Err(error) => cx.emit(Message(crate::components::message::Message::error(
-                        format!("Failed to export key: {error:#}"),
+                        format_for(
+                            language,
+                            "workspace.keys.export.failure",
+                            &[("error", &message_for(language, &format!("{error:#}")))],
+                        ),
                     ))),
                 }
                 cx.notify();

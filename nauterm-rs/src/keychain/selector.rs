@@ -4,6 +4,7 @@ use crate::{
     components::menu::{DropdownMenu, MenuItem},
     components::{Button, ButtonCustomVariant, SelectAction, SelectModel, SelectOption},
     palette::Palette,
+    typography::FontWeights,
     vault::Inventory,
 };
 use gpui_kit::{
@@ -131,8 +132,14 @@ impl KeySelector {
                     Button::new(("ssh-add-credential", self.select.state.entity_id()))
                         .small()
                         .ghost()
-                        .icon(crate::assets::icon(IconName::Plus))
-                        .label("Key or Certificate")
+                        .h(px(28.))
+                        .px(px(4.))
+                        .content_gap(px(6.))
+                        .icon_size(px(13.))
+                        .text_size(px(12.))
+                        .font_weight(FontWeights::SEMIBOLD)
+                        .icon(crate::assets::Glyph::PlusBold.icon())
+                        .label("workspace.credentials.keyOrCertificate")
                         .disabled(disabled)
                         .custom(ButtonCustomVariant::new(cx).foreground(p.muted.into()))
                         .dropdown_menu(move |mut menu, _, _| {

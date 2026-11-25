@@ -296,7 +296,7 @@ const ENTRIES: &[Entry] = &[
     Entry::new(
         S::Session,
         "settings.terminal.scrollback.label",
-        "rs.settings.terminal.scrollback.description",
+        "settings.terminal.scrollback.description",
         "buffer zero unlimited output 回滚 历史 行数",
     ),
     Entry::new(

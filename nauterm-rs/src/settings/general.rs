@@ -8,10 +8,15 @@ pub(super) struct LanguageControl {
     _events: Subscription,
 }
 fn language_options() -> Vec<SelectOption<crate::localization::Language>> {
-    crate::localization::Language::ALL
+    use crate::localization::Language;
+
+    Language::ALL
         .into_iter()
-        .map(|value| {
-            SelectOption::localized(value, value.label(crate::localization::Language::English))
+        .map(|value| match value {
+            Language::System => SelectOption::localized(value, "settings.general.language.system"),
+            Language::English | Language::Chinese => {
+                SelectOption::new(value, value.label(Language::English))
+            }
         })
         .collect()
 }

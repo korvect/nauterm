@@ -471,7 +471,7 @@ impl Chat {
                         .text_color(palette.muted)
                         .text_size(px(12.))
                         .child(Spinner::new())
-                        .child(crate::localization::text(cx, "rs.ui.copy.thinking"))
+                        .child(crate::localization::text(cx, "ai.label.thinking"))
                         .into_any_element()
                 } else if assistant {
                     self.markdown(
@@ -562,7 +562,11 @@ impl Chat {
                             } else {
                                 IconName::Copy
                             })
-                            .tooltip(if copied { "Copied" } else { "Copy message" })
+                            .tooltip(if copied {
+                                "Copied"
+                            } else {
+                                "ai.action.copyMessage"
+                            })
                             .focusable(visible)
                             .disabled(copy.is_empty() || !visible)
                             .on_click(cx.listener(move |this, _, _, cx| {

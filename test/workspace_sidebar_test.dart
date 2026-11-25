@@ -17,6 +17,7 @@ void main() {
       expect(tester.getSize(find.byKey(_sidebarKey)).width, 190);
       _expectToggleOnDivider(tester);
       expect(find.byTooltip('Collapse sidebar'), findsOneWidget);
+      expect(find.byTooltip('Hosts'), findsNothing);
       final rotation = find.descendant(
         of: find.byKey(const ValueKey('workspace-sidebar-toggle-arrow')),
         matching: find.byType(RotationTransition),
@@ -37,6 +38,15 @@ void main() {
       expect(tester.getSize(find.byKey(_sidebarKey)).width, 56);
       expect(turns(), 0.5);
       expect(find.byTooltip('Expand sidebar'), findsOneWidget);
+      final hostsTooltip = tester.widget<Tooltip>(
+        find.ancestor(
+          of: find.byTooltip('Hosts'),
+          matching: find.byType(Tooltip),
+        ),
+      );
+      expect(hostsTooltip.decoration, isNull);
+      expect(hostsTooltip.textStyle, isNull);
+      expect(find.byTooltip('Settings'), findsOneWidget);
 
       await tester.tap(
         find.descendant(

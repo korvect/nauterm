@@ -58,8 +58,7 @@ fn shell_options(
     shells: Vec<crate::shells::Shell>,
     selected: Option<&str>,
 ) -> Vec<SelectOption<String>> {
-    let mut options = vec![SelectOption::localized(
-        String::new(),
+    let mut options = vec![crate::shells::default_option(
         "workspace.label.systemDefaultShell",
     )];
     if let Some(selected) = selected.filter(|path| !shells.iter().any(|shell| shell.path == *path))
@@ -366,68 +365,6 @@ impl Draft {
 }
 
 impl Nauterm {
-    pub(super) fn host_editor_actions(
-        &self,
-        editor: &Editor,
-        cx: &mut Context<Self>,
-    ) -> Vec<AnyElement> {
-        let Some(id) = editor.id.filter(|_| editor.kind == ItemKind::Host) else {
-            return vec![];
-        };
-        let owner = cx.weak_entity();
-        vec![
-            Button::new("host-editor-actions")
-                .toolbar()
-                .ghost()
-                .disabled(editor.host.as_ref().is_some_and(|draft| draft.busy))
-                .icon(IconName::Ellipsis)
-                .tooltip("Host actions")
-                .dropdown_menu(move |menu, _, _| {
-                    let connect = owner.clone();
-                    let duplicate = owner.clone();
-                    let delete = owner.clone();
-                    menu.item(
-                        MenuItem::localized("Connect")
-                            .icon(IconName::Terminal)
-                            .on_click(move |_, window, cx| {
-                                let _ = connect.update(cx, |this, cx| {
-                                    if let Some(host) =
-                                        this.data.hosts.iter().find(|host| host.id == id).cloned()
-                                    {
-                                        this.open_ssh(host, window, cx);
-                                    }
-                                });
-                            }),
-                    )
-                    .item(
-                        MenuItem::localized("Duplicate")
-                            .icon(IconName::Copy)
-                            .on_click(move |_, _, cx| {
-                                let _ = duplicate.update(cx, |this, cx| {
-                                    this.selection = BTreeSet::from([id]);
-                                    this.selection_kind = Some(ItemKind::Host);
-                                    this.duplicate_resources(ItemKind::Host, cx);
-                                });
-                            }),
-                    )
-                    .separator()
-                    .item(
-                        MenuItem::localized("Delete")
-                            .icon(IconName::Trash)
-                            .destructive(true)
-                            .on_click(move |_, _, cx| {
-                                let _ = delete.update(cx, |this, cx| {
-                                    this.selection = BTreeSet::from([id]);
-                                    this.selection_kind = Some(ItemKind::Host);
-                                    this.delete_pending = true;
-                                    cx.notify();
-                                });
-                            }),
-                    )
-                })
-                .into_any_element(),
-        ]
-    }
     pub(super) fn host_editor_sections(
         &self,
         editor: &Editor,
@@ -598,26 +535,16 @@ impl Nauterm {
                 .pt(px(12.))
                 .border_t_1()
                 .border_color(p.border)
-                .child(self.host_theme_section(editor, cx))
+                .child(self.protocol_theme_section(
+                    editor,
+                    host_credentials::Target::Ssh,
+                    draft.more,
+                    cx,
+                ))
                 .into_any_element(),
         );
         if !draft.more {
-            fields.push(
-                Button::new("host-ssh-show-more")
-                    .small()
-                    .ghost()
-                    .w_full()
-                    .label("Show more")
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        if let Some(draft) =
-                            this.editor.as_mut().and_then(|editor| editor.host.as_mut())
-                        {
-                            draft.more = true;
-                        }
-                        cx.notify();
-                    }))
-                    .into_any_element(),
-            );
+            fields.push(self.protocol_show_more(host_credentials::Target::Ssh, cx));
         }
         div()
             .rounded(px(10.))
@@ -629,6 +556,46 @@ impl Nauterm {
             .child(self.protocol_editor_header(editor, super::host_credentials::Target::Ssh, cx))
             .children(fields)
             .into_any_element()
+    }
+
+    pub(super) fn protocol_show_more(
+        &self,
+        target: host_credentials::Target,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        Button::new(SharedString::from(format!(
+            "host-show-more-{}",
+            target.id()
+        )))
+        .small()
+        .ghost()
+        .content_start()
+        .px_0()
+        .h(px(26.))
+        .localized_accessibility_label("workspace.host.protocol.showMore")
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap(px(4.))
+                .text_color(Palette::new(self.data.dark).muted)
+                .text_size(px(12.))
+                .font_weight(FontWeights::SEMIBOLD)
+                .child(crate::localization::view(
+                    "workspace.host.protocol.showMore",
+                ))
+                .child(icon(IconName::ChevronDown).with_size(px(12.))),
+        )
+        .on_click(cx.listener(move |this, _, _, cx| {
+            if let Some(draft) = this.editor.as_mut().and_then(|editor| editor.host.as_mut()) {
+                match target {
+                    host_credentials::Target::Ssh => draft.more = true,
+                    host_credentials::Target::Telnet => draft.telnet.more = true,
+                }
+                cx.notify();
+            }
+        }))
+        .into_any_element()
     }
 
     fn ssh_compatibility_mode(&self, draft: &Draft, cx: &mut Context<Self>) -> AnyElement {
@@ -690,9 +657,16 @@ impl Nauterm {
         let draft = editor.host.as_ref().unwrap();
         let p = Palette::new(self.data.dark);
         let (title, port_label, port) = match target {
-            Target::Ssh => ("SSH on", "SSH port", &editor.fields[2].1),
-            Target::Telnet => ("Telnet on", "Telnet port", &draft.telnet.port),
+            Target::Ssh => ("SSH", "SSH port", &editor.fields[2].1),
+            Target::Telnet => ("Telnet", "Telnet port", &draft.telnet.port),
         };
+        let label = crate::localization::format_for(
+            crate::localization::language(cx),
+            "workspace.host.protocol.portLabel",
+            &[("protocol", title), ("port", "{port}")],
+        );
+        let (before, after) = label.split_once("{port}").unwrap_or((&label, ""));
+        let (before, after) = (before.trim().to_owned(), after.trim().to_owned());
         div()
             .flex()
             .items_center()
@@ -703,7 +677,7 @@ impl Nauterm {
             .text_size(px(13.))
             .line_height(px(18.))
             .font_weight(FontWeights::SEMIBOLD)
-            .child(crate::localization::view(title))
+            .when(!before.is_empty(), |v| v.child(before))
             .child(
                 Input::new(port)
                     .digits_only()
@@ -713,7 +687,7 @@ impl Nauterm {
                     .disabled(draft.busy)
                     .aria_label(port_label),
             )
-            .child(crate::localization::text(cx, "common.label.port"))
+            .when(!after.is_empty(), |v| v.child(after))
             .child(div().flex_1())
             .child(self.protocol_actions(editor, target, cx))
             .into_any_element()

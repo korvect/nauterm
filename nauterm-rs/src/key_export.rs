@@ -408,10 +408,18 @@ impl KeyExport {
                                 .min_w_0()
                                 .flex()
                                 .flex_col()
-                                .child(div().truncate().child(self.key.name.clone()))
+                                .gap(px(2.))
+                                .child(
+                                    div()
+                                        .text_size(px(13.))
+                                        .font_weight(FontWeights::SEMIBOLD)
+                                        .truncate()
+                                        .child(self.key.name.clone()),
+                                )
                                 .child(
                                     div()
                                         .text_size(px(11.))
+                                        .font_weight(FontWeights::MEDIUM)
                                         .text_color(p.muted)
                                         .truncate()
                                         .child(self.key.algorithm.clone()),
@@ -467,6 +475,11 @@ impl KeyExport {
                     .toolbar()
                     .ghost()
                     .w_full()
+                    .content_start()
+                    .px_0()
+                    .content_gap(px(5.))
+                    .icon_size(px(15.))
+                    .text_size(px(12.))
                     .text_color(p.muted)
                     .mt(px(14.))
                     .icon(if self.advanced {
@@ -485,7 +498,7 @@ impl KeyExport {
                     self.section("Script")
                         .mt(px(8.))
                         .child(div().text_size(px(12.)).text_color(p.muted).child(
-                            crate::localization::text(cx, "rs.ui.copy.publicKeyExportPlaceholders"),
+                            crate::localization::text(cx, "workspace.keys.export.scriptHelp"),
                         ))
                         .child(
                             Field::multiline(&self.script, "Script", 200.)
@@ -550,11 +563,11 @@ impl KeyExport {
                     .font_weight(FontWeight::SEMIBOLD)
                     .text_center()
                     .child(crate::localization::view(if self.running() {
-                        "Exporting key..."
+                        "workspace.keys.export.inProgressTitle"
                     } else if success {
-                        "Key exported successfully."
+                        "workspace.keys.export.hostSuccess"
                     } else {
-                        "Key export failed"
+                        "workspace.keys.export.failedTitle"
                     })),
             )
             .child(div().text_center().text_color(p.muted).child(format!(
@@ -586,7 +599,7 @@ impl KeyExport {
                         .text_color(p.muted)
                         .child(crate::localization::text(
                             cx,
-                            "rs.ui.copy.checkRemoteFileBeforeRetry",
+                            "workspace.keys.export.checkRemoteFile",
                         )),
                 )
             })
@@ -672,7 +685,7 @@ impl Render for KeyExport {
                                 .loading(self.running())
                                 .label(match self.stage {
                                     Stage::Form => "Export to host",
-                                    Stage::Running => "Exporting...",
+                                    Stage::Running => "workspace.keys.export.inProgress",
                                     Stage::Success => "Done",
                                     _ => "Back",
                                 })

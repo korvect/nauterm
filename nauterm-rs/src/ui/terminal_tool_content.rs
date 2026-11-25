@@ -286,7 +286,11 @@ impl Nauterm {
                     .flex()
                     .flex_col()
                     .gap(px(10.))
-                    .child(crate::localization::text(cx, "workspace.label.shellHistory"))
+                    .child(
+                        div()
+                            .font_weight(FontWeights::MEDIUM)
+                            .child(crate::localization::text(cx, "workspace.label.shellHistory")),
+                    )
                     .child(
                         Input::new(search)
                             .palette(p)
@@ -298,9 +302,10 @@ impl Nauterm {
                 v.child(
                     div()
                         .p(px(16.))
+                        .font_weight(FontWeights::SEMIBOLD)
                         .text_color(p.muted)
                         .child(crate::localization::view(if query.is_empty() {
-                            "No shell history recorded yet."
+                            "workspace.terminalTools.shellHistory.empty"
                         } else {
                             "No matching commands"
                         })),
@@ -343,6 +348,7 @@ impl Nauterm {
                                                 .child(
                                                     div()
                                                         .text_size(px(12.))
+                                                        .font_weight(FontWeights::MEDIUM)
                                                         .line_clamp(2)
                                                         .child(command),
                                                 )

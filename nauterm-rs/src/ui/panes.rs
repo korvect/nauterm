@@ -81,7 +81,7 @@ impl Nauterm {
                     Command::SplitRight => this.duplicate_selected(Some(SplitAxis::Horizontal), window, cx),
                     Command::SplitDown => this.duplicate_selected(Some(SplitAxis::Vertical), window, cx),
                     Command::NewTab => this.duplicate_selected(None, window, cx),
-                    Command::Settings => this.open_settings(window, cx),
+                    Command::Settings => this.open_settings_at(Some(crate::settings::Page::Terminal), window, cx),
                     Command::Close => this.close_selected_session(window, cx),
                 }
             }),

@@ -191,7 +191,7 @@ impl Nauterm {
         let actions = if editor.can_choose_group_parent(&self.data) {
             vec![crate::components::SelectAction::new(
                 "group",
-                "Create group",
+                "workspace.action.createGroup",
                 crate::assets::GROUP_ICON,
             )]
         } else {
@@ -305,12 +305,13 @@ impl Nauterm {
         if self.resource_editor_busy(cx) {
             return true;
         }
-        self.restore_resource_parent(None, window, cx);
+        self.restore_resource_parent(None, true, window, cx);
         true
     }
-    fn restore_resource_parent(
+    pub(super) fn restore_resource_parent(
         &mut self,
         saved: Option<(ItemKind, Id)>,
+        keep_draft: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -318,7 +319,7 @@ impl Nauterm {
         let parent = child.parent.take().expect("a related editor has a parent");
         let focus = parent.focus.clone();
         let target = parent.target;
-        self.editor = Some(if saved.is_none() {
+        self.editor = Some(if keep_draft {
             parent.retain_child(child, cx)
         } else {
             *parent.editor
@@ -359,7 +360,7 @@ impl Nauterm {
             .as_ref()
             .is_some_and(|editor| editor.parent.is_some())
         {
-            self.restore_resource_parent(Some((kind, id)), window, cx);
+            self.restore_resource_parent(Some((kind, id)), false, window, cx);
         } else {
             self.retire_editor();
             self.selection = BTreeSet::from([id]);

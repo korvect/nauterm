@@ -12,7 +12,7 @@ use gpui_kit::base::input::{
     InputPresentation, InputState, NativeMenu, NativeMenuItem, Paste, SelectAll,
     Textarea as BaseMultiline, TextareaState,
 };
-use gpui_kit::base::{InputBase as BaseFrame, StyledExt};
+use gpui_kit::base::{InputBase as BaseFrame, Scrollbar, ScrollbarMode, StyledExt};
 use gpui_kit::{
     assets::IconName,
     component::{ActiveTheme, Disableable, Sizable, Size},
@@ -252,6 +252,7 @@ pub struct Input<const SETTINGS: bool> {
     state: InputType,
     palette: Option<Palette>,
     caret_color: Option<Rgba>,
+    placeholder_color: Option<Rgba>,
     editor_cursor: Option<CursorStyle>,
     style: StyleRefinement,
     size: Size,
@@ -275,6 +276,7 @@ impl<const S: bool> Input<S> {
             state,
             palette: None,
             caret_color: None,
+            placeholder_color: None,
             editor_cursor: None,
             style: StyleRefinement::default(),
             size: Size::Medium,
@@ -324,6 +326,10 @@ impl<const S: bool> Input<S> {
             .font_weight(crate::typography::FontWeights::MEDIUM)
             .when(!multiline, |input| input.h(px(34.)))
             .when(multiline, |input| input.py(px(8.)))
+    }
+    pub fn placeholder_color(mut self, color: Rgba) -> Self {
+        self.placeholder_color = Some(color);
+        self
     }
     pub fn caret_color(mut self, color: Rgba) -> Self {
         self.caret_color = Some(color);
@@ -432,12 +438,16 @@ impl<const S: bool> RenderOnce for Input<S> {
         };
         let editor_style = InputEditorStyle {
             foreground: p.text.into(),
-            muted_foreground: if S {
-                Palette::settings_faint(dark)
-            } else {
-                p.muted.opacity(0.55)
-            }
-            .into(),
+            muted_foreground: self
+                .placeholder_color
+                .unwrap_or_else(|| {
+                    if S {
+                        Palette::settings_faint(dark)
+                    } else {
+                        p.muted.opacity(0.55)
+                    }
+                })
+                .into(),
             background: p.surface.into(),
             border: p.border.into(),
             caret: caret(self.caret_color.unwrap_or(p.accent)),
@@ -455,6 +465,18 @@ impl<const S: bool> RenderOnce for Input<S> {
             S,
             cx,
         );
+        if let InputType::Multiline(state) = &self.state {
+            let id = state.entity_id();
+            state.update(cx, |state, _| {
+                state.set_scrollbar_renderer(Some(Rc::new(move |editor, _, _| {
+                    Scrollbar::new(&editor)
+                        .id(("multiline-scrollbar", id))
+                        .axis(editor.axis())
+                        .mode(ScrollbarMode::Hover)
+                        .into_any_element()
+                })));
+            });
+        }
         let placeholder = self.state.presentation(cx).placeholder().clone();
         let translated_placeholder = crate::localization::text(cx, &placeholder);
         if translated_placeholder != placeholder {

@@ -270,6 +270,7 @@ impl RenderOnce for Field {
                 .when_some(self.palette, |input, p| input.palette(p).bg(p.control))
                 .when_some(height, |field, height| field.h(px(height)))
                 .aria_label(self.label.clone())
+                .cleanable(!self.secret)
                 .disabled(self.disabled)
                 .invalid(invalid)
                 .into_any_element(),

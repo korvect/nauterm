@@ -93,28 +93,20 @@ impl Command {
             _ => Scope::Workspace,
         }
     }
-    pub fn label(self) -> String {
-        match self {
-            Self::QuickConnect => "Quick Connect",
-            Self::Palette => "Command Palette",
-            Self::OpenSettings => "Open Settings",
-            Self::Edit => "Edit Selected Item",
-            Self::Duplicate => "Duplicate Selected Item",
-            Self::Ssh => "Switch to SSH",
-            Self::Sftp => "Switch to SFTP",
-            Self::PreviousTab => "Previous Tab",
-            Self::NextTab => "Next Tab",
-            Self::CloseTab => "Close Tab",
-            Self::Tab(index) => return format!("Select Tab {}", index + 1),
-            Self::Copy => "Copy",
-            Self::Paste => "Paste",
-            Self::SelectAll => "Select All",
-            Self::Search => "Search",
-            Self::SplitRight => "Split Right",
-            Self::SplitDown => "Split Down",
-            Self::NewLocalTerminal => "New Local Terminal",
+    pub fn label(self, language: crate::localization::Language) -> gpui_kit::SharedString {
+        use crate::localization::{format_for, text_for};
+        if let Self::Tab(index) = self {
+            format_for(
+                language,
+                "settings.shortcuts.action.selectTab",
+                &[("number", &(index + 1).to_string())],
+            )
+        } else {
+            text_for(
+                language,
+                &format!("settings.shortcuts.action.{}", self.key()),
+            )
         }
-        .into()
     }
     fn key(self) -> &'static str {
         match self {

@@ -513,19 +513,6 @@ class _SidebarItemButton extends StatelessWidget {
     return Tooltip(
       message: label,
       waitDuration: const Duration(milliseconds: 250),
-      decoration: BoxDecoration(
-        color: const Color(0xff151927),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      textStyle: TextStyle(
-        color: Colors.white,
-        fontSize: NautermFontSizes.labelMedium,
-        fontWeight: NautermFontWeights.medium,
-        letterSpacing: 0,
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      preferBelow: false,
-      verticalOffset: 14,
       child: button,
     );
   }

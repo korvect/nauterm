@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nauterm/app/nauterm_app.dart';
+import 'package:nauterm/ui/nauterm_context_menu.dart';
 
 void main() {
   testWidgets('unsaved status follows text edits and clears when reverted', (
@@ -182,12 +183,26 @@ void main() {
     await _close(tester);
     await _open(tester, 'New group');
     await tester.enterText(_field('Name *'), 'Discard this group');
+    await tester.pump();
     await tester.tap(find.byTooltip('More').last);
     await tester.pump(const Duration(milliseconds: 150));
     await tester.tap(find.text('Discard changes'));
+    await tester.pump();
     await tester.pump(const Duration(milliseconds: 250));
+    await tester.pump();
+    expect(find.text('Discard changes'), findsNothing);
+    expect(find.text('New Group'), findsNothing);
     await _open(tester, 'New group');
     expect(_text(tester, 'Name *'), isEmpty);
+    await tester.tap(find.byTooltip('More').last);
+    await tester.pump(const Duration(milliseconds: 150));
+    final discardRow = find.ancestor(
+      of: find.text('Discard changes'),
+      matching: find.byType(NautermDropdownRow),
+    );
+    expect(tester.widget<NautermDropdownRow>(discardRow).enabled, isFalse);
+    await tester.tapAt(const Offset(8, 400));
+    await tester.pump(const Duration(milliseconds: 200));
     await _close(tester);
     await _open(tester, 'New host');
     expect(_text(tester, 'Name *'), 'Keep this host');

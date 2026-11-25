@@ -2,9 +2,7 @@
 //! Companion reads stay bounded and never scan an SSH directory or original DB.
 use super::{Editor, Keychain, creation::is_certificate};
 use crate::{
-    components::{Button, drag},
-    connection::read_key_file,
-    palette::Palette,
+    components::Button, connection::read_key_file, palette::Palette, typography::FontWeights,
 };
 use anyhow::{Context as _, Result, ensure};
 use gpui_kit::{
@@ -28,9 +26,11 @@ struct Imported {
 }
 fn read(path: &Path) -> Result<Zeroizing<String>> {
     let metadata = fs::metadata(path)?;
+    ensure!(metadata.is_file(), "Choose a regular file.");
+    ensure!(metadata.len() > 0, "The selected file is empty.");
     ensure!(
-        metadata.is_file() && metadata.len() > 0 && metadata.len() <= 4 * 1024 * 1024,
-        "Choose a nonempty regular key file smaller than 4 MB."
+        metadata.len() <= 4 * 1024 * 1024,
+        "The selected file is too large."
     );
     let value = read_key_file(path.to_owned())?;
     ensure!(!value.trim().is_empty(), "The selected file is empty.");
@@ -120,7 +120,7 @@ impl Keychain {
                 files: true,
                 directories: false,
                 multiple: false,
-                prompt: Some("Import private key or certificate".into()),
+                prompt: None,
             },
             Some(crate::file_dialog::InitialDirectory::SshImport),
             window,
@@ -208,7 +208,17 @@ impl Keychain {
                         editor.private_error = None;
                         this.refresh_automatic_name(window, cx);
                     }
-                    Err(error) => editor.error = Some(format!("Unable to import key: {error:#}")),
+                    Err(error) => {
+                        use crate::localization::{format_for, language, message};
+                        editor.error = Some(
+                            format_for(
+                                language(cx),
+                                "workspace.keys.import.failure",
+                                &[("error", &message(cx, &format!("{error:#}")))],
+                            )
+                            .to_string(),
+                        );
+                    }
                 }
                 cx.notify();
             });
@@ -219,71 +229,90 @@ impl Keychain {
     pub(super) fn import_panel(&self, editor: &Editor, cx: &mut Context<Self>) -> AnyElement {
         let p = Palette::new(self.dark);
         let busy = self.saving || self.exporting_file || editor.importing || editor.picking;
-        let owner = cx.weak_entity();
-        let panel = Button::new("key-import-drop-button")
-            .localized_accessibility_label("Import private key file")
-            .ghost()
-            .w_full()
-            .h_full()
-            .p(px(10.))
-            .rounded(px(9.))
-            .border_1()
-            .border_color(if editor.private_error.is_some() {
-                rgb(0xe5453d)
-            } else {
-                p.border
-            })
-            .bg(p.sidebar)
-            .disabled(busy)
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .items_center()
-                    .justify_center()
-                    .gap(px(9.))
-                    .text_color(p.text)
-                    .child(Icon::new(IconName::FileUp).with_size(px(28.)))
-                    .child(crate::localization::view(if editor.importing {
-                        "Importing…"
-                    } else {
-                        "Drag and drop a private key file"
-                    })),
-            )
-            .on_click(cx.listener(|this, _, window, cx| this.choose_import(window, cx)))
-            .into_any_element();
+        let accepts = move |paths: &ExternalPaths| !busy && !paths.0.is_empty();
+        let content = |dragging: bool, label| {
+            let color = if dragging { p.accent } else { p.muted };
+            div()
+                .id(if dragging { "drop-ready" } else { "drop-idle" })
+                .absolute()
+                .inset_0()
+                .px(px(10.))
+                .flex()
+                .flex_col()
+                .items_center()
+                .justify_center()
+                .gap(px(8.))
+                .text_center()
+                .text_size(px(12.))
+                .font_weight(FontWeights::MEDIUM)
+                .opacity(if dragging { 0. } else { 1. })
+                .drag_over::<ExternalPaths>(move |style, paths, _, _| {
+                    style.opacity(if dragging == accepts(paths) { 1. } else { 0. })
+                })
+                .child(
+                    Icon::new(IconName::FileUp)
+                        .with_size(px(22.))
+                        .text_color(color),
+                )
+                .child(
+                    div()
+                        .text_color(if dragging { p.accent } else { p.text })
+                        .child(crate::localization::view(label)),
+                )
+        };
         div()
             .flex()
             .flex_col()
             .gap(px(10.))
             .child(
                 div()
+                    .id("key-file-import-drop")
                     .h(px(112.))
                     .w_full()
-                    .child(drag::external_target_with_label(
-                        "key-file-import-drop",
-                        panel,
-                        self.dark,
-                        "Drop the private key to import",
-                        move |paths, cx| {
-                            owner.upgrade().is_some_and(|owner| {
-                                let this = owner.read(cx);
-                                !paths.0.is_empty()
-                                    && !this.saving
-                                    && !this.exporting_file
-                                    && this.editor.as_ref().is_some_and(|editor| {
-                                        editor.can_import(this.related)
-                                            && !editor.importing
-                                            && !editor.picking
-                                    })
-                            })
-                        },
-                        cx.listener(|this, paths: &ExternalPaths, window, cx| {
-                            if let Some(path) = paths.0.first() {
-                                this.import_path(path.clone(), window, cx);
-                            }
-                        }),
-                    )),
+                    .relative()
+                    .rounded(px(9.))
+                    .border_1()
+                    .border_dashed()
+                    .border_color(if editor.private_error.is_some() {
+                        rgb(0xe5453d)
+                    } else {
+                        p.border
+                    })
+                    .bg(p.surface.opacity(0.48))
+                    .can_drop(move |data, _, _| {
+                        data.downcast_ref::<ExternalPaths>().is_some_and(accepts)
+                    })
+                    .drag_over::<ExternalPaths>(move |style, _, _, _| {
+                        style.border_color(p.accent).bg(p.accent.opacity(0.07))
+                    })
+                    .on_drop(cx.listener(|this, paths: &ExternalPaths, window, cx| {
+                        if let Some(path) = paths.0.first() {
+                            this.import_path(path.clone(), window, cx);
+                            cx.stop_propagation();
+                        }
+                    }))
+                    .child(
+                        Button::new("key-import-drop-button")
+                            .localized_accessibility_label("workspace.keys.import.fromFile")
+                            .ghost()
+                            .w_full()
+                            .h_full()
+                            .p_0()
+                            .rounded(px(9.))
+                            .disabled(busy)
+                            .child(content(
+                                false,
+                                if editor.importing {
+                                    "workspace.keys.import.importing"
+                                } else {
+                                    "workspace.keys.import.drag"
+                                },
+                            ))
+                            .child(content(true, "workspace.keys.import.drop"))
+                            .on_click(
+                                cx.listener(|this, _, window, cx| this.choose_import(window, cx)),
+                            ),
+                    ),
             )
             .child(
                 Button::new("import-credential")
@@ -292,9 +321,9 @@ impl Keychain {
                     .primary()
                     .icon(IconName::FileKey)
                     .label(if editor.importing {
-                        "Importing…"
+                        "workspace.keys.import.importing"
                     } else {
-                        "Import from key file"
+                        "workspace.keys.import.fromFile"
                     })
                     .loading(editor.importing)
                     .disabled(busy)

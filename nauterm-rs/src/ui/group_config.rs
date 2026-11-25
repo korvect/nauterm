@@ -27,7 +27,18 @@ impl Nauterm {
         let mut sections = vec![self.editor_section(
             "General",
             vec![
-                self.editor_field(editor, 0, "Name *"),
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(12.))
+                    .child(crate::avatar::group())
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .child(self.editor_field(editor, 0, "Name *")),
+                    )
+                    .into_any_element(),
                 self.parent_group_field(editor),
             ],
         )];

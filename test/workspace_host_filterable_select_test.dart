@@ -28,6 +28,43 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('workspace toolbar searches can focus and show empty results', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(NautermApp(onOpenSettings: () {}));
+    await tester.pump();
+
+    const pages = {
+      'Keychain': 'No keychain items found.',
+      'Proxies': 'No matching proxies',
+      'Port Forwarding': 'No matching forwarding rules',
+      'Snippets': 'No snippets found.',
+      'Known Hosts': 'No matching known hosts.',
+    };
+    final field = find.byKey(const ValueKey('workspace-toolbar-search-field'));
+    for (final MapEntry(key: page, value: emptyTitle) in pages.entries) {
+      await tester.tap(_sidebarSectionFinder(page));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.byTooltip('Search'));
+      await tester.pump();
+      await tester.pump();
+      expect(
+        tester.widget<TextField>(field).focusNode?.hasFocus,
+        isTrue,
+        reason: '$page search did not receive focus.',
+      );
+      await tester.enterText(field, 'missing-test-result');
+      await tester.pump();
+      expect(find.text(emptyTitle), findsOneWidget);
+    }
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('host search input uses medium control height', (tester) async {
     await tester.pumpWidget(NautermApp(onOpenSettings: () {}));
     await tester.pump();

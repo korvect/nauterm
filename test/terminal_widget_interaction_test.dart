@@ -2379,6 +2379,40 @@ void main() {
     expect(tester.widget<TextField>(find.byType(TextField)).expands, isFalse);
   });
 
+  testWidgets('composer sends on Enter and inserts a line on Shift+Enter', (
+    tester,
+  ) async {
+    final writes = <String>[];
+    final controller = TerminalController(
+      driver: MemoryTerminalDriver(columns: 80, rows: 8),
+      onInput: writes.add,
+    );
+    addTearDown(controller.dispose);
+    await _pumpTerminal(tester, controller);
+
+    final field = find.descendant(
+      of: find.byKey(const ValueKey('terminal-composer-surface')),
+      matching: find.byType(TextField),
+    );
+    await tester.enterText(field, 'firstsecond');
+    final input = tester.widget<TextField>(field).controller!;
+    input.selection = const TextSelection.collapsed(offset: 5);
+    await tester.pump();
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pump();
+    expect(input.text, 'first\nsecond');
+    expect(input.selection, const TextSelection.collapsed(offset: 6));
+    expect(writes, isEmpty);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    expect(writes, ['first\nsecond\r']);
+    expect(input.text, isEmpty);
+  });
+
   testWidgets('multiline composer does not resize the terminal', (
     tester,
   ) async {

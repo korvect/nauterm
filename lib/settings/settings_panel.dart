@@ -1,6 +1,7 @@
 // ignore_for_file: invalid_use_of_internal_member, implementation_imports
 
 import 'dart:async';
+import 'dart:ffi' show Abi;
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:math' as math;

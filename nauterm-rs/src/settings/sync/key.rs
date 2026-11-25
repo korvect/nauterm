@@ -1,6 +1,7 @@
 //! The Master Key unlocks management locally and is retained only in memory
 //! until the first encrypted sync. It is never a database encryption password.
 use super::*;
+use crate::localization::{self, Language};
 use zeroize::Zeroizing;
 
 pub(super) struct Key {
@@ -15,12 +16,12 @@ impl Key {
         let input = cx.new(|cx| {
             InputState::new(window, cx)
                 .masked(true)
-                .placeholder("At least 12 characters")
+                .placeholder("settings.sync.masterKey.hint")
         });
         let confirm = cx.new(|cx| {
             InputState::new(window, cx)
                 .masked(true)
-                .placeholder("Repeat Master Key")
+                .placeholder("settings.label.repeatMasterKey")
         });
         let events = [&input, &confirm]
             .into_iter()
@@ -59,7 +60,12 @@ impl Key {
         self.pending = None;
         self.confirmation_checked = false;
         for field in [&self.input, &self.confirm] {
-            field.update(cx, |field, cx| field.set_value("", window, cx));
+            field.update(cx, |field, cx| {
+                field.set_value("", window, cx);
+                if !field.presentation().is_masked() {
+                    field.toggle_masked(window, cx);
+                }
+            });
         }
     }
 }
@@ -98,6 +104,7 @@ impl Panel {
         let p = Palette::settings(self.dark);
         let value = Zeroizing::new(self.key.input.read(cx).value().to_string());
         let confirmation = Zeroizing::new(self.key.confirm.read(cx).value().to_string());
+        let text = |key| localization::text_for(self.language, key);
         let checked = self.key.confirmation_checked;
         let error = checked
             .then(|| confirmation_error(&value, &confirmation))
@@ -108,9 +115,11 @@ impl Panel {
             .flex_col()
             .gap(px(6.))
             .child(
-                Input::new(&self.key.input).aria_label(crate::localization::text(cx, "Master Key")),
+                Input::new(&self.key.input)
+                    .mask_toggle()
+                    .aria_label(text("common.label.masterKey")),
             )
-            .child(strength(&value, &p));
+            .child(strength(&value, p, self.language));
         let confirm = div()
             .w_full()
             .flex()
@@ -118,14 +127,15 @@ impl Panel {
             .gap(px(6.))
             .child(
                 Input::new(&self.key.confirm)
-                    .aria_label(crate::localization::text(cx, "Confirm Master Key"))
+                    .mask_toggle()
+                    .aria_label(text("settings.label.confirmMasterKey"))
                     .invalid(error.is_some())
                     .when(checked, |input| {
                         input.suffix(
                             div()
                                 .id("sync-master-key-confirmation")
                                 .role(Role::Status)
-                                .aria_label(error.unwrap_or("Master Keys match."))
+                                .aria_label(text(error.unwrap_or("Master Keys match.")))
                                 .flex()
                                 .items_center()
                                 .child(
@@ -153,13 +163,13 @@ impl Panel {
             .flex_col()
             .gap(px(18.))
             .child(self.row(
-                "Master Key",
-                "Use at least 12 printable ASCII characters and at least 3 character types.",
+                "common.label.masterKey",
+                "settings.sync.masterKey.requirements",
                 field,
             ))
             .child(self.row(
-                "Confirm Master Key",
-                "Enter the same Master Key again.",
+                "settings.label.confirmMasterKey",
+                "settings.sync.masterKey.confirm.description",
                 confirm,
             ))
             .child(
@@ -177,7 +187,7 @@ impl Panel {
             ));
         sections::frame(
             "settings.label.unlockSync",
-            crate::localization::text(cx, "settings.label.unlockSync"),
+            text("settings.label.unlockSync"),
             IconName::Key,
             p,
             content,
@@ -197,7 +207,7 @@ fn confirmation_error(value: &str, confirmation: &str) -> Option<&'static str> {
 }
 
 /// Both initial setup and rotation use the same policy and strength feedback.
-pub(super) fn strength(value: &str, p: &Palette) -> AnyElement {
+pub(super) fn strength(value: &str, p: Palette, language: Language) -> AnyElement {
     let strength = if crate::sync::validate_master_key(value).is_err() {
         0
     } else if value.len() >= 20 {
@@ -207,50 +217,90 @@ pub(super) fn strength(value: &str, p: &Palette) -> AnyElement {
     } else {
         1
     };
-    let colors = [rgb(0xef4444), rgb(0xf59e0b), p.accent, rgb(0x22a55b)];
-    let mut requirements = div().flex().flex_wrap().gap(px(8.));
-    for (index, label) in ["Uppercase", "Lowercase", "Numbers", "Symbols"]
-        .into_iter()
-        .enumerate()
-    {
-        requirements = requirements.child(
-            div()
-                .text_size(px(10.))
-                .text_color(if crate::sync::master_key_classes(value)[index] {
-                    colors[3]
-                } else {
-                    p.muted
-                })
-                .child(crate::localization::view(label)),
-        );
-    }
+    let colors = [rgb(0xdc2626), rgb(0xd97706), rgb(0x2563eb), rgb(0x16a34a)];
+    let color = colors[strength];
+    let text = |key| localization::text_for(language, key);
+    let level = text(
+        [
+            "settings.sync.masterKey.strength.weak",
+            "settings.sync.masterKey.strength.fair",
+            "settings.sync.masterKey.strength.good",
+            "settings.sync.masterKey.strength.strong",
+        ][strength],
+    );
+    let caption = format!(
+        "{}: {level}",
+        text("settings.sync.masterKey.strength.label")
+    );
+    let requirements = [
+        "settings.sync.masterKey.requirement.length",
+        "settings.sync.masterKey.requirement.uppercase",
+        "settings.sync.masterKey.requirement.lowercase",
+        "settings.sync.masterKey.requirement.number",
+        "settings.sync.masterKey.requirement.symbol",
+    ];
+    let satisfied =
+        std::iter::once(value.chars().count() >= 12).chain(crate::sync::master_key_classes(value));
     div()
+        .w_full()
         .flex()
         .flex_col()
-        .gap(px(6.))
+        .gap(px(7.))
         .when(!value.is_empty(), |view| {
             view.child(
                 div()
+                    .id("sync-master-key-strength")
+                    .role(Role::Status)
+                    .aria_label(caption.clone())
                     .flex()
-                    .items_center()
-                    .gap(px(8.))
+                    .flex_col()
+                    .gap(px(5.))
                     .child(
-                        div().flex_1().h(px(3.)).rounded_full().bg(p.border).child(
-                            div()
-                                .h_full()
-                                .rounded_full()
-                                .bg(colors[strength])
-                                .w(relative((strength + 1) as f32 / 4.)),
-                        ),
+                        div()
+                            .flex()
+                            .gap(px(4.))
+                            .children((0..colors.len()).map(|index| {
+                                div()
+                                    .flex_1()
+                                    .h(px(3.))
+                                    .rounded(px(2.))
+                                    .bg(if index <= strength { color } else { p.border })
+                            })),
                     )
                     .child(
                         div()
-                            .text_size(px(10.))
-                            .text_color(colors[strength])
-                            .child(["Weak", "Fair", "Good", "Strong"][strength]),
+                            .text_size(px(11.))
+                            .font_weight(FontWeights::MEDIUM)
+                            .text_right()
+                            .text_color(color)
+                            .child(caption),
                     ),
             )
         })
-        .child(requirements)
+        .child(
+            div()
+                .flex()
+                .flex_wrap()
+                .gap_x(px(10.))
+                .gap_y(px(5.))
+                .children(requirements.into_iter().zip(satisfied).map(|(label, met)| {
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(4.))
+                        .text_size(px(10.))
+                        .font_weight(FontWeights::MEDIUM)
+                        .text_color(if met { colors[3] } else { p.muted })
+                        .child(
+                            Icon::new(if met {
+                                IconName::CircleCheck
+                            } else {
+                                IconName::Circle
+                            })
+                            .with_size(px(12.)),
+                        )
+                        .child(text(label))
+                })),
+        )
         .into_any_element()
 }

@@ -10,6 +10,7 @@ use crate::{
 pub(super) struct Draft {
     pub enabled: bool,
     pub configured: bool,
+    pub more: bool,
     pub profile: Profile,
     pub port: Entity<InputState>,
     pub username: Entity<InputState>,
@@ -70,6 +71,7 @@ impl Draft {
         Self {
             enabled: existing.is_some(),
             configured: host.is_some(),
+            more: false,
             profile,
             port,
             username,
@@ -206,16 +208,21 @@ impl Nauterm {
         let draft = editor.host.as_ref().unwrap();
         let p = Palette::new(self.data.dark);
         let mut fields = self.protocol_authentication_fields(editor, Target::Telnet, cx);
-        fields.push(draft.telnet.encoding.field("Encoding", draft.busy));
+        if draft.telnet.more {
+            fields.push(draft.telnet.encoding.field("Encoding", draft.busy));
+        }
         fields.push(
             div()
                 .mt(px(2.))
                 .pt(px(12.))
                 .border_t_1()
                 .border_color(p.border)
-                .child(self.protocol_theme_section(editor, Target::Telnet, cx))
+                .child(self.protocol_theme_section(editor, Target::Telnet, draft.telnet.more, cx))
                 .into_any_element(),
         );
+        if !draft.telnet.more {
+            fields.push(self.protocol_show_more(Target::Telnet, cx));
+        }
         div()
             .rounded(px(10.))
             .bg(p.surface)

@@ -166,16 +166,6 @@ pub fn external_target(
 ) -> AnyElement {
     target_for(id, content, dark, "Upload here", accepts, receive)
 }
-pub fn external_target_with_label(
-    id: impl Into<SharedString>,
-    content: AnyElement,
-    dark: bool,
-    label: &'static str,
-    accepts: impl Fn(&ExternalPaths, &App) -> bool + 'static,
-    receive: impl Fn(&ExternalPaths, &mut Window, &mut App) + 'static,
-) -> AnyElement {
-    target_for(id, content, dark, label, accepts, receive)
-}
 fn target_for<T: 'static>(
     id: impl Into<SharedString>,
     content: AnyElement,

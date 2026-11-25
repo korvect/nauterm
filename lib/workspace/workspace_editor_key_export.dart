@@ -336,10 +336,19 @@ class _KeyExportEditorContentState extends State<_KeyExportEditorContent>
               const SizedBox(height: 20),
               Text(
                 _exporting
-                    ? 'Exporting key...'
+                    ? context.tr(
+                        'workspace.keys.export.inProgressTitle',
+                        fallback: 'Exporting key...',
+                      )
                     : _exported
-                    ? 'Key exported successfully.'
-                    : 'Key export failed',
+                    ? context.tr(
+                        'workspace.keys.export.hostSuccess',
+                        fallback: 'Key exported successfully.',
+                      )
+                    : context.tr(
+                        'workspace.keys.export.failedTitle',
+                        fallback: 'Key export failed',
+                      ),
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: _text,
@@ -408,7 +417,10 @@ class _KeyExportEditorContentState extends State<_KeyExportEditorContent>
         onSave: _exported ? widget.onClose : _backToExportForm,
         saveLabel: _exported ? 'Done' : 'Back',
         saving: _commandStarted && _exporting,
-        savingLabel: 'Exporting...',
+        savingLabel: context.tr(
+          'workspace.keys.export.inProgress',
+          fallback: 'Exporting...',
+        ),
         body: !_commandStarted
             ? widget.buildConnectionPage(connection, _backToExportForm)
             : _buildResultPage(),
@@ -426,7 +438,10 @@ class _KeyExportEditorContentState extends State<_KeyExportEditorContent>
       onSave: _export,
       saving: _exporting,
       saveLabel: 'Export to host',
-      savingLabel: 'Exporting...',
+      savingLabel: context.tr(
+        'workspace.keys.export.inProgress',
+        fallback: 'Exporting...',
+      ),
       children: [
         _WorkspaceFormSection(
           title: 'Key',

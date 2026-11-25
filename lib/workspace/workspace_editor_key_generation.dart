@@ -777,10 +777,17 @@ class _KeyEditorContentState extends State<_KeyEditorContent>
     }
     final XFile? file;
     try {
-      file = await openFile(
-        initialDirectory: _defaultSshKeyDirectoryPath(),
-        confirmButtonText: 'Import',
-      );
+      file = await openFile(initialDirectory: _defaultSshKeyDirectoryPath());
+    } on Object {
+      if (mounted) {
+        setState(() {
+          _error = tr(
+            'workspace.keys.import.pickerFailed',
+            fallback: 'Could not open the key import picker.',
+          );
+        });
+      }
+      return;
     } finally {
       _pickerLaunchPending = false;
     }
@@ -818,7 +825,11 @@ class _KeyEditorContentState extends State<_KeyEditorContent>
       }
       setState(() {
         _importing = false;
-        _error = 'Unable to import private key: $error';
+        _error = tr(
+          'workspace.keys.import.failure',
+          fallback: 'Unable to import key: {error}',
+          args: {'error': error is FormatException ? tr(error.message) : error},
+        );
       });
     }
   }

@@ -832,18 +832,43 @@ class _EditorShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final draftScope = _WorkspaceEditorDraftScope.maybeOf(context);
-    final actions = [
-      ...headerActions,
-      if (draftScope != null)
-        _EditorShellMenuAction(
-          label: tr(
-            'workspace.action.discardChanges',
-            fallback: 'Discard changes',
-          ),
-          icon: Icons.undo_rounded,
-          onSelected: draftScope.onDiscard,
+    final discard = draftScope == null
+        ? null
+        : _EditorShellMenuAction(
+            label: tr(
+              'workspace.action.discardChanges',
+              fallback: 'Discard changes',
+            ),
+            icon: Icons.undo_rounded,
+            onSelected: () {
+              if (draftScope.draft.hasChanges) draftScope.onDiscard();
+            },
+          );
+    final actions = [...headerActions, ?discard];
+
+    Widget buildMore() {
+      return _WorkspaceDropdown<_EditorShellMenuAction>(
+        width: 170,
+        entries: [
+          for (final action in actions)
+            NautermContextMenuAction<_EditorShellMenuAction>(
+              value: action,
+              label: action.label,
+              icon: action.icon,
+              destructive: action.destructive,
+              enabled:
+                  action != discard || (draftScope?.draft.hasChanges ?? false),
+            ),
+        ],
+        onSelected: (action) => action.onSelected(),
+        triggerBuilder: (openMenu) => _WorkspaceDrawerHeaderButton(
+          icon: Icons.more_horiz_rounded,
+          tooltip: tr('workspace.label.more', fallback: 'More'),
+          onPressed: saving ? null : openMenu,
         ),
-    ];
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -867,28 +892,13 @@ class _EditorShell extends StatelessWidget {
                     ),
                   ),
                   if (showMore)
-                    _WorkspaceDropdown<_EditorShellMenuAction>(
-                      width: 170,
-                      entries: [
-                        for (final action in actions)
-                          NautermContextMenuAction<_EditorShellMenuAction>(
-                            value: action,
-                            label: action.label,
-                            icon: action.icon,
-                            destructive: action.destructive,
-                          ),
-                      ],
-                      onSelected: (action) => action.onSelected(),
-                      triggerBuilder: (openMenu) =>
-                          _WorkspaceDrawerHeaderButton(
-                            icon: Icons.more_horiz_rounded,
-                            tooltip: tr(
-                              'workspace.label.more',
-                              fallback: 'More',
-                            ),
-                            onPressed: saving ? null : openMenu,
-                          ),
-                    ),
+                    if (draftScope == null)
+                      buildMore()
+                    else
+                      ListenableBuilder(
+                        listenable: draftScope.draft,
+                        builder: (context, _) => buildMore(),
+                      ),
                   if (showClose)
                     _WorkspaceDrawerHeaderButton(
                       tooltip: tr('common.action.close', fallback: 'Close'),
@@ -992,7 +1002,7 @@ class _EditorShellMenuAction {
 
   factory _EditorShellMenuAction.exportToFile(VoidCallback onSelected) {
     return _EditorShellMenuAction(
-      label: 'Export to File',
+      label: 'workspace.label.exportToFile',
       icon: Icons.save_alt_rounded,
       onSelected: onSelected,
     );

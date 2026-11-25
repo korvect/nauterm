@@ -333,6 +333,8 @@ pub fn newest_first(entries: &[Entry]) -> Vec<String> {
 pub struct Locations {
     pub home: PathBuf,
     pub app_data: Option<PathBuf>,
+    history_file: Option<PathBuf>,
+    data_home: Option<PathBuf>,
     pub windows: bool,
 }
 impl Locations {
@@ -347,14 +349,29 @@ impl Locations {
         Some(Self {
             home: home.into(),
             app_data: std::env::var_os("APPDATA").map(Into::into),
+            history_file: std::env::var_os("HISTFILE")
+                .map(PathBuf::from)
+                .filter(|path| path.is_absolute()),
+            data_home: std::env::var_os("XDG_DATA_HOME")
+                .map(PathBuf::from)
+                .filter(|path| path.is_absolute()),
             windows: cfg!(windows),
         })
     }
     fn file(&self, format: Format) -> Option<PathBuf> {
         Some(match format {
-            Format::Zsh => self.home.join(".zsh_history"),
-            Format::Bash => self.home.join(".bash_history"),
-            Format::Fish => self.home.join(".local/share/fish/fish_history"),
+            Format::Zsh | Format::Bash => self.history_file.clone().unwrap_or_else(|| {
+                self.home.join(if format == Format::Zsh {
+                    ".zsh_history"
+                } else {
+                    ".bash_history"
+                })
+            }),
+            Format::Fish => self
+                .data_home
+                .clone()
+                .unwrap_or_else(|| self.home.join(".local/share"))
+                .join("fish/fish_history"),
             Format::PowerShell if self.windows => self
                 .app_data
                 .as_ref()
@@ -520,7 +537,44 @@ impl Refresh {
 
 #[cfg(test)]
 mod capture_tests {
-    use super::Capture;
+    use super::{Capture, Format, Locations, read_local};
+
+    #[test]
+    fn local_history_reads_configured_and_standard_files() -> anyhow::Result<()> {
+        let root = tempfile::tempdir()?;
+        let history = root.path().join("custom-history");
+        let data_home = root.path().join("data");
+        std::fs::write(&history, ": 1700000000:0;fixture zsh command\n")?;
+        std::fs::write(root.path().join(".bash_history"), "fixture bash command\n")?;
+        std::fs::create_dir_all(data_home.join("fish"))?;
+        std::fs::write(
+            data_home.join("fish/fish_history"),
+            "- cmd: fixture fish command\n  when: 1700000000\n",
+        )?;
+        let mut locations = Locations {
+            home: root.path().to_owned(),
+            app_data: None,
+            history_file: Some(history),
+            data_home: Some(data_home),
+            windows: false,
+        };
+        assert_eq!(
+            read_local("/bin/zsh", &locations)?[0].command,
+            "fixture zsh command"
+        );
+        assert_eq!(
+            read_local("/usr/bin/fish", &locations)?[0].command,
+            "fixture fish command"
+        );
+        assert_eq!(locations.file(Format::Zsh), locations.history_file);
+        locations.history_file = None;
+        assert_eq!(
+            read_local("/bin/bash", &locations)?[0].command,
+            "fixture bash command"
+        );
+        Ok(())
+    }
+
     #[test]
     fn raw_capture_retains_only_shell_reported_commands_across_every_chunk_boundary() {
         let bytes = b"ordinary pwd output\x1b]4545;Shell;/bin/zsh\x07\x1b]4545;CommandStarted;123;cHdk\x1b\\";

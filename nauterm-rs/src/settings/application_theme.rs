@@ -103,10 +103,16 @@ impl Settings {
                                                     .right(px(2.))
                                                     .size(px(18.))
                                                     .rounded_full()
-                                                    .bg(p.surface)
+                                                    .border_1()
+                                                    .border_color(p.accent)
+                                                    .bg(rgb(0xffffff))
+                                                    .flex()
+                                                    .items_center()
+                                                    .justify_center()
                                                     .child(
-                                                        Icon::new(IconName::CircleCheck)
-                                                            .with_size(px(18.))
+                                                        crate::assets::Glyph::CheckBold
+                                                            .icon()
+                                                            .with_size(px(12.))
                                                             .text_color(p.accent),
                                                     ),
                                             )

@@ -750,9 +750,17 @@ impl Nauterm {
         let previous = self.recovery_pending.as_ref()?;
         let unexpected = !previous.clean_shutdown;
         let title = if unexpected {
-            "Nauterm closed unexpectedly"
+            "workspace.restore.unexpectedExit.title"
         } else {
-            "Restore previous workspace?"
+            "workspace.restore.startup.title"
+        };
+        let description = match (
+            previous.snapshot.has_sessions(),
+            !previous.snapshot.active_forwards.is_empty(),
+        ) {
+            (true, true) => "workspace.restore.sessionsAndForwards.description",
+            (false, true) => "workspace.restore.forwards.description",
+            _ => "workspace.restore.sessions.description",
         };
         Some(
             crate::components::Modal::new("workspace-recovery-modal", title)
@@ -773,18 +781,12 @@ impl Nauterm {
                                 .flex()
                                 .flex_col()
                                 .gap(px(16.))
-                                .child(crate::localization::view(if previous.snapshot.active_forwards.is_empty() {
-                                    "Restore your previous workspace? Terminals will reconnect."
-                                } else if previous.snapshot.has_sessions() {
-                                    "Restore your previous workspace? Terminals will reconnect and active port forwards will restart."
-                                } else {
-                                    "Restore your previous workspace? Active port forwards will restart."
-                                }))
+                                .child(crate::localization::view(description))
                                 .when(!unexpected, |view| {
                                     view.child(
                                         Checkbox::new(
                                             "recovery-always",
-                                            "Don't ask again",
+                                            "workspace.restore.dontAskAgain",
                                             self.recovery_always,
                                         )
                                         .on_change(
@@ -806,7 +808,7 @@ impl Nauterm {
                         .action(
                             Button::new("recovery-fresh")
                                 .ghost()
-                                .label("Start Fresh")
+                                .label("workspace.restore.startFresh")
                                 .on_click(|_, window, cx| {
                                     crate::components::Modal::dismiss(window, cx)
                                 }),
@@ -814,7 +816,7 @@ impl Nauterm {
                         .action(
                             Button::new("recovery-restore")
                                 .primary()
-                                .label("Restore Workspace")
+                                .label("workspace.restore.restoreWorkspace")
                                 .on_click(cx.listener(|this, _, window, cx| {
                                     this.resolve_recovery(true, window, cx)
                                 })),

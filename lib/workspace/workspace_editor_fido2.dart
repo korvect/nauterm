@@ -360,13 +360,18 @@ class _Fido2KeyEditorContentState extends State<_Fido2KeyEditorContent>
             child: _WorkspaceDrawerHeaderTitle(title: 'Generate FIDO2 key'),
           ),
           if (_WorkspaceEditorDraftScope.maybeOf(context) case final scope?)
-            _WorkspaceDrawerHeaderButton(
-              icon: Icons.undo_rounded,
-              tooltip: tr(
-                'workspace.action.discardChanges',
-                fallback: 'Discard changes',
+            ListenableBuilder(
+              listenable: scope.draft,
+              builder: (context, _) => _WorkspaceDrawerHeaderButton(
+                icon: Icons.undo_rounded,
+                tooltip: tr(
+                  'workspace.action.discardChanges',
+                  fallback: 'Discard changes',
+                ),
+                onPressed: _working || !scope.draft.hasChanges
+                    ? null
+                    : scope.onDiscard,
               ),
-              onPressed: _working ? null : scope.onDiscard,
             ),
           _WorkspaceDrawerHeaderButton(
             icon: Icons.keyboard_tab_rounded,

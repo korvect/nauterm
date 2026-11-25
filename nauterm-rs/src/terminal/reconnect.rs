@@ -342,12 +342,17 @@ impl Terminal {
                 .ceil()
                 .max(1.) as u64
         });
+        use crate::localization::{format_for, language, message, text};
         let detail = if let Some(seconds) = remaining {
-            format!("Reconnecting in {seconds}s...")
+            format_for(
+                language(cx),
+                "terminal.reconnect.countdown",
+                &[("seconds", &seconds.to_string())],
+            )
         } else if self.phase() == Phase::Connecting || self.reconnect.model.pending {
-            "Reconnecting...".into()
+            text(cx, "terminal.reconnect.pending")
         } else {
-            self.connection.message.clone()
+            message(cx, &self.connection.message)
         };
         Some(
             div()
@@ -395,19 +400,24 @@ impl Terminal {
                                         .flex_1()
                                         .min_w_0()
                                         .child(div().font_weight(FontWeights::SEMIBOLD).child(
-                                            if matches!(self.phase(), Phase::Failed | Phase::Exited)
-                                            {
-                                                "Connection lost"
-                                            } else {
-                                                "Reconnecting"
-                                            },
+                                            text(
+                                                cx,
+                                                if matches!(
+                                                    self.phase(),
+                                                    Phase::Failed | Phase::Exited
+                                                ) {
+                                                    "terminal.reconnect.disconnected"
+                                                } else {
+                                                    "terminal.reconnect.title"
+                                                },
+                                            ),
                                         ))
                                         .child(
                                             div()
                                                 .text_size(px(11.))
                                                 .text_color(p.muted)
                                                 .text_ellipsis()
-                                                .child(crate::localization::message(cx, &detail)),
+                                                .child(detail),
                                         ),
                                 )
                                 .child(

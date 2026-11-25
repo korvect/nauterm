@@ -1477,6 +1477,7 @@ class _HostEditorContentState extends State<_HostEditorContent>
   late final TextEditingController _shellController;
   late final TextEditingController _workDirController;
   late final List<String> _shellOptions;
+  late final String? _systemDefaultShell = systemDefaultShellPath();
   late List<HostEnvironmentVariable> _environmentVariables;
   late NautermHostType _type;
   late bool _sshEnabled;
@@ -2265,6 +2266,11 @@ class _HostEditorContentState extends State<_HostEditorContent>
   Widget build(BuildContext context) {
     final initial = widget.request.initial;
     final isLocal = _type == NautermHostType.local;
+    final defaultShell = isLocal ? _systemDefaultShell : null;
+    final defaultShellLabel = tr(
+      'workspace.label.systemDefaultShell',
+      fallback: 'System default shell',
+    );
     final isSerial = _type == NautermHostType.serial;
 
     final editor = _EditorShell(
@@ -2306,10 +2312,9 @@ class _HostEditorContentState extends State<_HostEditorContent>
                           DropdownMenuItem<String?>(
                             value: null,
                             child: Text(
-                              tr(
-                                'workspace.label.systemDefaultShell',
-                                fallback: 'System default shell',
-                              ),
+                              defaultShell == null
+                                  ? defaultShellLabel
+                                  : '$defaultShellLabel — ${shellDisplayNameWithVersion(defaultShell)} ($defaultShell)',
                             ),
                           ),
                           for (final shell in _shellOptions)
@@ -2420,7 +2425,7 @@ class _HostEditorContentState extends State<_HostEditorContent>
               editable: true,
               filterable: true,
               clearable: true,
-              createLabel: 'Create group',
+              createLabel: 'workspace.action.createGroup',
               onCreate: _createGroup,
               items: [
                 for (final group in widget.groups)
@@ -3133,15 +3138,21 @@ class _ProtocolFormSection extends StatelessWidget {
           children: [
             LayoutBuilder(
               builder: (context, constraints) {
+                final portLabel = context
+                    .tr(
+                      'workspace.host.protocol.portLabel',
+                      fallback: '{protocol} on {port} port',
+                      args: {'protocol': protocol},
+                    )
+                    .split('{port}');
+                final labelStyle = TextStyle(
+                  color: _text,
+                  fontSize: NautermFontSizes.labelLarge,
+                  fontWeight: NautermFontWeights.semibold,
+                );
                 final protocolControls = <Widget>[
-                  Text(
-                    '$protocol on',
-                    style: TextStyle(
-                      color: _text,
-                      fontSize: NautermFontSizes.labelLarge,
-                      fontWeight: NautermFontWeights.semibold,
-                    ),
-                  ),
+                  if (portLabel.first.trim().isNotEmpty)
+                    Text(portLabel.first.trim(), style: labelStyle),
                   SizedBox(
                     key: ValueKey('protocol-port:$protocol'),
                     width: 64,
@@ -3155,14 +3166,8 @@ class _ProtocolFormSection extends StatelessWidget {
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     ),
                   ),
-                  Text(
-                    'port',
-                    style: TextStyle(
-                      color: _text,
-                      fontSize: NautermFontSizes.labelLarge,
-                      fontWeight: NautermFontWeights.semibold,
-                    ),
-                  ),
+                  if (portLabel.length > 1 && portLabel.last.trim().isNotEmpty)
+                    Text(portLabel.last.trim(), style: labelStyle),
                 ];
                 final actionsButton = _WorkspaceDropdown<_ProtocolMenuAction>(
                   width: 190,
@@ -3170,7 +3175,7 @@ class _ProtocolFormSection extends StatelessWidget {
                     if (onCreateGroup != null) ...[
                       const NautermContextMenuAction<_ProtocolMenuAction>(
                         value: _ProtocolMenuAction.createGroup,
-                        label: 'Create group',
+                        label: 'workspace.action.createGroup',
                         icon: Icons.dashboard_customize_rounded,
                       ),
                       const NautermContextMenuDivider<_ProtocolMenuAction>(),

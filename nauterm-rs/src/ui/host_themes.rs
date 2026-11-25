@@ -57,20 +57,23 @@ impl Editor {
 }
 impl Nauterm {
     pub(super) fn host_theme_section(&self, editor: &Editor, cx: &mut Context<Self>) -> AnyElement {
-        self.protocol_theme_section(editor, Target::Ssh, cx)
+        self.protocol_theme_section(editor, Target::Ssh, true, cx)
     }
     pub(super) fn protocol_theme_section(
         &self,
         editor: &Editor,
         target: Target,
+        expanded: bool,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         div()
             .flex()
             .flex_col()
             .gap(px(8.))
-            .child(self.protocol_theme_field(editor, target, false, cx))
-            .child(self.protocol_theme_field(editor, target, true, cx))
+            .child(self.protocol_theme_field(editor, target, false, expanded, cx))
+            .when(expanded, |view| {
+                view.child(self.protocol_theme_field(editor, target, true, true, cx))
+            })
             .into_any_element()
     }
 
@@ -79,6 +82,7 @@ impl Nauterm {
         editor: &Editor,
         target: Target,
         dark: bool,
+        show_label: bool,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let draft = editor.theme_for(target).expect("host theme draft");
@@ -119,10 +123,16 @@ impl Nauterm {
             .flex()
             .flex_col()
             .gap(px(4.))
-            .child(crate::localization::text(
-                cx,
-                if dark { "Dark theme" } else { "Light theme" },
-            ))
+            .when(show_label, |view| {
+                view.child(crate::localization::text(
+                    cx,
+                    if dark {
+                        "workspace.host.darkTheme"
+                    } else {
+                        "workspace.host.lightTheme"
+                    },
+                ))
+            })
             .child(preview)
             .into_any_element()
     }
@@ -198,7 +208,7 @@ impl Nauterm {
                     .child(
                         div()
                             .font_weight(FontWeights::MEDIUM)
-                            .child(crate::localization::text(cx, "rs.ui.copy.selectTheme")),
+                            .child(crate::localization::text(cx, "common.label.themes")),
                     ),
             )
             .child(

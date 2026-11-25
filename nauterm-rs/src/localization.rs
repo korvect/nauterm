@@ -393,18 +393,10 @@ mod tests {
             "无法恢复 /tmp/{2}：permission denied"
         );
         assert_eq!(
-            text_for(Language::Chinese, "settings.terminal.fontWeight.light"),
-            "细体"
-        );
-        assert_eq!(
             text_for(Language::Chinese, "settings.general.applicationTheme.light"),
             "浅色"
         );
         assert_eq!(text_for(Language::Chinese, "Black"), "黑色");
-        assert_eq!(
-            text_for(Language::Chinese, "settings.terminal.fontWeight.black"),
-            "极粗"
-        );
         assert_eq!(text_for(Language::Chinese, "18 days"), "18 天");
     }
     #[test]

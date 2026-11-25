@@ -188,6 +188,12 @@ impl<const SETTINGS: bool> Disableable for Toggle<SETTINGS> {
 }
 impl<const SETTINGS: bool> RenderOnce for Toggle<SETTINGS> {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        const TRACK_WIDTH: f32 = 42.;
+        const TRACK_HEIGHT: f32 = 25.5;
+        const THUMB_DIAMETER: f32 = 23.;
+        const THUMB_EXTENSION: f32 = 5.75;
+        const INSET: f32 = (TRACK_HEIGHT - THUMB_DIAMETER) / 2.;
+
         let label = crate::localization::label(cx, &self.label);
         let amount = animated_check(self.id.clone(), self.checked, window, cx);
         let dark = cx.theme().is_dark();
@@ -199,14 +205,20 @@ impl<const SETTINGS: bool> RenderOnce for Toggle<SETTINGS> {
         super::button::Button::<SETTINGS>::new(self.id)
             .ghost()
             .disabled(self.disabled)
-            .w(px(42.))
-            .h(px(25.))
+            .w(px(TRACK_WIDTH))
+            .h(px(TRACK_HEIGHT))
             .p_0()
             .rounded_full()
             .role(Role::Switch)
             .checked(self.checked)
             .accessibility_label(label)
-            .child(
+            .ink_ripple(false)
+            .press_content(move |press| {
+                // Ease the shape change in both directions so a quick release
+                // can reverse mid-animation without a visible step.
+                let press = press * press * (3. - 2. * press);
+                let width = THUMB_DIAMETER + THUMB_EXTENSION * press;
+                let travel = TRACK_WIDTH - 2. * INSET - width;
                 div()
                     .relative()
                     .w_full()
@@ -216,17 +228,47 @@ impl<const SETTINGS: bool> RenderOnce for Toggle<SETTINGS> {
                     .child(
                         div()
                             .absolute()
-                            .left(px(2. + 17. * amount))
-                            .top(px(2.))
-                            .size(px(21.))
+                            .inset_0()
                             .rounded_full()
+                            .border_1()
+                            .border_color(motion::mix(
+                                rgb(0x000000).opacity(0.06),
+                                rgba(0),
+                                amount,
+                            )),
+                    )
+                    .child(
+                        div()
+                            .absolute()
+                            .left(px(INSET + travel * amount))
+                            .right(px(INSET + travel * (1. - amount)))
+                            .top(px(INSET))
+                            .h(px(THUMB_DIAMETER))
+                            .rounded_full()
+                            .shadow(vec![
+                                gpui_kit::base::box_shadow(
+                                    px(0.),
+                                    px(1.),
+                                    px(2.),
+                                    px(0.),
+                                    rgb(0x000000).opacity(0.16).into(),
+                                ),
+                                gpui_kit::base::box_shadow(
+                                    px(0.),
+                                    px(2.),
+                                    px(5.),
+                                    px(0.),
+                                    rgb(0x000000).opacity(0.14).into(),
+                                ),
+                            ])
                             .bg(if dark {
                                 motion::mix(rgb(0x9aa8b3), rgb(0xffffff), amount)
                             } else {
                                 rgb(0xffffff)
                             }),
-                    ),
-            )
+                    )
+                    .into_any_element()
+            })
             .on_click(move |_, w, cx| {
                 if let Some(f) = &self.on_change {
                     f(&!self.checked, w, cx);

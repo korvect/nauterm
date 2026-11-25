@@ -1391,7 +1391,7 @@ impl Keychain {
                             }),
                     )
                     .item(
-                        MenuItem::localized("rs.keychain.action.exportToFile")
+                        MenuItem::localized("workspace.label.exportToFile")
                             .icon(IconName::Download)
                             .disabled(busy)
                             .on_click(move |_, window, cx| {
@@ -1400,7 +1400,7 @@ impl Keychain {
                             }),
                     )
                     .item(
-                        MenuItem::localized("rs.keychain.action.copyPublicKey")
+                        MenuItem::localized("workspace.keys.action.copyPublicKey")
                             .icon(IconName::Copy)
                             .disabled(busy || public_key.is_none())
                             .on_click(move |_, _, cx| {
@@ -1443,10 +1443,10 @@ impl Keychain {
                 )
                 .separator()
                 .item(
-                    MenuItem::localized(if item.key {
-                        "Delete Key"
-                    } else {
-                        "Delete Identity"
+                    MenuItem::localized(match (single, item.key) {
+                        (true, true) => "workspace.label.deleteKey",
+                        (true, false) => "workspace.label.deleteIdentity",
+                        (false, _) => "common.action.delete",
                     })
                     .destructive(true)
                     .icon(IconName::Trash)
@@ -1763,7 +1763,7 @@ impl Keychain {
         crate::components::DrawerFrame::new("credential-editor", title, self.dark)
             .unsaved(editor.has_draft(cx), cx)
             .scroll_handle(&editor.scroll)
-            .actions(self.editor_actions(editor, cx))
+            .action(self.editor_actions(editor, cx))
             .when(self.related, |frame| {
                 frame.leading(
                     Button::new("back-related-credential")
@@ -1901,14 +1901,14 @@ impl Render for Keychain {
                         })
                     }))
                     .child({ let owner = cx.weak_entity(); crate::components::management::toolbar_search("keychain-search", &self.search, self.search_open, move |open, window, cx| { let _ = owner.update(cx, |this, cx| { this.search_open = open; if open { this.search.update(cx, |input, cx| input.focus(window, cx)); } else { this.focus.focus(window, cx); } cx.notify(); }); }, cx) })
-                    .child(Button::new("keychain-view").toolbar().ghost().icon(if self.list { IconName::LayoutGrid } else { IconName::List }).tooltip("Switch list/grid view").on_click(cx.listener(|this, _, _, cx| { this.list = !this.list; cx.notify(); }))))
+                    .child(crate::components::management::view_mode_button("keychain-view", self.list).on_click(cx.listener(|this, _, _, cx| { this.list = !this.list; cx.notify(); }))))
                 .child(div().id("keychain-scroll").flex_1().min_h_0().overflow_y_scroll().scrollbars().map(crate::components::management::collection_padding).flex().flex_col().gap(px(crate::components::management::COLLECTION_SECTION_GAP))
                     .on_click(cx.listener(|this, _: &ClickEvent, window, cx| this.close_editor(window, cx)))
                     .when(self.loading, |view| view.child(Spinner::new()))
                     .when(show_keys, |view| view.child(crate::components::management::collection_section("Keys", cx).child(keys)))
                     .when(show_identities, |view| view.child(crate::components::management::collection_section("Identities", cx).child(identities)))
                     .when(!self.loading && !show_keys && !show_identities && self.error.is_none(), |view| view.child({
-                        let empty = crate::components::EmptyState::new(IconName::KeyRound, if query.is_empty() { "No keychain items yet" } else { "No keychain items found." }, self.dark).description("Add keys and identities once, then reuse them across your saved hosts.");
+                        let empty = crate::components::EmptyState::new(IconName::KeyRound, if query.is_empty() { "No keychain items yet" } else { "workspace.label.noKeychainItemsFound" }, self.dark).description("Add keys and identities once, then reuse them across your saved hosts.");
                         if query.is_empty() { empty.action(Button::new("empty-add-key").primary().icon(crate::assets::icon(IconName::Plus)).label("Add key").on_click(cx.listener(|this, _, window, cx| this.create(Kind::Key, window, cx)))) } else { empty }
                     }))))
             .children(drawer)
@@ -1922,17 +1922,66 @@ impl Keychain {
         if !self.delete_pending {
             return None;
         }
-        let title = format!("Delete {} selected item(s)?", self.selection.len());
-        Some(crate::components::Dialog::new("credential-delete-modal", title.clone())
-            .return_focus(&self.focus).dismissible(!self.saving)
-            .on_dismiss(cx.listener(|this, _, _, cx| { this.delete_pending = false; cx.notify(); }))
-            .content(crate::components::DialogFrame::new("credential-delete-dialog", title).width(380.)
-                .colors(crate::components::DialogColors::workspace(self.dark))
-                .content("Saved credential references will be cleared. Active sessions are not disconnected.")
-                    .action(Button::new("cancel-credential-delete").ghost().label("Cancel").disabled(self.saving)
-                        .on_click(|_, window, cx| crate::components::Modal::dismiss(window, cx)))
-                    .action(Button::new("confirm-credential-delete").danger().label("Delete").disabled(self.saving)
-                        .on_click(cx.listener(|this, _, _, cx| this.delete(cx)))))
-            .into_any_element())
+        let first = self.selection.first()?;
+        let count = self
+            .selection
+            .iter()
+            .filter(|item| item.key == first.key)
+            .count();
+        use crate::localization::{format_for, language, text};
+        let title = text(
+            cx,
+            match (first.key, count == 1) {
+                (true, true) => "workspace.dialog.deleteKey",
+                (false, true) => "workspace.dialog.deleteIdentity",
+                (true, false) => "workspace.dialog.deleteKeys",
+                (false, false) => "workspace.dialog.deleteIdentities",
+            },
+        );
+        let message = if count == 1 {
+            text(cx, "workspace.dialog.deleteCredential.description")
+        } else {
+            format_for(
+                language(cx),
+                if first.key {
+                    "workspace.dialog.deleteKeys.description"
+                } else {
+                    "workspace.dialog.deleteIdentities.description"
+                },
+                &[("count", &count.to_string())],
+            )
+        };
+        Some(
+            crate::components::Dialog::new("credential-delete-modal", title.clone())
+                .return_focus(&self.focus)
+                .dismissible(!self.saving)
+                .on_dismiss(cx.listener(|this, _, _, cx| {
+                    this.delete_pending = false;
+                    cx.notify();
+                }))
+                .content(
+                    crate::components::DialogFrame::new("credential-delete-dialog", title)
+                        .width(380.)
+                        .colors(crate::components::DialogColors::workspace(self.dark))
+                        .content(message)
+                        .action(
+                            Button::new("cancel-credential-delete")
+                                .ghost()
+                                .label("Cancel")
+                                .disabled(self.saving)
+                                .on_click(|_, window, cx| {
+                                    crate::components::Modal::dismiss(window, cx)
+                                }),
+                        )
+                        .action(
+                            Button::new("confirm-credential-delete")
+                                .danger()
+                                .label("Delete")
+                                .disabled(self.saving)
+                                .on_click(cx.listener(|this, _, _, cx| this.delete(cx))),
+                        ),
+                )
+                .into_any_element(),
+        )
     }
 }

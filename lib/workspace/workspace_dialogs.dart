@@ -128,11 +128,13 @@ class _WorkspaceConfirmDialog extends StatelessWidget {
     required this.title,
     required this.message,
     required this.confirmLabel,
+    this.messageArgs = const {},
   });
 
   final Widget title;
   final String message;
   final String confirmLabel;
+  final Map<String, Object?> messageArgs;
 
   @override
   Widget build(BuildContext context) {
@@ -141,7 +143,7 @@ class _WorkspaceConfirmDialog extends StatelessWidget {
       width: 380,
       title: title,
       content: Text(
-        tr(message),
+        context.tr(message, args: messageArgs),
         style: TextStyle(
           color: terminalColors?.foreground ?? _text,
           fontSize: NautermFontSizes.labelLarge,
@@ -178,9 +180,15 @@ class _WorkspaceRecoveryDecision {
 }
 
 class _WorkspaceRecoveryDialog extends StatefulWidget {
-  const _WorkspaceRecoveryDialog({required this.unexpectedExit});
+  const _WorkspaceRecoveryDialog({
+    required this.unexpectedExit,
+    required this.hasSessions,
+    required this.hasForwards,
+  });
 
   final bool unexpectedExit;
+  final bool hasSessions;
+  final bool hasForwards;
 
   @override
   State<_WorkspaceRecoveryDialog> createState() =>
@@ -210,10 +218,12 @@ class _WorkspaceRecoveryDialogState extends State<_WorkspaceRecoveryDialog> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            context.tr(
-              'workspace.restore.unexpectedExit.description',
-              fallback: 'Restore your previous workspace? Terminals will reconnect and active port forwards will restart.',
-            ),
+            context.tr(switch ((widget.hasSessions, widget.hasForwards)) {
+              (true, true) =>
+                'workspace.restore.sessionsAndForwards.description',
+              (false, true) => 'workspace.restore.forwards.description',
+              _ => 'workspace.restore.sessions.description',
+            }),
             style: TextStyle(
               color: _text,
               fontSize: NautermFontSizes.labelLarge,

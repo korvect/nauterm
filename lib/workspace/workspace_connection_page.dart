@@ -590,10 +590,10 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
           ? 'Connection'
           : '${widget.controller.isMoshSession ? 'Mosh' : 'SSH'} ${profile.host}:${profile.port}',
       actionLabel: mode == _ConnectionPageMode.failed
-          ? 'Copy logs'
+          ? context.tr('connection.action.copyLogs', fallback: 'Copy logs')
           : _showLogs
-          ? 'Hide logs'
-          : 'Show logs',
+          ? context.tr('connection.action.hideLogs', fallback: 'Hide logs')
+          : context.tr('connection.action.showLogs', fallback: 'Show logs'),
       onAction: mode == _ConnectionPageMode.failed
           ? () => _copyDiagnostics(diagnostics)
           : () => setState(() => _showLogs = !_showLogs),
@@ -830,7 +830,10 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Unlock FIDO2 security key',
+            context.tr(
+              'connection.auth.securityKeyPin.title',
+              fallback: 'Unlock FIDO2 security key',
+            ),
             style: TextStyle(
               color: _text,
               fontSize: 18,
@@ -839,7 +842,10 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
           ),
           const SizedBox(height: 10),
           Text(
-            'Enter the device PIN to continue SSH authentication.',
+            context.tr(
+              'connection.auth.securityKeyPin.description',
+              fallback: 'Enter the device PIN to continue SSH authentication.',
+            ),
             style: TextStyle(color: _mutedText),
           ),
           const SizedBox(height: 20),
@@ -930,8 +936,14 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
                           ? 24
                           : _WorkspaceControlSize.medium.inputHeight,
                       tooltip: _obscurePassword
-                          ? 'Show password'
-                          : 'Hide password',
+                          ? context.tr(
+                              'common.action.showPassword',
+                              fallback: 'Show password',
+                            )
+                          : context.tr(
+                              'common.action.hidePassword',
+                              fallback: 'Hide password',
+                            ),
                       onPressed: () {
                         setState(() => _obscurePassword = !_obscurePassword);
                       },

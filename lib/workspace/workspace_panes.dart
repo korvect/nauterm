@@ -376,6 +376,7 @@ class _KnownHostsPaneState extends State<_KnownHostsPane> {
       ordinal: (host) => host.lineIndex,
     );
 
+    final isSearching = _searchQuery.trim().isNotEmpty;
     return ColoredBox(
       color: _surface,
       child: Column(
@@ -392,29 +393,46 @@ class _KnownHostsPaneState extends State<_KnownHostsPane> {
             onViewModeChanged: (value) => setState(() => _viewMode = value),
           ),
           Expanded(
-            child: _WorkspaceItemScrollView(
-              padding: _workspacePanePadding,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const _SectionTitle('Known Hosts'),
-                  SizedBox(height: 12),
-                  if (knownHosts.isEmpty)
-                    _WorkspaceInlineMessage(
-                      _searchQuery.trim().isEmpty
-                          ? 'No known hosts yet.'
-                          : 'No known hosts found.',
-                    )
-                  else
-                    _WorkspaceItemCollection(
-                      items: knownHosts,
-                      viewMode: _viewMode,
-                      onContextAction: widget.onContextAction,
-                      onContextActions: widget.onContextActions,
+            child: knownHosts.isEmpty
+                ? LayoutBuilder(
+                    builder: (context, constraints) => _WorkspaceItemScrollView(
+                      padding: EdgeInsets.zero,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          minHeight: constraints.maxHeight,
+                        ),
+                        child: _WorkspaceEmptyState(
+                          icon: LucideIcons.fingerprint,
+                          title: isSearching
+                              ? 'workspace.label.noKnownHostsFound'
+                              : 'workspace.label.noKnownHostsYet',
+                          description: isSearching
+                              ? null
+                              : 'workspace.description.knownHosts',
+                          actionLabel: isSearching
+                              ? null
+                              : 'workspace.action.importKnownHosts',
+                          onAction: isSearching ? null : widget.onImport,
+                        ),
+                      ),
                     ),
-                ],
-              ),
-            ),
+                  )
+                : _WorkspaceItemScrollView(
+                    padding: _workspacePanePadding,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const _SectionTitle('Known Hosts'),
+                        SizedBox(height: 12),
+                        _WorkspaceItemCollection(
+                          items: knownHosts,
+                          viewMode: _viewMode,
+                          onContextAction: widget.onContextAction,
+                          onContextActions: widget.onContextActions,
+                        ),
+                      ],
+                    ),
+                  ),
           ),
         ],
       ),
@@ -446,7 +464,10 @@ class _KnownHostsToolbar extends StatelessWidget {
     return _WorkspaceToolbarFrame(
       children: [
         _WorkspaceButton(
-          label: 'Import',
+          label: context.tr(
+            'workspace.action.importKnownHosts',
+            fallback: 'Import known hosts',
+          ),
           size: _WorkspaceControlSize.tiny,
           variant: _WorkspaceButtonVariant.filled,
           height: _workspaceToolbarControlExtent,
@@ -543,9 +564,9 @@ class _SnippetsPaneState extends State<_SnippetsPane> {
     final sharedGridItemCount = showingPackage
         ? snippets.length
         : math.max(packages.length, snippets.length);
-    final hasStoredItems =
-        widget.packages.isNotEmpty || widget.snippets.isNotEmpty;
-    final showEmptyState = !hasStoredItems && _searchQuery.trim().isEmpty;
+    final searching = _searchQuery.trim().isNotEmpty;
+    final showEmptyState =
+        packages.isEmpty && snippets.isEmpty && (!showingPackage || searching);
 
     return ColoredBox(
       color: _surface,
@@ -568,10 +589,22 @@ class _SnippetsPaneState extends State<_SnippetsPane> {
             child: showEmptyState
                 ? _WorkspaceEmptyState(
                     icon: LucideIcons.code,
-                    title: 'No snippets yet',
-                    description: 'Save frequently used commands as snippets so they are ready in every terminal.',
-                    actionLabel: 'Add snippet',
-                    onAction: () => widget.onCreateSnippet(currentPackageId),
+                    title: searching
+                        ? 'workspace.label.noSnippetsFound'
+                        : 'workspace.label.noSnippetsYet',
+                    description: searching
+                        ? 'workspace.description.tryAnotherSearch'
+                        : 'workspace.empty.snippets.description',
+                    actionLabel: searching ? null : 'Add snippet',
+                    onAction: searching
+                        ? null
+                        : () => widget.onCreateSnippet(currentPackageId),
+                    leading: selectedPackage == null
+                        ? null
+                        : _SnippetPackageBreadcrumb(
+                            package: selectedPackage,
+                            onRootSelected: _openRoot,
+                          ),
                   )
                 : _WorkspaceItemScrollView(
                     padding: _workspacePanePadding,
@@ -616,7 +649,9 @@ class _SnippetsPaneState extends State<_SnippetsPane> {
                           ),
                         ],
                         if (packages.isEmpty && snippets.isEmpty)
-                          const _WorkspaceInlineMessage('No snippets found.'),
+                          const _WorkspaceInlineMessage(
+                            'workspace.label.noSnippetsFound',
+                          ),
                       ],
                     ),
                   ),
@@ -726,8 +761,7 @@ class _PortForwardingPaneState extends State<_PortForwardingPane> {
       _sortOrder,
       ordinal: (forward) => forward.id,
     );
-    final showEmptyState =
-        widget.forwards.isEmpty && _searchQuery.trim().isEmpty;
+    final searching = _searchQuery.trim().isNotEmpty;
 
     return ColoredBox(
       color: _surface,
@@ -743,42 +777,42 @@ class _PortForwardingPaneState extends State<_PortForwardingPane> {
                 setState(() => _searchQuery = value),
           ),
           Expanded(
-            child: showEmptyState
+            child: forwards.isEmpty
                 ? _WorkspaceEmptyState(
                     icon: LucideIcons.arrowRightLeft,
-                    title: 'No forwarding rules yet',
-                    description: 'Add a forwarding rule to route local, remote, or dynamic traffic through SSH.',
-                    actionLabel: 'Add forwarding',
-                    onAction: () => widget.onCreateForward('local'),
+                    title: searching
+                        ? 'workspace.label.noForwardingRulesFound'
+                        : 'workspace.label.noForwardingRulesYet',
+                    description: searching
+                        ? 'workspace.description.tryAnotherSearch'
+                        : 'workspace.empty.forwarding.description',
+                    actionLabel: searching ? null : 'Add forwarding',
+                    onAction: searching
+                        ? null
+                        : () => widget.onCreateForward('local'),
                   )
                 : _WorkspaceItemScrollView(
                     padding: _workspacePanePadding,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        if (forwards.isEmpty)
-                          const _WorkspaceInlineMessage(
-                            'No forwarding rules found.',
-                          )
-                        else ...[
-                          const _SectionTitle('Port Forwarding'),
-                          SizedBox(height: 14),
-                          Column(
-                            children: [
-                              for (final forward in forwards) ...[
-                                _PortForwardCard(
-                                  forward: forward,
-                                  onEdit: () => widget.onEditForward(forward),
-                                  onToggle: () => widget.onToggleForward(
-                                    forward,
-                                    !forward.enabled,
-                                  ),
+                        const _SectionTitle('Port Forwarding'),
+                        SizedBox(height: 14),
+                        Column(
+                          children: [
+                            for (final forward in forwards) ...[
+                              _PortForwardCard(
+                                forward: forward,
+                                onEdit: () => widget.onEditForward(forward),
+                                onToggle: () => widget.onToggleForward(
+                                  forward,
+                                  !forward.enabled,
                                 ),
-                                SizedBox(height: 12),
-                              ],
+                              ),
+                              SizedBox(height: 12),
                             ],
-                          ),
-                        ],
+                          ],
+                        ),
                       ],
                     ),
                   ),
@@ -830,8 +864,7 @@ class _ProxiesPaneState extends State<_ProxiesPane> {
       _sortOrder,
       ordinal: (proxy) => proxy.id,
     );
-    final showEmptyState =
-        widget.proxies.isEmpty && _searchQuery.trim().isEmpty;
+    final searching = _searchQuery.trim().isNotEmpty;
 
     return ColoredBox(
       color: _surface,
@@ -849,13 +882,15 @@ class _ProxiesPaneState extends State<_ProxiesPane> {
             onViewModeChanged: (value) => setState(() => _viewMode = value),
           ),
           Expanded(
-            child: showEmptyState
+            child: proxies.isEmpty
                 ? _WorkspaceEmptyState(
                     icon: LucideIcons.network,
-                    title: 'No proxies yet',
-                    description: 'Add a proxy once and reuse it across hosts that share the same route.',
-                    actionLabel: 'Add proxy',
-                    onAction: widget.onCreateProxy,
+                    title: searching
+                        ? 'workspace.label.noProxiesFound'
+                        : 'workspace.label.noProxiesYet',
+                    description: 'workspace.empty.proxies.description',
+                    actionLabel: searching ? null : 'Add proxy',
+                    onAction: searching ? null : widget.onCreateProxy,
                   )
                 : _WorkspaceItemScrollView(
                     padding: _workspacePanePadding,
@@ -864,16 +899,13 @@ class _ProxiesPaneState extends State<_ProxiesPane> {
                       children: [
                         const _SectionTitle('Proxies'),
                         SizedBox(height: 12),
-                        if (proxies.isEmpty)
-                          const _WorkspaceInlineMessage('No proxies found.')
-                        else
-                          _WorkspaceItemCollection<_ProxyItem>(
-                            items: proxies,
-                            viewMode: _viewMode,
-                            onItemDoubleTap: widget.onEditProxy,
-                            onContextAction: widget.onContextAction,
-                            onContextActions: widget.onContextActions,
-                          ),
+                        _WorkspaceItemCollection<_ProxyItem>(
+                          items: proxies,
+                          viewMode: _viewMode,
+                          onItemDoubleTap: widget.onEditProxy,
+                          onContextAction: widget.onContextAction,
+                          onContextActions: widget.onContextActions,
+                        ),
                       ],
                     ),
                   ),
@@ -1666,6 +1698,9 @@ class _LogsTableRow extends StatelessWidget {
   final VoidCallback onDelete;
   final ValueChanged<_TerminalLogExportFormat> onExport;
   final NautermDataStore? dataStore;
+                        foregroundColor: _text,
+                        title: account.title,
+                        subtitle: account.subtitle,
 
   @override
   Widget build(BuildContext context) {
@@ -1698,9 +1733,6 @@ class _LogsTableRow extends StatelessWidget {
                           size: 16,
                           color: _mutedText,
                         ),
-                        foregroundColor: _text,
-                        title: account.title,
-                        subtitle: account.subtitle,
                       ),
                     ),
                     Expanded(
@@ -1732,6 +1764,8 @@ class _LogsTableRow extends StatelessWidget {
                   tooltip: tr('common.action.replay', fallback: 'Replay'),
                   icon: LucideIcons.play,
                   onPressed: onReplay,
+                  icon: LucideIcons.trash2,
+                  onPressed: onDelete,
                 ),
                 SizedBox(width: 2),
                 _WorkspaceDropdown<_TerminalLogExportFormat>(
@@ -1764,8 +1798,6 @@ class _LogsTableRow extends StatelessWidget {
                     'workspace.label.deleteLogAndCapture',
                     fallback: 'Delete log and capture',
                   ),
-                  icon: LucideIcons.trash2,
-                  onPressed: onDelete,
                 ),
               ],
             ),

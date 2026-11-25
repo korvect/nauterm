@@ -912,11 +912,11 @@ impl Connection {
                     div()
                         .text_size(px(18.))
                         .font_weight(FontWeights::BOLD)
-                        .child(crate::localization::text(cx, "rs.ui.copy.unlockFidoKey")),
+                        .child(crate::localization::text(cx, "connection.auth.securityKeyPin.title")),
                 )
                 .child(div().text_color(p.muted).child(crate::localization::text(
                     cx,
-                    "rs.ui.copy.enterDevicePinSsh",
+                    "connection.auth.securityKeyPin.description",
                 )))
                 .child(auth_input(&self.fido2_pin, "PIN", true).disabled(self.auth.busy))
                 .when_some(self.error.clone(), |view, error| {

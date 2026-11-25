@@ -665,7 +665,7 @@ class _SftpToolbarFilterState extends State<_SftpToolbarFilter> {
         ),
         decoration: InputDecoration(
           isDense: true,
-          hintText: tr('common.label.filter', fallback: 'Filter'),
+          hintText: tr('workspace.label.filterFiles', fallback: 'Filter files'),
           hintStyle: TextStyle(
             color: _mutedText,
             fontSize: NautermFontSizes.labelMedium,
@@ -795,7 +795,7 @@ class _SftpPathBar extends StatelessWidget {
                     'sftp.action.goToSshDirectory',
                     fallback: 'Go to SSH current directory',
                   ),
-                  icon: LucideIcons.folderInput,
+                  icon: LucideIcons.locateFixed,
                   enabled: onSshDirectory != null,
                   onTap: () => onSshDirectory?.call(),
                 ),

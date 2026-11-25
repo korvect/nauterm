@@ -42,7 +42,10 @@ impl Nauterm {
             ExitAction::Settings => return,
         };
         self.notice = None;
-        if self.has_open_sessions(cx) {
+        if self.has_open_sessions(cx)
+            || (matches!(target, CloseTarget::Quit | CloseTarget::Window)
+                && self.terminals.iter().next().is_some())
+        {
             self.close_pending = Some(target);
             window.activate_window();
             self.focus.focus(window, cx);

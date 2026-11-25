@@ -60,7 +60,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('settings-nav-sync')));
       await tester.pumpAndSettle();
-      expect(find.text('Sync unlocked'), findsOneWidget);
+      expect(find.text('Attention needed'), findsOneWidget);
       expect(
         find.byKey(const ValueKey('settings-sync-master-key')),
         findsNothing,
@@ -68,7 +68,7 @@ void main() {
 
       await _tapSync(tester);
       expect(suppliedKeys, [_masterKey, _masterKey]);
-      expect(find.text('Sync ready'), findsOneWidget);
+      expect(find.text('Up to date'), findsOneWidget);
 
       await _tapSync(tester);
       expect(suppliedKeys, [_masterKey, _masterKey, null]);
@@ -106,35 +106,34 @@ void main() {
     },
   );
   for (final backend in [
-    (id: 'github_repository', card: 'settings-sync-provider-githubRepository'),
-    (id: 'github_gist', card: 'settings-sync-provider-githubGist'),
-    (id: 'cloud:test-provider', card: 'settings-cloud-provider-test-provider'),
+    'github_repository',
+    'github_gist',
+    'cloud:test-provider',
   ]) {
-    testWidgets(
-      '${backend.id} keeps the key after failure and settings refresh',
-      (tester) async {
-        _cacheSettings(providerId: backend.id);
-        final suppliedKeys = <String?>[];
-        settingsSyncRunnerOverride = (providerId, _, masterKey, _, _) async {
-          expect(providerId, backend.id);
-          suppliedKeys.add(masterKey);
-          throw const NautermDataException('Sync connection failed for test.');
-        };
-        await _openUnlockedSync(tester);
-        await _tapSync(tester, cardKey: backend.card);
-        expect(find.text('Sync connection failed for test.'), findsOneWidget);
+    testWidgets('$backend keeps the key after failure and settings refresh', (
+      tester,
+    ) async {
+      _cacheSettings(providerId: backend);
+      final suppliedKeys = <String?>[];
+      settingsSyncRunnerOverride = (providerId, _, masterKey, _, _) async {
+        expect(providerId, backend);
+        suppliedKeys.add(masterKey);
+        throw const NautermDataException('Sync connection failed for test.');
+      };
+      await _openUnlockedSync(tester);
+      await _tapSync(tester);
+      expect(find.text('Sync connection failed for test.'), findsOneWidget);
 
-        _cacheSettings(providerId: backend.id, filename: 'updated-sync.enc');
-        await tester.tap(find.byKey(const ValueKey('settings-nav-general')));
-        await tester.pumpAndSettle();
-        await tester.tap(find.byKey(const ValueKey('settings-nav-sync')));
-        await tester.pumpAndSettle();
-        expect(find.text('Sync unlocked'), findsOneWidget);
-        await _tapSync(tester, cardKey: backend.card);
-        expect(suppliedKeys, [_masterKey, _masterKey]);
-        expect(tester.takeException(), isNull);
-      },
-    );
+      _cacheSettings(providerId: backend, filename: 'updated-sync.enc');
+      await tester.tap(find.byKey(const ValueKey('settings-nav-general')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('settings-nav-sync')));
+      await tester.pumpAndSettle();
+      expect(find.text('Attention needed'), findsOneWidget);
+      await _tapSync(tester);
+      expect(suppliedKeys, [_masterKey, _masterKey]);
+      expect(tester.takeException(), isNull);
+    });
   }
 }
 
@@ -207,14 +206,8 @@ Future<void> _openUnlockedSync(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
-Future<void> _tapSync(
-  WidgetTester tester, {
-  String cardKey = 'settings-sync-provider-s3Compatible',
-}) async {
-  final sync = find.descendant(
-    of: find.byKey(ValueKey(cardKey)),
-    matching: find.byTooltip('Sync'),
-  );
+Future<void> _tapSync(WidgetTester tester) async {
+  final sync = find.byKey(const ValueKey('settings-sync-now'));
   await tester.ensureVisible(sync);
   await tester.pumpAndSettle();
   await tester.tap(sync);

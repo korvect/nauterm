@@ -1255,7 +1255,7 @@ class _WorkspaceSelectState<T> extends State<_WorkspaceSelect<T>> {
   }
 
   String get _createOptionLabel =>
-      '${widget.createLabel!} ${_inputController.text.trim()}';
+      '${context.tr(widget.createLabel!)} ${_inputController.text.trim()}';
 
   // Whether the dropdown panel should be shown. For a filterable field the
   // panel is pointless while the input is empty and there are no candidate

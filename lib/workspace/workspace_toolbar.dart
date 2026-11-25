@@ -56,12 +56,12 @@ class _HostsToolbar extends StatelessWidget {
                   ),
                   const NautermContextMenuAction<_HostCreateAction>(
                     value: _HostCreateAction.import,
-                    label: 'Import…',
+                    label: 'workspace.label.import',
                     icon: Icons.file_download_outlined,
                   ),
                   const NautermContextMenuAction<_HostCreateAction>(
                     value: _HostCreateAction.export,
-                    label: 'Export…',
+                    label: 'workspace.action.exportCsv',
                     icon: Icons.file_upload_outlined,
                   ),
                 ],
@@ -656,8 +656,9 @@ class _WorkspaceToolbarFrame extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ExcludeFocus(
+    return FocusTraversalGroup(
       key: const ValueKey('workspace-toolbar-tab-exclusion'),
+      descendantsAreTraversable: false,
       child: Container(
         height: _workspaceToolbarHeight,
         decoration: BoxDecoration(
@@ -948,6 +949,7 @@ class _WorkspaceToolbarSearchState extends State<_WorkspaceToolbarSearch> {
       width: 180,
       height: _workspaceToolbarControlExtent,
       child: TextField(
+        key: const ValueKey('workspace-toolbar-search-field'),
         controller: _controller,
         focusNode: _focusNode,
         autofocus: true,

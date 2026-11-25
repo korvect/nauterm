@@ -336,7 +336,11 @@ impl Chat {
                                 IconName::Copy
                             })
                             .text_color(if copied { p.accent } else { p.muted })
-                            .tooltip(if copied { "Copied" } else { "Copy command" })
+                            .tooltip(if copied {
+                                "Copied"
+                            } else {
+                                "ai.action.copyCommand"
+                            })
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 this.copy_text(copy_id.clone(), code.clone(), cx)
                             })),

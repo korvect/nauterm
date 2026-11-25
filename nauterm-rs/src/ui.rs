@@ -378,6 +378,7 @@ pub struct Nauterm {
     saved_drawers: HashMap<Page, drawer_motion::PageDrawer>,
     editor_drafts: HashMap<editor_drafts::Key, Editor>,
     drawer_motion: crate::components::panel::Presence<RetiredDrawer>,
+    sidebar_collapsed: bool,
     sidebar_width: f32,
     child_drawer_open: bool,
     delete_pending: bool,
@@ -657,6 +658,7 @@ impl Nauterm {
             saved_drawers: HashMap::new(),
             editor_drafts: HashMap::new(),
             drawer_motion: Default::default(),
+            sidebar_collapsed: false,
             sidebar_width: layout::SIDEBAR_WIDTH,
             child_drawer_open: false,
             delete_pending: false,
@@ -2268,7 +2270,7 @@ impl Nauterm {
         }
     }
 
-    fn save_editor(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    fn save_editor(&mut self, connect: bool, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(editor) = &mut self.editor {
             editor.validation_error = None;
         }
@@ -2501,7 +2503,7 @@ impl Nauterm {
                         }
                     },
                 };
-                self.save_host_candidate(host, window, cx);
+                self.save_host_candidate(host, connect, window, cx);
                 return;
             }
             ItemKind::Group => {
@@ -2920,11 +2922,14 @@ impl Nauterm {
             ))
     }
 
-    fn sidebar(&self, collapsed: bool, width: f32, cx: &mut Context<Self>) -> impl IntoElement {
+    fn sidebar(
+        &self,
+        collapsed: bool,
+        width: f32,
+        reveal: f32,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         let p = Palette::new(self.data.dark);
-        let reveal = ((width - layout::COLLAPSED_SIDEBAR_WIDTH)
-            / (layout::SIDEBAR_WIDTH - layout::COLLAPSED_SIDEBAR_WIDTH))
-            .clamp(0., 1.);
         let label = |text: &'static str| {
             div()
                 .w(px(114.))
@@ -3010,6 +3015,65 @@ impl Nauterm {
                     })
                     .on_click(cx.listener(|this, _, window, cx| this.open_settings(window, cx))),
             )
+    }
+
+    fn sidebar_toggle(
+        &self,
+        width: f32,
+        reveal: f32,
+        collapsed: bool,
+        can_expand: bool,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let p = Palette::new(self.data.dark);
+        let tooltip = crate::localization::text_for(
+            self.data.general.language,
+            if !can_expand {
+                "workspace.sidebar.expandUnavailable.label"
+            } else if collapsed {
+                "workspace.sidebar.expand.label"
+            } else {
+                "workspace.sidebar.collapse.label"
+            },
+        );
+        let size = px(24.);
+        let toggle = Button::new("workspace-sidebar-toggle")
+            .size(size)
+            .p_0()
+            .rounded_full()
+            .custom(ButtonCustomVariant::for_surface(p).foreground(p.muted.into()))
+            .border_1()
+            .border_color(p.border.alpha(0.7))
+            .bg(p.surface)
+            .icon(Icon::new(IconName::ChevronLeft).rotate(percentage((1. - reveal) * 0.5)))
+            .icon_size(px(14.))
+            .accessibility_label(tooltip.clone())
+            .disabled(!can_expand)
+            .when(can_expand, |button| {
+                button
+                    .raw_tooltip(tooltip.clone())
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.sidebar_collapsed = !this.sidebar_collapsed;
+                        cx.notify();
+                    }))
+            });
+        div()
+            .id("workspace-sidebar-toggle-anchor")
+            .absolute()
+            .left(px(width) - size / 2.)
+            .top(relative(0.5))
+            .mt(-size / 2.)
+            .size(size)
+            .occlude()
+            .rounded_full()
+            .bg(p.surface)
+            .when(!can_expand, |view| {
+                view.tooltip(move |_, cx| {
+                    cx.new(|_| crate::components::Tooltip::new(tooltip.clone()))
+                        .into()
+                })
+            })
+            .child(toggle)
     }
 
     fn toolbar(&self, width: f32, window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -3146,7 +3210,7 @@ impl Nauterm {
                                     let export_owner = owner.clone();
                                     menu.separator()
                                         .item(
-                                            MenuItem::localized("Import…")
+                                            MenuItem::localized("workspace.label.import")
                                                 .icon(IconName::Upload)
                                                 .disabled(import_disabled)
                                                 .on_click(move |_, window, cx| {
@@ -3156,7 +3220,7 @@ impl Nauterm {
                                                 }),
                                         )
                                         .item(
-                                            MenuItem::localized("rs.workspace.action.exportCsv")
+                                            MenuItem::localized("workspace.action.exportCsv")
                                                 .icon(IconName::Download)
                                                 .disabled(export_disabled)
                                                 .on_click(move |_, window, cx| {
@@ -3264,15 +3328,7 @@ impl Nauterm {
             })
             .when(page != Page::PortForwards, |view| {
                 view.child(
-                    Button::new("view-mode")
-                        .toolbar()
-                        .ghost()
-                        .icon(if preferences.list {
-                            IconName::LayoutGrid
-                        } else {
-                            IconName::List
-                        })
-                        .tooltip("Switch list/grid view")
+                    crate::components::management::view_mode_button("view-mode", preferences.list)
                         .on_click(cx.listener(|this, _, _, cx| {
                             let preferences = this.collection_views.entry(this.page).or_default();
                             preferences.list = !preferences.list;
@@ -3639,14 +3695,14 @@ impl Nauterm {
                 if !filtered {
                     "No hosts yet"
                 } else {
-                    "No hosts found"
+                    "workspace.label.noHostsFound"
                 },
                 self.data.dark,
             )
             .description(if !filtered {
                 "workspace.empty.hosts.description"
             } else {
-                "Try another search or clear tag filters."
+                "workspace.description.tryAnotherSearchOrClearTags"
             })
             .on_click(cx.listener(|this, _, window, cx| {
                 if !this.dismiss_editor(cx) {
@@ -3944,10 +4000,8 @@ impl Nauterm {
             )
         })
         .unsaved(editor.has_draft(cx), cx)
-        .actions(self.host_editor_actions(editor, cx))
+        .action(self.resource_editor_menu(editor, cx))
         .scroll_handle(&editor.scroll)
-        .actions(self.forward_editor_actions(editor, cx))
-        .actions(self.snippet_editor_actions(editor, cx))
         .when(
             editor
                 .host
@@ -4031,7 +4085,7 @@ impl Nauterm {
                             .as_ref()
                             .is_some_and(|forward| forward.saving()),
                 )
-                .on_click(cx.listener(|this, _, window, cx| this.save_editor(window, cx))),
+                .on_click(cx.listener(|this, _, window, cx| this.save_editor(false, window, cx))),
         )
         .into_any_element()
     }
@@ -4119,8 +4173,16 @@ impl Render for Nauterm {
             _ => false,
         };
         let reserved_drawers = usize::from(drawer_open) + usize::from(self.child_drawer_open);
-        let sidebar_target =
-            layout::sidebar_width(viewport_width - layout::DRAWER_WIDTH * reserved_drawers as f32);
+        let show_sidebar = !matches!(self.page, Page::Sessions | Page::Sftp);
+        let can_expand_sidebar = layout::sidebar_can_expand(
+            viewport_width - layout::DRAWER_WIDTH * reserved_drawers as f32,
+        );
+        let sidebar_collapsed = self.sidebar_collapsed || !can_expand_sidebar;
+        let sidebar_target = if sidebar_collapsed {
+            layout::COLLAPSED_SIDEBAR_WIDTH
+        } else {
+            layout::SIDEBAR_WIDTH
+        };
         let sidebar_width = crate::components::panel::width_transition(
             ("workspace-sidebar", cx.entity_id()),
             sidebar_target,
@@ -4129,6 +4191,9 @@ impl Render for Nauterm {
             window,
             cx,
         );
+        let sidebar_reveal = ((sidebar_width - layout::COLLAPSED_SIDEBAR_WIDTH)
+            / (layout::SIDEBAR_WIDTH - layout::COLLAPSED_SIDEBAR_WIDTH))
+            .clamp(0., 1.);
         self.sidebar_width = sidebar_width;
         let drawer_amount = self.drawer_motion.frame(drawer_open, window, cx);
         let drawer = (drawer_open || drawer_amount > 0.)
@@ -4485,13 +4550,15 @@ impl Render for Nauterm {
             .child(self.topbar(window, cx))
             .child(
                 div()
+                    .relative()
                     .flex_1()
                     .min_h_0()
                     .flex()
-                    .when(!matches!(self.page, Page::Sessions | Page::Sftp), |view| {
+                    .when(show_sidebar, |view| {
                         view.child(self.sidebar(
-                            sidebar_target == layout::COLLAPSED_SIDEBAR_WIDTH,
+                            sidebar_collapsed,
                             sidebar_width,
+                            sidebar_reveal,
                             cx,
                         ))
                     })
@@ -4513,6 +4580,9 @@ impl Render for Nauterm {
                                                     surface: p.hover,
                                                     ..p
                                                 })
+                                                .placeholder_color(crate::components::motion::mix(
+                                                    p.text, p.hover, 0.34,
+                                                ))
                                                 .pl(px(12.))
                                                 .pr(px(4.))
                                                 .py_0()
@@ -4548,7 +4618,16 @@ impl Render for Nauterm {
                             )
                             .child(content),
                     )
-                    .when_some(drawer, |view, drawer| view.child(drawer)),
+                    .when_some(drawer, |view, drawer| view.child(drawer))
+                    .when(show_sidebar, |view| {
+                        view.child(self.sidebar_toggle(
+                            sidebar_width,
+                            sidebar_reveal,
+                            sidebar_collapsed,
+                            can_expand_sidebar,
+                            cx,
+                        ))
+                    }),
             )
             .when_some(self.workspace_overlay(cx), |view, overlay| {
                 view.child(overlay)

@@ -329,11 +329,16 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
 
     final sessionCount = workspace.sessionCount;
     final confirmed = await _confirmDelete(
-      title: 'Close Workspace?',
-      message: sessionCount == 0
-          ? 'Close "${workspace.name}"?'
-          : 'Close "${workspace.name}" and its $sessionCount ${sessionCount == 1 ? 'session' : 'sessions'}?',
-      confirmLabel: 'Close',
+      title: 'workspace.dialog.closeWorkspace',
+      message: context.tr(
+        switch (sessionCount) {
+          0 => 'workspace.closeWorkspace.empty',
+          1 => 'workspace.closeWorkspace.session',
+          _ => 'workspace.closeWorkspace.sessions',
+        },
+        args: {'name': workspace.name, 'count': sessionCount},
+      ),
+      confirmLabel: 'common.action.close',
     );
     if (!confirmed || !mounted) {
       return;

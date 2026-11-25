@@ -76,15 +76,9 @@ impl Nauterm {
                                 && Some(tab.id) == active
                                 && !tab.files_visible()
                                 && session.id == pane.active().id;
-                            let history_visible = session_page
-                                && Some(tab.id) == active
-                                && !tab.show_sftp
-                                && tab.tools.history_visible()
-                                && session.id == tab.active().id;
                             view.update(cx, |view, cx| {
                                 view.set_focus_scope(visible, window, cx);
                                 view.set_reconnect_focus(allow);
-                                view.set_history_tool_visible(history_visible, cx);
                                 view.set_composer_visible(pane.composer_visible, cx);
                             });
                         }
@@ -931,31 +925,30 @@ impl Nauterm {
             )
         } else if let Some(dialog) = &self.rename_workspace {
             (
-                crate::components::DialogFrame::new("rename-workspace-dialog", "Rename workspace")
-                    .width(360.)
-                    .colors(crate::components::DialogColors::workspace(self.data.dark))
-                    .content(
-                        Field::input(&dialog.input, "Name").error(dialog.validation_error.clone()),
-                    )
-                    .action(
-                        Button::new("cancel-workspace-rename")
-                            .ghost()
-                            .label("Cancel")
-                            .on_click(|_, window, cx| {
-                                crate::components::Modal::dismiss(window, cx)
-                            }),
-                    )
-                    .action(
-                        Button::new("confirm-workspace-rename")
-                            .primary()
-                            .label("Rename")
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                this.save_workspace_name(window, cx)
-                            })),
-                    )
-                    .into_any_element(),
+                crate::components::DialogFrame::new(
+                    "rename-workspace-dialog",
+                    "workspace.label.renameWorkspace",
+                )
+                .width(360.)
+                .colors(crate::components::DialogColors::workspace(self.data.dark))
+                .content(Field::input(&dialog.input, "Name").error(dialog.validation_error.clone()))
+                .action(
+                    Button::new("cancel-workspace-rename")
+                        .ghost()
+                        .label("Cancel")
+                        .on_click(|_, window, cx| crate::components::Modal::dismiss(window, cx)),
+                )
+                .action(
+                    Button::new("confirm-workspace-rename")
+                        .primary()
+                        .label("Rename")
+                        .on_click(
+                            cx.listener(|this, _, window, cx| this.save_workspace_name(window, cx)),
+                        ),
+                )
+                .into_any_element(),
                 dialog.input.read(cx).focus_handle(cx),
-                "Rename workspace",
+                "workspace.label.renameWorkspace",
             )
         } else {
             return None;
@@ -971,15 +964,21 @@ impl Nauterm {
                 .into_any_element(),
         )
     }
-    pub(super) fn close_title(&self, target: CloseTarget) -> &'static str {
-        match target {
-            CloseTarget::Tab(_) => "Close terminal?",
-            CloseTarget::Session(_) => "Close terminal?",
-            CloseTarget::Quit => "Quit Nauterm RS?",
-            CloseTarget::Window => "Close window?",
+    pub(super) fn close_title(&self, target: CloseTarget, cx: &App) -> SharedString {
+        let key = match target {
+            CloseTarget::Tab(_) | CloseTarget::Session(_) => "workspace.dialog.closeTerminal",
+            CloseTarget::Quit => {
+                return crate::localization::format_for(
+                    crate::localization::language(cx),
+                    "workspace.dialog.quit",
+                    &[("app", "Nauterm RS")],
+                );
+            }
+            CloseTarget::Window => "workspace.dialog.closeWindow",
             CloseTarget::Restart => "Restart Nauterm RS?",
-            CloseTarget::Workspace(_) => "Close Workspace?",
-        }
+            CloseTarget::Workspace(_) => "workspace.dialog.closeWorkspace",
+        };
+        crate::localization::text(cx, key)
     }
     pub(super) fn close_message(&self, target: CloseTarget, cx: &App) -> String {
         let base = self.close_base_message(target, cx);
@@ -1011,22 +1010,80 @@ impl Nauterm {
                 .any(|tab| tab.tree.sessions().any(editing)),
         };
         if has_edits {
-            format!(
-                "{base}\n\nExternal edit sessions will close. Stable pending saves are uploaded only when safe; unsent edits are retained in private local folders."
+            return crate::localization::format_for(
+                crate::localization::language(cx),
+                "rs.ui.copy.externalEditSessionsWillCloseStable",
+                &[("base", &base)],
             )
-        } else {
-            base
+            .to_string();
         }
+        base
     }
     fn close_base_message(&self, target: CloseTarget, cx: &App) -> String {
+        if matches!(target, CloseTarget::Tab(_) | CloseTarget::Session(_)) {
+            return crate::localization::text(
+                cx,
+                "workspace.dialog.areYouSureYouWantToCloseThisTerminal",
+            )
+            .to_string();
+        }
+        let work_warning = || {
+            if self
+                .sftp
+                .as_ref()
+                .is_some_and(|view| view.read(cx).has_request(cx))
+            {
+                Some("workspace.closeWindow.sftpInProgress")
+            } else if self
+                .keychain
+                .as_ref()
+                .is_some_and(|view| view.read(cx).has_connection(cx))
+            {
+                Some("rs.ui.copy.runningSessionsWillBeDisconnectedKey")
+            } else {
+                None
+            }
+        };
+        if matches!(target, CloseTarget::Quit | CloseTarget::Window) {
+            let tabs = self.terminals.iter().count();
+            let forwards = self.active_forward_count();
+            let message = match (tabs, forwards) {
+                (0, 0) => None,
+                (0, _) => Some("activeForwards"),
+                (1, 0) => Some("openTab"),
+                (_, 0) => Some("openTabs"),
+                _ => Some("openTabsAndForwards"),
+            };
+            if let Some(message) = message {
+                let scope = if matches!(target, CloseTarget::Window) {
+                    "workspace.closeWindow"
+                } else {
+                    "workspace.quit"
+                };
+                let message = crate::localization::format_for(
+                    crate::localization::language(cx),
+                    &format!("{scope}.{message}"),
+                    &[
+                        (
+                            "count",
+                            &(if tabs == 0 { forwards } else { tabs }).to_string(),
+                        ),
+                        ("tabs", &tabs.to_string()),
+                        ("forwards", &forwards.to_string()),
+                    ],
+                );
+                return match work_warning() {
+                    Some(warning) => {
+                        format!("{message}\n\n{}", crate::localization::text(cx, warning))
+                    }
+                    None => message.to_string(),
+                };
+            }
+        }
         if matches!(target, CloseTarget::Restart) && !self.has_open_sessions(cx) {
             return "Restart Nauterm RS after saving the current workspace?".into();
         }
-        if matches!(
-            target,
-            CloseTarget::Quit | CloseTarget::Window | CloseTarget::Restart
-        ) && self.active_forward_count() > 0
-        {
+        if matches!(target, CloseTarget::Restart) && self.active_forward_count() > 0 {
             return format!(
                 "{} active port forward(s) will stop. Running terminal sessions and SFTP work will also be disconnected.",
                 self.active_forward_count()
@@ -1045,36 +1102,21 @@ impl Nauterm {
                 .in_workspace(id)
                 .map(|tab| tab.tree.sessions().count())
                 .sum::<usize>();
-            return if count == 0 {
-                format!("Close \"{name}\"?")
-            } else {
-                format!(
-                    "Close \"{name}\" and its {count} {}? Running sessions will be disconnected.",
-                    if count == 1 { "session" } else { "sessions" }
-                )
-            };
+            return crate::localization::format_for(
+                crate::localization::language(cx),
+                match count {
+                    0 => "workspace.closeWorkspace.empty",
+                    1 => "workspace.closeWorkspace.session",
+                    _ => "workspace.closeWorkspace.sessions",
+                },
+                &[("name", name), ("count", &count.to_string())],
+            )
+            .to_string();
         }
-        if matches!(
-            target,
-            CloseTarget::Quit | CloseTarget::Window | CloseTarget::Restart
-        ) && self
-            .sftp
-            .as_ref()
-            .is_some_and(|view| view.read(cx).has_request(cx))
-        {
-            "SFTP work will stop. Paused transfers are not restored on the next launch, and remote partial data may remain. Running sessions will be disconnected.".into()
-        } else if matches!(
-            target,
-            CloseTarget::Quit | CloseTarget::Window | CloseTarget::Restart
-        ) && self
-            .keychain
-            .as_ref()
-            .is_some_and(|view| view.read(cx).has_connection(cx))
-        {
-            "Running sessions will be disconnected. A key export may have partially completed; check the remote file before retrying.".into()
-        } else {
-            "Running sessions will be disconnected. Their processes may still be running remotely."
-                .into()
-        }
+        crate::localization::text(
+            cx,
+            work_warning().unwrap_or("rs.ui.copy.runningSessionsWillBeDisconnected"),
+        )
+        .to_string()
     }
 }

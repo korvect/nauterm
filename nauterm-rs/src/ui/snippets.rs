@@ -820,76 +820,6 @@ impl Nauterm {
         self.focus.focus(window, cx);
         cx.notify();
     }
-    pub(super) fn snippet_editor_actions(
-        &self,
-        editor: &Editor,
-        cx: &mut Context<Self>,
-    ) -> Vec<AnyElement> {
-        let kind = editor.kind;
-        let Some(id) = editor
-            .id
-            .filter(|_| matches!(kind, ItemKind::Snippet | ItemKind::SnippetPackage))
-        else {
-            return vec![];
-        };
-        let token = editor.fields[0].1.entity_id();
-        let owner = cx.weak_entity();
-        vec![
-            Button::new("snippet-editor-actions")
-                .toolbar()
-                .ghost()
-                .icon(IconName::Ellipsis)
-                .tooltip(if kind == ItemKind::Snippet {
-                    "Snippet actions"
-                } else {
-                    "Package actions"
-                })
-                .disabled(self.snippet_state.busy)
-                .dropdown_menu(move |menu, _, _| {
-                    let duplicate = owner.clone();
-                    let delete = owner.clone();
-                    menu.when(kind == ItemKind::Snippet, |menu| {
-                        menu.item(
-                            MenuItem::localized("Duplicate")
-                                .icon(IconName::Copy)
-                                .on_click(move |_, window, cx| {
-                                    let _ = duplicate.update(cx, |this, cx| {
-                                        if this.editor.as_ref().is_some_and(|editor| {
-                                            editor.fields[0].1.entity_id() == token
-                                        }) {
-                                            this.duplicate_snippets(
-                                                BTreeSet::from([id]),
-                                                window,
-                                                cx,
-                                            );
-                                        }
-                                    });
-                                }),
-                        )
-                    })
-                    .item(
-                        MenuItem::localized("Delete")
-                            .icon(IconName::Trash)
-                            .destructive(true)
-                            .on_click(move |_, _, cx| {
-                                let _ = delete.update(cx, |this, cx| {
-                                    if !this.snippet_state.busy
-                                        && this.editor.as_ref().is_some_and(|editor| {
-                                            editor.fields[0].1.entity_id() == token
-                                        })
-                                    {
-                                        this.selection = BTreeSet::from([id]);
-                                        this.selection_kind = Some(kind);
-                                        this.delete_pending = true;
-                                        cx.notify();
-                                    }
-                                });
-                            }),
-                    )
-                })
-                .into_any_element(),
-        ]
-    }
     pub(super) fn delete_snippets(
         &mut self,
         packages: bool,
@@ -1485,7 +1415,7 @@ impl Nauterm {
             .description(if query.is_empty() {
                 "Save frequently used commands as snippets so they are ready in every terminal."
             } else {
-                "Try another search."
+                "workspace.description.tryAnotherSearch"
             })
             .on_click(cx.listener(|this, _, window, cx| {
                 this.retire_editor();

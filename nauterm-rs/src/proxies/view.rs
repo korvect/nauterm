@@ -1400,9 +1400,64 @@ impl Proxies {
             .into_any_element(),
             section("Authentication", authentication).into_any_element(),
         ];
+        let id = editor.id;
+        let token = editor.name.entity_id();
+        let has_draft = editor.has_draft(cx);
+        let owner = cx.weak_entity();
+        use crate::components::management::{discard_changes_item, editor_more_button};
+        let more = editor_more_button("proxy-editor-more")
+            .disabled(self.saving)
+            .dropdown_menu(move |menu, _, _| {
+                let discard = owner.clone();
+                let menu = menu.width(180.);
+                let menu = if let Some(id) = id {
+                    let duplicate = owner.clone();
+                    let delete = owner.clone();
+                    menu.item(
+                        MenuItem::localized("Duplicate")
+                            .icon(IconName::Copy)
+                            .on_click(move |_, _, cx| {
+                                let _ = duplicate.update(cx, |view, cx| {
+                                    view.selection = BTreeSet::from([id]);
+                                    view.mutate(false, cx);
+                                });
+                            }),
+                    )
+                    .item(
+                        MenuItem::localized("Delete")
+                            .icon(IconName::Trash)
+                            .destructive(true)
+                            .on_click(move |_, _, cx| {
+                                let _ = delete.update(cx, |view, cx| {
+                                    view.selection = BTreeSet::from([id]);
+                                    view.request_delete(cx);
+                                });
+                            }),
+                    )
+                    .separator()
+                } else {
+                    menu
+                };
+                menu.item(
+                    discard_changes_item(has_draft).on_click(move |_, window, cx| {
+                        let _ = discard.update(cx, |view, cx| {
+                            if !view.editor_busy(cx)
+                                && let Some(editor) = view.editor.as_ref().filter(|editor| {
+                                    editor.name.entity_id() == token && editor.has_draft(cx)
+                                })
+                            {
+                                view.drafts.remove(&editor.id);
+                                view.retire_editor();
+                                view.close_editor(window, cx);
+                            }
+                        });
+                    }),
+                )
+            });
         crate::components::DrawerFrame::new("proxy-editor", title, self.dark)
             .unsaved(editor.has_draft(cx), cx)
             .scroll_handle(&editor.scroll)
+            .action(more)
             .when(self.owner.is_some(), |frame| {
                 frame.leading(
                     Button::new("back-related-proxy")
@@ -1501,23 +1556,29 @@ impl Render for Proxies {
                     .when(self.error.is_some() || self.reference_error.is_some(), |view| view.child(Button::new("reload-proxies").toolbar().ghost().icon(IconName::RefreshCw).tooltip("Reload proxies").disabled(self.loading || self.saving || self.deletion.is_some()).on_click(cx.listener(|view, _, _, cx| view.refresh(cx)))))
                     .child(Button::new("sort-proxies").toolbar().ghost().icon(sort.icon()).tooltip(sort.label()).dropdown_menu(move |menu, _, _| { let owner = owner.clone(); sort_menu(menu, sort, move |sort, _, cx| { let _ = owner.update(cx, |view, cx| { view.preferences.sort = sort; cx.notify(); }); }) }))
                     .child({ let owner = cx.weak_entity(); crate::components::management::toolbar_search("proxies-search", &self.search, self.preferences.search_open, move |open, window, cx| { let _ = owner.update(cx, |view, cx| { view.preferences.search_open = open; if open { view.search.update(cx, |input, cx| input.focus(window, cx)); } else { view.focus.focus(window, cx); } cx.notify(); }); }, cx) })
-                    .child(Button::new("proxy-view").toolbar().ghost().icon(if self.preferences.list { IconName::LayoutGrid } else { IconName::List }).tooltip("Switch list/grid view").on_click(cx.listener(|view, _, _, cx| { view.preferences.list = !view.preferences.list; cx.notify(); }))))
+                    .child(crate::components::management::view_mode_button("proxy-view", self.preferences.list).on_click(cx.listener(|view, _, _, cx| { view.preferences.list = !view.preferences.list; cx.notify(); }))))
                 .child(div().id("proxies-scroll").flex_1().min_h_0().overflow_y_scroll().scrollbars().map(crate::components::management::collection_padding).flex().flex_col()
                     .on_click(cx.listener(|view, _: &ClickEvent, window, cx| view.close_editor(window, cx)))
                     .when(!entries.is_empty(), |view| view.child(crate::components::management::section_title("Proxies", cx).mb(px(crate::components::management::COLLECTION_TITLE_GAP))))
                     .child(crate::components::card_grid(grid).children(entries.iter().cloned().map(|entry| self.card(entry, cx))))
                     .when(entries.is_empty(), |view| view.child({
-                        let empty = crate::components::EmptyState::new(IconName::Network, if self.loading { "Loading proxies…" } else if self.search.read(cx).value().is_empty() { "No proxies yet" } else { "No matching proxies" }, self.dark)
+                        let empty = crate::components::EmptyState::new(IconName::Network, if self.loading { "Loading proxies…" } else if self.search.read(cx).value().is_empty() { "No proxies yet" } else { "workspace.label.noProxiesFound" }, self.dark)
                             .description("Add a proxy once and reuse it across hosts that share the same route.");
                         if !self.loading && self.search.read(cx).value().is_empty() { empty.action(Button::new("empty-add-proxy").primary().icon(crate::assets::icon(IconName::Plus)).label("Add proxy").disabled(self.busy()).on_click(cx.listener(|view, _, window, cx| view.create(window, cx)))) } else { empty }
                     }))))
             .children(drawer)
             .when_some(self.deletion.as_ref(), |view, ids| {
-                let title = format!("Delete {} proxy/proxies?", ids.len());
+                use crate::localization::{format_for, language, text};
+                let count = ids.len();
+                let (title, message) = if count == 1 {
+                    (text(cx, "workspace.dialog.deleteProxy"), text(cx, "workspace.dialog.deleteProxy.description"))
+                } else {
+                    (text(cx, "workspace.dialog.deleteProxies"), format_for(language(cx), "workspace.dialog.deleteProxies.description", &[("count", &count.to_string())]))
+                };
                 view.child(crate::components::Dialog::new("delete-proxies-modal", title.clone()).return_focus(&self.focus).dismissible(!self.saving)
                     .on_dismiss(cx.listener(|view, _, _, cx| { view.deletion = None; cx.notify(); }))
                     .content(DialogFrame::new("delete-proxies-dialog", title).width(380.).colors(DialogColors::workspace(self.dark))
-                        .content("This removes the saved proxy and its stored authentication. Existing connections are not closed.")
+                        .content(message)
                         .action(Button::new("cancel-delete-proxies").ghost().label("Cancel").disabled(self.saving).on_click(|_, window, cx| Modal::dismiss(window, cx)))
                         .action(Button::new("confirm-delete-proxies").danger().label("Delete").disabled(self.saving).on_click(cx.listener(|view, _, _, cx| view.mutate(true, cx))))))
             })

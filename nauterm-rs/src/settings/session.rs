@@ -16,15 +16,16 @@ impl Settings {
             return;
         }
         let preferences = &self.values.terminal_preferences;
-        let shell_options =
-            std::iter::once(SelectOption::localized(String::new(), "System Default"))
-                .chain(crate::shells::discover().into_iter().map(|shell| {
-                    SelectOption::new(
-                        shell.path.clone(),
-                        format!("{} ({})", shell.label, shell.path),
-                    )
-                }))
-                .collect();
+        let shell_options = std::iter::once(crate::shells::default_option(
+            "settings.general.language.system",
+        ))
+        .chain(crate::shells::discover().into_iter().map(|shell| {
+            SelectOption::new(
+                shell.path.clone(),
+                format!("{} ({})", shell.label, shell.path),
+            )
+        }))
+        .collect();
         let shell = SelectModel::new(
             shell_options,
             Some(preferences.shell_path.clone().unwrap_or_default()),
@@ -177,7 +178,7 @@ impl Settings {
                 .child(
                     self.row(
                         "settings.terminal.scrollback.label",
-                        "rs.settings.terminal.scrollback.description",
+                        "settings.terminal.scrollback.description",
                         Input::new(&self.scrollback_lines)
                             .digits_only()
                             .aria_label(crate::localization::text(cx, "Scrollback Lines")),

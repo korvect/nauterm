@@ -372,7 +372,8 @@ impl FilePane {
         let initial_directory = data.sftp.initial_directory(&home);
         let hidden = data.sftp.show_hidden_files;
         let path = cx.new(|cx| InputState::new(window, cx));
-        let filter = cx.new(|cx| InputState::new(window, cx).placeholder("Filter files"));
+        let filter =
+            cx.new(|cx| InputState::new(window, cx).placeholder("workspace.label.filterFiles"));
         let picker = cx.new(|cx| HostPicker::new(data.clone(), window, cx).allow_local());
         let inputs = vec![
             cx.observe(&tasks, |_, _, cx| cx.notify()),
@@ -695,11 +696,11 @@ impl FilePane {
         }));
         cx.notify();
     }
-    fn title(&self) -> String {
+    fn title(&self, cx: &App) -> SharedString {
         self.remote
             .as_ref()
-            .map(|remote| remote.title.clone())
-            .unwrap_or("Local".into())
+            .map(|remote| SharedString::from(remote.title.clone()))
+            .unwrap_or_else(|| crate::localization::text(cx, "common.label.local"))
     }
     fn home(&self) -> String {
         if self.remote.is_some() {
@@ -814,7 +815,7 @@ impl FilePane {
                                         .font_weight(FontWeights::SEMIBOLD)
                                         .whitespace_nowrap()
                                         .text_ellipsis()
-                                        .child(self.title()),
+                                        .child(self.title(cx)),
                                 )
                                 .child(
                                     Icon::new(IconName::ChevronDown)
@@ -1477,7 +1478,7 @@ impl Render for FilePane {
                             .ghost()
                             .custom(crate::components::ButtonCustomVariant::for_surface(p))
                             .icon(IconName::Folder)
-                            .label("Local")
+                            .label("common.label.local")
                             .on_click(
                                 cx.listener(|this, _, window, cx| this.use_local(window, cx)),
                             ),

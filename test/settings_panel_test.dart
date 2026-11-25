@@ -361,6 +361,10 @@ void main() {
     expect(find.text('1.2.3'), findsOneWidget);
     expect(find.text('42'), findsOneWidget);
     expect(find.text('com.korvect.nauterm'), findsOneWidget);
+    final platform = tester.widget<Text>(
+      find.byKey(const ValueKey('settings-about-platform')),
+    );
+    expect(platform.data, matches(r'^[^·]+ · [a-z0-9_]+$'));
     expect(
       find.byKey(const ValueKey('settings-about-build-number')),
       findsOneWidget,
@@ -420,9 +424,12 @@ void main() {
     await tester.pump();
     await tester.tap(find.byKey(const ValueKey('settings-nav-about')));
     await tester.pumpAndSettle();
-    await tester.tap(
-      find.byKey(const ValueKey('settings-about-third-party-licenses')),
+    final licenseButton = find.byKey(
+      const ValueKey('settings-about-third-party-licenses'),
     );
+    await tester.ensureVisible(licenseButton);
+    await tester.pumpAndSettle();
+    await tester.tap(licenseButton);
     await tester.pumpAndSettle();
 
     expect(find.byType(LicensePage), findsNothing);
@@ -1213,12 +1220,22 @@ void main() {
     WidgetTester tester,
   ) async {
     githubDeviceFlowClientIdOverride = '';
+    var refreshCount = 0;
+    settingsRemoteSyncStatusLoaderOverride = (_) async {
+      refreshCount++;
+      return {};
+    };
+    cacheGithubSyncSettingsForTesting(NautermPaths.resolve().databasePath, {
+      'hasLocalSyncKey': false,
+    });
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(1000, 820);
     addTearDown(() {
       tester.view.resetDevicePixelRatio();
       tester.view.resetPhysicalSize();
       githubDeviceFlowClientIdOverride = null;
+      settingsRemoteSyncStatusLoaderOverride = null;
+      clearGithubSyncSettingsCacheForTesting();
     });
 
     await tester.pumpWidget(
@@ -1286,8 +1303,15 @@ void main() {
     expect(find.text('Automatic Sync'), findsOneWidget);
     expect(find.text('minutes'), findsOneWidget);
     expect(find.text('Local Backups'), findsOneWidget);
-    expect(find.text('Local Version'), findsOneWidget);
-    expect(find.text('Remote Version'), findsOneWidget);
+    expect(find.text('Local —', findRichText: true), findsOneWidget);
+    expect(find.text('Remote —', findRichText: true), findsOneWidget);
+    final syncNow = find.byKey(const ValueKey('settings-sync-now'));
+    expect(tester.widget<FilledButton>(syncNow).onPressed, isNull);
+    final refresh = find.byTooltip('Refresh Status');
+    final beforeRefresh = refreshCount;
+    await tester.tap(refresh);
+    await tester.pumpAndSettle();
+    expect(refreshCount, beforeRefresh + 1);
     expect(find.text('Sync Status'), findsNothing);
     expect(find.text('No sync providers yet'), findsNothing);
     expect(find.text('GitHub Repository'), findsOneWidget);
@@ -1456,11 +1480,14 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('sync key details exposes Master Key rotation validation', (
+  testWidgets('sync key details confirms forgetting and validates rotation', (
     WidgetTester tester,
   ) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(760, 820);
+    settingsRemoteSyncStatusLoaderOverride = (_) async => {
+      'active_provider_id': 'cloud:provider-1',
+    };
     cacheGithubSyncSettingsForTesting(
       NautermPaths.resolve().databasePath,
       <String, Object?>{
@@ -1522,6 +1549,7 @@ void main() {
     );
     addTearDown(() {
       clearGithubSyncSettingsCacheForTesting();
+      settingsRemoteSyncStatusLoaderOverride = null;
       tester.view.resetDevicePixelRatio();
       tester.view.resetPhysicalSize();
     });
@@ -1543,39 +1571,24 @@ void main() {
     final thirdCard = find.byKey(
       const ValueKey('settings-cloud-provider-provider-3'),
     );
+    expect(find.byKey(const ValueKey('settings-sync-now')), findsOneWidget);
     expect(
-      find.descendant(of: activeCard, matching: find.byTooltip('Sync')),
+      find.descendant(of: activeCard, matching: find.text('ACTIVE')),
       findsOneWidget,
     );
     expect(
-      find.descendant(of: activeCard, matching: find.text('Active')),
-      findsNothing,
+      find.descendant(of: inactiveCard, matching: find.text('Use')),
+      findsOneWidget,
     );
     expect(
       find.descendant(
-        of: activeCard,
-        matching: find.textContaining('Connected'),
+        of: inactiveCard,
+        matching: find.byTooltip('Version History'),
       ),
       findsOneWidget,
     );
     expect(
-      find.descendant(of: inactiveCard, matching: find.byTooltip('Sync')),
-      findsNothing,
-    );
-    expect(
-      find.descendant(of: inactiveCard, matching: find.byTooltip('History')),
-      findsNothing,
-    );
-    expect(
-      find.descendant(of: inactiveCard, matching: find.text('Activate')),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(of: inactiveCard, matching: find.textContaining('Ready')),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(of: inactiveCard, matching: find.byTooltip('Settings')),
+      find.descendant(of: inactiveCard, matching: find.byTooltip('Configure')),
       findsOneWidget,
     );
     expect(
@@ -1585,12 +1598,30 @@ void main() {
     expect(tester.getSize(activeCard).width, tester.getSize(thirdCard).width);
     expect(
       tester.getTopLeft(activeCard).dy,
-      tester.getTopLeft(inactiveCard).dy,
+      lessThan(tester.getTopLeft(inactiveCard).dy),
     );
-    expect(tester.getTopLeft(activeCard).dy, tester.getTopLeft(thirdCard).dy);
-    await tester.tap(find.text('Key details'));
+    expect(
+      tester.getTopLeft(inactiveCard).dy,
+      lessThan(tester.getTopLeft(thirdCard).dy),
+    );
+    await tester.tap(find.text('Key'));
     await tester.pumpAndSettle();
     expect(find.text('Forget Master Key'), findsOneWidget);
+    await tester.tap(find.text('Forget Master Key'));
+    await tester.pumpAndSettle();
+    final confirmation = find.byKey(
+      const ValueKey('settings-sync-confirm-forget-key'),
+    );
+    expect(find.text('Forget Master Key?'), findsOneWidget);
+    expect(confirmation, findsOneWidget);
+    expect(find.byKey(const ValueKey('settings-sync-now')), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(confirmation, findsNothing);
+    expect(find.byKey(const ValueKey('settings-sync-now')), findsOneWidget);
+    await tester.tap(find.text('Key'));
+    await tester.pumpAndSettle();
+    expect(find.text('Sync DEK available locally'), findsOneWidget);
     await tester.tap(find.text('Change Master Key'));
     await tester.pumpAndSettle();
 

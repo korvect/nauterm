@@ -255,6 +255,7 @@ impl Render for History {
                         .items_center()
                         .justify_center()
                         .p(px(20.))
+                        .font_weight(FontWeights::MEDIUM)
                         .text_color(p.muted)
                         .child(crate::localization::view(if self.loading {
                             "Loading shell history…"
@@ -372,39 +373,45 @@ impl Render for History {
             })
             .when(self.clear_pending, |view| {
                 view.child(
-                    crate::components::Dialog::new("clear-shell-history", "Clear shell history?")
-                        .return_focus(&self.focus)
-                        .dismissible(!self.busy)
-                        .on_dismiss(cx.listener(|view, _, _, cx| {
-                            view.clear_pending = false;
-                            view.error = None;
-                            cx.notify();
-                        }))
-                        .content(
-                            DialogFrame::new("clear-shell-history-frame", "Clear shell history?")
-                                .width(400.)
-                                .colors(DialogColors::workspace(self.dark))
-                                .content(div().flex().flex_col().gap(px(10.)).child(
-                                    crate::localization::text(
-                                        cx,
-                                        "rs.ui.copy.clearShellHistoryDescription",
-                                    ),
-                                ))
-                                .action(
-                                    Button::new("cancel-clear-history")
-                                        .ghost()
-                                        .label("Cancel")
-                                        .disabled(self.busy)
-                                        .on_click(|_, window, cx| Modal::dismiss(window, cx)),
-                                )
-                                .action(
-                                    Button::new("confirm-clear-history")
-                                        .danger()
-                                        .label("Clear all")
-                                        .disabled(self.busy)
-                                        .on_click(cx.listener(|view, _, _, cx| view.clear(cx))),
-                                ),
+                    crate::components::Dialog::new(
+                        "clear-shell-history",
+                        "workspace.dialog.clearShellHistory",
+                    )
+                    .return_focus(&self.focus)
+                    .dismissible(!self.busy)
+                    .on_dismiss(cx.listener(|view, _, _, cx| {
+                        view.clear_pending = false;
+                        view.error = None;
+                        cx.notify();
+                    }))
+                    .content(
+                        DialogFrame::new(
+                            "clear-shell-history-frame",
+                            "workspace.dialog.clearShellHistory",
+                        )
+                        .width(400.)
+                        .colors(DialogColors::workspace(self.dark))
+                        .content(div().flex().flex_col().gap(px(10.)).child(
+                            crate::localization::text(
+                                cx,
+                                "workspace.history.clearShell.description",
+                            ),
+                        ))
+                        .action(
+                            Button::new("cancel-clear-history")
+                                .ghost()
+                                .label("Cancel")
+                                .disabled(self.busy)
+                                .on_click(|_, window, cx| Modal::dismiss(window, cx)),
+                        )
+                        .action(
+                            Button::new("confirm-clear-history")
+                                .danger()
+                                .label("Clear all")
+                                .disabled(self.busy)
+                                .on_click(cx.listener(|view, _, _, cx| view.clear(cx))),
                         ),
+                    ),
                 )
             })
     }

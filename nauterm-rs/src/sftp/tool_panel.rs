@@ -75,7 +75,7 @@ impl FilePane {
                                     .font_weight(FontWeights::SEMIBOLD)
                                     .whitespace_nowrap()
                                     .text_ellipsis()
-                                    .child(self.title()),
+                                    .child(self.title(cx)),
                             )
                     }),
             )

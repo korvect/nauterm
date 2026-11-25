@@ -137,10 +137,14 @@ class _TerminalReconnectOverlayState extends State<_TerminalReconnectOverlay> {
     final disconnected = _isDisconnected(phase);
     final remaining = _remainingSeconds;
     final detail = disconnected && remaining != null
-        ? 'Reconnecting in ${remaining}s...'
+        ? context.tr(
+            'terminal.reconnect.countdown',
+            args: {'seconds': remaining},
+          )
         : phase == TerminalConnectionPhase.connecting
-        ? 'Reconnecting...'
-        : widget.controller.connectionStatus.message ?? 'Connection lost.';
+        ? context.tr('terminal.reconnect.pending')
+        : widget.controller.connectionStatus.message ??
+              context.tr('common.description.connectionLost');
 
     return Positioned(
       left: 12,
@@ -184,7 +188,11 @@ class _TerminalReconnectOverlayState extends State<_TerminalReconnectOverlay> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              disconnected ? 'Connection lost' : 'Reconnecting',
+                              context.tr(
+                                disconnected
+                                    ? 'terminal.reconnect.disconnected'
+                                    : 'terminal.reconnect.title',
+                              ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(

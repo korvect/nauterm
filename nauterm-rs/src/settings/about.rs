@@ -215,7 +215,7 @@ impl Panel {
                         SettingsText::Description
                             .apply(div())
                             .text_color(Palette::settings_faint(self.dark))
-                            .child(subtitle.into()),
+                            .child(crate::localization::view(subtitle.into())),
                     ),
             )
             .child(div().flex_shrink_0().child(value))
@@ -388,13 +388,13 @@ impl Render for Panel {
                         .gap(px(18.))
                         .child(self.row(
                             "Version",
-                            "Release channel: stable",
+                            "settings.label.releaseChannelStable",
                             div().font_weight(FontWeights::MEDIUM).child(model::VERSION),
                         ))
                         .child(self.row("Build", model::PACKAGE, model::BUILD))
                         .child(self.row(
                             "Platform",
-                            "Current operating system and architecture",
+                            "settings.label.currentPlatformArchitecture",
                             model::platform(),
                         )),
                     cx,
@@ -424,7 +424,7 @@ impl Render for Panel {
                         .child(
                             self.row(
                                 "Third-party licenses",
-                                "Bundled Rust, Mosh, terminal and icon components.",
+                                "settings.about.licenses.rustDescription",
                                 Button::new("about-third-party-licenses")
                                     .outline()
                                     .label("View")

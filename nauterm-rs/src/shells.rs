@@ -74,6 +74,22 @@ pub fn label(path: &str) -> String {
         _ => name.into(),
     }
 }
+pub(crate) fn default_option(label_key: &'static str) -> crate::components::SelectOption<String> {
+    let option = crate::components::SelectOption::localized(String::new(), label_key);
+    let Some(path) = nauterm_core::pty::default_local_shell_path() else {
+        return option;
+    };
+    let name = match path.rsplit(['/', '\\']).next() {
+        Some(name)
+            if name.eq_ignore_ascii_case("pwsh.exe") || name.eq_ignore_ascii_case("pwsh") =>
+        {
+            "PowerShell 7".to_owned()
+        }
+        _ => label(&path),
+    };
+    option.title_suffix(format!(" — {name} ({path})"))
+}
+
 pub fn available(path: &str) -> bool {
     if !Path::new(path).is_absolute() || path.as_bytes().contains(&0) {
         return false;

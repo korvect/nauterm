@@ -415,8 +415,8 @@ impl FilePane {
                         .p_0()
                         .ghost()
                         .custom(crate::components::ButtonCustomVariant::for_surface(p))
-                        .icon(IconName::FolderInput)
-                        .tooltip("Go to SSH current directory")
+                        .icon(crate::assets::Glyph::LocateFixed.icon())
+                        .tooltip("sftp.action.goToSshDirectory")
                         .disabled(!related || self.loading)
                         .on_click(cx.listener(|this, _, window, cx| {
                             if this.shares_terminal(cx) {

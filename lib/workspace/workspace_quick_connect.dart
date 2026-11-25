@@ -465,9 +465,9 @@ class _QuickConnectHeader extends StatelessWidget {
                                   'Search host:, group:, tag:, or user@host',
                             ),
                             hintStyle: TextStyle(
-                              color: _mutedText,
+                              color: _text.withValues(alpha: 0.66),
                               fontSize: NautermFontSizes.labelLarge,
-                              fontWeight: NautermFontWeights.regular,
+                              fontWeight: NautermFontWeights.medium,
                               letterSpacing: 0,
                             ),
                           ),

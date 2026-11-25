@@ -31,13 +31,7 @@ pub(crate) fn weight_options(values: &[u16]) -> Vec<SelectOption<String>> {
                 900 => "Black",
                 _ => return SelectOption::new(value.to_string(), value.to_string()),
             };
-            SelectOption::localized(
-                value.to_string(),
-                format!(
-                    "settings.terminal.fontWeight.{}",
-                    name.to_lowercase().replace(' ', "")
-                ),
-            )
+            SelectOption::new(value.to_string(), name)
         })
         .collect()
 }
@@ -52,7 +46,7 @@ impl Default for Options {
         Self {
             primary: vec![
                 SelectOption::new("monospace".into(), "monospace")
-                    .font_preview(crate::terminal_appearance::platform_family()),
+                    .font_sample(crate::terminal_appearance::platform_family(), "Aa 0123"),
             ],
             cjk: vec![SelectOption::localized(
                 String::new(),
@@ -75,7 +69,7 @@ pub(crate) fn primary_options(fonts: &Options, selected: &str) -> Vec<SelectOpti
         };
         options.push(
             SelectOption::new(selected.to_owned(), selected.to_owned())
-                .font_preview(family.to_owned()),
+                .font_sample(family, "Aa 0123"),
         );
     }
     options
@@ -150,7 +144,7 @@ pub(crate) fn options(text: &TextSystem) -> Options {
                 } else {
                     &name
                 };
-                SelectOption::new(name.clone(), name.clone()).font_preview(resolved.to_owned())
+                SelectOption::new(name.clone(), name.clone()).font_sample(resolved, "Aa 0123")
             })
             .collect(),
         cjk,

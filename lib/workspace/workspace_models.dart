@@ -881,8 +881,8 @@ class _ContextMenuAction {
 
   bool get hasSubmenu => submenuActions.isNotEmpty;
 
-  String get localizedLabel =>
-      tr(localizationKey, fallback: label, args: localizationArgs);
+  String localizedLabel(BuildContext context) =>
+      context.tr(localizationKey, fallback: label, args: localizationArgs);
 
   String? get displayShortcut {
     final configuredShortcut = switch (id) {
@@ -912,6 +912,7 @@ enum _ContextMenuActionId {
   duplicate,
   newHostInGroup,
   copySshCommand,
+  copyPublicKey,
   exportToHost,
   exportToFile,
   delete,
@@ -934,7 +935,13 @@ List<Object> _contextMenuRowsFor(
     return _groupMenuRows;
   }
   if (item is _KeyItem) {
-    return _keyMenuRows;
+    return [
+      for (final row in _keyMenuRows)
+        if (row is! _ContextMenuAction ||
+            row.id != _ContextMenuActionId.copyPublicKey ||
+            _emptyToNull(item.publicKey) != null)
+          row,
+    ];
   }
   if (item is _IdentityItem) {
     return _identityMenuRows;
@@ -1230,6 +1237,12 @@ const List<Object> _keyMenuRows = [
     label: 'Export to File',
     localizationKey: 'workspace.label.exportToFile',
     id: _ContextMenuActionId.exportToFile,
+  ),
+  _ContextMenuAction(
+    icon: Icons.copy_rounded,
+    label: 'Copy public key',
+    localizationKey: 'workspace.keys.action.copyPublicKey',
+    id: _ContextMenuActionId.copyPublicKey,
   ),
   _ContextMenuAction(
     icon: LucideIcons.pencil,

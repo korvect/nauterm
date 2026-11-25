@@ -16,7 +16,6 @@ use gpui_kit::{
 };
 
 const PANEL_INSET: f32 = 18.;
-const PANEL_MIN_HEIGHT: f32 = 360.;
 const PANEL_PADDING: f32 = 14.;
 const SHELL_GAP: f32 = 6.;
 const SHELL_HEIGHT: f32 = 36.;
@@ -339,7 +338,7 @@ fn empty_state(message: &'static str, p: Palette, cx: &App) -> Div {
 impl QuickConnect {
     pub fn new(data: AppState, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let search = cx.new(|cx| {
-            InputState::new(window, cx).placeholder("Search hosts or enter a connection command")
+            InputState::new(window, cx).placeholder("workspace.search.quickConnect.placeholder")
         });
         let events = cx.subscribe_in(&search, window, |this, _, event: &InputEvent, _, cx| {
             if matches!(event, InputEvent::Change) {
@@ -659,8 +658,7 @@ impl Render for QuickConnect {
         div()
             .id("quick-connect-panel")
             .w(px(width))
-            .min_h(px(PANEL_MIN_HEIGHT.min(max_height)))
-            .max_h(px(max_height))
+            .h(px(max_height))
             .min_w_0()
             .rounded(px(10.))
             .border_1()
@@ -717,6 +715,9 @@ impl Render for QuickConnect {
                     )
                     .child(
                         Input::new(&self.search)
+                            .placeholder_color(crate::components::motion::mix(
+                                p.text, p.surface, 0.34,
+                            ))
                             .h(px(36.))
                             .text_size(px(13.))
                             .line_height(relative(18. / 13.))
@@ -735,6 +736,7 @@ impl Render for QuickConnect {
             .child(
                 div()
                     .id("quick-connect-options")
+                    .flex_1()
                     .min_w_0()
                     .min_h_0()
                     .flex_shrink_1()

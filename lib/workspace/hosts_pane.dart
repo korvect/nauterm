@@ -174,12 +174,14 @@ class _HostsPaneState extends State<_HostsPane> {
         final breadcrumbPath = _groupBreadcrumbPath(currentGroupId);
         final showingGroup = currentGroupId != null;
         final canCreateGroup = breadcrumbPath.length < 2;
-        final hasStoredItems =
-            widget.groups.isNotEmpty || widget.hosts.isNotEmpty;
+        final filtered =
+            _searchController.text.trim().isNotEmpty ||
+            _effectiveSelectedTagUuids.isNotEmpty;
         final showEmptyState =
             !widget.loading &&
-            !hasStoredItems &&
-            _searchController.text.trim().isEmpty;
+            groups.isEmpty &&
+            hosts.isEmpty &&
+            (!showingGroup || filtered);
 
         return Row(
           children: [
@@ -219,10 +221,22 @@ class _HostsPaneState extends State<_HostsPane> {
                     child: showEmptyState
                         ? _WorkspaceEmptyState(
                             icon: LucideIcons.server,
-                            title: 'No hosts yet',
-                            description: 'Add a host to save connection details and open remote sessions quickly.',
-                            actionLabel: 'Add host',
-                            onAction: () => widget.onCreateHost(currentGroupId),
+                            title: filtered
+                                ? 'workspace.label.noHostsFound'
+                                : 'workspace.label.noHostsYet',
+                            description: filtered
+                                ? 'workspace.description.tryAnotherSearchOrClearTags'
+                                : 'workspace.empty.hosts.description',
+                            actionLabel: filtered ? null : 'Add host',
+                            onAction: filtered
+                                ? null
+                                : () => widget.onCreateHost(currentGroupId),
+                            leading: showingGroup
+                                ? _GroupBreadcrumb(
+                                    path: breadcrumbPath,
+                                    onSelected: _openGroupId,
+                                  )
+                                : null,
                           )
                         : _WorkspaceItemScrollView(
                             padding: _workspacePanePadding,
@@ -282,10 +296,8 @@ class _HostsPaneState extends State<_HostsPane> {
                                 if (!widget.loading &&
                                     groups.isEmpty &&
                                     hosts.isEmpty)
-                                  _WorkspaceInlineMessage(
-                                    _searchController.text.trim().isEmpty
-                                        ? 'No hosts in this group.'
-                                        : 'No hosts found.',
+                                  const _WorkspaceInlineMessage(
+                                    'workspace.label.noHostsInGroup',
                                   ),
                               ],
                             ),
@@ -385,6 +397,7 @@ class _WorkspaceEmptyState extends StatelessWidget {
     this.description,
     this.actionLabel,
     this.onAction,
+    this.leading,
   }) : assert(
          (actionLabel == null) == (onAction == null),
          'actionLabel and onAction must be provided together',
@@ -395,10 +408,11 @@ class _WorkspaceEmptyState extends StatelessWidget {
   final String? description;
   final String? actionLabel;
   final VoidCallback? onAction;
+  final Widget? leading;
 
   @override
   Widget build(BuildContext context) {
-    return Center(
+    final content = Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
         child: ConstrainedBox(
@@ -458,6 +472,14 @@ class _WorkspaceEmptyState extends StatelessWidget {
           ),
         ),
       ),
+    );
+    if (leading == null) return content;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(padding: _workspacePanePadding, child: leading!),
+        Expanded(child: content),
+      ],
     );
   }
 }
@@ -604,9 +626,9 @@ class _HostSearchBar extends StatelessWidget {
                           fallback: 'Search host:, group:, username:, tag:, or user@host',
                         ),
                         hintStyle: TextStyle(
-                          color: _mutedText,
+                          color: _text.withValues(alpha: 0.66),
                           fontSize: _WorkspaceControlSize.medium.inputFontSize,
-                          fontWeight: NautermFontWeights.regular,
+                          fontWeight: NautermFontWeights.medium,
                           letterSpacing: 0,
                         ),
                       ),

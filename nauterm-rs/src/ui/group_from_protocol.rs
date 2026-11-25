@@ -95,7 +95,7 @@ impl Nauterm {
                 menu.width(190.)
                     .when(create, |menu| {
                         menu.item(
-                            MenuItem::localized("rs.workspace.action.createGroup")
+                            MenuItem::localized("workspace.action.createGroup")
                                 .icon(crate::assets::GROUP_ICON)
                                 .disabled(blocked)
                                 .on_click(move |_, window, cx| {

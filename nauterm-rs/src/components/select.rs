@@ -20,10 +20,10 @@ pub struct SelectOption<V: Clone + PartialEq> {
     value: Option<V>,
     title: SharedString,
     source_title: Option<SharedString>,
+    title_suffix: Option<SharedString>,
     unavailable: bool,
     icon: Option<IconName>,
     image: Option<std::sync::Arc<Image>>,
-    font_family: Option<SharedString>,
     font_sample: Option<(SharedString, SharedString)>,
 }
 impl<V: Clone + PartialEq> SelectOption<V> {
@@ -32,10 +32,10 @@ impl<V: Clone + PartialEq> SelectOption<V> {
             value: Some(value),
             title: title.into(),
             source_title: None,
+            title_suffix: None,
             unavailable: false,
             icon: None,
             image: None,
-            font_family: None,
             font_sample: None,
         }
     }
@@ -45,9 +45,18 @@ impl<V: Clone + PartialEq> SelectOption<V> {
         option.source_title = Some(option.title.clone());
         option
     }
+    pub fn title_suffix(mut self, suffix: impl Into<SharedString>) -> Self {
+        self.title_suffix = Some(suffix.into());
+        self
+    }
     fn translate(&mut self, language: crate::localization::Language) {
         if let Some(source) = &self.source_title {
-            self.title = crate::localization::text_for(language, source);
+            let title = crate::localization::text_for(language, source);
+            self.title = if let Some(suffix) = &self.title_suffix {
+                format!("{title}{suffix}").into()
+            } else {
+                title
+            };
         }
     }
     pub fn icon(mut self, icon: IconName) -> Self {
@@ -73,10 +82,6 @@ impl<V: Clone + PartialEq> SelectOption<V> {
                 self.icon
                     .map(|icon| crate::assets::icon(icon).size(px(18.)).into_any_element())
             })
-    }
-    pub fn font_preview(mut self, family: impl Into<SharedString>) -> Self {
-        self.font_family = Some(family.into());
-        self
     }
     /// Show a separate sample while keeping the option's name in the UI font.
     /// The caller must verify glyph coverage before supplying a sample.
@@ -112,10 +117,10 @@ fn with_missing<V: Clone + PartialEq>(
             value: Some(value.clone()),
             title: "Unavailable item".into(),
             source_title: Some("Unavailable item".into()),
+            title_suffix: None,
             unavailable: true,
             icon: None,
             image: None,
-            font_family: None,
             font_sample: None,
         });
     }
@@ -377,8 +382,8 @@ impl<V: Clone + PartialEq + 'static> SelectState<V> {
             }
         })
     }
-    fn compact_terminal(&self) -> bool {
-        self.presentation.terminal_palette.is_some() && !self.presentation.terminal_form
+    fn terminal_popup(&self) -> bool {
+        self.presentation.terminal_palette.is_some()
     }
     fn dark(&self, cx: &App) -> bool {
         self.presentation
@@ -751,7 +756,7 @@ impl<V: Clone + PartialEq + 'static> SelectState<V> {
             .terminal_palette
             .map(|p| p.hover)
             .unwrap_or_else(|| rgb(if dark { 0x3e3e3e } else { 0xf0f4f5 }));
-        let terminal = self.compact_terminal();
+        let terminal = self.terminal_popup();
         let selected_color = if terminal {
             p.accent.alpha(0.10)
         } else if S {
@@ -765,10 +770,11 @@ impl<V: Clone + PartialEq + 'static> SelectState<V> {
         };
         let option = super::button::Button::<S>::new(("select-option", index))
             .ghost()
+            .when(S, |row| row.ink_ripple(false))
             .content_start()
             .w_full()
             .h(px(if S { 34. } else { 32. }))
-            .px(px(if self.compact_terminal() {
+            .px(px(if self.terminal_popup() {
                 9.
             } else if S {
                 10.
@@ -778,7 +784,7 @@ impl<V: Clone + PartialEq + 'static> SelectState<V> {
             .rounded(px(if terminal {
                 6.
             } else if S {
-                0.
+                5.
             } else {
                 8.
             }))
@@ -795,7 +801,7 @@ impl<V: Clone + PartialEq + 'static> SelectState<V> {
             } else {
                 FontWeight::NORMAL
             })
-            .text_size(px(if self.compact_terminal() { 11.5 } else { 14. }))
+            .text_size(px(if self.terminal_popup() { 11.5 } else { 14. }))
             // Labels and font previews need space for ascent and descent,
             // independently of the fixed selectable row height.
             .line_height(relative(1.5))
@@ -841,7 +847,7 @@ impl<V: Clone + PartialEq + 'static> SelectState<V> {
                         if terminal {
                             p.accent.alpha(0.08)
                         } else if S {
-                            p.accent.opacity(0.18)
+                            p.accent.opacity(0.07)
                         } else {
                             rgb(if dark { 0x484848 } else { 0xe9f1f3 })
                         }
@@ -851,7 +857,7 @@ impl<V: Clone + PartialEq + 'static> SelectState<V> {
                         if terminal {
                             p.accent.alpha(0.14)
                         } else if S {
-                            p.accent.opacity(0.22)
+                            p.accent.opacity(0.10)
                         } else {
                             rgb(if dark { 0x484848 } else { 0xe9f1f3 })
                         }
@@ -872,10 +878,6 @@ impl<V: Clone + PartialEq + 'static> SelectState<V> {
                             .min_w_0()
                             .whitespace_nowrap()
                             .text_ellipsis()
-                            .when_some(
-                                option.font_family.clone().filter(|_| !terminal),
-                                |v, family| v.font_family(family),
-                            )
                             .child(option.title.clone()),
                     )
                     .when_some(option.font_sample.clone(), |row, (family, sample)| {
@@ -887,6 +889,8 @@ impl<V: Clone + PartialEq + 'static> SelectState<V> {
                                 .whitespace_nowrap()
                                 .text_right()
                                 .font(font(family))
+                                .font_weight(FontWeights::REGULAR)
+                                .text_color(p.muted)
                                 .text_size(px(13.))
                                 .child(sample),
                         )
@@ -894,7 +898,7 @@ impl<V: Clone + PartialEq + 'static> SelectState<V> {
                     .when(S || (terminal && selected), |v| {
                         v.child(
                             div()
-                                .w(px(if self.compact_terminal() { 15. } else { 20. }))
+                                .w(px(if self.terminal_popup() { 15. } else { 20. }))
                                 .flex_shrink_0()
                                 .flex()
                                 .justify_center()
@@ -927,19 +931,21 @@ impl<V: Clone + PartialEq + 'static> SelectState<V> {
                 let _ = pick.update(cx, |this, cx| this.commit(value.clone(), w, cx));
             })
             .into_any_element();
-        if S {
-            option
-        } else {
-            div()
-                .h(px(if terminal { 32. } else { 34. }))
-                .px(px(if terminal { 6. } else { 7. }))
-                .py(px(if terminal { 0. } else { 1. }))
-                .child(option)
-                .into_any_element()
-        }
+        div()
+            .h(px(if terminal { 32. } else { 34. }))
+            .px(px(if S {
+                4.
+            } else if terminal {
+                6.
+            } else {
+                7.
+            }))
+            .py(px(if S || terminal { 0. } else { 1. }))
+            .child(option)
+            .into_any_element()
     }
     fn action_row_height(&self) -> f32 {
-        if self.compact_terminal() { 32. } else { 34. }
+        if self.terminal_popup() { 32. } else { 34. }
     }
     fn action_rows(
         &self,
@@ -948,9 +954,9 @@ impl<V: Clone + PartialEq + 'static> SelectState<V> {
         p: Palette,
         cx: &App,
     ) -> AnyElement {
-        let terminal = self.compact_terminal();
+        let terminal = self.terminal_popup();
         let settings = self.presentation.settings;
-        let compact = self.compact_terminal();
+        let compact = self.terminal_popup();
         let hover_color = if terminal {
             p.control
         } else {
@@ -1071,23 +1077,23 @@ impl<V: Clone + PartialEq + 'static> SelectState<V> {
     /// Desired option list height and the fixed chrome (padding, border,
     /// action rows) around it.
     fn list_and_chrome(&self, named: usize, related: usize) -> (f32, f32) {
-        let row_height = if self.compact_terminal() {
+        let row_height = if self.terminal_popup() {
             32.
         } else {
             SELECT_ROW
         };
         let rows = self.visible.len() as f32 * row_height;
-        let list = rows.min(if self.compact_terminal() {
+        let list = rows.min(if self.terminal_popup() {
             224.
         } else if self.presentation.settings {
             204.
         } else {
             228.
         });
-        let chrome = if self.compact_terminal() {
+        let chrome = if self.terminal_popup() {
             12.
         } else if self.presentation.settings {
-            0.
+            8.
         } else {
             10.
         } + 2.
@@ -1144,7 +1150,7 @@ impl<V: Clone + PartialEq + 'static> SelectState<V> {
                     p.surface
                 },
             )
-            .rounded(px(if self.compact_terminal() {
+            .rounded(px(if self.terminal_popup() {
                 10.
             } else if self.presentation.settings {
                 7.
@@ -1368,7 +1374,7 @@ fn next_enabled(enabled: &[usize], current: Option<usize>, delta: isize) -> Opti
 impl<V: Clone + PartialEq + 'static> Render for SelectState<V> {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let state = cx.entity();
-        if self.compact_terminal() && self.terminal_menu_width.is_none() {
+        if self.terminal_popup() && self.terminal_menu_width.is_none() {
             let mut style = window.text_style();
             style.font_weight = crate::typography::FontWeights::MEDIUM;
             let longest = self
@@ -1464,14 +1470,14 @@ impl<V: Clone + PartialEq + 'static> Render for SelectState<V> {
             )
             .border_color(p.border)
             .p(px(0.))
-            .py(px(if self.compact_terminal() {
+            .py(px(if self.terminal_popup() {
                 6.
             } else if self.presentation.settings {
-                0.
+                4.
             } else {
                 5.
             }))
-            .rounded(px(if self.compact_terminal() {
+            .rounded(px(if self.terminal_popup() {
                 10.
             } else if self.presentation.settings {
                 7.
@@ -1513,7 +1519,7 @@ impl<V: Clone + PartialEq + 'static> Render for SelectState<V> {
                     inset: false,
                 },
             ])
-            .when(self.compact_terminal(), |overlay| {
+            .when(self.terminal_popup(), |overlay| {
                 overlay.shadow(vec![BoxShadow {
                     color: black().opacity(if self.dark(cx) { 0.34 } else { 0.14 }),
                     offset: point(px(0.), px(9.)),
@@ -1556,7 +1562,8 @@ impl<V: Clone + PartialEq + 'static> Render for SelectState<V> {
             .w_full()
             .min_w_0()
             .child(overlay);
-        if self.presentation.settings || self.compact_terminal() {
+        if self.presentation.settings || (self.terminal_popup() && !self.presentation.terminal_form)
+        {
             root.into_any_element()
         } else {
             let missing = self
@@ -1822,7 +1829,8 @@ impl<V: Clone + PartialEq + 'static> RenderOnce for SelectView<V> {
         self.state.update(cx, |state, cx| {
             state.refresh_language(window, cx);
             state.presentation = self.presentation;
-            if state.compact_terminal()
+            if state.terminal_popup()
+                && !state.presentation.terminal_form
                 && state.input.read(cx).presentation().placeholder() != &state.presentation.label
             {
                 state.input.update(cx, |input, cx| {
@@ -1861,9 +1869,9 @@ mod tests {
             assert_eq!(resource.title, name);
             assert_eq!(resource.value(), &Some(42));
         }
-        let mut weight = SelectOption::localized(300, "settings.terminal.fontWeight.light");
+        let mut weight = crate::fonts::weight_options(&[300]).remove(0);
         weight.translate(Language::Chinese);
-        assert_eq!(weight.title, "细体");
+        assert_eq!(weight.title, "Light");
         assert!(weight.matches("Light"));
         weight.translate(Language::English);
         assert_eq!(weight.title, "Light");

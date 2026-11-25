@@ -109,7 +109,132 @@ impl Editor {
     }
 }
 
+#[derive(Clone, Copy)]
+enum EditorAction {
+    Connect,
+    Duplicate,
+    Delete,
+    Discard,
+}
+
 impl Nauterm {
+    pub(super) fn resource_editor_menu(
+        &self,
+        editor: &Editor,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        use crate::components::management::{discard_changes_item, editor_more_button};
+        let token = editor.fields[0].1.entity_id();
+        let kind = editor.kind;
+        let id = editor.id;
+        let has_draft = editor.has_draft(cx);
+        let owner = cx.weak_entity();
+        editor_more_button("resource-editor-more")
+            .disabled(
+                self.resource_editor_busy(cx)
+                    || id.is_some_and(|id| {
+                        kind == ItemKind::Forward && self.forward_mutations.contains(&id)
+                    }),
+            )
+            .dropdown_menu(move |menu, _, _| {
+                let item = |item: MenuItem, action| {
+                    let owner = owner.clone();
+                    item.on_click(move |_, window, cx| {
+                        let _ = owner.update(cx, |this, cx| {
+                            this.resource_editor_action(token, action, window, cx);
+                        });
+                    })
+                };
+                menu.width(180.)
+                    .when(id.is_some() && kind == ItemKind::Host, |menu| {
+                        menu.item(item(
+                            MenuItem::localized("Connect").icon(IconName::Terminal),
+                            EditorAction::Connect,
+                        ))
+                    })
+                    .when(
+                        id.is_some()
+                            && matches!(kind, ItemKind::Host | ItemKind::Group | ItemKind::Snippet),
+                        |menu| {
+                            menu.item(item(
+                                MenuItem::localized("Duplicate").icon(IconName::Copy),
+                                EditorAction::Duplicate,
+                            ))
+                        },
+                    )
+                    .when(id.is_some(), |menu| {
+                        menu.item(item(
+                            MenuItem::localized("Delete")
+                                .icon(IconName::Trash)
+                                .destructive(true),
+                            EditorAction::Delete,
+                        ))
+                        .separator()
+                    })
+                    .item(item(discard_changes_item(has_draft), EditorAction::Discard))
+            })
+    }
+
+    fn resource_editor_action(
+        &mut self,
+        token: EntityId,
+        action: EditorAction,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(editor) = self
+            .editor
+            .as_ref()
+            .filter(|editor| editor.fields[0].1.entity_id() == token)
+        else {
+            return;
+        };
+        if self.resource_editor_busy(cx)
+            || (editor.kind == ItemKind::Forward
+                && editor
+                    .id
+                    .is_some_and(|id| self.forward_mutations.contains(&id)))
+        {
+            return;
+        }
+        match action {
+            EditorAction::Connect => self.save_editor(true, window, cx),
+            EditorAction::Duplicate | EditorAction::Delete => {
+                let Some((kind, id)) = editor.edited() else {
+                    return;
+                };
+                self.selection = BTreeSet::from([id]);
+                self.selection_kind = Some(kind);
+                if matches!(action, EditorAction::Delete) {
+                    self.delete_pending = true;
+                    cx.notify();
+                } else if kind == ItemKind::Snippet {
+                    self.duplicate_snippets(BTreeSet::from([id]), window, cx);
+                } else {
+                    self.duplicate_resources(kind, cx);
+                }
+            }
+            EditorAction::Discard => {
+                if !editor.has_draft(cx) {
+                    return;
+                }
+                if editor.parent.is_some() {
+                    self.restore_resource_parent(None, false, window, cx);
+                } else {
+                    if let Some(key) = editor.draft_key {
+                        self.editor_drafts.remove(&key);
+                    }
+                    self.retire_editor();
+                    self.selection.clear();
+                    self.selection_kind = None;
+                    self.delete_pending = false;
+                    self.focus.focus(window, cx);
+                    cx.notify();
+                }
+            }
+        }
+    }
+
     pub(super) fn dismiss_editor(&mut self, cx: &App) -> bool {
         if self.resource_editor_busy(cx) {
             return false;

@@ -5,9 +5,17 @@ use crate::{
     components::{Checkbox, DialogColors, DialogFrame, Modal},
     host_import::{KeyBatch, KeyCandidate, Source},
     host_transfer::{self, Candidate},
+    localization::{format_for, language, text},
 };
 use gpui_kit::{PathPromptOptions, base::input::InputEvent};
 use std::{collections::BTreeMap, rc::Rc};
+
+fn source_label(source: Source, cx: &App) -> SharedString {
+    match source {
+        Source::Csv => text(cx, "workspace.import.source.csv.label"),
+        _ => source.label().into(),
+    }
+}
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Section {
@@ -82,7 +90,9 @@ impl Nauterm {
         if self.host_import.as_ref().is_some_and(|state| state.saving) {
             return;
         }
-        let filter = cx.new(|cx| InputState::new(window, cx).placeholder("Search Hosts and keys"));
+        let filter = cx.new(|cx| {
+            InputState::new(window, cx).placeholder("workspace.label.filterHostsAndKeys")
+        });
         let event = cx.subscribe(&filter, |this, input, event: &InputEvent, cx| {
             if matches!(event, InputEvent::Change)
                 && let Some(state) = this
@@ -130,7 +140,7 @@ impl Nauterm {
                 files: !source.directory(),
                 directories: source.directory(),
                 multiple: false,
-                prompt: Some(source.detail().into()),
+                prompt: None,
             },
             matches!(source, Source::OpenSsh)
                 .then_some(crate::file_dialog::InitialDirectory::SshImport),
@@ -246,13 +256,24 @@ impl Nauterm {
         state.error = None;
         cx.spawn_in(window, async move |this, cx| {
             let saved = if let Some(vault) = &vault {
-                vault.save_host_passwords(password_rows.iter().map(|index| rows[*index].password.clone()).collect()).await
+                vault
+                    .save_host_passwords(
+                        password_rows
+                            .iter()
+                            .map(|index| rows[*index].password.clone())
+                            .collect(),
+                    )
+                    .await
             } else {
                 Ok(vec![])
             };
             let created = saved.as_ref().cloned().unwrap_or_default();
             let _ = this.update_in(cx, |this, _, cx| {
-                if !this.host_import.as_ref().is_some_and(|state| state.filter.entity_id() == token) {
+                if !this
+                    .host_import
+                    .as_ref()
+                    .is_some_and(|state| state.filter.entity_id() == token)
+                {
                     return;
                 }
                 let result = (|| -> anyhow::Result<_> {
@@ -263,10 +284,13 @@ impl Nauterm {
                     }
                     anyhow::ensure!(this.resources_ready(), "Workspace storage is unavailable.");
                     let mut imported = host_transfer::merge(&this.data, &rows, &references)?;
-                    let report = this.store.publish_host_import(&mut imported.data, KeyBatch {
-                        keys,
-                        bindings: std::mem::take(&mut imported.key_bindings),
-                    })?;
+                    let report = this.store.publish_host_import(
+                        &mut imported.data,
+                        KeyBatch {
+                            keys,
+                            bindings: std::mem::take(&mut imported.key_bindings),
+                        },
+                    )?;
                     Ok((imported, report))
                 })();
                 match result {
@@ -274,12 +298,34 @@ impl Nauterm {
                         let count = imported.ids.len();
                         this.data = imported.data;
                         this.host_import = None;
-                        let unmatched = if report.unmatched_hosts > 0 {
-                            format!(" {} Host key references remain unconfigured.", report.unmatched_hosts)
-                        } else {
-                            String::new()
-                        };
-                        this.notice = Some(format!("Imported {count} Hosts and {} keys. {} duplicate Hosts skipped; {} keys reused.{unmatched}", report.created, imported.skipped, report.reused));
+                        let language = language(cx);
+                        let mut summary = format_for(
+                            language,
+                            "workspace.import.result.added",
+                            &[
+                                ("hosts", &count.to_string()),
+                                ("keys", &report.created.to_string()),
+                            ],
+                        )
+                        .to_string();
+                        for (key, count) in [
+                            ("workspace.import.result.skipped", imported.skipped),
+                            ("workspace.import.result.reusedKeys", report.reused),
+                            (
+                                "workspace.import.result.unconfiguredHostKeys",
+                                report.unmatched_hosts,
+                            ),
+                        ] {
+                            if count > 0 {
+                                summary.push(' ');
+                                summary.push_str(&format_for(
+                                    language,
+                                    key,
+                                    &[("count", &count.to_string())],
+                                ));
+                            }
+                        }
+                        this.notice = Some(summary);
                         if let Some(keychain) = &this.keychain {
                             keychain.update(cx, |view, cx| view.refresh(cx));
                         }
@@ -301,7 +347,8 @@ impl Nauterm {
                     cx.notify();
                 });
             }
-        }).detach();
+        })
+        .detach();
         cx.notify();
     }
 }
@@ -313,7 +360,8 @@ impl Nauterm {
         }
         let export = host_transfer::Export::new(&self.data);
         if export.hosts.is_empty() {
-            self.notice = Some("No remote hosts to export.".into());
+            self.notice =
+                Some(crate::localization::text(cx, "workspace.export.hosts.empty").to_string());
             cx.notify();
             return;
         }
@@ -365,13 +413,31 @@ impl Nauterm {
             }
             .await;
             let _ = this.update(cx, |this, cx| {
+                use crate::localization::{format_for, language, message_for};
+                let language = language(cx);
                 this.host_exporting = false;
                 match result {
                     Ok(Some(count)) => {
-                        this.notice = Some(format!("Exported {count} hosts to CSV."))
+                        this.notice = Some(
+                            format_for(
+                                language,
+                                "workspace.export.hosts.success",
+                                &[("count", &count.to_string())],
+                            )
+                            .to_string(),
+                        );
                     }
                     Ok(None) => {}
-                    Err(error) => this.notice = Some(format!("Host export failed: {error}")),
+                    Err(error) => {
+                        this.notice = Some(
+                            format_for(
+                                language,
+                                "workspace.export.hosts.failure",
+                                &[("error", &message_for(language, &error.to_string()))],
+                            )
+                            .to_string(),
+                        );
+                    }
                 }
                 cx.notify();
             });
@@ -559,10 +625,16 @@ impl Nauterm {
         let state = self.host_import.as_ref()?;
         let token = state.filter.entity_id();
         let p = Palette::new(self.data.dark);
-        let title = state
-            .source
-            .map(|source| format!("Import from {}", source.label()))
-            .unwrap_or_else(|| "Import to vault".into());
+        let title = state.source.map_or_else(
+            || text(cx, "workspace.import.title"),
+            |source| {
+                format_for(
+                    language(cx),
+                    "workspace.import.fromTitle",
+                    &[("source", &source_label(source, cx))],
+                )
+            },
+        );
         let visible = state.visible.clone();
         let owner = cx.weak_entity();
         let list = uniform_list("host-import-list", visible.len(), move |range, _, cx| {
@@ -585,7 +657,7 @@ impl Nauterm {
         if state.source.is_none() {
             body = body.child(div().text_color(p.muted).child(crate::localization::text(
                 cx,
-                "rs.ui.copy.chooseImportSource",
+                "workspace.import.source.description",
             )));
             let mut sources = div().w_full().min_w_0().grid().grid_cols(2).gap(px(10.));
             for source in Source::ALL {
@@ -637,14 +709,14 @@ impl Nauterm {
                             .child(
                                 div()
                                     .font_weight(FontWeights::SEMIBOLD)
-                                    .child(crate::localization::view(source.label())),
+                                    .child(source_label(source, cx)),
                             )
                             .child(
                                 div()
                                     .text_size(px(11.))
                                     .text_color(p.muted)
                                     .truncate()
-                                    .child(source.detail()),
+                                    .child(crate::localization::view(source.description_key())),
                             ),
                     )
                     .trailing_icon(
@@ -697,7 +769,7 @@ impl Nauterm {
             body.child(
                 div()
                     .text_color(p.muted)
-                    .child(crate::localization::text(cx, "rs.ui.copy.loadingImport")),
+                    .child(crate::localization::text(cx, "workspace.import.loading")),
             )
         });
         let mut frame = DialogFrame::new("host-import-frame", title.clone())
@@ -736,7 +808,7 @@ impl Nauterm {
             Button::new("cancel-host-import")
                 .ghost()
                 .label(if state.source.is_some() {
-                    "Choose again"
+                    "workspace.import.chooseAgain"
                 } else {
                     "Cancel"
                 })
@@ -754,9 +826,13 @@ impl Nauterm {
                 Button::new("confirm-host-import")
                     .primary()
                     .label(if state.saving {
-                        "Importing…".into()
+                        text(cx, "workspace.import.importing")
                     } else {
-                        format!("Import {}", state.selection_count())
+                        format_for(
+                            language(cx),
+                            "workspace.import.selectedCount",
+                            &[("count", &state.selection_count().to_string())],
+                        )
                     })
                     .disabled(
                         state.loading

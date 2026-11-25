@@ -1,5 +1,8 @@
 use super::*;
-use crate::components::{Dialog, DialogColors, DialogFrame, Modal};
+use crate::{
+    components::{Dialog, DialogColors, DialogFrame, Modal},
+    typography::FontWeights,
+};
 
 impl Chat {
     fn prepare_delete(&mut self, uuid: String, window: &mut Window, cx: &mut Context<Self>) {
@@ -257,13 +260,17 @@ impl Chat {
                 .text_center()
                 .text_color(palette.muted)
                 .child(crate::assets::icon(IconName::RotateCcwClock).size(px(22.)))
-                .child(div().text_size(px(13.)).text_color(palette.text).child(
-                    crate::localization::view(if query_empty {
-                        "No conversation history"
-                    } else {
-                        "No matching conversations"
-                    }),
-                ))
+                .child(
+                    div()
+                        .text_size(px(13.))
+                        .font_weight(FontWeights::MEDIUM)
+                        .text_color(palette.text)
+                        .child(crate::localization::view(if query_empty {
+                            "No conversation history"
+                        } else {
+                            "No matching conversations"
+                        })),
+                )
                 .into_any_element()
         } else {
             crate::components::uniform_scrollbar(

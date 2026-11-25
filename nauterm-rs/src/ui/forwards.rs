@@ -66,51 +66,6 @@ impl Nauterm {
         }
         cx.notify();
     }
-    pub(super) fn forward_editor_actions(
-        &self,
-        editor: &Editor,
-        cx: &mut Context<Self>,
-    ) -> Vec<AnyElement> {
-        let Some(id) = editor.id.filter(|_| editor.kind == ItemKind::Forward) else {
-            return vec![];
-        };
-        let busy = self.forward_mutations.contains(&id);
-        let token = editor.fields[0].1.entity_id();
-        let owner = cx.weak_entity();
-        vec![
-            Button::new("forward-editor-actions")
-                .toolbar()
-                .ghost()
-                .icon(IconName::Ellipsis)
-                .tooltip("Forwarding actions")
-                .dropdown_menu(move |menu, _, _| {
-                    let owner = owner.clone();
-                    menu.item(
-                        MenuItem::localized("Delete")
-                            .icon(IconName::Trash)
-                            .destructive(true)
-                            .disabled(busy)
-                            .on_click(move |_, _, cx| {
-                                let _ = owner.update(cx, |this, cx| {
-                                    if this.forward_mutations.contains(&id)
-                                        || !this.data.forwards.iter().any(|rule| rule.id == id)
-                                        || !this.editor.as_ref().is_some_and(|editor| {
-                                            editor.fields[0].1.entity_id() == token
-                                        })
-                                    {
-                                        return;
-                                    }
-                                    this.selection = BTreeSet::from([id]);
-                                    this.selection_kind = Some(ItemKind::Forward);
-                                    this.delete_pending = true;
-                                    cx.notify();
-                                });
-                            }),
-                    )
-                })
-                .into_any_element(),
-        ]
-    }
     pub(super) fn active_forward_count(&self) -> usize {
         self.forward_states
             .values()
@@ -613,14 +568,14 @@ impl Nauterm {
                 if query.is_empty() {
                     "No forwarding rules yet"
                 } else {
-                    "No matching forwarding rules"
+                    "workspace.label.noForwardingRulesFound"
                 },
                 self.data.dark,
             )
             .description(if query.is_empty() {
                 "Add a forwarding rule to route local, remote, or dynamic traffic through SSH."
             } else {
-                "Try another search."
+                "workspace.description.tryAnotherSearch"
             })
             .on_click(cx.listener(|this, _, window, cx| {
                 this.retire_editor();
@@ -893,10 +848,11 @@ impl Nauterm {
                             )
                             .when(status.state == State::Running, |row| {
                                 row.child(div().text_size(px(11.)).text_color(p.muted).child(
-                                    crate::localization::view(format!(
-                                        "{} active",
-                                        status.active_connections
-                                    )),
+                                    crate::localization::format_for(
+                                        crate::localization::language(cx),
+                                        "workspace.portForward.activeConnections",
+                                        &[("count", &status.active_connections.to_string())],
+                                    ),
                                 ))
                             })
                             .child(div().flex_1())

@@ -87,7 +87,7 @@ impl Wizard {
         section("Device", p)
             .child(div().text_color(p.muted).child(crate::localization::text(
                 cx,
-                "rs.ui.copy.selectFidoAuthenticator",
+                "workspace.keys.fido2.selectAuthenticator",
             )))
             .children(self.devices.iter().map(|device| {
                 let selected = self.device.as_ref() == Some(&device.id);
@@ -304,7 +304,7 @@ impl Wizard {
                             .error(self.validation_hint(ValidationError::Rounds)),
                     )
                     .child(div().text_size(px(11.)).text_color(p.muted).child(
-                        crate::localization::text(cx, "rs.ui.copy.privateKeyStrength"),
+                        crate::localization::text(cx, "workspace.keys.fido2.privateKeyProtectionDescription"),
                     ))
                     .child(toggle(
                         "workspace.keys.label.savePassphrase",
