@@ -227,6 +227,7 @@
   "connection.action.copyLogs": "Copy logs",
   "connection.action.hideLogs": "Hide logs",
   "connection.action.showLogs": "Show logs",
+  "connection.auth.interactiveRetry": "Authentication failed. Try again.",
   "connection.auth.securityKeyPin.title": "Unlock FIDO2 security key",
   "connection.auth.securityKeyPin.description": "Enter the device PIN to continue SSH authentication.",
   "connection.ssh.portRange": "SSH port must be between 1 and 65535.",

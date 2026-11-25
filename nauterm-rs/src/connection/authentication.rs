@@ -94,6 +94,7 @@ impl Connection {
     }
     pub(super) fn ensure_authentication(&mut self, cx: &mut Context<Self>) {
         if self.state.phase != Phase::Authentication
+            || self.state.challenge.is_some()
             || !matches!(
                 self.auth_step(),
                 Intervention::Username | Intervention::Password | Intervention::PublicKey

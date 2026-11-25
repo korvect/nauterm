@@ -18,6 +18,7 @@ struct TestServer {
     require_key: bool,
     password_first: bool,
     empty_round: bool,
+    allow_retry: bool,
 }
 fn methods(kinds: &[MethodKind], partial_success: bool) -> server::Auth {
     server::Auth::Reject {
@@ -79,11 +80,17 @@ impl server::Handler for TestServer {
                 vec!["123456".into()]
             };
             if responses != expected {
-                return Ok(methods(&[MethodKind::KeyboardInteractive], false));
+                return Ok(if self.allow_retry {
+                    methods(&[MethodKind::KeyboardInteractive], false)
+                } else {
+                    methods(&[], false)
+                });
             }
             if self.round == 2 {
                 return Ok(server::Auth::Accept);
             }
+        } else {
+            self.round = 0;
         }
         self.round += 1;
         Ok(server::Auth::Partial {
@@ -104,6 +111,7 @@ impl server::Handler for TestServer {
 enum Answer {
     Correct,
     Wrong,
+    WrongCodeThenCorrect,
     Cancel,
     DisconnectThenRespond,
 }
@@ -125,6 +133,7 @@ async fn exercise(
         ..Default::default()
     });
     let (server_socket_tx, server_socket_rx) = tokio::sync::oneshot::channel();
+    let retry_code = matches!(answer, Answer::WrongCodeThenCorrect);
     let server = tokio::spawn(async move {
         let (stream, _) = listener.accept().await.unwrap();
         let socket = stream.into_std().unwrap();
@@ -138,6 +147,7 @@ async fn exercise(
                 require_key,
                 password_first,
                 empty_round,
+                allow_retry: retry_code,
             },
         )
         .await
@@ -193,10 +203,11 @@ async fn exercise(
                     return;
                 }
                 assert_eq!(request.name, "Server authentication");
+                assert_eq!(request.retry, retry_code && rounds == 2);
                 assert!(!interaction.respond(request.id + 100, Some(vec![])));
                 let responses = if matches!(answer, Answer::Cancel) {
                     None
-                } else if matches!(answer, Answer::Wrong) {
+                } else if matches!(answer, Answer::Wrong) || (retry_code && rounds == 1) {
                     Some(vec!["incorrect-response".to_owned(); request.prompts.len()])
                 } else if request.prompts.len() == 2 {
                     assert!(request.prompts[0].echo);
@@ -212,7 +223,12 @@ async fn exercise(
                 assert!(!interaction.respond(request.id, Some(vec![])));
                 last_id = request.id;
                 rounds += 1;
-                if rounds == 2 || !matches!(answer, Answer::Correct) {
+                let done = match answer {
+                    Answer::Correct => rounds == 2,
+                    Answer::WrongCodeThenCorrect => rounds == 4,
+                    _ => true,
+                };
+                if done {
                     return;
                 }
             }
@@ -224,7 +240,8 @@ async fn exercise(
     })
     .await
     .unwrap_or_else(|_| panic!("authentication must not hang: key={require_key}, password={password_first}, empty={empty_round}, answer={answer:?}, trusted={trusted}"));
-    assert_eq!(result.is_ok(), trusted && matches!(answer, Answer::Correct));
+    let correct = matches!(answer, Answer::Correct | Answer::WrongCodeThenCorrect);
+    assert_eq!(result.is_ok(), trusted && correct);
     let events = events.lock().unwrap();
     let serialized = serde_json::to_string(&*events).unwrap();
     for secret in ["private-password", "123456", "incorrect-response"] {
@@ -234,7 +251,7 @@ async fn exercise(
         assert!(!events
             .iter()
             .any(|event| event.kind == "auth_interactive_request"));
-    } else if matches!(answer, Answer::Correct) {
+    } else if correct {
         assert_eq!(
             events
                 .iter()
@@ -243,9 +260,13 @@ async fn exercise(
             1
         );
         if require_key || password_first {
-            assert!(events
-                .iter()
-                .any(|event| event.kind == "auth_partial_success"));
+            assert_eq!(
+                events
+                    .iter()
+                    .filter(|event| event.kind == "auth_partial_success")
+                    .count(),
+                1
+            );
         }
     } else {
         assert!(events
@@ -267,6 +288,7 @@ fn keyboard_interactive_real_ssh_challenges() {
             exercise(false, false, false, Answer::Correct, true).await;
             exercise(true, false, false, Answer::Correct, true).await;
             exercise(false, true, false, Answer::Correct, true).await;
+            exercise(true, false, false, Answer::WrongCodeThenCorrect, true).await;
             exercise(false, false, true, Answer::Correct, true).await;
             exercise(false, false, false, Answer::Wrong, true).await;
             exercise(false, false, false, Answer::Cancel, true).await;
@@ -302,6 +324,7 @@ fn keyboard_interactive_transport_roundtrip_and_shutdown() {
                             require_key: false,
                             password_first: false,
                             empty_round: false,
+                            allow_retry: false,
                         },
                     )
                     .await

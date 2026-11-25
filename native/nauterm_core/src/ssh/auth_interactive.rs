@@ -45,6 +45,31 @@ pub struct KeyboardInteractiveChallenge {
     pub name: String,
     pub instructions: String,
     pub prompts: Vec<KeyboardInteractivePrompt>,
+    #[serde(default)]
+    pub retry: bool,
+}
+
+impl KeyboardInteractiveChallenge {
+    pub(super) fn new(
+        name: String,
+        instructions: String,
+        prompts: Vec<client::Prompt>,
+        retry: bool,
+    ) -> Self {
+        Self {
+            id: NEXT_CHALLENGE_ID.fetch_add(1, Ordering::Relaxed),
+            name,
+            instructions,
+            prompts: prompts
+                .into_iter()
+                .map(|prompt| KeyboardInteractivePrompt {
+                    prompt: prompt.prompt,
+                    echo: prompt.echo,
+                })
+                .collect(),
+            retry,
+        }
+    }
 }
 
 #[derive(Default, serde::Deserialize)]
@@ -198,38 +223,28 @@ impl AuthenticationInteraction {
     pub(super) async fn request<H: client::Handler>(
         &self,
         handle: &mut client::Handle<H>,
-        name: String,
-        instructions: String,
-        prompts: Vec<client::Prompt>,
+        challenge: KeyboardInteractiveChallenge,
         events: &Arc<Mutex<Vec<SessionEvent>>>,
         wakeup: &Arc<Mutex<Option<WakeupCallback>>>,
     ) -> Result<Vec<String>, String> {
-        let id = NEXT_CHALLENGE_ID.fetch_add(1, Ordering::Relaxed);
         let (sender, receiver) = oneshot::channel();
         *self.pending.lock().unwrap() = Some(PendingResponse {
-            id,
-            count: prompts.len(),
+            id: challenge.id,
+            count: challenge.prompts.len(),
             sender,
         });
         // Clear the sender even when shutdown cancels this future.
         let _pending = PendingChallenge(self);
         let mut event = SessionEvent::new(
             "auth_interactive_request",
-            "SSH keyboard-interactive authentication requires a response.",
+            if challenge.retry {
+                "SSH authentication response rejected. Try again."
+            } else {
+                "SSH keyboard-interactive authentication requires a response."
+            },
         )
         .with_method("keyboard-interactive");
-        event.challenge = Some(KeyboardInteractiveChallenge {
-            id,
-            name,
-            instructions,
-            prompts: prompts
-                .into_iter()
-                .map(|prompt| KeyboardInteractivePrompt {
-                    prompt: prompt.prompt,
-                    echo: prompt.echo,
-                })
-                .collect(),
-        });
+        event.challenge = Some(challenge);
         push_event(events, wakeup, event);
         tokio::select! {
             response = receiver => response.map_err(|_| "SSH authentication cancelled.".to_owned()),

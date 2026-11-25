@@ -685,7 +685,9 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
     // A rejected response can create a new request for the same form. Keep
     // its node, while still appending each new keyboard-interactive round.
     if (previousPage?.stage == stage &&
-        previousPage?.challengeId == page.challengeId) {
+        (previousPage?.challengeId == page.challengeId ||
+            (challenge?.isRetry == true &&
+                previousPage?.challengeId != null))) {
       _lastProgressPage = page;
       return;
     }
@@ -1690,10 +1692,24 @@ class _KeyboardInteractiveFormState extends State<_KeyboardInteractiveForm> {
             if (challenge.name.isNotEmpty) const SizedBox(height: 10),
             Text(challenge.instructions, style: _connectionBodyStyle),
           ],
+          if (challenge.isRetry) ...[
+            if (challenge.name.isNotEmpty || challenge.instructions.isNotEmpty)
+              const SizedBox(height: 10),
+            Text(
+              context.tr(
+                'connection.auth.interactiveRetry',
+                fallback: 'Authentication failed. Try again.',
+              ),
+              style: _connectionBodyStyle.copyWith(
+                color: const Color(0xffd24135),
+              ),
+            ),
+          ],
           for (var index = 0; index < challenge.prompts.length; index++) ...[
             if (index > 0 ||
                 challenge.name.isNotEmpty ||
-                challenge.instructions.isNotEmpty)
+                challenge.instructions.isNotEmpty ||
+                challenge.isRetry)
               const SizedBox(height: 16),
             _WorkspaceInput(
               controller: _controllers[index],

@@ -1174,6 +1174,8 @@ async fn authenticate_keyboard_interactive<H: client::Handler>(
             .await
             .map_err(|error| error.to_string())?;
         let mut tried_saved_password = false;
+        let mut submitted = false;
+        let mut retry = false;
         loop {
             match response {
                 client::KeyboardInteractiveAuthResponse::Success => {
@@ -1194,10 +1196,29 @@ async fn authenticate_keyboard_interactive<H: client::Handler>(
                     );
                     return Ok(AuthResult::Failure { remaining_methods, partial_success: true });
                 }
-                client::KeyboardInteractiveAuthResponse::Failure { partial_success: false, .. } => {
-                    return Err("Server rejected SSH keyboard-interactive authentication.".to_owned());
+                client::KeyboardInteractiveAuthResponse::Failure {
+                    remaining_methods,
+                    partial_success: false,
+                } => {
+                    if !submitted
+                        || verification.interaction.is_none()
+                        || !remaining_methods.contains(&russh::MethodKind::KeyboardInteractive)
+                    {
+                        return Err("Server rejected SSH keyboard-interactive authentication.".to_owned());
+                    }
+                    // A retry waits for fresh input, including when the first
+                    // attempt used a saved password. An immediate rejection
+                    // without any submitted answers ends the attempt.
+                    submitted = false;
+                    tried_saved_password = true;
+                    retry = true;
+                    response = handle
+                        .authenticate_keyboard_interactive_start(username, None)
+                        .await
+                        .map_err(|error| error.to_string())?;
                 }
                 client::KeyboardInteractiveAuthResponse::InfoRequest { name, instructions, prompts } => {
+                    submitted |= !prompts.is_empty();
                     // Empty information requests still require an empty response.
                     let auto_password = saved_password.filter(|value| {
                         !tried_saved_password
@@ -1219,7 +1240,10 @@ async fn authenticate_keyboard_interactive<H: client::Handler>(
                         let interaction = verification.interaction.as_ref().ok_or_else(|| {
                             "This SSH operation requires keyboard-interactive authentication, but cannot display interactive prompts.".to_owned()
                         })?;
-                        interaction.request(handle, name, instructions, prompts, events, wakeup).await?
+                        let challenge = KeyboardInteractiveChallenge::new(
+                            name, instructions, prompts, std::mem::take(&mut retry),
+                        );
+                        interaction.request(handle, challenge, events, wakeup).await?
                     };
                     push_auth_event(
                         events, wakeup, "auth_interactive_submitted", "keyboard-interactive",

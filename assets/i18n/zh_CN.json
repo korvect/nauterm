@@ -227,6 +227,7 @@
   "connection.action.copyLogs": "复制日志",
   "connection.action.hideLogs": "隐藏日志",
   "connection.action.showLogs": "显示日志",
+  "connection.auth.interactiveRetry": "身份验证失败，请重试。",
   "connection.auth.securityKeyPin.title": "解锁 FIDO2 安全密钥",
   "connection.auth.securityKeyPin.description": "请输入设备 PIN 以继续 SSH 身份验证。",
   "connection.ssh.portRange": "SSH 端口必须介于 1 和 65535 之间。",

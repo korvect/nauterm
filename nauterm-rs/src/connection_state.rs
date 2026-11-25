@@ -51,6 +51,15 @@ pub enum Severity {
 impl LogEntry {
     pub fn severity(&self) -> Severity {
         match self.event.kind.as_str() {
+            "auth_interactive_request"
+                if self
+                    .event
+                    .challenge
+                    .as_ref()
+                    .is_some_and(|challenge| challenge.retry) =>
+            {
+                Severity::Warning
+            }
             "known_host_verified"
             | "host_key_accepted"
             | "host_key_accepted_for_session"
@@ -102,9 +111,12 @@ pub struct ProgressHistory {
 }
 
 impl ProgressHistory {
-    fn observe(&mut self, page: InterventionPage, segmented: bool) {
+    fn observe(&mut self, page: InterventionPage, segmented: bool, retry: bool) {
         if let Some(previous) = self.page {
-            if previous.step == page.step && previous.challenge_id == page.challenge_id {
+            if previous.step == page.step
+                && (previous.challenge_id == page.challenge_id
+                    || retry && previous.challenge_id.is_some())
+            {
                 self.page = Some(page);
                 return;
             }
@@ -152,6 +164,9 @@ impl ConnectionState {
                 request_id: self.credentials.as_ref().map(|(id, _)| *id),
             },
             segmented,
+            self.challenge
+                .as_ref()
+                .is_some_and(|challenge| challenge.retry),
         );
     }
 
@@ -566,6 +581,31 @@ mod tests {
         assert!(state.requires_key_passphrase());
         state.observe_intervention(Intervention::Passphrase, false);
         assert_eq!(state.progress.steps, [Intervention::Passphrase]);
+    }
+
+    #[test]
+    fn retrying_a_visible_interactive_step_reuses_its_node() {
+        let mut state = ConnectionState::default();
+        state.apply(challenge(1, "OTP:"));
+        state.observe_intervention(Intervention::VerificationCode, false);
+        state.apply(event("auth_interactive_submitted"));
+
+        let mut retry = challenge(2, "OTP:");
+        retry.challenge.as_mut().unwrap().retry = true;
+        state.apply(retry);
+        state.observe_intervention(Intervention::VerificationCode, false);
+        assert_eq!(state.progress.steps, [Intervention::VerificationCode]);
+        assert_eq!(state.logs.last().unwrap().severity(), Severity::Warning);
+
+        state.apply(challenge(3, "OTP:"));
+        state.observe_intervention(Intervention::VerificationCode, false);
+        assert_eq!(
+            state.progress.steps,
+            [
+                Intervention::VerificationCode,
+                Intervention::VerificationCode
+            ]
+        );
     }
 
     #[test]

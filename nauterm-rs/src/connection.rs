@@ -863,6 +863,16 @@ impl Connection {
                 .when(!challenge.instructions.trim().is_empty(), |view| {
                     view.child(challenge.instructions.clone())
                 })
+                .when(challenge.retry, |view| {
+                    view.child(
+                        div()
+                            .text_color(rgb(0xd24135))
+                            .child(crate::localization::text(
+                                cx,
+                                "connection.auth.interactiveRetry",
+                            )),
+                    )
+                })
                 .children(challenge.prompts.iter().zip(&self.challenge_inputs).map(
                     |(prompt, input)| {
                         let label = if prompt.asks_for_verification_code() {
