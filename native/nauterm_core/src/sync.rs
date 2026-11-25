@@ -552,7 +552,9 @@ fn sync_file(
                 merge_payload(connection, &remote_payload, remote_header.schema_version)?
             }
             SyncStrategy::LocalWins => 0,
-            SyncStrategy::RemoteWins => replace_payload(connection, &remote_payload)?,
+            SyncStrategy::RemoteWins => {
+                replace_payload(connection, &remote_payload, remote_header.schema_version)?
+            }
         };
         let header = match local_header {
             Some(mut local_header) => {
@@ -1024,7 +1026,11 @@ fn merge_payload_in_transaction(
     Ok(imported)
 }
 
-fn replace_payload(connection: &mut Connection, payload: &SyncPayload) -> Result<usize, SyncError> {
+fn replace_payload(
+    connection: &mut Connection,
+    payload: &SyncPayload,
+    source_schema_version: i32,
+) -> Result<usize, SyncError> {
     validate_payload_tables(payload)?;
     let dek = crate::crypto::local_dek_if_configured(connection)?;
     let transaction = connection.transaction()?;
@@ -1034,7 +1040,8 @@ fn replace_payload(connection: &mut Connection, payload: &SyncPayload) -> Result
     for table in SYNC_TABLES.iter().rev() {
         transaction.execute(&format!("DELETE FROM {} {}", table.name, table.filter), [])?;
     }
-    let imported = merge_payload_in_transaction(&transaction, payload, dek.as_ref(), 5)?;
+    let imported =
+        merge_payload_in_transaction(&transaction, payload, dek.as_ref(), source_schema_version)?;
     transaction.commit()?;
     Ok(imported)
 }
@@ -1069,7 +1076,7 @@ fn merge_record(
     dek: Option<&crate::crypto::Dek>,
     source_schema_version: i32,
 ) -> Result<bool, SyncError> {
-    validate_record(table, record)?;
+    validate_record(table, record, source_schema_version)?;
     let uuid = record_string(record, "uuid")?;
     let local_stamp = transaction
         .query_row(
@@ -1108,10 +1115,7 @@ fn merge_record(
         .iter()
         .map(|column| {
             let Some(value) = record.get(*column) else {
-                return Err(SyncError::new(format!(
-                    "Missing {}.{} in sync record.",
-                    table.name, column
-                )));
+                return Ok(SqlValue::Null);
             };
             if let Some(target_table) = weak_reference_target(table.name, column) {
                 let Some(uuid) = value.as_str().filter(|value| is_uuid_value(value)) else {
@@ -1147,9 +1151,8 @@ fn merge_record(
                 && !(source_schema_version < 6
                     && table.name == "hosts"
                     && matches!(**column, "serial_port" | "serial_baud_rate" | "config"))
-                && !(source_schema_version < 5
-                    && matches!(table.name, "hosts" | "groups")
-                    && matches!(**column, "dark_theme_id" | "telnet_dark_theme_id"))
+                && !(is_dark_theme_column(table.name, column)
+                    && (source_schema_version < 5 || !record.contains_key(**column)))
         })
         .map(|column| format!("{column} = excluded.{column}"))
         .collect::<Vec<_>>()
@@ -1203,9 +1206,20 @@ fn is_sensitive_field(table: &str, column: &str) -> bool {
     )
 }
 
-fn validate_record(table: &SyncTable, record: &SyncRecord) -> Result<(), SyncError> {
+fn is_dark_theme_column(table: &str, column: &str) -> bool {
+    matches!(table, "hosts" | "groups")
+        && matches!(column, "dark_theme_id" | "telnet_dark_theme_id")
+}
+
+fn validate_record(
+    table: &SyncTable,
+    record: &SyncRecord,
+    source_schema_version: i32,
+) -> Result<(), SyncError> {
     for column in table.columns {
-        if !record.contains_key(*column) {
+        // The GPUI preview used schema 5 for local AI data before main added dark themes.
+        let may_omit = source_schema_version <= 5 && is_dark_theme_column(table.name, column);
+        if !record.contains_key(*column) && !may_omit {
             return Err(SyncError::new(format!(
                 "Sync record in {} is missing {column}.",
                 table.name
@@ -1470,6 +1484,7 @@ fn decrypt_envelope(
 // host config (including SSH compatibility mode and custom icons) and serial
 // columns. Schema 7 changes only local AI data. Preserve the authenticated
 // header and normalize only the decrypted payload before applying a strategy.
+// Theme columns are handled during import to distinguish omission from null.
 fn migrate_sync_payload(payload: &mut SyncPayload, source_schema_version: i32) {
     if source_schema_version < 6 {
         if let Some(hosts) = payload.tables.get_mut("hosts") {
@@ -1485,16 +1500,6 @@ fn migrate_sync_payload(payload: &mut SyncPayload, source_schema_version: i32) {
         if let Some(keys) = payload.tables.get_mut("keys") {
             for record in keys {
                 record.entry("passphrase").or_insert(Value::Null);
-            }
-        }
-    }
-    if source_schema_version < 5 {
-        for table in ["groups", "hosts"] {
-            if let Some(records) = payload.tables.get_mut(table) {
-                for record in records {
-                    record.entry("dark_theme_id").or_insert(Value::Null);
-                    record.entry("telnet_dark_theme_id").or_insert(Value::Null);
-                }
             }
         }
     }

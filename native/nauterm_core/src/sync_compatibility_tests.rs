@@ -158,6 +158,7 @@ fn legacy_encrypted_snapshots_authenticate_and_upgrade_to_schema_four() {
         validate_record(
             SYNC_TABLES.iter().find(|t| t.name == "keys").unwrap(),
             record,
+            schema,
         )
         .unwrap();
 
@@ -212,7 +213,7 @@ fn remote_wins_restores_legacy_snapshot_without_saved_passphrase() {
     let mut connection = connection_with_key();
     let mut payload = key_payload(None);
     migrate_sync_payload(&mut payload, 1);
-    replace_payload(&mut connection, &payload).unwrap();
+    replace_payload(&mut connection, &payload, 1).unwrap();
     assert_eq!(saved_key(&connection), ("Remote key".into(), None));
 }
 
@@ -370,9 +371,11 @@ fn complete_connection_with_key() -> Connection {
     connection
 }
 
-#[test]
-fn schema_four_dark_theme_defaults_preserve_local_overrides_during_merge() {
-    let mut connection = complete_connection_with_key();
+fn dark_theme_sync_fixture() -> (Connection, SyncPayload) {
+    let connection = complete_connection_with_key();
+    connection
+        .execute_batch("ALTER TABLE host_tags ADD COLUMN tag_uuid TEXT")
+        .unwrap();
     let mut payload = key_payload(Some(Value::Null));
     payload.tables.clear();
     for (name, uuid) in [
@@ -393,15 +396,26 @@ fn schema_four_dark_theme_defaults_preserve_local_overrides_during_merge() {
         record.remove("telnet_dark_theme_id");
         record.insert("uuid".into(), Value::String(uuid.into()));
         record.insert("name".into(), Value::String("Remote".into()));
-        record.insert("type".into(), Value::String("remote".into()));
-        if name == "groups" {
-            record.remove("type");
+        if name == "hosts" {
+            connection
+                .execute("UPDATE hosts SET type = 'remote' WHERE uuid = ?", [uuid])
+                .unwrap();
+            record.insert("type".into(), json!("remote"));
+            for column in ["serial_port", "serial_baud_rate", "config"] {
+                record.remove(column);
+            }
         }
         record.insert("created_at".into(), Value::from(1));
         record.insert("updated_at".into(), Value::from(20));
         record.insert("version".into(), Value::from(2));
         payload.tables.insert(name.into(), vec![record]);
     }
+    (connection, payload)
+}
+
+#[test]
+fn schema_four_dark_theme_defaults_preserve_local_overrides_during_merge() {
+    let (mut connection, mut payload) = dark_theme_sync_fixture();
     migrate_sync_payload(&mut payload, 4);
     merge_payload(&mut connection, &payload, 4).unwrap();
     for name in ["groups", "hosts"] {
@@ -421,7 +435,7 @@ fn schema_four_dark_theme_defaults_preserve_local_overrides_during_merge() {
             )
         );
     }
-    replace_payload(&mut connection, &payload).unwrap();
+    replace_payload(&mut connection, &payload, 4).unwrap();
     for name in ["groups", "hosts"] {
         let dark: Option<String> = connection
             .query_row(&format!("SELECT dark_theme_id FROM {name}"), [], |row| {
@@ -429,6 +443,69 @@ fn schema_four_dark_theme_defaults_preserve_local_overrides_during_merge() {
             })
             .unwrap();
         assert_eq!(dark, None);
+    }
+}
+
+#[test]
+fn gpui_preview_schema_five_syncs_without_dark_theme_fields() {
+    for strategy in [SyncStrategy::SmartMerge, SyncStrategy::RemoteWins] {
+        let (mut connection, payload) = dark_theme_sync_fixture();
+        connection.pragma_update(None, "user_version", 7).unwrap();
+        let envelope = encrypt_payload(payload, Some(MASTER_KEY), 5, None, &[7u8; 32]).unwrap();
+        let file = TemporarySyncFile(std::env::temp_dir().join(format!(
+            "nauterm-preview-sync-{}.enc",
+            envelope.header.vault_id
+        )));
+        fs::write(&file.0, serde_json::to_vec(&envelope).unwrap()).unwrap();
+        let result = sync_file(
+            &mut connection,
+            file.0.to_str().unwrap(),
+            Some(MASTER_KEY),
+            None,
+            SyncFileKind::LinkedLocal,
+            strategy,
+        )
+        .unwrap();
+        assert_eq!(result.imported_records, 2);
+
+        let upgraded: SyncEnvelope = serde_json::from_slice(&fs::read(&file.0).unwrap()).unwrap();
+        assert_eq!(upgraded.header.schema_version, 7);
+        let (_, payload, _) = decrypt_envelope(upgraded, None, Some(&[7u8; 32]), 7).unwrap();
+        for name in ["groups", "hosts"] {
+            let record = &payload.tables[name][0];
+            assert_eq!(record["name"], "Remote");
+            let expected = if strategy == SyncStrategy::SmartMerge {
+                [json!("saved-ssh-dark"), json!("saved-telnet-dark")]
+            } else {
+                [Value::Null, Value::Null]
+            };
+            assert_eq!(
+                [&record["dark_theme_id"], &record["telnet_dark_theme_id"]],
+                [&expected[0], &expected[1]]
+            );
+        }
+    }
+}
+
+#[test]
+fn schema_five_applies_explicit_dark_theme_values_and_newer_schemas_require_them() {
+    let (mut connection, mut payload) = dark_theme_sync_fixture();
+    assert!(merge_payload(&mut connection, &payload, 7).is_err());
+    assert!(replace_payload(&mut connection, &payload, 7).is_err());
+
+    for name in ["groups", "hosts"] {
+        let record = &mut payload.tables.get_mut(name).unwrap()[0];
+        record.insert("dark_theme_id".into(), Value::Null);
+        record.insert("telnet_dark_theme_id".into(), json!("new-telnet-dark"));
+    }
+    migrate_sync_payload(&mut payload, 5);
+    assert_eq!(merge_payload(&mut connection, &payload, 5).unwrap(), 2);
+
+    let exported = export_payload(&connection).unwrap();
+    for name in ["groups", "hosts"] {
+        let record = &exported.tables[name][0];
+        assert_eq!(record["dark_theme_id"], Value::Null);
+        assert_eq!(record["telnet_dark_theme_id"], "new-telnet-dark");
     }
 }
 
