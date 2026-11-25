@@ -70,13 +70,16 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final range = find.text('23:55 - 02:03');
-      final offset = find.text('(+120d)');
+      final range = find.text('23:55 - 02:03 (+120d)');
       expect(range, findsOneWidget);
-      expect(offset, findsOneWidget);
       expect(
-        tester.getTopLeft(offset).dy,
-        greaterThan(tester.getTopLeft(range).dy),
+        find.ancestor(
+          of: range,
+          matching: find.byWidgetPredicate(
+            (widget) => widget is SizedBox && widget.width == 156,
+          ),
+        ),
+        findsOneWidget,
       );
 
       await tester.tap(

@@ -90,30 +90,27 @@ fn time_range(
     start: NaiveDateTime,
     end: NaiveDateTime,
     language: crate::localization::Language,
-) -> (String, Option<String>) {
+) -> String {
+    let range = format!("{} - {}", start.format("%H:%M"), end.format("%H:%M"));
     let days = end.date().signed_duration_since(start.date()).num_days();
-    let suffix = (days > 0).then(|| {
-        crate::localization::format_for(
-            language,
-            "workspace.logs.date.dayOffset",
-            &[("days", &days.to_string())],
-        )
-        .to_string()
-    });
-    (
-        format!("{} - {}", start.format("%H:%M"), end.format("%H:%M")),
-        suffix,
-    )
+    if days <= 0 {
+        return range;
+    }
+    let offset = crate::localization::format_for(
+        language,
+        "workspace.logs.date.dayOffset",
+        &[("days", &days.to_string())],
+    );
+    format!("{range} {offset}")
 }
 pub(super) fn date_range(
     entry: &Entry,
     language: crate::localization::Language,
-) -> (String, String, Option<String>) {
+) -> (String, String) {
     let Some(start) = DateTime::from_timestamp_millis(entry.started_at) else {
         return (
             crate::localization::text_for(language, "Unknown date").to_string(),
             String::new(),
-            None,
         );
     };
     let start = start.with_timezone(&Local).naive_local();
@@ -122,7 +119,6 @@ pub(super) fn date_range(
         .and_then(DateTime::from_timestamp_millis)
         .map(|end| end.with_timezone(&Local).naive_local())
         .unwrap_or_else(|| Local::now().naive_local());
-    let (range, offset) = time_range(start, end, language);
     (
         crate::localization::format_for(
             language,
@@ -135,8 +131,7 @@ pub(super) fn date_range(
             ],
         )
         .to_string(),
-        range,
-        offset,
+        time_range(start, end, language),
     )
 }
 
@@ -194,7 +189,7 @@ mod tests {
                 at(24, 2, 54),
                 crate::localization::Language::English
             ),
-            ("22:03 - 02:54".into(), Some("(+1d)".into()))
+            "22:03 - 02:54 (+1d)"
         );
         assert_eq!(
             time_range(
@@ -202,7 +197,7 @@ mod tests {
                 at(25, 22, 2),
                 crate::localization::Language::English
             ),
-            ("22:03 - 22:02".into(), Some("(+2d)".into()))
+            "22:03 - 22:02 (+2d)"
         );
         assert_eq!(
             time_range(
@@ -210,7 +205,7 @@ mod tests {
                 at(23, 5, 8),
                 crate::localization::Language::English
             ),
-            ("02:03 - 05:08".into(), None)
+            "02:03 - 05:08"
         );
         assert_eq!(
             time_range(
@@ -218,7 +213,7 @@ mod tests {
                 at(24, 2, 54),
                 crate::localization::Language::Chinese
             ),
-            ("22:03 - 02:54".into(), Some("（+1 天）".into()))
+            "22:03 - 02:54 （+1 天）"
         );
         assert_eq!(at(3, 2, 3).format("%b %-d, %Y").to_string(), "Oct 3, 2026");
     }

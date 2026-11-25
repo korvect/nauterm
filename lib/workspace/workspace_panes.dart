@@ -1477,6 +1477,8 @@ class _LogsFooter extends StatelessWidget {
   }
 }
 
+const _logsDateColumnWidth = 156.0;
+
 class _LogsTableHeader extends StatelessWidget {
   const _LogsTableHeader({
     required this.newestFirst,
@@ -1497,7 +1499,7 @@ class _LogsTableHeader extends StatelessWidget {
       child: Row(
         children: [
           SizedBox(
-            width: 112,
+            width: _logsDateColumnWidth,
             child: _LogsHeaderCell(
               label: tr('common.label.date', fallback: 'Date'),
               icon: newestFirst
@@ -1803,7 +1805,10 @@ class _LogsTableRow extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 26),
                   child: Row(
                     children: [
-                      SizedBox(width: 112, child: _LogsDateCell(log: log)),
+                      SizedBox(
+                        width: _logsDateColumnWidth,
+                        child: _LogsDateCell(log: log),
+                      ),
                       Expanded(
                         flex: 3,
                         child: _LogsIdentityCell(
@@ -2139,7 +2144,6 @@ class _LogsDateCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (range, dayOffset) = _formatLogTimeRange(context, log);
     final rangeStyle = TextStyle(
       color: _mutedText,
       fontSize: NautermFontSizes.labelSmall,
@@ -2147,7 +2151,7 @@ class _LogsDateCell extends StatelessWidget {
       letterSpacing: 0,
     );
     return Padding(
-      padding: EdgeInsets.symmetric(vertical: dayOffset == null ? 10 : 5),
+      padding: const EdgeInsets.symmetric(vertical: 10),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2165,15 +2169,11 @@ class _LogsDateCell extends StatelessWidget {
           ),
           SizedBox(height: 4),
           Text(
-            range,
+            _formatLogTimeRange(context, log),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: rangeStyle,
           ),
-          if (dayOffset != null) ...[
-            const SizedBox(height: 2),
-            Text(dayOffset, style: rangeStyle),
-          ],
         ],
       ),
     );
@@ -2499,10 +2499,7 @@ String _formatLogDate(BuildContext context, DateTime timestamp) {
   );
 }
 
-(String, String?) _formatLogTimeRange(
-  BuildContext context,
-  TerminalLogEntry log,
-) {
+String _formatLogTimeRange(BuildContext context, TerminalLogEntry log) {
   final start = log.startedAt.toLocal();
   final end = (log.endedAt ?? DateTime.now()).toLocal();
   final suffixDays = DateTime.utc(
@@ -2510,14 +2507,14 @@ String _formatLogDate(BuildContext context, DateTime timestamp) {
     end.month,
     end.day,
   ).difference(DateTime.utc(start.year, start.month, start.day)).inDays;
-  final suffix = suffixDays > 0
-      ? context.tr(
-          'workspace.logs.date.dayOffset',
-          fallback: '(+{days}d)',
-          args: {'days': suffixDays},
-        )
-      : null;
-  return ('${_formatLogTime(start)} - ${_formatLogTime(end)}', suffix);
+  final range = '${_formatLogTime(start)} - ${_formatLogTime(end)}';
+  if (suffixDays <= 0) return range;
+  final offset = context.tr(
+    'workspace.logs.date.dayOffset',
+    fallback: '(+{days}d)',
+    args: {'days': suffixDays},
+  );
+  return '$range $offset';
 }
 
 String _formatLogTimestamp(DateTime timestamp) {

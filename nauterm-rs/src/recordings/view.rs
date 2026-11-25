@@ -27,7 +27,7 @@ const TABLE_MARGIN: f32 = 10.;
 const TABLE_INSET: f32 = 26.;
 const PAGE_SIZE: usize = 40;
 fn date_column() -> Div {
-    div().w(px(112.)).flex_shrink_0()
+    div().w(px(156.)).flex_shrink_0()
 }
 fn user_column() -> Div {
     div().flex_1().min_w_0().flex_grow(3.)
@@ -573,8 +573,7 @@ impl Logs {
         let can_read = !live && !entry.capture_file.is_empty() && entry.capture_sha256.is_some();
         let owner = cx.weak_entity();
         let menu_owner = owner.clone();
-        let (day, range, day_offset) =
-            presentation::date_range(&entry, crate::localization::language(cx));
+        let (day, range) = presentation::date_range(&entry, crate::localization::language(cx));
         let (username, account) = presentation::account(&entry);
         let host_subtitle = presentation::subtitle(&entry);
         let host_icon = match presentation::kind(&entry) {
@@ -671,13 +670,16 @@ impl Logs {
                 date_column()
                     .flex()
                     .flex_col()
-                    .gap(px(if day_offset.is_some() { 2. } else { 4. }))
+                    .gap(px(4.))
                     .line_height(px(15.))
                     .child(div().text_size(px(12.)).child(day))
-                    .child(div().text_size(px(11.)).text_color(p.muted).child(range))
-                    .when_some(day_offset, |column, offset| {
-                        column.child(div().text_size(px(11.)).text_color(p.muted).child(offset))
-                    }),
+                    .child(
+                        div()
+                            .text_size(px(11.))
+                            .text_color(p.muted)
+                            .truncate()
+                            .child(range),
+                    ),
             )
             .child(
                 user_column()
