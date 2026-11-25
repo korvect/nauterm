@@ -1,5 +1,6 @@
 //! Host protocol selection shares the connection page without opening a transport.
 use super::*;
+use crate::components::Input;
 use crate::model::{Host, Id};
 use crate::typography::FontWeights;
 use gpui_kit::component::ActiveTheme;
@@ -239,6 +240,7 @@ impl Connection {
             .gap(px(14.))
             .child(
                 div()
+                    .flex_shrink_0()
                     .font_weight(FontWeights::MEDIUM)
                     .child(crate::localization::text(cx, "common.label.protocol")),
             )
@@ -286,6 +288,7 @@ impl Connection {
                         // and keyboard input, including Space and Enter.
                         .focusable(false)
                         .tab_stop(false)
+                        .flex_shrink_0()
                         .w_full()
                         .h_auto()
                         .min_h(px(62.))

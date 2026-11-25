@@ -11,7 +11,9 @@ pub const CARD_MAX_WIDTH: f32 = 320.;
 /// scroll region. The normal-size reference spacing remains unchanged.
 pub struct ConnectionMetrics {
     pub compact: bool,
-    pub outer: f32,
+    pub short: bool,
+    pub top: f32,
+    pub bottom: f32,
     pub horizontal: f32,
     pub inner: f32,
     pub progress_top: f32,
@@ -26,28 +28,35 @@ impl ConnectionMetrics {
         self
     }
     pub fn new(height: f32, drawer: bool) -> Self {
-        let short = height < 480.;
+        let short = height < 420.;
         let compact = drawer || short;
-        let outer = if compact { 16. } else { 32. };
+        let top = if short {
+            16.
+        } else {
+            (24. + height - 420.).min(if drawer { 72. } else { 80. })
+        };
+        let bottom = if compact { 16. } else { 24. };
         let inner = if compact { 0. } else { 22. };
         let progress_top = if short { 12. } else { 22. };
         let progress_bottom = if short { 12. } else { 28. };
         let footer_gap = if short { 12. } else { 26. };
         let fixed = 40.
-            + 24.
+            + 36.
             + progress_top
             + progress_bottom
             + footer_gap
             + if compact { 24. } else { 36. };
         Self {
             compact,
-            outer,
+            short,
+            top,
+            bottom,
             horizontal: if compact { 16. } else { 24. },
             inner,
             progress_top,
             progress_bottom,
             footer_gap,
-            body_max: (height - outer * 2. - fixed).max(0.),
+            body_max: (height - top - bottom - fixed).max(0.),
         }
     }
 }
@@ -97,8 +106,8 @@ mod tests {
         let normal = super::ConnectionMetrics::new(716., false);
         assert!(!normal.compact);
         assert_eq!(
-            (normal.outer, normal.horizontal, normal.inner),
-            (32., 24., 22.)
+            (normal.top, normal.bottom, normal.horizontal, normal.inner),
+            (80., 24., 24., 22.)
         );
         assert_eq!(
             (
@@ -108,14 +117,15 @@ mod tests {
             ),
             (22., 28., 26.)
         );
-        for height in [280., 306., 396., 439.] {
+        for height in [280., 306., 396., 419.] {
             let tile = super::ConnectionMetrics::new(height, false);
             assert!(tile.compact);
             // One 18px error line and its gap leave a readable inner log area.
-            assert!(tile.body_max - 18. - 16. >= 80.);
-            let used = tile.outer * 2.
+            assert!(tile.body_max - 18. - 16. >= 78.);
+            let used = tile.top
+                + tile.bottom
                 + 40.
-                + 24.
+                + 36.
                 + tile.progress_top
                 + tile.progress_bottom
                 + tile.body_max
@@ -123,7 +133,12 @@ mod tests {
                 + 24.;
             assert_eq!(used, height);
         }
-        assert!(super::ConnectionMetrics::new(600., true).compact);
+        let at_threshold = super::ConnectionMetrics::new(420., false);
+        assert!(!at_threshold.compact);
+        assert_eq!(at_threshold.top, 24.);
+        let drawer = super::ConnectionMetrics::new(600., true);
+        assert!(drawer.compact);
+        assert_eq!(drawer.top, 72.);
     }
     #[test]
     fn wrapped_connection_footer_reserves_an_extra_row_without_widening_the_drawer() {

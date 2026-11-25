@@ -62,6 +62,7 @@ enum Content {
 pub struct Field {
     content: Content,
     label: SharedString,
+    localize_label: bool,
     secret: bool,
     digits_only: bool,
     disabled: bool,
@@ -79,6 +80,7 @@ impl Field {
         Self {
             content: Content::Control(control.into_any_element(), focus, nonempty),
             label: label.into(),
+            localize_label: true,
             secret: false,
             digits_only: false,
             disabled: false,
@@ -93,6 +95,7 @@ impl Field {
         Self {
             content: Content::Trigger(Box::new(button), has_content),
             label: label.into(),
+            localize_label: true,
             secret: false,
             digits_only: false,
             disabled: false,
@@ -105,6 +108,7 @@ impl Field {
         Self {
             content: Content::Input(state.clone()),
             label: label.into(),
+            localize_label: true,
             secret: false,
             digits_only: false,
             disabled: false,
@@ -121,6 +125,7 @@ impl Field {
         Self {
             content: Content::Multiline(state.clone(), Some(height)),
             label: label.into(),
+            localize_label: true,
             secret: false,
             digits_only: false,
             disabled: false,
@@ -135,6 +140,7 @@ impl Field {
         Self {
             content: Content::Multiline(state.clone(), None),
             label: label.into(),
+            localize_label: true,
             secret: false,
             digits_only: false,
             disabled: false,
@@ -149,6 +155,10 @@ impl Field {
     }
     pub fn secret(mut self, secret: bool) -> Self {
         self.secret = secret;
+        self
+    }
+    pub(crate) fn verbatim_label(mut self) -> Self {
+        self.localize_label = false;
         self
     }
     pub fn digits_only(mut self) -> Self {
@@ -173,7 +183,9 @@ impl Sizable for Field {
 impl RenderOnce for Field {
     fn render(mut self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         // Only the field's UI caption is localized; the editor state is data.
-        self.label = crate::localization::label(cx, &self.label);
+        if self.localize_label {
+            self.label = crate::localization::label(cx, &self.label);
+        }
         let (focus, nonempty, multiline) = match &self.content {
             Content::Input(state) => (
                 Some(state.read(cx).focus_handle(cx)),

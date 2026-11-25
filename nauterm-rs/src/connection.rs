@@ -6,7 +6,7 @@ mod presentation;
 mod progress;
 use crate::components::ScrollbarsExt;
 use crate::{
-    components::{Button, ButtonCustomVariant, Field, Input},
+    components::{Button, ButtonCustomVariant, Field},
     connection_state::{ConnectionState, Intervention, Phase},
     layout::ConnectionMetrics,
     native::{Core, HostTrust, Session, SshOptions},
@@ -158,13 +158,6 @@ fn action(id: &str, label: &str, primary: bool, compact: bool) -> Button {
         .label(label.to_owned())
         .when(primary, |button| button.primary())
         .when(!primary, |button| button.secondary())
-}
-
-fn auth_input(state: &Entity<InputState>, label: &str, secret: bool) -> Input {
-    Input::new(state)
-        .large()
-        .aria_label(label.to_owned())
-        .when(secret, |input| input.mask_toggle())
 }
 
 impl Connection {
@@ -407,23 +400,17 @@ impl Connection {
         cx: &mut Context<Self>,
     ) -> Self {
         let username = cx.new(|cx| {
-            InputState::new(window, cx)
-                .placeholder("Username")
-                .default_value(
-                    target
-                        .ssh()
-                        .map(|options| options.username.clone())
-                        .unwrap_or_default(),
-                )
+            InputState::new(window, cx).default_value(
+                target
+                    .ssh()
+                    .map(|options| options.username.clone())
+                    .unwrap_or_default(),
+            )
         });
-        let password = cx.new(|cx| {
-            InputState::new(window, cx)
-                .placeholder("Password")
-                .masked(true)
-        });
+        let password = cx.new(|cx| InputState::new(window, cx).masked(true));
         let passphrase = cx.new(|cx| InputState::new(window, cx).masked(true));
         let logs = cx.new(logs::View::new);
-        let fido2_pin = cx.new(|cx| InputState::new(window, cx).placeholder("PIN").masked(true));
+        let fido2_pin = cx.new(|cx| InputState::new(window, cx).masked(true));
         let mut inputs = vec![];
         for input in [&username, &password, &passphrase, &fido2_pin] {
             inputs.push(cx.subscribe_in(
@@ -879,16 +866,15 @@ impl Connection {
                 .children(challenge.prompts.iter().zip(&self.challenge_inputs).map(
                     |(prompt, input)| {
                         let label = if prompt.asks_for_verification_code() {
-                            crate::localization::text(cx, "common.label.verificationCode")
+                            "common.label.verificationCode"
                         } else {
-                            prompt.prompt.trim().to_owned().into()
+                            prompt.prompt.trim()
                         };
-                        div()
-                            .flex()
-                            .flex_col()
-                            .gap(px(6.))
-                            .child(label.clone())
-                            .child(auth_input(input, &label, !prompt.echo))
+                        Field::input(input, label.to_owned())
+                            .when(!prompt.asks_for_verification_code(), |field| {
+                                field.verbatim_label()
+                            })
+                            .secret(!prompt.echo)
                     },
                 ))
                 .when_some(self.error.clone(), |view, error| view.child(error))
@@ -898,7 +884,7 @@ impl Connection {
             return div().into_any_element();
         }
         if self.auth_step() == Intervention::Username {
-            return auth_input(&self.username, "Username", false)
+            return Field::input(&self.username, "common.label.username")
                 .disabled(self.auth.busy)
                 .into_any_element();
         }
@@ -912,13 +898,20 @@ impl Connection {
                     div()
                         .text_size(px(18.))
                         .font_weight(FontWeights::BOLD)
-                        .child(crate::localization::text(cx, "connection.auth.securityKeyPin.title")),
+                        .child(crate::localization::text(
+                            cx,
+                            "connection.auth.securityKeyPin.title",
+                        )),
                 )
                 .child(div().text_color(p.muted).child(crate::localization::text(
                     cx,
                     "connection.auth.securityKeyPin.description",
                 )))
-                .child(auth_input(&self.fido2_pin, "PIN", true).disabled(self.auth.busy))
+                .child(
+                    Field::input(&self.fido2_pin, "PIN")
+                        .secret(true)
+                        .disabled(self.auth.busy),
+                )
                 .when_some(self.error.clone(), |view, error| {
                     view.child(
                         div()
@@ -960,38 +953,12 @@ impl Connection {
             .flex()
             .flex_col()
             .gap(px(20.))
-            .when(self.shows_auth_modes(), |view| {
-                view.child(
-                    crate::components::Segmented::new(
-                        "authentication-method",
-                        self.mode,
-                        [
-                            (AuthMode::Password, "Password".into()),
-                            (AuthMode::PublicKey, "Public Key".into()),
-                        ],
-                    )
-                    .sliding()
-                    .height(if self.compact_controls() { 28. } else { 36. })
-                    .icon(AuthMode::Password, IconName::Lock)
-                    .icon(AuthMode::PublicKey, IconName::KeyRound)
-                    .disabled(self.auth.busy)
-                    .on_change({
-                        let owner = cx.weak_entity();
-                        move |mode, _, cx| {
-                            let _ = owner.update(cx, |this, cx| {
-                                if this.mode != *mode {
-                                    this.mode = *mode;
-                                    this.error = None;
-                                    this.needs_auth_focus = true;
-                                    cx.notify();
-                                }
-                            });
-                        }
-                    }),
-                )
-            })
             .when(self.mode == AuthMode::Password, |view| {
-                view.child(auth_input(&self.password, "Password", true).disabled(self.auth.busy))
+                view.child(
+                    Field::input(&self.password, "common.label.password")
+                        .secret(true)
+                        .disabled(self.auth.busy),
+                )
             })
             .when(self.mode == AuthMode::PublicKey, |view| {
                 view.child(self.authentication_keys(cx))
@@ -1013,6 +980,45 @@ impl Connection {
                 )
             })
             .into_any_element()
+    }
+
+    fn authentication_header(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        if !self.shows_auth_modes() {
+            return (self.state.challenge.is_none() && self.auth_step() == Intervention::PublicKey)
+                .then(|| {
+                    div()
+                        .font_weight(FontWeights::MEDIUM)
+                        .child(crate::localization::text(cx, "workspace.label.publicKey"))
+                        .into_any_element()
+                });
+        }
+        let owner = cx.weak_entity();
+        Some(
+            crate::components::Segmented::new(
+                "authentication-method",
+                self.mode,
+                [
+                    (AuthMode::Password, "Password".into()),
+                    (AuthMode::PublicKey, "Public Key".into()),
+                ],
+            )
+            .sliding()
+            .height(if self.compact_controls() { 28. } else { 36. })
+            .icon(AuthMode::Password, IconName::Lock)
+            .icon(AuthMode::PublicKey, IconName::KeyRound)
+            .disabled(self.auth.busy)
+            .on_change(move |mode, _, cx| {
+                let _ = owner.update(cx, |this, cx| {
+                    if this.mode != *mode {
+                        this.mode = *mode;
+                        this.error = None;
+                        this.needs_auth_focus = true;
+                        cx.notify();
+                    }
+                });
+            })
+            .into_any_element(),
+        )
     }
 }
 
@@ -1095,7 +1101,7 @@ impl Render for Connection {
             Body::Protocol => self.protocol_body(window, cx),
             Body::Logs => self.log_panel(cx),
             Body::Failure => div().flex_1().min_h_0().flex().flex_col().gap(px(16.))
-                .child(div().text_color(rgb(0xef4444)).font_weight(FontWeight::BOLD).child(crate::localization::text(cx, "workspace.label.connectionFailedWithConnectionLog")))
+                .child(div().flex_shrink_0().line_height(px(18.)).when(metrics.short, |view| view.truncate()).text_color(rgb(0xef4444)).font_weight(FontWeight::BOLD).child(crate::localization::text(cx, "workspace.label.connectionFailedWithConnectionLog")))
                 .child(self.log_panel(cx)).into_any_element(),
             Body::Mode => match self.state.phase {
                 Phase::HostKey => div().flex().flex_col().text_size(px(14.)).line_height(px(21.))
@@ -1125,6 +1131,26 @@ impl Render for Connection {
                 _ => div().h(px(1.)).into_any_element(),
             },
         };
+        let auth_header = (page.body == Body::Mode && self.state.phase == Phase::Authentication)
+            .then(|| self.authentication_header(cx))
+            .flatten();
+        let body = if page.scroll_body {
+            div()
+                .id("connection-intervention-scroll")
+                .min_h_0()
+                .overflow_y_scroll()
+                .child(
+                    div()
+                        .when(self.state.phase == Phase::Authentication, |view| {
+                            view.pt(px(8.))
+                        })
+                        .child(body),
+                )
+                .scrollbars()
+                .into_any_element()
+        } else {
+            body
+        };
         div()
             .size_full()
             .relative()
@@ -1143,10 +1169,11 @@ impl Render for Connection {
             .text_color(p.text)
             .track_focus(&self.focus)
             .flex()
+            .flex_col()
             .items_center()
-            .justify_center()
             .px(px(metrics.horizontal))
-            .py(px(metrics.outer))
+            .pt(px(metrics.top))
+            .pb(px(metrics.bottom))
             .child(
                 div()
                     .w_full()
@@ -1264,9 +1291,10 @@ impl Render for Connection {
                             .overflow_hidden()
                             .flex()
                             .flex_col()
-                            .when(page.scroll_body, |view| view.overflow_y_scroll())
-                            .child(body)
-                            .scrollbars(),
+                            .when_some(auth_header, |view, header| {
+                                view.child(div().flex_shrink_0().mb(px(12.)).child(header))
+                            })
+                            .child(body),
                     )
                     .child(
                         div()
