@@ -1,5 +1,6 @@
 use super::*;
 use crate::pane_tree::{Node, Pane, SplitAxis};
+use gpui_kit::component::Selectable;
 use gpui_kit::base::ElementExt;
 
 pub(super) struct SplitDrag {
@@ -658,56 +659,77 @@ impl Nauterm {
                                     view.children(pane.sessions.iter().map(|item| {
                                         let id = item.id;
                                         let active = item.id == session.id;
-                                        div()
-                                            .id(("pane-session", id))
+                                        let is_selected = selected && active;
+                                        let title = item.title(cx);
+                                        let close_button =
+                                            Button::new(("close-pane-session", id))
+                                                .ink_ripple(false)
+                                                .xsmall()
+                                                .ghost()
+                                                .custom(chrome)
+                                                .size(px(22.))
+                                                .flex_shrink_0()
+                                                .px(px(0.))
+                                                .icon(crate::assets::icon(IconName::X))
+                                                .icon_size(px(14.))
+                                                .tooltip("terminal.label.closeTab")
+                                                .on_click(cx.listener(
+                                                    move |this, _, window, cx| {
+                                                        cx.stop_propagation();
+                                                        this.request_session_close(
+                                                            id, window, cx,
+                                                        );
+                                                    },
+                                                ));
+                                        Button::new(("pane-session", id))
+                                            .xsmall()
+                                            .ghost()
+                                            .custom(
+                                                ButtonCustomVariant::for_surface(p).color(
+                                                    if is_selected {
+                                                        p.hover.into()
+                                                    } else {
+                                                        rgba(0).into()
+                                                    },
+                                                ),
+                                            )
+                                            .role(Role::Tab)
+                                            .selected(is_selected)
+                                            .accessibility_label(title.clone())
                                             .h(px(28.))
                                             .max_w(px(260.))
                                             .flex_shrink_0()
-                                            .flex()
-                                            .items_center()
-                                            .rounded(px(6.))
-                                            .when(selected && active, |view| view.bg(p.hover))
+                                            .content_start()
+                                            .px(px(0.))
+                                            .pl(px(8.))
+                                            .pr(px(4.))
                                             .child(
-                                                Button::new(("select-pane-session", id))
-                                                    .ink_ripple(false)
-                                                    .xsmall()
-                                                    .ghost()
-                                                    .custom(chrome)
-                                                    .content_start()
+                                                div()
+                                                    .flex()
+                                                    .items_center()
                                                     .min_w_0()
-                                                    .text_size(px(12.))
-                                                    .raw_label(item.title(cx))
-                                                    .text_color(if active {
-                                                        title_color
-                                                    } else {
-                                                        p.muted
-                                                    })
-                                                    .on_click(cx.listener(
-                                                        move |this, _, window, cx| {
-                                                            cx.stop_propagation();
-                                                            this.select_pane_session(
-                                                                tab_id, id, window, cx,
-                                                            );
-                                                        },
-                                                    )),
+                                                    .gap(px(6.))
+                                                    .child(
+                                                        div()
+                                                            .flex_1()
+                                                            .min_w_0()
+                                                            .text_size(px(12.))
+                                                            .font_weight(
+                                                                crate::typography::FontWeights::MEDIUM,
+                                                            )
+                                                            .text_color(if active {
+                                                                title_color
+                                                            } else {
+                                                                p.muted
+                                                            })
+                                                            .text_ellipsis()
+                                                            .child(title),
+                                                    )
+                                                    .child(close_button),
                                             )
-                                            .child(
-                                                Button::new(("close-pane-session", id))
-                                                    .xsmall()
-                                                    .ghost()
-                                                    .custom(chrome)
-                                                    .icon(crate::assets::icon(IconName::X))
-                                                    .icon_size(px(13.))
-                                                    .tooltip("workspace.label.closeTerminal")
-                                                    .on_click(cx.listener(
-                                                        move |this, _, window, cx| {
-                                                            cx.stop_propagation();
-                                                            this.request_session_close(
-                                                                id, window, cx,
-                                                            );
-                                                        },
-                                                    )),
-                                            )
+                                            .on_click(cx.listener(move |this, _, window, cx| {
+                                                this.select_pane_session(tab_id, id, window, cx);
+                                            }))
                                     }))
                                 })
                                 .when(!show_tabs, |view| {

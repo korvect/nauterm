@@ -126,7 +126,7 @@ impl RenderOnce for Tab {
         }
         let hover = motion::mix(background, foreground, 0.08);
         let held = motion::mix(background, foreground, 0.16);
-        let close_padding = if self.close.is_some() { 33. } else { 8. };
+        let close_padding = if self.close.is_some() { 29. } else { 8. };
         let label = if self.reveal_label {
             // Keep the whole label at its natural width and constant opacity.
             // Only this viewport's right edge moves. There is no ellipsis,
@@ -207,13 +207,14 @@ impl RenderOnce for Tab {
             tab = tab.child(
                 div()
                     .absolute()
-                    .right(px(8.))
+                    .right(px(4.))
                     .top(px(6.))
                     .size(px(18.))
                     .child(
                         Button::new((self.id, "close"))
                             .ink_ripple(false)
                             .size(px(18.))
+                            .px(px(0.))
                             .rounded(px(5.))
                             .flex_shrink_0()
                             .focusable(false)

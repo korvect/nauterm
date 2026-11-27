@@ -194,17 +194,20 @@ class _TerminalViewTab extends StatelessWidget {
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 260),
       child: Padding(
-        padding: const EdgeInsets.only(left: 2, top: 2),
+        padding: const EdgeInsets.only(left: 2, top: 3, bottom: 3),
         child: Material(
-          color: Colors.transparent,
-          borderRadius: BorderRadius.circular(6),
+          color: tab.selected
+              ? foreground.withValues(alpha: 0.08)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(7),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: tab.onSelected,
+            borderRadius: BorderRadius.circular(7),
             hoverColor: foreground.withValues(alpha: 0.055),
             child: Container(
               height: 28,
-              padding: const EdgeInsets.only(left: 8, right: 7),
+              padding: const EdgeInsets.only(left: 8, right: 3),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.center,
@@ -225,23 +228,29 @@ class _TerminalViewTab extends StatelessWidget {
                   ),
                   const SizedBox(width: 6),
                   SizedBox(
-                    width: 22,
-                    height: 22,
+                    width: 18,
+                    height: 18,
                     child: IconButton(
                       tooltip: tr(
                         'terminal.label.closeTab',
                         fallback: 'Close tab',
                       ),
                       constraints: const BoxConstraints.tightFor(
-                        width: 22,
-                        height: 22,
+                        width: 18,
+                        height: 18,
                       ),
                       padding: EdgeInsets.zero,
-                      visualDensity: VisualDensity.compact,
+                      style: IconButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(5),
+                        ),
+                        hoverColor: foreground.withValues(alpha: 0.12),
+                        highlightColor: foreground.withValues(alpha: 0.18),
+                      ),
                       onPressed: tab.onClose,
                       icon: Icon(
                         Icons.close_rounded,
-                        size: 14,
+                        size: 12,
                         color: textColor.withValues(alpha: 0.82),
                       ),
                     ),
@@ -279,29 +288,23 @@ class _TerminalViewToolbarButton extends StatelessWidget {
         ? foreground.withValues(alpha: selected ? 0.95 : 0.80)
         : foreground.withValues(alpha: 0.28);
     return SizedBox(
-      width: 26,
-      height: 30,
-      child: Center(
-        child: Tooltip(
-          message: tr(tooltip),
-          child: SizedBox(
-            width: 26,
-            height: 26,
-            child: Material(
-              color: selected && enabled
-                  ? foreground.withValues(alpha: 0.11)
-                  : Colors.transparent,
-              shape: const CircleBorder(),
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                onTap: onPressed,
-                customBorder: const CircleBorder(),
-                hoverColor: foreground.withValues(alpha: 0.12),
-                splashColor: foreground.withValues(alpha: 0.18),
-                highlightColor: foreground.withValues(alpha: 0.15),
-                child: Center(child: Icon(icon, size: 16, color: color)),
-              ),
-            ),
+      width: 24,
+      height: 24,
+      child: Tooltip(
+        message: tr(tooltip),
+        child: Material(
+          color: selected && enabled
+              ? foreground.withValues(alpha: 0.11)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(7),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onPressed,
+            borderRadius: BorderRadius.circular(7),
+            hoverColor: foreground.withValues(alpha: 0.12),
+            splashColor: foreground.withValues(alpha: 0.18),
+            highlightColor: foreground.withValues(alpha: 0.15),
+            child: Center(child: Icon(icon, size: 16, color: color)),
           ),
         ),
       ),
