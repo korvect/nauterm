@@ -91,6 +91,27 @@ class _SftpTaskManager extends ChangeNotifier {
     return identical(_owners[taskId], owner);
   }
 
+  bool canRetry(_SftpTask task) {
+    // Relayed transfers and edits can depend on staged files cleaned up by
+    // their original caller after the transfer ends.
+    if (task.status != _SftpTaskStatus.failed ||
+        (task.type != _SftpTaskType.upload &&
+            task.type != _SftpTaskType.download) ||
+        runningTaskIds.contains(task.id)) {
+      return false;
+    }
+    final owner = _owners[task.id];
+    final execution = taskExecutions[task.id];
+    final connection = execution?.remoteSession?.connection;
+    return owner != null &&
+        owner.mounted &&
+        !owner._shuttingDown &&
+        execution != null &&
+        execution.persistHistory &&
+        connection?.phase == _SftpConnectionPhase.connected &&
+        identical(connection?.auth, execution.auth);
+  }
+
   void pumpQueues() {
     for (final owner in _owners.values.toSet()) {
       owner._pumpSftpTaskQueue();
@@ -119,33 +140,56 @@ class _SftpRemotePaneSession {
   _SftpSortColumn sortColumn = _SftpSortColumn.name;
   bool sortAscending = true;
   bool loading = false;
+  bool changingDirectory = false;
   bool showHiddenFiles = sftpShowHiddenFiles;
   bool editingPath = false;
   bool selectingHost = false;
   bool followSshDirectory = false;
   String? followedSshDirectory;
   final List<String> favoritePaths = <String>[];
+  int favoriteLoadGeneration = 0;
+  bool loadingFavorites = false;
+  Object? favoritesError;
   int loadGeneration = 0;
+  int navigationRevision = 0;
+  final Map<int, int> destinationChecks = <int, int>{};
   _SftpListingCancellation? listingCancellation;
   _SftpConnectionState? connection;
-  String get sudoSessionId => '$sessionId:with-sudo';
+  _SftpConnectRequest? closedEndpoint;
+  _SftpRemoteEditOpening? editOpening;
+  int _sudoGeneration = 0;
+  String get sudoSessionId => '$sessionId:with-sudo:$_sudoGeneration';
   bool sudoSessionAuthenticated = false;
   Object? loadError;
+
+  void closeSudoSession() {
+    final id = sudoSessionId;
+    _sudoGeneration += 1;
+    sudoSessionAuthenticated = false;
+    FfiSftpTaskExecutor.closeSudoSession(id);
+  }
 
   void dispose() {
     listingCancellation?.cancel();
     listingCancellation = null;
-    FfiSftpTaskExecutor.closeSudoSession(sudoSessionId);
-    sudoSessionAuthenticated = false;
+    closeSudoSession();
     pathController.dispose();
     filterController.dispose();
     pathFocusNode.dispose();
   }
 }
 
+class _SftpRemoteEditOpening {
+  _SftpRemoteEditOpening(this.filePath);
+
+  final String filePath;
+  int? taskId;
+  _SftpListingCancellation? verification;
+}
+
 enum _SftpNameConflictResolution { cancel, keepBoth, replace }
 
-enum _SftpSudoPromptKind { explicit, permissionDenied }
+enum _SftpSudoPromptKind { explicit, permissionDenied, saveEdit }
 
 class _SftpResolvedRemoteTarget {
   const _SftpResolvedRemoteTarget({
@@ -165,6 +209,8 @@ class _SftpLocalPaneSession {
   }
 
   String path;
+  int navigationRevision = 0;
+  int loadGeneration = 0;
   late final TextEditingController pathController;
   late final TextEditingController filterController;
   late final FocusNode pathFocusNode;
@@ -177,8 +223,10 @@ class _SftpLocalPaneSession {
   _SftpSortColumn sortColumn = _SftpSortColumn.name;
   bool sortAscending = true;
   bool loading = true;
+  bool changingDirectory = false;
   bool showHiddenFiles = sftpShowHiddenFiles;
   bool editingPath = false;
+  bool hasUnrepresentableNames = false;
   Object? loadError;
 
   void dispose() {
@@ -309,6 +357,11 @@ class _ExternalEditRemoteVersion {
   }
 }
 
+typedef _VerifiedSudoEdit = ({
+  _ExternalEditRemoteVersion? version,
+  String sessionId,
+});
+
 class _ExternalSftpEditTarget {
   _ExternalSftpEditTarget({required this.remotePath, required this.version});
 
@@ -323,20 +376,29 @@ enum _ExternalEditConflictResolution {
   saveCopy,
 }
 
-enum _ExternalEditSaveResult { failed, uploaded, localReplaced }
+enum _ExternalEditSaveResult {
+  failed,
+  uploaded,
+  localReplaced,
+  authorizationPaused,
+}
 
 class _ExternalSftpEditSession {
   _ExternalSftpEditSession({
     required this.localPath,
     required this.tempDirectory,
+    required this.auth,
     required this.protectFile,
     required this.onSaved,
+    required this.onAuthorizationChanged,
   });
 
   final String localPath;
   final io.Directory tempDirectory;
+  final _SftpRemoteAuth auth;
   final Future<bool> Function(String path) protectFile;
   final Future<_ExternalEditSaveResult> Function(String uploadPath) onSaved;
+  final VoidCallback onAuthorizationChanged;
   static const _sampleInterval = Duration(milliseconds: 350);
   StreamSubscription<io.FileSystemEvent>? _watcher;
   _ExternalEditLocalSnapshot? _lastUploaded;
@@ -344,6 +406,7 @@ class _ExternalSftpEditSession {
   Future<void>? _uploadWorker;
   int _sampleGeneration = 0;
   bool _closed = false;
+  bool authorizationPaused = false;
   Future<void>? _closeFuture;
 
   Future<void> startWatching() async {
@@ -385,6 +448,7 @@ class _ExternalSftpEditSession {
   }
 
   void _queueUpload(_ExternalEditLocalSnapshot snapshot) {
+    if (authorizationPaused) return;
     _pendingUpload = snapshot;
     _uploadWorker ??= _drainUploads().whenComplete(() {
       _uploadWorker = null;
@@ -392,6 +456,18 @@ class _ExternalSftpEditSession {
         _queueUpload(pending);
       }
     });
+  }
+
+  Future<void> retryPausedSave() async {
+    if (!authorizationPaused || _closed || _closeFuture != null) return;
+    final latest = await _snapshot();
+    if (latest != null && !await protectFile(localPath)) return;
+    if (!authorizationPaused || _closed || _closeFuture != null) return;
+    authorizationPaused = false;
+    onAuthorizationChanged();
+    if (latest != null && latest != _lastUploaded) {
+      _queueUpload(latest);
+    }
   }
 
   Future<void> _drainUploads() async {
@@ -419,6 +495,11 @@ class _ExternalSftpEditSession {
             _lastUploaded = snapshot;
           case _ExternalEditSaveResult.localReplaced:
             _lastUploaded = await _snapshot();
+          case _ExternalEditSaveResult.authorizationPaused:
+            authorizationPaused = true;
+            _pendingUpload = null;
+            onAuthorizationChanged();
+            return;
         }
       } finally {
         try {
@@ -488,13 +569,13 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
   final GlobalKey _rightPaneKey = GlobalKey();
   StreamSubscription<NautermFileDropEvent>? _fileDropSubscription;
   _SftpPaneSlot? _fileDropHoverSlot;
-  String? _fileDropHoverLabel;
+  String? _fileDropHoverLabelKey;
   final Map<String, _ExternalSftpEditSession> _externalEditSessions =
       <String, _ExternalSftpEditSession>{};
   final Map<String, Future<void>> _externalEditUploadLocks =
       <String, Future<void>>{};
-  late final Future<void> Function() _shutdownHook;
   bool _shuttingDown = false;
+  bool _closingSftp = false;
   Future<void>? _shutdownFuture;
   bool _sshDirectoryFollowScheduled = false;
   bool _sshDirectoryFollowStopped = false;
@@ -531,12 +612,20 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
   _SftpPaneEndpoint get _leftPaneEndpoint => _controller.leftPaneEndpoint;
 
   set _leftPaneEndpoint(_SftpPaneEndpoint value) {
+    if (_leftPaneEndpoint != value) {
+      _leftLocal.navigationRevision += 1;
+      _leftRemote.navigationRevision += 1;
+    }
     _controller.leftPaneEndpoint = value;
   }
 
   _SftpPaneEndpoint get _rightPaneEndpoint => _controller.rightPaneEndpoint;
 
   set _rightPaneEndpoint(_SftpPaneEndpoint value) {
+    if (_rightPaneEndpoint != value) {
+      _rightLocal.navigationRevision += 1;
+      _rightRemote.navigationRevision += 1;
+    }
     _controller.rightPaneEndpoint = value;
   }
 
@@ -549,8 +638,7 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
   @override
   void initState() {
     super.initState();
-    _shutdownHook = _flushAndClose;
-    _workspaceShutdownHooks.add(_shutdownHook);
+    _workspaceSftpPanes.add(this);
     _controllerKey = widget.sessionId;
     _controller = ref.read(_sftpPaneControllerProvider(_controllerKey));
     widget.sshEditorController?.workingDirectoryListenable.addListener(
@@ -675,10 +763,14 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
   @override
   void dispose() {
     _sshDirectoryFollowStopped = true;
+    _leftRemote.editOpening?.verification?.cancel();
+    _rightRemote.editOpening?.verification?.cancel();
+    _leftRemote.editOpening = null;
+    _rightRemote.editOpening = null;
     widget.sshEditorController?.workingDirectoryListenable.removeListener(
       _scheduleSshDirectoryFollow,
     );
-    _workspaceShutdownHooks.remove(_shutdownHook);
+    _workspaceSftpPanes.remove(this);
     unawaited(_fileDropSubscription?.cancel());
     _leftRemote.listingCancellation?.cancel();
     _leftRemote.listingCancellation = null;
@@ -700,8 +792,18 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     return _shutdownFuture ??= _performFlushAndClose();
   }
 
+  bool get _hasPendingWork =>
+      _leftRemote.loading ||
+      _rightRemote.loading ||
+      _leftRemote.editOpening != null ||
+      _rightRemote.editOpening != null ||
+      _tasks.any((task) => !_isFinishedSftpTask(task));
+
   Future<void> _performFlushAndClose() async {
+    _closingSftp = true;
     _sshDirectoryFollowStopped = true;
+    _cancelRemoteEditOpening(_leftRemote);
+    _cancelRemoteEditOpening(_rightRemote);
     widget.sshEditorController?.workingDirectoryListenable.removeListener(
       _scheduleSshDirectoryFollow,
     );
@@ -712,9 +814,18 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     _rightRemote.listingCancellation?.cancel();
     _rightRemote.listingCancellation = null;
 
-    await Future.wait([
-      for (final session in _externalEditSessions.values) session.close(),
-    ]);
+    try {
+      await Future.wait([
+        for (final session in _externalEditSessions.values) session.close(),
+      ]).timeout(const Duration(seconds: 10));
+    } on Object catch (error, stackTrace) {
+      NautermLog.warning(
+        'sftp',
+        'Unable to finish saving SFTP external edits before shutdown.',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
     _externalEditSessions.clear();
     _shuttingDown = true;
 
@@ -775,38 +886,60 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
   void _loadPersistedSftpFavorites() {
     final leftConnection = _leftRemote.connection;
     if (leftConnection != null) {
-      _loadRemoteSftpFavorites(_leftRemote, leftConnection.host);
+      unawaited(_loadRemoteSftpFavorites(_leftRemote, leftConnection.host));
     }
     final rightConnection = _rightRemote.connection;
     if (rightConnection != null) {
-      _loadRemoteSftpFavorites(_rightRemote, rightConnection.host);
+      unawaited(_loadRemoteSftpFavorites(_rightRemote, rightConnection.host));
     }
   }
 
-  void _loadRemoteSftpFavorites(
+  Future<void> _loadRemoteSftpFavorites(
     _SftpRemotePaneSession session,
     _HostItem host,
-  ) {
-    if (host.id <= 0) {
-      _setSftpState(session.favoritePaths.clear);
-      return;
-    }
+  ) async {
+    final generation = ++session.favoriteLoadGeneration;
     final store = widget.dataStore;
+    if (host.id <= 0) return;
     if (store == null) {
-      _setSftpState(session.favoritePaths.clear);
+      _setSftpState(() => _resetSftpFavorites(session));
       return;
     }
+    _setSftpState(() {
+      session.loadingFavorites = true;
+      session.favoritesError = null;
+    });
+    bool isCurrent() =>
+        mounted &&
+        identical(store, widget.dataStore) &&
+        generation == session.favoriteLoadGeneration &&
+        session.connection?.host.id == host.id &&
+        session.connection?.host.uuid == host.uuid;
     try {
-      final paths = _favoritePathsFromEntries(
-        store.listSftpFavoritePaths(
-          scope: SftpFavoriteScope.remote,
-          hostId: host.id,
-        ),
+      final entries = await loadNautermRemoteSftpFavorites(
+        NautermPaths.resolve().databasePath,
+        host.id,
       );
-      _setSftpState(() => _replaceFavoritePaths(session.favoritePaths, paths));
-    } catch (_) {
-      return;
+      if (!isCurrent()) return;
+      final paths = _favoritePathsFromEntries(entries);
+      _setSftpState(() {
+        _replaceFavoritePaths(session.favoritePaths, paths);
+        session.loadingFavorites = false;
+      });
+    } on Object catch (error) {
+      if (!isCurrent()) return;
+      _setSftpState(() {
+        session.loadingFavorites = false;
+        session.favoritesError = error;
+      });
     }
+  }
+
+  void _resetSftpFavorites(_SftpRemotePaneSession session) {
+    session.favoriteLoadGeneration += 1;
+    session.loadingFavorites = false;
+    session.favoritesError = null;
+    session.favoritePaths.clear();
   }
 
   List<String> _favoritePathsFromEntries(List<SftpFavoritePathEntry> entries) {
@@ -851,6 +984,17 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     _SftpRemotePaneSession session,
     _SftpSelectionChange selection,
   ) {
+    if (session.editOpening case final opening?
+        when opening.filePath != selection.primaryPath ||
+            selection.selectedPaths.length != 1) {
+      _cancelRemoteEditOpening(
+        session,
+        message: tr(
+          'sftp.edit.selectionChanged.description',
+          fallback: 'Open cancelled because the selected file changed.',
+        ),
+      );
+    }
     session.selectedPath = selection.primaryPath;
     session.selectionAnchorPath = selection.anchorPath;
     session.selectedPaths
@@ -870,6 +1014,16 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     _SftpRemotePaneSession session,
     _SftpFileEntry entry,
   ) {
+    if (session.editOpening case final opening?
+        when opening.filePath != entry.path) {
+      _cancelRemoteEditOpening(
+        session,
+        message: tr(
+          'sftp.edit.selectionChanged.description',
+          fallback: 'Open cancelled because the selected file changed.',
+        ),
+      );
+    }
     session.selectedPath = entry.path;
     session.selectionAnchorPath = entry.path;
     session.selectedPaths
@@ -886,7 +1040,9 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
 
   void _showEndpointSelector(_SftpPaneSlot slot) {
     final session = _remoteSessionForSlot(slot);
+    _cancelRemoteEditOpening(session);
     _setSftpState(() {
+      session.navigationRevision += 1;
       switch (slot) {
         case _SftpPaneSlot.left:
           _leftPaneEndpoint = _SftpPaneEndpoint.remote;
@@ -901,6 +1057,7 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
 
   void _useLocalEndpoint(_SftpPaneSlot slot) {
     final session = _remoteSessionForSlot(slot);
+    _cancelRemoteEditOpening(session);
     _setSftpState(() {
       switch (slot) {
         case _SftpPaneSlot.left:
@@ -963,6 +1120,63 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
         : _SftpPaneSlot.right;
   }
 
+  _SftpPaneLocation _sftpPaneLocation(
+    _SftpPaneSlot slot,
+    _SftpPaneEndpoint endpoint,
+  ) {
+    final local = _localSessionForSlot(slot);
+    final remote = _remoteSessionForSlot(slot);
+    final isLocal = endpoint == _SftpPaneEndpoint.local;
+    return (
+      sessionId: widget.sessionId,
+      slot: slot,
+      endpoint: endpoint,
+      path: isLocal ? local.path : remote.path,
+      revision: isLocal ? local.navigationRevision : remote.navigationRevision,
+    );
+  }
+
+  bool _sftpPaneLocationIsCurrent(_SftpPaneLocation location) {
+    if (!mounted || !widget.active || _closingSftp) return false;
+    final endpoint = location.slot == _SftpPaneSlot.left
+        ? _leftPaneEndpoint
+        : _rightPaneEndpoint;
+    if (endpoint != location.endpoint ||
+        location != _sftpPaneLocation(location.slot, endpoint)) {
+      return false;
+    }
+    if (endpoint == _SftpPaneEndpoint.local) {
+      return !_localSessionForSlot(location.slot).changingDirectory;
+    }
+    final session = _remoteSessionForSlot(location.slot);
+    return !session.selectingHost &&
+        !session.changingDirectory &&
+        session.connection?.phase == _SftpConnectionPhase.connected;
+  }
+
+  bool _sftpDragSourceIsCurrent(_SftpPaneDragPayload payload) {
+    if (!_sftpPaneLocationIsCurrent(payload.source)) return false;
+    final selected = payload.sourceRemote
+        ? _selectedRemoteEntries(_remoteSessionForSlot(payload.source.slot))
+        : _selectedEntries(_localSessionForSlot(payload.source.slot));
+    return setEquals(
+      {for (final entry in selected) (entry.path, entry.isDirectory)},
+      {for (final entry in payload.entries) (entry.path, entry.isDirectory)},
+    );
+  }
+
+  bool _checkSftpTransferScope(bool isCurrent, String message) {
+    if (!isCurrent && mounted && widget.active && !_shuttingDown) {
+      _showSftpSnack(message);
+    }
+    return isCurrent;
+  }
+
+  String get _sftpTransferScopeChanged => tr(
+    'sftp.transfer.scopeChanged.description',
+    fallback: 'Transfer cancelled because a pane or selection changed.',
+  );
+
   void _focusPathInput(FocusNode focusNode, TextEditingController controller) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) {
@@ -992,11 +1206,18 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     _SftpRemotePaneSession session,
   ) {
     NautermLog.info('sftp', 'SFTP connection started.');
+    _cancelRemoteEditOpening(session);
     _closeRemoteSudoSession(session);
     session.loadGeneration += 1;
     _setSftpState(() {
+      session.navigationRevision += 1;
+      _resetSftpFavorites(session);
+      session.closedEndpoint = null;
       session.selectingHost = false;
-      session.connection = _SftpConnectionState.connecting(request.host);
+      session.connection = _SftpConnectionState.connecting(
+        request.host,
+        auth: request.auth,
+      );
       session.followSshDirectory = false;
       session.followedSshDirectory = null;
       session.path = request.initialPath;
@@ -1009,7 +1230,7 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
       session.backStack.clear();
       session.forwardStack.clear();
     });
-    _loadRemoteSftpFavorites(session, request.host);
+    unawaited(_loadRemoteSftpFavorites(session, request.host));
 
     unawaited(
       _loadRemotePath(
@@ -1029,11 +1250,9 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     if (connection == null || auth == null) {
       return;
     }
-    final retryRequestId = (_handledConnectRequestId ?? 0) + 1;
-    _handledConnectRequestId = retryRequestId;
     _startSftpConnection(
       _SftpConnectRequest(
-        id: retryRequestId,
+        id: _handledConnectRequestId ?? 0,
         host: connection.host,
         auth: auth,
         initialPath: session.path,
@@ -1051,38 +1270,59 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     if (connection == null || auth == null) {
       return;
     }
-    final retryRequestId = (_handledConnectRequestId ?? 0) + 1;
-    _handledConnectRequestId = retryRequestId;
     _startSftpConnection(
       _SftpConnectRequest(
-        id: retryRequestId,
+        id: _handledConnectRequestId ?? 0,
         host: connection.host,
         auth: auth.copyWith(hostKeyTrustMode: hostKeyTrustMode),
+        initialPath: session.path,
       ),
       session,
     );
   }
 
   void _showSftpHostSelector(_SftpRemotePaneSession session) {
-    _closeRemoteSudoSession(session);
+    _closeSftpConnectionPage(session);
     _setSftpState(() {
-      session.connection = null;
       session.selectingHost = true;
     });
   }
 
   void _closeSftpConnectionPage(_SftpRemotePaneSession session) {
+    final connection = session.connection;
+    final auth = connection?.auth;
+    _cancelRemoteEditOpening(session);
     _closeRemoteSudoSession(session);
     session.listingCancellation?.cancel();
     session.listingCancellation = null;
     session.loadGeneration += 1;
     _setSftpState(() {
+      session.navigationRevision += 1;
+      _resetSftpFavorites(session);
+      if (widget.compact && connection != null && auth != null) {
+        session.closedEndpoint = _SftpConnectRequest(
+          id: _handledConnectRequestId ?? 0,
+          host: connection.host,
+          auth: auth.copyWith(hostKeyTrustMode: SshHostKeyTrustMode.strict),
+          initialPath: session.path,
+        );
+      }
       session.connection = null;
       session.selectingHost = false;
       session.entries = const [];
       _clearRemoteSelection(session);
       session.loadError = null;
       session.loading = false;
+      session.changingDirectory = false;
+      session.followSshDirectory = false;
+      session.followedSshDirectory = null;
+      final slot = _slotForRemoteSession(session);
+      if (_controller.favoriteListSlot == slot) {
+        _controller.favoriteListOpen = false;
+      }
+      if (_controller.taskListSlot == slot) {
+        _controller.taskListOpen = false;
+      }
     });
   }
 
@@ -1091,8 +1331,7 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
   }
 
   void _closeRemoteSudoSession(_SftpRemotePaneSession session) {
-    FfiSftpTaskExecutor.closeSudoSession(session.sudoSessionId);
-    session.sudoSessionAuthenticated = false;
+    session.closeSudoSession();
   }
 
   Future<void> _loadLocalPath(
@@ -1102,7 +1341,10 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     bool clearForward = true,
   }) async {
     final normalized = _normalizeSftpPath(path);
+    final generation = ++session.loadGeneration;
     _setSftpState(() {
+      session.changingDirectory = normalized != session.path;
+      if (session.changingDirectory) session.navigationRevision += 1;
       session.loading = true;
       session.loadError = null;
       session.editingPath = false;
@@ -1110,10 +1352,13 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
 
     try {
       final directory = io.Directory(normalized);
-      final entries = await _listSftpDirectory(session, directory);
-      if (!mounted) {
+      final listing = await _listSftpDirectory(session, directory);
+      if (!mounted || generation != session.loadGeneration) {
         return;
       }
+      final showNameWarning =
+          listing.hasUnrepresentableNames &&
+          (normalized != session.path || !session.hasUnrepresentableNames);
       _setSftpState(() {
         if (recordHistory && normalized != session.path) {
           session.backStack.add(session.path);
@@ -1123,27 +1368,36 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
         }
         session.path = normalized;
         session.pathController.text = normalized;
-        session.entries = entries;
+        session.entries = listing.entries;
+        session.hasUnrepresentableNames = listing.hasUnrepresentableNames;
         _clearLocalSelection(session);
         session.loading = false;
+        session.changingDirectory = false;
       });
+      if (showNameWarning) {
+        _showSftpSnack(context.tr('sftp.error.unrepresentableLocalName'));
+      }
     } on Object catch (error) {
-      if (!mounted) {
+      if (!mounted || generation != session.loadGeneration) {
         return;
       }
       _setSftpState(() {
         session.loadError = error;
         session.loading = false;
+        session.changingDirectory = false;
       });
     }
   }
 
-  Future<List<_SftpFileEntry>> _listSftpDirectory(
+  Future<({List<_SftpFileEntry> entries, bool hasUnrepresentableNames})>
+  _listSftpDirectory(
     _SftpLocalPaneSession session,
     io.Directory directory,
   ) async {
     final entities = await directory.list(followLinks: false).toList();
     final entries = <_SftpFileEntry>[];
+    final replacementPaths = <String>{};
+    var hasUnrepresentableNames = false;
     final parent = directory.parent.path;
     if (parent != directory.path) {
       entries.add(
@@ -1159,8 +1413,23 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
       if (!session.showHiddenFiles && name.startsWith('.')) {
         continue;
       }
+      // dart:io replaces malformed filename bytes in the displayed path.
+      // Probe the resulting path before exposing it to any file action, and
+      // list a valid file with the same spelling only once.
+      final needsRoundTrip = name.contains('\uFFFD');
+      if (needsRoundTrip && !replacementPaths.add(entity.path)) {
+        hasUnrepresentableNames = true;
+        continue;
+      }
       final stat = await entity.stat();
       final type = stat.type;
+      if (needsRoundTrip &&
+          type == io.FileSystemEntityType.notFound &&
+          await io.FileSystemEntity.type(entity.path, followLinks: false) ==
+              io.FileSystemEntityType.notFound) {
+        hasUnrepresentableNames = true;
+        continue;
+      }
       entries.add(
         _SftpFileEntry(
           path: entity.path,
@@ -1188,7 +1457,7 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
       }
       return a.name.toLowerCase().compareTo(b.name.toLowerCase());
     });
-    return entries;
+    return (entries: entries, hasUnrepresentableNames: hasUnrepresentableNames);
   }
 
   Future<void> _loadRemotePath(
@@ -1201,12 +1470,16 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     bool initial = false,
     bool fromSshFollow = false,
   }) async {
+    if (_closingSftp) return;
     final generation = ++session.loadGeneration;
     session.listingCancellation?.cancel();
     final cancellation = _SftpListingCancellation(_allocateSftpNativeTaskId());
     session.listingCancellation = cancellation;
     final normalized = _normalizeRemoteSftpPath(path, base: session.path);
+    _cancelRemoteEditOpening(session);
     _setSftpState(() {
+      session.changingDirectory = normalized != session.path;
+      if (session.changingDirectory) session.navigationRevision += 1;
       if (!initial && !fromSshFollow && normalized != session.path) {
         session.followSshDirectory = false;
         session.followedSshDirectory = null;
@@ -1244,6 +1517,7 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
         session.entries = listing.entries;
         _clearRemoteSelection(session);
         session.loading = false;
+        session.changingDirectory = false;
         session.connection = _SftpConnectionState.connected(host, auth);
       });
       if (initial) {
@@ -1273,6 +1547,7 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
       }
       _setSftpState(() {
         session.loading = false;
+        session.changingDirectory = false;
         if (initial) {
           if (listingError != null &&
               _hasSftpHostKeyEvent(listingError.events)) {
@@ -1312,9 +1587,13 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     String directory, {
     bool includeHidden = false,
     _SftpListingCancellation? cancellation,
+    String? sudoSessionId,
+    String? sudoPassword,
   }) async {
     final result = await _spawnSftpDirectoryEntryListing(
-      auth.toArguments(directory),
+      auth.toArguments(directory)
+        ..['sudoSessionId'] = sudoSessionId
+        ..['sudoPassword'] = sudoPassword,
       requestId: cancellation?.requestId ?? _allocateSftpNativeTaskId(),
       cancellation: cancellation,
     );
@@ -1566,6 +1845,38 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     );
   }
 
+  bool _remoteEditSelectionIsCurrent(
+    _SftpRemotePaneSession session,
+    _SftpConnectionState? connection,
+    String filePath,
+  ) {
+    return mounted &&
+        widget.active &&
+        !_closingSftp &&
+        !session.selectingHost &&
+        !session.loading &&
+        connection?.phase == _SftpConnectionPhase.connected &&
+        identical(connection, session.connection) &&
+        session.selectedPath == filePath &&
+        session.selectedPaths.length == 1;
+  }
+
+  void _cancelRemoteEditOpening(
+    _SftpRemotePaneSession session, {
+    String? message,
+  }) {
+    final opening = session.editOpening;
+    if (opening == null) return;
+    _setSftpState(() => session.editOpening = null);
+    opening.verification?.cancel();
+    if (opening.taskId case final taskId?) {
+      _cancelSftpTask(taskId);
+    }
+    if (message != null && mounted && widget.active) {
+      _showSftpSnack(message);
+    }
+  }
+
   Future<void> _openRemoteFileWithApplication(
     _SftpRemotePaneSession session,
     _SftpFileEntry entry, {
@@ -1581,120 +1892,185 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     }
     final connection = session.connection;
     final auth = connection?.auth;
-    if (auth == null) return;
-    final localSession = identical(session, _rightRemote)
-        ? _leftLocal
-        : _rightLocal;
-    final tempDir = await io.Directory.systemTemp.createTemp('nauterm-edit-');
-    if (!await _ensurePrivateExternalEditDirectory(tempDir.path)) {
-      try {
-        await tempDir.delete(recursive: true);
-      } on Object {
-        // Temp cleanup is best-effort.
-      }
+    if (auth == null ||
+        session.editOpening != null ||
+        !_remoteEditSelectionIsCurrent(session, connection, entry.path)) {
       return;
     }
-    final localPath = _joinSftpPath(tempDir.path, entry.name);
-    final task = await _enqueueSftpTask(
-      type: _SftpTaskType.download,
-      slot: _slotForRemoteSession(session),
-      displayName: application == null
-          ? 'Open ${entry.name}'
-          : 'Open ${entry.name} with ${application.label}',
-      sourcePath: entry.path,
-      targetPath: localPath,
-      auth: auth,
-      operation: {
-        'op': _SftpTaskType.download.wireName,
-        'remote_path': entry.path,
-        'local_path': localPath,
-      },
-      refreshLocal: false,
-      localSession: localSession,
-      remoteSession: session,
-      persistHistory: false,
-      withSudo: withSudo,
-    );
-    if (!mounted || task.status != _SftpTaskStatus.completed) {
-      try {
-        await tempDir.delete(recursive: true);
-      } on Object {
-        // Temp cleanup is best-effort.
-      }
-      return;
-    }
-    if (!await _ensurePrivateExternalEditFile(localPath)) {
-      try {
-        await tempDir.delete(recursive: true);
-      } on Object {
-        // Temp cleanup is best-effort.
-      }
-      return;
-    }
-    _ExternalEditRemoteVersion remoteVersion;
+    final opening = _SftpRemoteEditOpening(entry.path);
+    _setSftpState(() => session.editOpening = opening);
+    bool canLaunch() =>
+        identical(session.editOpening, opening) &&
+        _remoteEditSelectionIsCurrent(session, connection, entry.path);
+
+    io.Directory? tempDir;
+    var watching = false;
     try {
-      remoteVersion = withSudo
-          ? _ExternalEditRemoteVersion(
-              modified: entry.modified,
-              size: entry.size,
-            )
-          : await _readRemoteExternalEditVersion(session, auth, entry.path) ??
-                _ExternalEditRemoteVersion(
-                  modified: entry.modified,
-                  size: entry.size,
-                );
-    } on Object catch (error) {
-      _showSftpSnack('Unable to verify ${entry.name}: $error');
-      try {
-        await tempDir.delete(recursive: true);
-      } on Object {
-        // Temp cleanup is best-effort.
+      final directory = await io.Directory.systemTemp.createTemp(
+        'nauterm-edit-',
+      );
+      tempDir = directory;
+      if (!canLaunch() ||
+          !await _ensurePrivateExternalEditDirectory(directory.path) ||
+          !canLaunch()) {
+        return;
       }
-      return;
-    }
-    final started = await _startExternalApplication(
-      localPath,
-      application: application,
-    );
-    if (!started) {
-      try {
-        await tempDir.delete(recursive: true);
-      } on Object {
-        // Temp cleanup is best-effort.
+      final localPath = _joinSftpPath(directory.path, entry.name);
+      final task = await _enqueueSftpTask(
+        type: _SftpTaskType.download,
+        slot: _slotForRemoteSession(session),
+        displayName: tr(
+          'sftp.edit.opening.description',
+          fallback: 'Opening remote file…',
+        ),
+        sourcePath: entry.path,
+        targetPath: localPath,
+        auth: auth,
+        operation: {
+          'op': _SftpTaskType.download.wireName,
+          'remote_path': entry.path,
+          'local_path': localPath,
+        },
+        remoteSession: session,
+        persistHistory: false,
+        withSudo: withSudo,
+        onQueued: (taskId) => opening.taskId = taskId,
+      );
+      if (task.status == _SftpTaskStatus.cancelled && canLaunch()) {
+        _showSftpSnack(
+          tr(
+            'sftp.edit.openCancelled.description',
+            fallback: 'Remote file opening cancelled.',
+          ),
+        );
       }
-      return;
-    }
-    if (!mounted) return;
-    final target = _ExternalSftpEditTarget(
-      remotePath: entry.path,
-      version: remoteVersion,
-    );
-    final editSession = _ExternalSftpEditSession(
-      localPath: localPath,
-      tempDirectory: tempDir,
-      protectFile: _ensurePrivateExternalEditFile,
-      onSaved: (uploadPath) async {
+      if (canLaunch()) {
+        _setSftpState(() => opening.taskId = null);
+      }
+      if (task.status != _SftpTaskStatus.completed ||
+          !canLaunch() ||
+          !await _ensurePrivateExternalEditFile(localPath) ||
+          !canLaunch()) {
+        return;
+      }
+      var remoteVersion = _ExternalEditRemoteVersion(
+        modified: entry.modified,
+        size: entry.size,
+      );
+      {
+        final verification = _SftpListingCancellation(
+          _allocateSftpNativeTaskId(),
+        );
+        opening.verification = verification;
         try {
-          return await _uploadEditedRemoteFile(
+          final version = await _readRemoteExternalEditVersion(
             session,
             auth,
-            localPath,
-            uploadPath,
-            entry,
-            target,
-            withSudo: withSudo,
+            entry.path,
+            cancellation: verification,
+            sudoSessionId: withSudo ? session.sudoSessionId : null,
           );
-        } on Object catch (error) {
-          if (mounted) {
-            _showSftpSnack('Failed to save ${entry.name}: $error');
+          if (withSudo && version == null) {
+            if (canLaunch()) {
+              _showSftpSnack(tr('sftp.error.remoteFileMissing'));
+            }
+            return;
           }
-          return _ExternalEditSaveResult.failed;
+          remoteVersion = version ?? remoteVersion;
+        } on Object catch (error) {
+          if (canLaunch()) {
+            _showSftpSnack(
+              tr(
+                'sftp.error.verifyFile',
+                fallback: 'Unable to verify {name}: {error}',
+                args: {'name': entry.name, 'error': error},
+              ),
+            );
+          }
+          return;
+        } finally {
+          opening.verification = null;
         }
-      },
-    );
-    _externalEditSessions[localPath]?.dispose();
-    _externalEditSessions[localPath] = editSession;
-    await editSession.startWatching();
+      }
+      if (!canLaunch()) return;
+      // Launch has been handed to the OS, so the opening can no longer be cancelled.
+      _setSftpState(() => session.editOpening = null);
+      if (!await _startExternalApplication(
+            localPath,
+            application: application,
+          ) ||
+          !mounted) {
+        return;
+      }
+      final target = _ExternalSftpEditTarget(
+        remotePath: entry.path,
+        version: remoteVersion,
+      );
+      final editSession = _ExternalSftpEditSession(
+        localPath: localPath,
+        tempDirectory: directory,
+        auth: auth,
+        protectFile: _ensurePrivateExternalEditFile,
+        onAuthorizationChanged: () => _setSftpState(() {}),
+        onSaved: (uploadPath) async {
+          try {
+            return await _uploadEditedRemoteFile(
+              session,
+              auth,
+              localPath,
+              uploadPath,
+              entry,
+              target,
+              withSudo: withSudo,
+            );
+          } on Object catch (error) {
+            if (mounted) {
+              _showSftpSnack(
+                tr(
+                  'sftp.error.saveFile',
+                  fallback: 'Failed to save {name}: {error}',
+                  args: {'name': entry.name, 'error': error},
+                ),
+              );
+            }
+            return _ExternalEditSaveResult.failed;
+          }
+        },
+      );
+      _externalEditSessions[localPath]?.dispose();
+      _externalEditSessions[localPath] = editSession;
+      watching = true;
+      await editSession.startWatching();
+      if (mounted) {
+        _showSftpSnack(
+          context.tr(
+            'sftp.edit.opened.description',
+            fallback: 'Opened a private copy for editing.',
+          ),
+        );
+      }
+    } on io.FileSystemException catch (error) {
+      if (canLaunch()) {
+        _showSftpSnack(
+          tr(
+            'sftp.error.openFile',
+            fallback: 'Failed to open {path}: {error}',
+            args: {'path': entry.path, 'error': error},
+          ),
+        );
+      }
+    } finally {
+      if (identical(session.editOpening, opening)) {
+        _setSftpState(() => session.editOpening = null);
+      }
+      if (!watching && tempDir != null) {
+        try {
+          await tempDir.delete(recursive: true);
+        } on io.FileSystemException {
+          // Temp cleanup is best-effort.
+        }
+      }
+    }
   }
 
   Future<bool> _ensurePrivateExternalEditFile(String path) async {
@@ -1710,7 +2086,13 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
       return true;
     } on Object catch (error) {
       if (mounted) {
-        _showSftpSnack('Unable to protect temporary edit file: $error');
+        _showSftpSnack(
+          tr(
+            'sftp.error.protectEditFile',
+            fallback: 'Unable to protect temporary edit file: {error}',
+            args: {'error': error},
+          ),
+        );
       }
       return false;
     }
@@ -1729,7 +2111,13 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
       return true;
     } on Object catch (error) {
       if (mounted) {
-        _showSftpSnack('Unable to protect temporary edit directory: $error');
+        _showSftpSnack(
+          tr(
+            'sftp.error.protectEditDirectory',
+            fallback: 'Unable to protect temporary edit directory: {error}',
+            args: {'error': error},
+          ),
+        );
       }
       return false;
     }
@@ -1748,16 +2136,45 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     }
     if (!await io.File(entry.path).exists()) {
       if (mounted) {
-        _showSftpSnack('File no longer exists: ${entry.path}');
+        _showSftpSnack(
+          tr(
+            'sftp.error.fileMissing',
+            fallback: 'File no longer exists: {path}',
+            args: {'path': entry.path},
+          ),
+        );
       }
       return;
     }
     await _startExternalApplication(entry.path, application: application);
   }
 
-  Future<void> _openLocalFileWithOtherApplication(_SftpFileEntry entry) async {
+  Future<void> _openLocalFileWithOtherApplication(
+    _SftpLocalPaneSession session,
+    _SftpPaneSlot slot,
+    _SftpFileEntry entry,
+  ) async {
+    final path = session.path;
     final application = await chooseSystemFileApplication();
-    if (application == null) return;
+    if (application == null || !mounted || !widget.active || _shuttingDown) {
+      return;
+    }
+    final endpoint = slot == _SftpPaneSlot.left
+        ? _leftPaneEndpoint
+        : _rightPaneEndpoint;
+    if (endpoint != _SftpPaneEndpoint.local ||
+        session.loading ||
+        session.path != path ||
+        session.selectedPath != entry.path ||
+        session.selectedPaths.length != 1) {
+      _showSftpSnack(
+        tr(
+          'sftp.edit.selectionChanged.description',
+          fallback: 'Open cancelled because the selected file changed.',
+        ),
+      );
+      return;
+    }
     await _openLocalFileWithApplication(
       entry,
       application: application.command,
@@ -1769,8 +2186,20 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     _SftpFileEntry entry, {
     bool withSudo = false,
   }) async {
+    final connection = session.connection;
     final application = await chooseSystemFileApplication();
-    if (application == null) return;
+    if (application == null || !mounted || !widget.active || _shuttingDown) {
+      return;
+    }
+    if (!_remoteEditSelectionIsCurrent(session, connection, entry.path)) {
+      _showSftpSnack(
+        tr(
+          'sftp.edit.selectionChanged.description',
+          fallback: 'Open cancelled because the selected file changed.',
+        ),
+      );
+      return;
+    }
     await _openRemoteFileWithApplication(
       session,
       entry,
@@ -1789,7 +2218,13 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     } on Object catch (error) {
       if (mounted) {
         final target = application?.label ?? 'the default application';
-        _showSftpSnack('Failed to open $target: $error');
+        _showSftpSnack(
+          tr(
+            'sftp.error.openFile',
+            fallback: 'Failed to open {path}: {error}',
+            args: {'path': target, 'error': error},
+          ),
+        );
       }
       return false;
     }
@@ -1844,42 +2279,106 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     _SftpFileEntry entry,
     _ExternalSftpEditTarget target, {
     bool withSudo = false,
+    bool retrySudoAuthorization = true,
   }) async {
-    if (!mounted || _shuttingDown) return _ExternalEditSaveResult.failed;
+    if (!mounted || _shuttingDown || (_closingSftp && withSudo)) {
+      return _ExternalEditSaveResult.failed;
+    }
     if (!await _ensurePrivateExternalEditFile(uploadSourcePath)) {
       return _ExternalEditSaveResult.failed;
     }
 
     final _ExternalEditRemoteVersion? currentVersion;
+    final String? verifiedSudoId;
     try {
-      currentVersion = withSudo
-          ? target.version
-          : await _readRemoteExternalEditVersion(
-              session,
-              auth,
-              target.remotePath,
-            );
+      if (withSudo) {
+        final verified = await _verifySudoEdit(
+          session,
+          auth,
+          target.remotePath,
+        );
+        if (verified == null) {
+          if (mounted && !_closingSftp) {
+            _showSftpSnack(context.tr('sftp.edit.status.localChangesKept'));
+          }
+          return _ExternalEditSaveResult.authorizationPaused;
+        }
+        verifiedSudoId = verified.sessionId;
+        currentVersion = verified.version;
+      } else {
+        verifiedSudoId = null;
+        currentVersion = await _readRemoteExternalEditVersion(
+          session,
+          auth,
+          target.remotePath,
+        );
+      }
     } on Object catch (error) {
-      _showSftpSnack('Unable to check ${entry.name} before upload: $error');
+      _showSftpSnack(
+        tr(
+          'sftp.error.checkBeforeUpload',
+          fallback: 'Unable to check {name} before upload: {error}',
+          args: {'name': entry.name, 'error': error},
+        ),
+      );
       return _ExternalEditSaveResult.failed;
     }
 
     var remoteUploadPath = target.remotePath;
-    var replaceExisting = true;
+    var replaceExisting = !withSudo || currentVersion != null;
     if (currentVersion == null || !target.version.matches(currentVersion)) {
+      if (_closingSftp) return _ExternalEditSaveResult.failed;
       final resolution = await _promptExternalEditConflict(
-        entryName: entry.name,
         remotePath: target.remotePath,
         remoteMissing: currentVersion == null,
       );
       if (!mounted) return _ExternalEditSaveResult.failed;
+      if (withSudo && resolution != _ExternalEditConflictResolution.cancel) {
+        try {
+          final latestVersion = await _readRemoteExternalEditVersion(
+            session,
+            auth,
+            target.remotePath,
+            sudoSessionId: verifiedSudoId,
+          );
+          final unchanged = currentVersion == null
+              ? latestVersion == null
+              : latestVersion != null && currentVersion.matches(latestVersion);
+          if (!unchanged) {
+            _showSftpSnack(tr('sftp.message.uploadPaused'));
+            return _ExternalEditSaveResult.failed;
+          }
+        } on _SftpRemoteListingException catch (error) {
+          if (_sftpSudoAuthenticationFailed(error.message)) {
+            _showSftpSnack(tr('sftp.edit.status.localChangesKept'));
+            return _ExternalEditSaveResult.authorizationPaused;
+          }
+          _showSftpSnack(
+            tr(
+              'sftp.error.checkBeforeUpload',
+              args: {'name': entry.name, 'error': error},
+            ),
+          );
+          return _ExternalEditSaveResult.failed;
+        }
+      }
       switch (resolution) {
         case _ExternalEditConflictResolution.cancel:
-          _showSftpSnack('Upload paused; the remote file was not changed.');
+          _showSftpSnack(
+            tr(
+              'sftp.message.uploadPaused',
+              fallback: 'Upload paused. The remote file is unchanged.',
+            ),
+          );
           return _ExternalEditSaveResult.failed;
         case _ExternalEditConflictResolution.keepRemote:
           if (currentVersion == null) {
-            _showSftpSnack('The remote file no longer exists.');
+            _showSftpSnack(
+              tr(
+                'sftp.error.remoteFileMissing',
+                fallback: 'The remote file no longer exists.',
+              ),
+            );
             return _ExternalEditSaveResult.failed;
           }
           final kept = await _downloadRemoteEditVersion(
@@ -1888,10 +2387,17 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
             target.remotePath,
             localPath,
             entry.name,
+            verifiedSudoSessionId: verifiedSudoId,
           );
           if (kept) {
             target.version = currentVersion;
-            _showSftpSnack('Kept the remote version of ${entry.name}.');
+            _showSftpSnack(
+              tr(
+                'sftp.message.keptRemoteVersion',
+                fallback: 'Kept the remote version of {name}.',
+                args: {'name': entry.name},
+              ),
+            );
           }
           return kept
               ? _ExternalEditSaveResult.localReplaced
@@ -1924,52 +2430,173 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
         'local_path': uploadSourcePath,
         'remote_path': remoteUploadPath,
         'replace_existing': replaceExisting,
+        if (withSudo && replaceExisting && currentVersion != null)
+          'expected_remote_version': {
+            'modified': currentVersion.modified.millisecondsSinceEpoch ~/ 1000,
+            'size': currentVersion.size,
+          },
       },
       refreshRemote: true,
       remoteSession: session,
       withSudo: withSudo,
+      verifiedSudoSessionId: verifiedSudoId,
     );
     if (!mounted) return _ExternalEditSaveResult.failed;
+    if (task.status == _SftpTaskStatus.cancelled) {
+      _showSftpSnack(context.tr('sftp.edit.status.localChangesKept'));
+      return _ExternalEditSaveResult.failed;
+    }
     if (task.status != _SftpTaskStatus.completed) {
+      if (withSudo &&
+          retrySudoAuthorization &&
+          !_closingSftp &&
+          _sftpSudoAuthenticationFailed(task.error)) {
+        return _performUploadEditedRemoteFile(
+          session,
+          auth,
+          localPath,
+          uploadSourcePath,
+          entry,
+          target,
+          withSudo: true,
+          retrySudoAuthorization: false,
+        );
+      }
       _showSftpSnack(
-        'Failed to upload $uploadName: ${task.error ?? 'Unknown error'}',
+        tr(
+          'sftp.error.uploadFile',
+          fallback: 'Failed to upload {name}: {error}',
+          args: {
+            'name': uploadName,
+            'error':
+                task.error ??
+                tr('common.error.unknown', fallback: 'Unknown error'),
+          },
+        ),
       );
       return _ExternalEditSaveResult.failed;
     }
 
     try {
-      final uploadedVersion = withSudo
-          ? _ExternalEditRemoteVersion(
-              modified: DateTime.now(),
-              size: await io.File(uploadSourcePath).length(),
-            )
-          : await _readRemoteExternalEditVersion(
-              session,
-              auth,
-              remoteUploadPath,
-            );
+      final uploadedVersion = await _readRemoteExternalEditVersion(
+        session,
+        auth,
+        remoteUploadPath,
+        sudoSessionId: verifiedSudoId,
+      );
       if (uploadedVersion != null) target.version = uploadedVersion;
     } on Object catch (error) {
-      _showSftpSnack('Saved $uploadName, but verification failed: $error');
+      _showSftpSnack(
+        tr(
+          'sftp.error.verifyAfterSave',
+          fallback: 'Saved {name}. Verification failed: {error}',
+          args: {'name': uploadName, 'error': error},
+        ),
+      );
     }
     if (remoteUploadPath != target.remotePath) {
       target.remotePath = remoteUploadPath;
-      _showSftpSnack('Saved the edited file as $uploadName.');
+      _showSftpSnack(
+        tr(
+          'sftp.message.savedEditedFile',
+          fallback: 'Saved the edited file as {name}.',
+          args: {'name': uploadName},
+        ),
+      );
     }
     return _ExternalEditSaveResult.uploaded;
+  }
+
+  Future<_VerifiedSudoEdit?> _verifySudoEdit(
+    _SftpRemotePaneSession session,
+    _SftpRemoteAuth auth,
+    String path,
+  ) async {
+    bool connectionIsCurrent() =>
+        mounted && !_closingSftp && identical(session.connection?.auth, auth);
+    if (!connectionIsCurrent()) return null;
+
+    final cachedId = session.sudoSessionId;
+    try {
+      final version = await _readRemoteExternalEditVersion(
+        session,
+        auth,
+        path,
+        sudoSessionId: cachedId,
+      );
+      if (!connectionIsCurrent() || session.sudoSessionId != cachedId) {
+        return null;
+      }
+      return (version: version, sessionId: cachedId);
+    } on _SftpRemoteListingException catch (error) {
+      if (!_sftpSudoAuthenticationFailed(error.message)) rethrow;
+      if (!connectionIsCurrent() || session.sudoSessionId != cachedId) {
+        return null;
+      }
+      session.closeSudoSession();
+    }
+
+    final revision = session.navigationRevision;
+    final sudoId = session.sudoSessionId;
+    bool paneIsCurrent() =>
+        connectionIsCurrent() &&
+        session.navigationRevision == revision &&
+        session.sudoSessionId == sudoId;
+    return _showSftpSudoPrompt<_VerifiedSudoEdit>(
+      kind: _SftpSudoPromptKind.saveEdit,
+      target: tr(
+        'sftp.sudo.explicit.dialog.target',
+        args: {'user': auth.username, 'host': auth.host},
+      ),
+      onSubmit: (password) async {
+        if (!paneIsCurrent()) {
+          _showSftpSnack(tr('sftp.sudo.error.paneChanged'));
+          return null;
+        }
+        _ExternalEditRemoteVersion? version;
+        try {
+          version = await _readRemoteExternalEditVersion(
+            session,
+            auth,
+            path,
+            sudoSessionId: sudoId,
+            sudoPassword: password,
+          );
+        } on Object {
+          if (paneIsCurrent()) rethrow;
+        }
+        if (!paneIsCurrent()) {
+          if (session.sudoSessionId == sudoId) {
+            session.closeSudoSession();
+          } else {
+            FfiSftpTaskExecutor.closeSudoSession(sudoId);
+          }
+          _showSftpSnack(tr('sftp.sudo.error.paneChanged'));
+          return null;
+        }
+        session.sudoSessionAuthenticated = true;
+        return (version: version, sessionId: sudoId);
+      },
+    );
   }
 
   Future<_ExternalEditRemoteVersion?> _readRemoteExternalEditVersion(
     _SftpRemotePaneSession session,
     _SftpRemoteAuth auth,
-    String remotePath,
-  ) async {
+    String remotePath, {
+    _SftpListingCancellation? cancellation,
+    String? sudoSessionId,
+    String? sudoPassword,
+  }) async {
     final parent = _remoteParentPath(remotePath) ?? session.path;
     final listing = await _listRemoteSftpDirectory(
       session,
       auth,
       parent,
       includeHidden: true,
+      cancellation: cancellation,
+      sudoSessionId: sudoSessionId,
+      sudoPassword: sudoPassword,
     );
     final normalized = _collapseRemoteSftpPath(remotePath);
     final match = listing.entries.where((candidate) {
@@ -1988,8 +2615,9 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     _SftpRemoteAuth auth,
     String remotePath,
     String localPath,
-    String displayName,
-  ) async {
+    String displayName, {
+    String? verifiedSudoSessionId,
+  }) async {
     final task = await _enqueueSftpTask(
       type: _SftpTaskType.download,
       slot: _slotForRemoteSession(session),
@@ -2005,12 +2633,21 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
       refreshLocal: false,
       remoteSession: session,
       persistHistory: false,
+      withSudo: verifiedSudoSessionId != null,
+      verifiedSudoSessionId: verifiedSudoSessionId,
     );
     if (task.status != _SftpTaskStatus.completed) {
       if (mounted) {
         _showSftpSnack(
-          'Failed to keep the remote version: '
-          '${task.error ?? 'Unknown error'}',
+          tr(
+            'sftp.error.keepRemoteVersion',
+            fallback: 'Failed to keep the remote version: {error}',
+            args: {
+              'error':
+                  task.error ??
+                  tr('common.error.unknown', fallback: 'Unknown error'),
+            },
+          ),
         );
       }
       return false;
@@ -2019,86 +2656,107 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
   }
 
   Future<_ExternalEditConflictResolution> _promptExternalEditConflict({
-    required String entryName,
     required String remotePath,
     required bool remoteMissing,
   }) async {
     if (!mounted) return _ExternalEditConflictResolution.cancel;
-    final result = await _showSftpWorkspaceDialog<_ExternalEditConflictResolution>(
-      barrierDismissible: false,
-      builder: (dialogContext) {
-        final colors = widget.compact ? widget.panelColors : null;
-        return _WorkspaceDialogFrame(
-          width: 540,
-          title: Text(
-            tr('sftp.label.remoteFileChanged', fallback: 'Remote file changed'),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                remoteMissing
-                    ? '$entryName was removed from the server after editing began.'
-                    : '$entryName was changed on the server after editing began.',
-                style: TextStyle(
-                  color: colors?.foreground ?? _text,
-                  fontSize: NautermFontSizes.labelLarge,
-                  fontWeight: NautermFontWeights.regular,
-                  height: 1.35,
-                  letterSpacing: 0,
+    final result =
+        await _showSftpWorkspaceDialog<_ExternalEditConflictResolution>(
+          barrierDismissible: false,
+          builder: (dialogContext) {
+            final colors = widget.compact ? widget.panelColors : null;
+            return _WorkspaceDialogFrame(
+              width: 540,
+              title: Text(
+                tr(
+                  'sftp.label.remoteFileChanged',
+                  fallback: 'Remote file changed',
                 ),
               ),
-              SizedBox(height: 10),
-              Text(
-                remotePath,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: colors?.muted ?? _mutedText,
-                  fontFamily: 'monospace',
-                  fontSize: NautermFontSizes.labelMedium,
-                  fontWeight: NautermFontWeights.regular,
-                  letterSpacing: 0,
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    remoteMissing
+                        ? dialogContext.tr(
+                            'sftp.edit.conflict.removed.description',
+                            fallback: 'The file was removed from the server after editing began.',
+                          )
+                        : dialogContext.tr(
+                            'sftp.edit.conflict.changed.description',
+                            fallback: 'The file was changed on the server after editing began.',
+                          ),
+                    style: TextStyle(
+                      color: colors?.foreground ?? _text,
+                      fontSize: NautermFontSizes.labelLarge,
+                      fontWeight: NautermFontWeights.regular,
+                      height: 1.35,
+                      letterSpacing: 0,
+                    ),
+                  ),
+                  SizedBox(height: 10),
+                  Text(
+                    remotePath,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: colors?.muted ?? _mutedText,
+                      fontFamily: 'monospace',
+                      fontSize: NautermFontSizes.labelMedium,
+                      fontWeight: NautermFontWeights.regular,
+                      letterSpacing: 0,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    dialogContext.tr(
+                      'sftp.edit.conflict.localCopy.description',
+                      fallback: 'Your local edits are retained until you choose a resolution.',
+                    ),
+                    style: TextStyle(
+                      color: colors?.muted ?? _mutedText,
+                      fontSize: NautermFontSizes.labelMedium,
+                      letterSpacing: 0,
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                _WorkspaceButton(
+                  label: 'common.action.cancel',
+                  variant: _WorkspaceButtonVariant.text,
+                  onPressed: () =>
+                      Navigator.of(dialogContext)
+                          .pop(_ExternalEditConflictResolution.cancel),
                 ),
-              ),
-            ],
-          ),
-          actions: [
-            _WorkspaceButton(
-              label: 'Cancel',
-              variant: _WorkspaceButtonVariant.text,
-              onPressed: () =>
-                  Navigator.of(dialogContext)
-                      .pop(_ExternalEditConflictResolution.cancel),
-            ),
-            if (!remoteMissing)
-              _WorkspaceButton(
-                label: 'Keep Remote',
-                variant: _WorkspaceButtonVariant.filled,
-                onPressed: () =>
-                    Navigator.of(dialogContext)
-                        .pop(_ExternalEditConflictResolution.keepRemote),
-              ),
-            _WorkspaceButton(
-              label: 'Save a Copy',
-              variant: _WorkspaceButtonVariant.filled,
-              onPressed: () =>
-                  Navigator.of(dialogContext)
-                      .pop(_ExternalEditConflictResolution.saveCopy),
-            ),
-            _WorkspaceButton(
-              label: 'Overwrite Remote',
-              type: _WorkspaceButtonType.error,
-              variant: _WorkspaceButtonVariant.solid,
-              onPressed: () =>
-                  Navigator.of(dialogContext)
-                      .pop(_ExternalEditConflictResolution.overwriteRemote),
-            ),
-          ],
+                if (!remoteMissing)
+                  _WorkspaceButton(
+                    label: 'sftp.label.keepRemote',
+                    variant: _WorkspaceButtonVariant.filled,
+                    onPressed: () =>
+                        Navigator.of(dialogContext)
+                            .pop(_ExternalEditConflictResolution.keepRemote),
+                  ),
+                _WorkspaceButton(
+                  label: 'sftp.label.saveACopy',
+                  variant: _WorkspaceButtonVariant.filled,
+                  onPressed: () =>
+                      Navigator.of(dialogContext)
+                          .pop(_ExternalEditConflictResolution.saveCopy),
+                ),
+                _WorkspaceButton(
+                  label: 'sftp.label.overwriteRemote',
+                  type: _WorkspaceButtonType.error,
+                  variant: _WorkspaceButtonVariant.solid,
+                  onPressed: () =>
+                      Navigator.of(dialogContext)
+                          .pop(_ExternalEditConflictResolution.overwriteRemote),
+                ),
+              ],
+            );
+          },
         );
-      },
-    );
     return result ?? _ExternalEditConflictResolution.cancel;
   }
 
@@ -2146,10 +2804,121 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
   }
 
   void _showSftpSnack(String message) {
+    if (!mounted) return;
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-      SnackBar(
-        content: Text(tr(message)),
-        duration: const Duration(seconds: 3),
+      SnackBar(content: Text(message), duration: const Duration(seconds: 3)),
+    );
+  }
+
+  Widget? _sftpOperationBanner(
+    _SftpRemotePaneSession session, {
+    _AiAssistantColors? colors,
+  }) {
+    final opening = session.editOpening;
+    if (opening == null &&
+        !session.destinationChecks.containsKey(session.navigationRevision)) {
+      final paused = _externalEditSessions.values
+          .where(
+            (edit) =>
+                edit.authorizationPaused &&
+                identical(edit.auth, session.connection?.auth),
+          )
+          .firstOrNull;
+      if (paused == null || _closingSftp) return null;
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        child: Row(
+          children: [
+            Expanded(
+              child: Tooltip(
+                message: tr(
+                  'sftp.edit.notice.localCopy',
+                  args: {
+                    'error': tr('sftp.edit.status.localChangesKept'),
+                    'path': paused.localPath,
+                  },
+                ),
+                child: Text(
+                  tr(
+                    'sftp.edit.status.savePaused',
+                    args: {'host': paused.auth.host},
+                  ),
+                  style: TextStyle(
+                    color: colors?.foreground ?? _text,
+                    fontSize: NautermFontSizes.labelSmall,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: () => unawaited(paused.retryPausedSave()),
+              child: Text(tr('common.action.authenticate')),
+            ),
+          ],
+        ),
+      );
+    }
+    final label = switch (opening) {
+      null => tr(
+        'sftp.transfer.checkingDestination.description',
+        fallback: 'Checking destination…',
+      ),
+      _SftpRemoteEditOpening(taskId: null) => tr(
+        'sftp.edit.opening.description',
+        fallback: 'Opening remote file…',
+      ),
+      _ => tr(
+        'sftp.edit.downloading.description',
+        fallback: 'Downloading a private copy for editing…',
+      ),
+    };
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      child: SizedBox(
+        height: 32,
+        child: Row(
+          children: [
+            SizedBox.square(
+              dimension: 12,
+              child: CircularProgressIndicator(
+                strokeWidth: 1.5,
+                color: colors?.accent,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                label,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: colors?.foreground ?? _text,
+                  fontSize: NautermFontSizes.labelSmall,
+                ),
+              ),
+            ),
+            if (opening != null)
+              TextButton(
+                style: TextButton.styleFrom(
+                  foregroundColor: colors?.foreground ?? _text,
+                  minimumSize: const Size(0, 32),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  textStyle: const TextStyle(
+                    fontSize: NautermFontSizes.labelSmall,
+                  ),
+                ),
+                onPressed: () => _cancelRemoteEditOpening(
+                  session,
+                  message: tr(
+                    'sftp.edit.openCancelled.description',
+                    fallback: 'Remote file opening cancelled.',
+                  ),
+                ),
+                child: Text(tr('common.action.cancel', fallback: 'Cancel')),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -2269,8 +3038,10 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     _SftpRemotePaneSession? remoteSession,
     bool persistHistory = true,
     bool withSudo = false,
+    String? verifiedSudoSessionId,
+    ValueChanged<int>? onQueued,
   }) {
-    if (_shuttingDown) {
+    if (_shuttingDown || (_closingSftp && type != _SftpTaskType.edit)) {
       return Future.value(
         _SftpTask(
           id: -1,
@@ -2303,6 +3074,8 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
       _tasks = [..._tasks, task];
     });
     final completer = Completer<_SftpTask>();
+    final host = remoteSession?.connection?.host;
+    final hostUuid = host != null && host.id > 0 ? host.uuid : null;
     _controller.taskCompletions[id] = completer;
     _controller.taskExecutions[id] = _QueuedSftpTaskExecution(
       nativeTaskId: nativeTaskId,
@@ -2313,9 +3086,15 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
       localSession: localSession,
       remoteSession: remoteSession,
       persistHistory: persistHistory,
+      hostUuid: hostUuid,
+      historyUuid: persistHistory && hostUuid != null
+          ? const Uuid().v7()
+          : null,
       withSudo: withSudo,
+      verifiedSudoSessionId: verifiedSudoSessionId,
     );
     _controller.taskManager.registerOwner(id, this);
+    onQueued?.call(id);
     _controller.taskManager.pumpQueues();
     return completer.future;
   }
@@ -2347,7 +3126,6 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
             finishedAt: DateTime.now(),
           ),
         );
-        _persistSftpTaskHistory(nextTask.id);
         _completeSftpTask(nextTask.id);
         continue;
       }
@@ -2362,7 +3140,8 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
               .firstOrNull;
           final retainExecution =
               finishedTask?.status == _SftpTaskStatus.paused ||
-              (finishedTask?.status == _SftpTaskStatus.failed &&
+              (execution.verifiedSudoSessionId == null &&
+                  finishedTask?.status == _SftpTaskStatus.failed &&
                   _isPausableSftpTask(finishedTask!));
           if (!retainExecution) {
             _controller.taskExecutions.remove(runningTaskId);
@@ -2394,10 +3173,16 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
       (task) => task.copyWith(status: _SftpTaskStatus.running),
     );
     final session = execution.remoteSession ?? _rightRemote;
+    final verifiedSudoId = execution.verifiedSudoSessionId;
+    var activeSudoId = verifiedSudoId ?? session.sudoSessionId;
+    bool currentSudoScope() =>
+        identical(session.connection?.auth, execution.auth) &&
+        session.sudoSessionId == activeSudoId;
     final arguments = execution.auth.toArguments(session.path)
       ..['taskId'] = execution.nativeTaskId;
     var lastProgressAt = DateTime.fromMillisecondsSinceEpoch(0);
     var lastProgressBytes = -1;
+    var sudoPaneChanged = false;
 
     void updateProgress(_SftpTaskProgressUpdate progress) {
       final now = DateTime.now();
@@ -2425,25 +3210,62 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     }
 
     Future<FfiSftpTaskResult> run(Map<String, Object?> operation) {
+      if ((execution.withSudo || operation.containsKey('sudo_password')) &&
+          !currentSudoScope()) {
+        sudoPaneChanged = true;
+        return Future.value(
+          const FfiSftpTaskResult(
+            ok: false,
+            bytes: 0,
+            itemKind: 'unknown',
+            error: 'SFTP connection changed before the task could run.',
+          ),
+        );
+      }
       arguments['operation'] = operation;
       return _spawnSftpTask(arguments, onProgress: updateProgress);
+    }
+
+    Future<String?> promptForCurrentPane(
+      _SftpSudoPromptKind kind, {
+      String? error,
+    }) async {
+      if (!currentSudoScope()) {
+        sudoPaneChanged = true;
+        return null;
+      }
+      final revision = session.navigationRevision;
+      final password = await _promptSftpSudoPassword(
+        kind: kind,
+        error: error,
+        paths: kind == _SftpSudoPromptKind.permissionDenied
+            ? (
+                source: currentTask.sourcePath,
+                destination: currentTask.targetPath,
+              )
+            : null,
+      );
+      if (password != null &&
+          (revision != session.navigationRevision || !currentSudoScope())) {
+        sudoPaneChanged = true;
+        return null;
+      }
+      return password;
     }
 
     var operation = execution.operation;
     String? initialSudoPassword;
     final usedCachedChannel =
-        execution.withSudo && session.sudoSessionAuthenticated;
+        execution.withSudo &&
+        (verifiedSudoId != null || session.sudoSessionAuthenticated);
     if (execution.withSudo) {
-      if (!usedCachedChannel) {
-        initialSudoPassword = await _promptSftpSudoPassword(
-          kind: _SftpSudoPromptKind.explicit,
+      if (!usedCachedChannel && !_closingSftp) {
+        initialSudoPassword = await promptForCurrentPane(
+          _SftpSudoPromptKind.explicit,
         );
       }
       if (usedCachedChannel || initialSudoPassword != null) {
-        operation = {
-          ...execution.operation,
-          'sudo_session_id': session.sudoSessionId,
-        };
+        operation = {...execution.operation, 'sudo_session_id': activeSudoId};
         if (initialSudoPassword != null) {
           operation['sudo_password'] = initialSudoPassword;
         }
@@ -2460,31 +3282,37 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
           )
         : await run(operation);
     if (execution.withSudo) {
-      if (result.ok) {
+      if (!currentSudoScope()) {
+        FfiSftpTaskExecutor.closeSudoSession(activeSudoId);
+      } else if (result.ok) {
         session.sudoSessionAuthenticated = true;
       } else if (_sftpSudoAuthenticationFailed(result.error)) {
-        FfiSftpTaskExecutor.closeSudoSession(session.sudoSessionId);
-        session.sudoSessionAuthenticated = false;
-        if (usedCachedChannel) {
-          final replacementPassword = await _promptSftpSudoPassword(
-            kind: _SftpSudoPromptKind.explicit,
+        session.closeSudoSession();
+        activeSudoId = session.sudoSessionId;
+        if (usedCachedChannel && verifiedSudoId == null && !_closingSftp) {
+          final replacementPassword = await promptForCurrentPane(
+            _SftpSudoPromptKind.explicit,
             error: result.error,
           );
           if (replacementPassword != null) {
             result = await run({
               ...execution.operation,
-              'sudo_session_id': session.sudoSessionId,
+              'sudo_session_id': activeSudoId,
               'sudo_password': replacementPassword,
             });
-            if (result.ok) {
+            if (!currentSudoScope()) {
+              FfiSftpTaskExecutor.closeSudoSession(activeSudoId);
+            } else if (result.ok) {
               session.sudoSessionAuthenticated = true;
             }
           }
         }
       }
-    } else if (!result.ok && _sftpPermissionDenied(result.error)) {
-      final oneShotPassword = await _promptSftpSudoPassword(
-        kind: _SftpSudoPromptKind.permissionDenied,
+    } else if (!result.ok &&
+        !_closingSftp &&
+        _sftpPermissionDenied(result.error)) {
+      final oneShotPassword = await promptForCurrentPane(
+        _SftpSudoPromptKind.permissionDenied,
         error: result.error,
       );
       if (oneShotPassword != null) {
@@ -2494,11 +3322,18 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
         });
       }
     }
-    final cancelled = result.error?.toLowerCase().contains('cancelled') == true;
+    final cancelled =
+        sudoPaneChanged ||
+        result.error?.toLowerCase().contains('cancelled') == true;
     final latestTask = _tasks.where((task) => task.id == taskId).firstOrNull;
     final paused =
-        !result.ok && cancelled && latestTask?.pauseRequested == true;
-    if (cancelled && !paused) {
+        !result.ok &&
+        cancelled &&
+        !sudoPaneChanged &&
+        latestTask?.pauseRequested == true;
+    if (sudoPaneChanged && mounted && !_closingSftp) {
+      _showSftpSnack(context.tr('sftp.sudo.error.paneChanged'));
+    } else if (cancelled && !paused && !sudoPaneChanged) {
       await _discardCancelledSftpTaskParts(operation, arguments);
     }
     if (result.ok && mounted) {
@@ -2534,7 +3369,7 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
       ),
     );
     if (!paused && execution.persistHistory) {
-      _persistSftpTaskHistory(taskId);
+      _persistSftpTaskHistory(taskId, execution);
     }
     if (!paused) {
       _completeSftpTask(taskId);
@@ -2543,8 +3378,8 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
       _removeSftpTaskFromMemory(taskId);
     }
     if (result.ok) {
-      if (execution.refreshLocal) {
-        final sessionToRefresh = execution.localSession ?? _leftLocal;
+      final sessionToRefresh = execution.localSession ?? _leftLocal;
+      if (execution.refreshLocal && !sessionToRefresh.changingDirectory) {
         unawaited(
           _loadLocalPath(
             sessionToRefresh,
@@ -2553,16 +3388,18 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
           ),
         );
       }
-      if (execution.refreshRemote) {
+      if (execution.refreshRemote &&
+          !session.changingDirectory &&
+          !session.selectingHost) {
         final connection = session.connection;
-        final currentAuth = connection?.auth;
-        if (connection != null && currentAuth != null) {
+        if (connection?.phase == _SftpConnectionPhase.connected &&
+            identical(connection?.auth, execution.auth)) {
           unawaited(
             _loadRemotePath(
               session,
-              currentAuth,
+              execution.auth,
               session.path,
-              host: connection.host,
+              host: connection!.host,
               recordHistory: false,
             ),
           );
@@ -2580,92 +3417,157 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
   Future<String?> _promptSftpSudoPassword({
     required _SftpSudoPromptKind kind,
     String? error,
+    ({String source, String destination})? paths,
+  }) => _showSftpSudoPrompt<String>(
+    kind: kind,
+    error: error,
+    paths: paths,
+    onSubmit: (password) => password,
+  );
+
+  Future<T?> _showSftpSudoPrompt<T>({
+    required _SftpSudoPromptKind kind,
+    required FutureOr<T?> Function(String password) onSubmit,
+    String? error,
+    String? target,
+    ({String source, String destination})? paths,
   }) async {
     if (!mounted) return null;
     final controller = TextEditingController();
-    final explicit = kind == _SftpSudoPromptKind.explicit;
+    final permissionDenied = kind == _SftpSudoPromptKind.permissionDenied;
+    final descriptionKey = switch (kind) {
+      _SftpSudoPromptKind.explicit => 'sftp.sudo.explicit.dialog.description',
+      _SftpSudoPromptKind.permissionDenied =>
+        'sftp.sudo.permissionDenied.dialog.description',
+      _SftpSudoPromptKind.saveEdit => 'sftp.sudo.edit.dialog.description',
+    };
+    final actionKey = switch (kind) {
+      _SftpSudoPromptKind.explicit => 'common.action.authenticate',
+      _SftpSudoPromptKind.permissionDenied =>
+        'sftp.sudo.permissionDenied.action.retry',
+      _SftpSudoPromptKind.saveEdit =>
+        'sftp.sudo.edit.action.authenticateAndSave',
+    };
+    var authenticating = false;
     try {
-      return await _showSftpWorkspaceDialog<String>(
+      return await _showSftpWorkspaceDialog<T>(
         barrierDismissible: false,
-        builder: (dialogContext) {
-          void submit() {
-            final password = controller.text;
-            if (password.isEmpty) return;
-            Navigator.of(dialogContext).pop(password);
-          }
+        builder: (_) => StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            Future<void> submit() async {
+              if (authenticating) return;
+              final password = controller.text;
+              if (password.isEmpty) return;
+              controller.clear();
+              setDialogState(() {
+                authenticating = true;
+                error = null;
+              });
+              try {
+                final result = await onSubmit(password);
+                if (dialogContext.mounted) {
+                  Navigator.of(dialogContext).pop(result);
+                }
+              } on Object catch (failure) {
+                if (dialogContext.mounted) {
+                  setDialogState(() {
+                    authenticating = false;
+                    error = failure.toString();
+                  });
+                }
+              }
+            }
 
-          return _WorkspaceDialogFrame(
-            title: Text(
-              tr(
-                explicit
-                    ? 'sftp.sudo.explicit.dialog.title'
-                    : 'sftp.sudo.permissionDenied.dialog.title',
-                fallback: explicit
-                    ? 'Authenticate with sudo'
-                    : 'Permission denied',
-              ),
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  tr(
-                    explicit
-                        ? 'sftp.sudo.explicit.dialog.description'
-                        : 'sftp.sudo.permissionDenied.dialog.description',
-                    fallback: explicit
-                        ? 'Enter the sudo password to authorize this and future With sudo actions for 15 minutes.'
-                        : 'The server denied this operation. Enter the sudo password to retry this task once.',
-                  ),
+            return _WorkspaceDialogFrame(
+              title: Text(
+                tr(
+                  permissionDenied
+                      ? 'sftp.sudo.permissionDenied.dialog.title'
+                      : 'sftp.sudo.explicit.dialog.title',
                 ),
-                if (error case final message?
-                    when message.trim().isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  Text(
-                    message,
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color:
-                          widget.panelColors?.muted ??
-                          context.nautermPalette.faintText,
-                      fontSize: 11,
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(tr(descriptionKey)),
+                  if (target != null) ...[
+                    const SizedBox(height: 8),
+                    Text(target),
+                  ],
+                  if (paths != null) ...[
+                    const SizedBox(height: 8),
+                    if (paths.source.isNotEmpty)
+                      Text(
+                        dialogContext.tr(
+                          'sftp.label.sourcePath',
+                          args: {'path': paths.source},
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    if (paths.destination.isNotEmpty)
+                      Text(
+                        dialogContext.tr(
+                          'sftp.label.destinationPath',
+                          args: {'path': paths.destination},
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                  ],
+                  if (error case final message?
+                      when message.trim().isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      message,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color:
+                            widget.panelColors?.muted ??
+                            context.nautermPalette.faintText,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  AbsorbPointer(
+                    absorbing: authenticating,
+                    child: _WorkspaceInput(
+                      controller: controller,
+                      label: tr('common.label.password', fallback: 'Password'),
+                      autofocus: true,
+                      obscureText: true,
+                      clearable: false,
+                      textInputAction: TextInputAction.done,
+                      onSubmitted: (_) => unawaited(submit()),
                     ),
                   ),
+                  if (authenticating) ...[
+                    const SizedBox(height: 8),
+                    Text(tr('common.status.authenticating')),
+                  ],
                 ],
-                const SizedBox(height: 16),
-                _WorkspaceInput(
-                  controller: controller,
-                  label: tr('common.label.password', fallback: 'Password'),
-                  autofocus: true,
-                  obscureText: true,
-                  clearable: false,
-                  textInputAction: TextInputAction.done,
-                  onSubmitted: (_) => submit(),
+              ),
+              actions: [
+                _WorkspaceButton(
+                  label: tr('common.action.cancel', fallback: 'Cancel'),
+                  variant: _WorkspaceButtonVariant.text,
+                  onPressed: authenticating
+                      ? null
+                      : () => Navigator.of(dialogContext).pop(),
+                ),
+                _WorkspaceButton(
+                  label: tr(actionKey),
+                  type: _WorkspaceButtonType.primary,
+                  variant: _WorkspaceButtonVariant.solid,
+                  onPressed: authenticating ? null : () => unawaited(submit()),
                 ),
               ],
-            ),
-            actions: [
-              _WorkspaceButton(
-                label: tr('common.action.cancel', fallback: 'Cancel'),
-                variant: _WorkspaceButtonVariant.text,
-                onPressed: () => Navigator.of(dialogContext).pop(),
-              ),
-              _WorkspaceButton(
-                label: tr(
-                  explicit
-                      ? 'sftp.sudo.explicit.action.authenticate'
-                      : 'sftp.sudo.permissionDenied.action.retry',
-                  fallback: explicit ? 'Authenticate' : 'Retry with sudo',
-                ),
-                type: _WorkspaceButtonType.primary,
-                variant: _WorkspaceButtonVariant.solid,
-                onPressed: submit,
-              ),
-            ],
-          );
-        },
+            );
+          },
+        ),
       );
     } finally {
       controller.dispose();
@@ -2694,28 +3596,24 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     return _SftpPaneSlot.right;
   }
 
-  void _persistSftpTaskHistory(int taskId) {
+  void _persistSftpTaskHistory(int taskId, _QueuedSftpTaskExecution execution) {
     final store = widget.dataStore;
     if (store == null) return;
     final task = _tasks.where((task) => task.id == taskId).firstOrNull;
     final finishedAt = task?.finishedAt;
-    if (task == null || finishedAt == null || task.historyId != null) return;
-    final execution = _controller.taskExecutions[taskId];
-    final auth = execution?.auth;
-    final connection = execution?.remoteSession?.connection;
-    if (connection == null ||
-        connection.host.id <= 0 ||
-        connection.host.uuid == null) {
+    if (task == null || finishedAt == null || execution.historyUuid == null) {
       return;
     }
+    final auth = execution.auth;
     try {
       final historyId = store.saveSftpTaskHistory(
         SftpTaskHistoryEntry(
-          hostUuid: connection.host.uuid,
+          uuid: execution.historyUuid,
+          hostUuid: execution.hostUuid,
           type: _persistedSftpTaskType(task.type),
-          host: auth?.host ?? '',
-          username: auth?.username ?? '',
-          port: auth?.port ?? 22,
+          host: auth.host,
+          username: auth.username,
+          port: auth.port,
           status: task.status.name,
           displayName: task.displayName,
           sourcePath: task.sourcePath,
@@ -2876,8 +3774,8 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
           finishedAt: DateTime.now(),
         ),
       );
-      if (execution?.persistHistory ?? true) {
-        _persistSftpTaskHistory(taskId);
+      if (execution != null && execution.persistHistory) {
+        _persistSftpTaskHistory(taskId, execution);
       }
       _completeSftpTask(taskId);
       _controller.taskManager.forgetOwner(taskId);
@@ -2926,13 +3824,17 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     final execution = _controller.taskExecutions[taskId];
     if (task == null ||
         execution == null ||
-        task.status != _SftpTaskStatus.paused) {
+        _shuttingDown ||
+        _controller.runningTaskIds.contains(taskId) ||
+        (task.status != _SftpTaskStatus.paused &&
+            !_controller.taskManager.canRetry(task))) {
       return;
     }
     final nativeTaskId = DateTime.now().microsecondsSinceEpoch + taskId;
     _controller.taskExecutions[taskId] = execution.withNativeTaskId(
       nativeTaskId,
     );
+    _controller.taskCompletions.putIfAbsent(taskId, Completer<_SftpTask>.new);
     _replaceSftpTask(
       taskId,
       (task) => task.copyWith(
@@ -2949,7 +3851,8 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
 
   void _toggleSftpTaskPause(int taskId) {
     final task = _tasks.where((task) => task.id == taskId).firstOrNull;
-    if (task?.status == _SftpTaskStatus.paused) {
+    if (task?.status == _SftpTaskStatus.paused ||
+        task?.status == _SftpTaskStatus.failed) {
       _resumeSftpTask(taskId);
     } else {
       _pauseSftpTask(taskId);
@@ -3126,17 +4029,22 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     _HostItem host,
   ) {
     final normalizedPath = session.path.trim();
-    if (normalizedPath.isEmpty) {
+    if (normalizedPath.isEmpty || session.loadingFavorites) {
       return;
     }
     final remove = session.favoritePaths.contains(normalizedPath);
     if (host.id > 0) {
-      _persistSftpFavoritePathChange(
-        scope: SftpFavoriteScope.remote,
-        hostId: host.id,
-        path: normalizedPath,
-        remove: remove,
-      );
+      try {
+        _persistSftpFavoritePathChange(
+          scope: SftpFavoriteScope.remote,
+          hostId: host.id,
+          path: normalizedPath,
+          remove: remove,
+        );
+      } on Object catch (error) {
+        _showSftpSnack(error.toString());
+        return;
+      }
     }
     _setSftpState(
       () => _setFavoritePath(session.favoritePaths, normalizedPath, remove),
@@ -3153,20 +4061,16 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     if (store == null) {
       return;
     }
-    try {
-      if (remove) {
-        store.deleteSftpFavoritePathByTarget(
-          scope: scope,
-          hostId: hostId,
-          path: path,
-        );
-      } else {
-        store.saveSftpFavoritePath(
-          SftpFavoritePathEntry(scope: scope, hostId: hostId, path: path),
-        );
-      }
-    } catch (_) {
-      return;
+    if (remove) {
+      store.deleteSftpFavoritePathByTarget(
+        scope: scope,
+        hostId: hostId,
+        path: path,
+      );
+    } else {
+      store.saveSftpFavoritePath(
+        SftpFavoritePathEntry(scope: scope, hostId: hostId, path: path),
+      );
     }
   }
 
@@ -3185,17 +4089,38 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     _SftpRemotePaneSession session,
     _SftpRemoteAuth auth,
     String targetPath, {
-    required String actionLabel,
     Set<String>? reservedTargets,
     Map<String, Set<String>>? siblingCache,
+    required bool Function() isCurrent,
   }) async {
+    if (!isCurrent()) return null;
     final normalizedTarget = _collapseRemoteSftpPath(targetPath);
-    final siblingTargets = await _remoteSftpSiblingTargets(
-      session,
-      auth,
-      normalizedTarget,
-      cache: siblingCache,
-    );
+    final revision = session.navigationRevision;
+    _setSftpState(() {
+      session.destinationChecks.update(
+        revision,
+        (count) => count + 1,
+        ifAbsent: () => 1,
+      );
+    });
+    final Set<String> siblingTargets;
+    try {
+      siblingTargets = await _remoteSftpSiblingTargets(
+        session,
+        auth,
+        normalizedTarget,
+        cache: siblingCache,
+      );
+    } finally {
+      final count = session.destinationChecks[revision] ?? 0;
+      if (count <= 1) {
+        session.destinationChecks.remove(revision);
+      } else {
+        session.destinationChecks[revision] = count - 1;
+      }
+      _setSftpState(() {});
+    }
+    if (!isCurrent()) return null;
     if (reservedTargets != null) {
       siblingTargets.addAll(reservedTargets);
     }
@@ -3206,12 +4131,16 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
       );
     }
 
+    final keepBothPath = _uniqueRemoteSftpPath(
+      normalizedTarget,
+      siblingTargets,
+    );
     final resolution = await _promptRemoteNameConflict(
-      actionLabel: actionLabel,
       name: _remoteSftpName(normalizedTarget),
       targetPath: normalizedTarget,
+      keepBothPath: keepBothPath,
     );
-    if (!mounted || resolution == _SftpNameConflictResolution.cancel) {
+    if (!isCurrent() || resolution == _SftpNameConflictResolution.cancel) {
       return null;
     }
     if (resolution == _SftpNameConflictResolution.replace) {
@@ -3221,7 +4150,7 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
       );
     }
     return _SftpResolvedRemoteTarget(
-      targetPath: _uniqueRemoteSftpPath(normalizedTarget, siblingTargets),
+      targetPath: keepBothPath,
       replaceExisting: false,
     );
   }
@@ -3319,9 +4248,9 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
   }
 
   Future<_SftpNameConflictResolution> _promptRemoteNameConflict({
-    required String actionLabel,
     required String name,
     required String targetPath,
+    required String keepBothPath,
   }) async {
     if (!mounted) {
       return _SftpNameConflictResolution.cancel;
@@ -3331,18 +4260,39 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
         final colors = widget.compact ? widget.panelColors : null;
         return _WorkspaceDialogFrame(
           width: 460,
-          title: Text(tr('$actionLabel name conflict')),
+          title: Text(
+            dialogContext.tr(
+              'sftp.conflict.destinationExists.title',
+              fallback: 'Destination already exists',
+            ),
+          ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                tr('An item named "$name" already exists in the destination.'),
+                tr(
+                  'sftp.conflict.itemExists.description',
+                  fallback: 'An item named "{name}" already exists in the destination.',
+                  args: {'name': name},
+                ),
                 style: TextStyle(
                   color: colors?.foreground ?? _text,
                   fontSize: NautermFontSizes.labelLarge,
                   fontWeight: NautermFontWeights.regular,
                   height: 1.35,
+                  letterSpacing: 0,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                dialogContext.tr(
+                  'sftp.conflict.replacement.description',
+                  fallback: 'Keep both items with different names, or replace the existing destination. Replacement cannot be undone.',
+                ),
+                style: TextStyle(
+                  color: colors?.muted ?? _mutedText,
+                  fontSize: NautermFontSizes.labelMedium,
                   letterSpacing: 0,
                 ),
               ),
@@ -3359,7 +4309,10 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
                     vertical: 8,
                   ),
                   child: Text(
-                    targetPath,
+                    dialogContext.tr(
+                      'sftp.label.destinationPath',
+                      args: {'path': targetPath},
+                    ),
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
@@ -3373,25 +4326,38 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
                   ),
                 ),
               ),
+              const SizedBox(height: 8),
+              Text(
+                dialogContext.tr(
+                  'sftp.conflict.keepBoth.path',
+                  args: {'path': keepBothPath},
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: colors?.muted ?? _mutedText,
+                  fontSize: NautermFontSizes.labelMedium,
+                ),
+              ),
             ],
           ),
           actions: [
             _WorkspaceButton(
-              label: 'Cancel',
+              label: 'common.action.cancel',
               variant: _WorkspaceButtonVariant.text,
               onPressed: () =>
                   Navigator.of(dialogContext)
                       .pop(_SftpNameConflictResolution.cancel),
             ),
             _WorkspaceButton(
-              label: 'Keep Both',
+              label: 'sftp.label.keepBoth',
               variant: _WorkspaceButtonVariant.filled,
               onPressed: () =>
                   Navigator.of(dialogContext)
                       .pop(_SftpNameConflictResolution.keepBoth),
             ),
             _WorkspaceButton(
-              label: 'Replace',
+              label: 'sftp.label.replace',
               type: _WorkspaceButtonType.primary,
               variant: _WorkspaceButtonVariant.solid,
               onPressed: () =>
@@ -3405,95 +4371,42 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     return result ?? _SftpNameConflictResolution.cancel;
   }
 
-  Future<void> _uploadLocalEntriesToRemote(
-    List<_SftpFileEntry> entries,
-    _SftpRemotePaneSession remoteSession, {
-    bool withSudo = false,
-  }) async {
-    final connection = remoteSession.connection;
-    final auth = connection?.auth;
-    if (entries.isEmpty || connection == null || auth == null) {
-      return;
-    }
-    final reservedTargets = <String>{};
-    final siblingCache = <String, Set<String>>{};
-    for (final entry in entries) {
-      final originalTargetPath = _joinRemoteSftpPath(
-        remoteSession.path,
-        entry.name,
-      );
-      final target = await _prepareRemoteSftpTarget(
-        remoteSession,
-        auth,
-        originalTargetPath,
-        actionLabel: 'Upload',
-        reservedTargets: reservedTargets,
-        siblingCache: siblingCache,
-      );
-      if (!mounted) {
-        return;
-      }
-      if (target == null) {
-        continue;
-      }
-      final targetPath = target.targetPath;
-      reservedTargets.add(_collapseRemoteSftpPath(targetPath));
-      _enqueueSftpTask(
-        type: _SftpTaskType.upload,
-        slot: _slotForRemoteSession(remoteSession),
-        displayName: targetPath == originalTargetPath
-            ? entry.name
-            : '${entry.name} -> ${_remoteSftpName(targetPath)}',
-        sourcePath: entry.path,
-        targetPath: targetPath,
-        auth: auth,
-        operation: {
-          'op': _SftpTaskType.upload.wireName,
-          'local_path': entry.path,
-          'remote_path': targetPath,
-          'replace_existing': target.replaceExisting,
-        },
-        refreshRemote: true,
-        remoteSession: remoteSession,
-        withSudo: withSudo,
-      );
-    }
-  }
-
   Future<void> _downloadSelectedRemoteToDownloadsDirectory(
     _SftpRemotePaneSession session, {
     bool withSudo = false,
   }) async {
     final entries = _selectedRemoteEntries(session);
     if (entries.isEmpty) return;
+    final source = _sftpPaneLocation(
+      _slotForRemoteSession(session),
+      _SftpPaneEndpoint.remote,
+    );
+    final cancellation = tr(
+      'sftp.transfer.sourceChanged.description',
+      fallback: 'Download cancelled because the source changed.',
+    );
+    bool isCurrent() => _sftpPaneLocationIsCurrent(source);
+
     final downloadsDirectory = await _controller.taskManager.downloadsDirectory;
+    if (!_checkSftpTransferScope(isCurrent(), cancellation)) return;
     if (downloadsDirectory == null) {
       if (mounted) {
-        _showSftpSnack('Unable to use the system Downloads directory.');
+        _showSftpSnack(
+          tr(
+            'sftp.error.useDownloadsDirectory',
+            fallback: 'Unable to use the system Downloads directory.',
+          ),
+        );
       }
       return;
     }
-    if (!mounted) return;
     await _downloadRemoteEntriesToDirectory(
       entries,
       session,
       _normalizeLocalSftpSeparators(downloadsDirectory.path),
+      isCurrent: isCurrent,
+      cancellation: cancellation,
       withSudo: withSudo,
-    );
-  }
-
-  void _downloadRemoteEntriesToLocal(
-    List<_SftpFileEntry> entries,
-    _SftpRemotePaneSession session,
-    _SftpLocalPaneSession localSession,
-  ) {
-    unawaited(
-      _downloadRemoteEntriesToDirectory(
-        entries,
-        session,
-        localSession.path,
-        localSession: localSession,
-      ),
     );
   }
 
@@ -3501,6 +4414,8 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     List<_SftpFileEntry> entries,
     _SftpRemotePaneSession session,
     String targetDirectory, {
+    required bool Function() isCurrent,
+    required String cancellation,
     _SftpLocalPaneSession? localSession,
     bool withSudo = false,
   }) async {
@@ -3511,13 +4426,20 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     }
     final reservedTargets = <String>{};
     for (final entry in entries) {
-      final targetPath = entries.length == 1
-          ? (await _uniqueLocalSftpPath(targetDirectory, entry.name))
-          : (await _uniqueLocalSftpPathWithReserved(
-              targetDirectory,
-              entry.name,
-              reservedTargets,
-            ));
+      final String targetPath;
+      try {
+        targetPath = await _uniqueLocalSftpPathWithReserved(
+          targetDirectory,
+          entry.name,
+          reservedTargets,
+        );
+      } on Object catch (error) {
+        if (isCurrent()) {
+          _showSftpSnack(tr('sftp.error.download', args: {'error': error}));
+        }
+        return;
+      }
+      if (!_checkSftpTransferScope(isCurrent(), cancellation)) return;
       reservedTargets.add(targetPath);
       _enqueueSftpTask(
         type: _SftpTaskType.download,
@@ -3540,15 +4462,21 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
   }
 
   Future<void> _copyRemoteEntriesToRemote(
-    List<_SftpFileEntry> entries,
+    _SftpPaneDragPayload drag,
     _SftpRemotePaneSession sourceSession,
     _SftpRemotePaneSession targetSession,
+    _SftpPaneLocation destination,
   ) async {
+    final entries = drag.entries;
     final sourceAuth = sourceSession.connection?.auth;
     final targetAuth = targetSession.connection?.auth;
     if (entries.isEmpty || sourceAuth == null || targetAuth == null) {
       return;
     }
+    bool isCurrent() =>
+        _sftpDragSourceIsCurrent(drag) &&
+        _sftpPaneLocationIsCurrent(destination);
+    final cancellation = _sftpTransferScopeChanged;
 
     final reservedTargets = <String>{};
     final siblingCache = <String, Set<String>>{};
@@ -3563,18 +4491,18 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
 
       for (final entry in entries) {
         final originalTargetPath = _joinRemoteSftpPath(
-          targetSession.path,
+          destination.path,
           entry.name,
         );
         final target = await _prepareRemoteSftpTarget(
           targetSession,
           targetAuth,
           originalTargetPath,
-          actionLabel: 'Upload',
           reservedTargets: reservedTargets,
           siblingCache: siblingCache,
+          isCurrent: isCurrent,
         );
-        if (!mounted) return;
+        if (!_checkSftpTransferScope(isCurrent(), cancellation)) return;
         if (target == null) continue;
 
         final targetPath = target.targetPath;
@@ -3598,7 +4526,8 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
           },
           remoteSession: sourceSession,
         );
-        if (!mounted || downloadTask.status != _SftpTaskStatus.completed) {
+        if (!_checkSftpTransferScope(isCurrent(), cancellation)) return;
+        if (downloadTask.status != _SftpTaskStatus.completed) {
           continue;
         }
 
@@ -3656,7 +4585,13 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
       return true;
     } on Object catch (error) {
       if (mounted) {
-        _showSftpSnack('Unable to protect temporary transfer data: $error');
+        _showSftpSnack(
+          tr(
+            'sftp.error.protectTransferData',
+            fallback: 'Unable to protect temporary transfer data: {error}',
+            args: {'error': error},
+          ),
+        );
       }
       return false;
     }
@@ -3666,20 +4601,20 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     _SftpPaneSlot targetSlot,
     _SftpPaneDragPayload payload,
   ) {
-    if (payload.entries.isEmpty || payload.sourceSlot == targetSlot) {
+    if (payload.entries.isEmpty ||
+        payload.source.slot == targetSlot ||
+        !_sftpDragSourceIsCurrent(payload)) {
       return false;
     }
     final targetEndpoint = switch (targetSlot) {
       _SftpPaneSlot.left => _leftPaneEndpoint,
       _SftpPaneSlot.right => _rightPaneEndpoint,
     };
-    if (payload.sourceRemote) {
-      return targetEndpoint == _SftpPaneEndpoint.local ||
-          (targetEndpoint == _SftpPaneEndpoint.remote &&
-              _fileDropRemoteSessionForSlot(targetSlot) != null);
-    }
-    return targetEndpoint == _SftpPaneEndpoint.remote &&
-        _fileDropRemoteSessionForSlot(targetSlot) != null;
+    return (payload.sourceRemote ||
+            targetEndpoint == _SftpPaneEndpoint.remote) &&
+        _sftpPaneLocationIsCurrent(
+          _sftpPaneLocation(targetSlot, targetEndpoint),
+        );
   }
 
   void _updateSftpPaneDragHover(
@@ -3693,15 +4628,15 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     };
     final label = payload.sourceRemote
         ? targetEndpoint == _SftpPaneEndpoint.remote
-              ? 'Upload here'
-              : 'Download here'
-        : 'Upload here';
-    if (_fileDropHoverSlot == targetSlot && _fileDropHoverLabel == label) {
+              ? 'sftp.action.uploadHere'
+              : 'sftp.action.downloadHere'
+        : 'sftp.action.uploadHere';
+    if (_fileDropHoverSlot == targetSlot && _fileDropHoverLabelKey == label) {
       return;
     }
     setState(() {
       _fileDropHoverSlot = targetSlot;
-      _fileDropHoverLabel = label;
+      _fileDropHoverLabelKey = label;
     });
   }
 
@@ -3710,32 +4645,52 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     _SftpPaneDragPayload payload,
   ) {
     _clearFileDropHover();
-    if (!_canAcceptSftpPaneDrag(targetSlot, payload)) return;
+    if (!_checkSftpTransferScope(
+      _canAcceptSftpPaneDrag(targetSlot, payload),
+      _sftpTransferScopeChanged,
+    )) {
+      return;
+    }
+    final targetEndpoint = targetSlot == _SftpPaneSlot.left
+        ? _leftPaneEndpoint
+        : _rightPaneEndpoint;
+    final destination = _sftpPaneLocation(targetSlot, targetEndpoint);
     if (payload.sourceRemote) {
-      final sourceSession = _remoteSessionForSlot(payload.sourceSlot);
-      final targetEndpoint = switch (targetSlot) {
-        _SftpPaneSlot.left => _leftPaneEndpoint,
-        _SftpPaneSlot.right => _rightPaneEndpoint,
-      };
+      final sourceSession = _remoteSessionForSlot(payload.source.slot);
       if (targetEndpoint == _SftpPaneEndpoint.remote) {
         unawaited(
           _copyRemoteEntriesToRemote(
-            payload.entries,
+            payload,
             sourceSession,
             _remoteSessionForSlot(targetSlot),
+            destination,
           ),
         );
       } else {
-        _downloadRemoteEntriesToLocal(
-          payload.entries,
-          sourceSession,
-          _localSessionForSlot(targetSlot),
+        unawaited(
+          _downloadRemoteEntriesToDirectory(
+            payload.entries,
+            sourceSession,
+            destination.path,
+            localSession: _localSessionForSlot(targetSlot),
+            isCurrent: () =>
+                _sftpDragSourceIsCurrent(payload) &&
+                _sftpPaneLocationIsCurrent(destination),
+            cancellation: _sftpTransferScopeChanged,
+          ),
         );
       }
       return;
     }
     final remoteSession = _remoteSessionForSlot(targetSlot);
-    unawaited(_uploadLocalEntriesToRemote(payload.entries, remoteSession));
+    unawaited(
+      _uploadSftpFiles(
+        payload.entries.map((entry) => (path: entry.path, name: entry.name)),
+        remoteSession,
+        destination,
+        drag: payload,
+      ),
+    );
   }
 
   _SftpPaneSlot? _fileDropTargetSlot(NautermFileDropEvent event) {
@@ -3772,7 +4727,9 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     };
     if (widget.remoteOnly || endpoint == _SftpPaneEndpoint.remote) {
       final session = _remoteSessionForSlot(targetSlot);
-      if (session.connection?.phase == _SftpConnectionPhase.connected) {
+      if (_sftpPaneLocationIsCurrent(
+        _sftpPaneLocation(targetSlot, _SftpPaneEndpoint.remote),
+      )) {
         return session;
       }
     }
@@ -3791,18 +4748,8 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
       return null;
     }
 
-    final candidates = <_SftpRemotePaneSession>[
-      if (_rightPaneEndpoint == _SftpPaneEndpoint.remote) _rightRemote,
-      if (_leftPaneEndpoint == _SftpPaneEndpoint.remote) _leftRemote,
-      _rightRemote,
-      _leftRemote,
-    ];
-    for (final session in candidates) {
-      if (session.connection?.phase == _SftpConnectionPhase.connected) {
-        return session;
-      }
-    }
-    return null;
+    return _fileDropRemoteSessionForSlot(_SftpPaneSlot.right) ??
+        _fileDropRemoteSessionForSlot(_SftpPaneSlot.left);
   }
 
   void _updateFileDropHover(NautermFileDropEvent event) {
@@ -3812,22 +4759,25 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
         ? slot
         : null;
     if (_fileDropHoverSlot == targetSlot &&
-        _fileDropHoverLabel == (targetSlot == null ? null : 'Upload here')) {
+        _fileDropHoverLabelKey ==
+            (targetSlot == null ? null : 'sftp.action.uploadHere')) {
       return;
     }
     setState(() {
       _fileDropHoverSlot = targetSlot;
-      _fileDropHoverLabel = targetSlot == null ? null : 'Upload here';
+      _fileDropHoverLabelKey = targetSlot == null
+          ? null
+          : 'sftp.action.uploadHere';
     });
   }
 
   void _clearFileDropHover() {
-    if (_fileDropHoverSlot == null && _fileDropHoverLabel == null) {
+    if (_fileDropHoverSlot == null && _fileDropHoverLabelKey == null) {
       return;
     }
     setState(() {
       _fileDropHoverSlot = null;
-      _fileDropHoverLabel = null;
+      _fileDropHoverLabelKey = null;
     });
   }
 
@@ -3859,66 +4809,93 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
         connection.phase != _SftpConnectionPhase.connected) {
       return;
     }
-    unawaited(_uploadLocalPathsToRemote(event.paths, auth, session));
+    unawaited(
+      _uploadSftpFiles(
+        _sftpUploadFiles(event.paths),
+        session,
+        _sftpPaneLocation(
+          _slotForRemoteSession(session),
+          _SftpPaneEndpoint.remote,
+        ),
+      ),
+    );
   }
 
-  Future<void> _uploadLocalPathsToRemote(
-    List<String> paths,
-    _SftpRemoteAuth auth,
-    _SftpRemotePaneSession session, {
-    bool withSudo = false,
-  }) async {
+  Iterable<({String path, String name})> _sftpUploadFiles(
+    Iterable<String> paths,
+  ) sync* {
     final uniquePaths = <String>{};
-    final reservedTargets = <String>{};
-    final siblingCache = <String, Set<String>>{};
     for (final rawPath in paths) {
       final path = rawPath.trim();
-      if (path.isEmpty || !uniquePaths.add(path)) {
-        continue;
-      }
-      final type = io.FileSystemEntity.typeSync(path, followLinks: false);
-      if (type == io.FileSystemEntityType.notFound) {
-        continue;
-      }
+      if (path.isEmpty || !uniquePaths.add(path)) continue;
       final name = _basename(path);
-      if (name.isEmpty) {
+      if (name.isEmpty ||
+          io.FileSystemEntity.typeSync(path, followLinks: false) ==
+              io.FileSystemEntityType.notFound) {
         continue;
       }
-      final originalTargetPath = _joinRemoteSftpPath(session.path, name);
+      yield (path: path, name: name);
+    }
+  }
+
+  Future<void> _uploadSftpFiles(
+    Iterable<({String path, String name})> files,
+    _SftpRemotePaneSession session,
+    _SftpPaneLocation destination, {
+    bool withSudo = false,
+    _SftpPaneDragPayload? drag,
+  }) async {
+    final auth = session.connection?.auth;
+    if (auth == null) return;
+    bool isCurrent() =>
+        _sftpPaneLocationIsCurrent(destination) &&
+        (drag == null || _sftpDragSourceIsCurrent(drag));
+
+    final cancellation = drag == null
+        ? tr(
+            'sftp.transfer.destinationChanged.description',
+            fallback: 'Upload cancelled because the destination changed.',
+          )
+        : _sftpTransferScopeChanged;
+    final reservedTargets = <String>{};
+    final siblingCache = <String, Set<String>>{};
+    for (final file in files) {
+      final originalTargetPath = _joinRemoteSftpPath(
+        destination.path,
+        file.name,
+      );
       final target = await _prepareRemoteSftpTarget(
         session,
         auth,
         originalTargetPath,
-        actionLabel: 'Upload',
         reservedTargets: reservedTargets,
         siblingCache: siblingCache,
+        isCurrent: isCurrent,
       );
-      if (!mounted) {
-        return;
-      }
-      if (target == null) {
-        continue;
-      }
+      if (!_checkSftpTransferScope(isCurrent(), cancellation)) return;
+      if (target == null) continue;
       final targetPath = target.targetPath;
       reservedTargets.add(_collapseRemoteSftpPath(targetPath));
-      _enqueueSftpTask(
-        type: _SftpTaskType.upload,
-        slot: _slotForRemoteSession(session),
-        displayName: targetPath == originalTargetPath
-            ? name
-            : '$name -> ${_remoteSftpName(targetPath)}',
-        sourcePath: path,
-        targetPath: targetPath,
-        auth: auth,
-        operation: {
-          'op': _SftpTaskType.upload.wireName,
-          'local_path': path,
-          'remote_path': targetPath,
-          'replace_existing': target.replaceExisting,
-        },
-        refreshRemote: true,
-        remoteSession: session,
-        withSudo: withSudo,
+      unawaited(
+        _enqueueSftpTask(
+          type: _SftpTaskType.upload,
+          slot: destination.slot,
+          displayName: targetPath == originalTargetPath
+              ? file.name
+              : '${file.name} -> ${_remoteSftpName(targetPath)}',
+          sourcePath: file.path,
+          targetPath: targetPath,
+          auth: auth,
+          operation: {
+            'op': _SftpTaskType.upload.wireName,
+            'local_path': file.path,
+            'remote_path': targetPath,
+            'replace_existing': target.replaceExisting,
+          },
+          refreshRemote: true,
+          remoteSession: session,
+          withSudo: withSudo,
+        ),
       );
     }
   }
@@ -3927,9 +4904,12 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     _SftpRemotePaneSession session, {
     bool withSudo = false,
   }) async {
-    final connection = session.connection;
-    final auth = connection?.auth;
-    if (connection == null || auth == null) {
+    final destination = _sftpPaneLocation(
+      _slotForRemoteSession(session),
+      _SftpPaneEndpoint.remote,
+    );
+    if (!_sftpPaneLocationIsCurrent(destination) ||
+        session.connection?.auth == null) {
       return;
     }
     final List<XFile> files;
@@ -3937,17 +4917,32 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
       files = await openFiles();
     } on Object catch (error) {
       if (mounted) {
-        _showSftpSnack('Unable to choose files: $error');
+        _showSftpSnack(
+          tr(
+            'sftp.error.chooseFiles',
+            fallback: 'Unable to choose files: {error}',
+            args: {'error': error},
+          ),
+        );
       }
       return;
     }
     if (!mounted || files.isEmpty) {
       return;
     }
-    await _uploadLocalPathsToRemote(
-      [for (final file in files) file.path],
-      auth,
+    if (!_checkSftpTransferScope(
+      _sftpPaneLocationIsCurrent(destination),
+      tr(
+        'sftp.transfer.destinationChanged.description',
+        fallback: 'Upload cancelled because the destination changed.',
+      ),
+    )) {
+      return;
+    }
+    await _uploadSftpFiles(
+      _sftpUploadFiles(files.map((file) => file.path)),
       session,
+      destination,
       withSudo: withSudo,
     );
   }
@@ -3963,10 +4958,11 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
       return;
     }
     final newName = await _promptSftpInput(
-      title: 'Rename',
-      label: 'Name',
+      titleKey: 'common.action.rename',
+      label: 'common.label.name',
       initialValue: entry.name,
-      confirmLabel: 'Rename',
+      confirmLabel: 'common.action.rename',
+      withSudo: withSudo,
     );
     if (newName == null || !mounted || newName == entry.name) {
       return;
@@ -4002,16 +4998,27 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     if (entry == null || entry.isParent || connection == null || auth == null) {
       return;
     }
+    final location = _sftpPaneLocation(
+      _slotForRemoteSession(session),
+      _SftpPaneEndpoint.remote,
+    );
+    bool isCurrent() =>
+        _sftpPaneLocationIsCurrent(location) &&
+        _selectedRemoteEntry(session)?.path == entry.path;
     final input = await _promptSftpInput(
-      title: 'Move to',
-      label: 'Destination path',
+      titleKey: 'sftp.label.moveTo',
+      label: 'sftp.field.destinationPath',
       initialValue: entry.path,
-      confirmLabel: 'Move',
+      confirmLabel: 'sftp.task.move',
+      withSudo: withSudo,
     );
     if (input == null || !mounted) {
       return;
     }
-    final targetPath = _normalizeRemoteSftpPath(input, base: session.path);
+    if (!_checkSftpTransferScope(isCurrent(), _sftpTransferScopeChanged)) {
+      return;
+    }
+    final targetPath = _normalizeRemoteSftpPath(input, base: location.path);
     if (targetPath == entry.path) {
       return;
     }
@@ -4019,9 +5026,10 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
       session,
       auth,
       targetPath,
-      actionLabel: 'Move',
+      isCurrent: isCurrent,
     );
-    if (target == null || !mounted) {
+    if (!_checkSftpTransferScope(isCurrent(), _sftpTransferScopeChanged) ||
+        target == null) {
       return;
     }
     _enqueueSftpTask(
@@ -4053,16 +5061,27 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     if (entry == null || entry.isParent || connection == null || auth == null) {
       return;
     }
+    final location = _sftpPaneLocation(
+      _slotForRemoteSession(session),
+      _SftpPaneEndpoint.remote,
+    );
+    bool isCurrent() =>
+        _sftpPaneLocationIsCurrent(location) &&
+        _selectedRemoteEntry(session)?.path == entry.path;
     final input = await _promptSftpInput(
-      title: 'Copy to',
-      label: 'Destination path',
+      titleKey: 'sftp.label.copyTo',
+      label: 'sftp.field.destinationPath',
       initialValue: _defaultRemoteCopyPath(session, entry),
-      confirmLabel: 'Copy',
+      confirmLabel: 'common.action.copy',
+      withSudo: withSudo,
     );
     if (input == null || !mounted) {
       return;
     }
-    final targetPath = _normalizeRemoteSftpPath(input, base: session.path);
+    if (!_checkSftpTransferScope(isCurrent(), _sftpTransferScopeChanged)) {
+      return;
+    }
+    final targetPath = _normalizeRemoteSftpPath(input, base: location.path);
     if (targetPath == entry.path) {
       return;
     }
@@ -4070,9 +5089,10 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
       session,
       auth,
       targetPath,
-      actionLabel: 'Copy',
+      isCurrent: isCurrent,
     );
-    if (target == null || !mounted) {
+    if (!_checkSftpTransferScope(isCurrent(), _sftpTransferScopeChanged) ||
+        target == null) {
       return;
     }
     _enqueueSftpTask(
@@ -4186,10 +5206,11 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
   }
 
   Future<String?> _promptSftpInput({
-    required String title,
+    required String titleKey,
     required String label,
     required String initialValue,
     required String confirmLabel,
+    required bool withSudo,
   }) async {
     if (!mounted) {
       return null;
@@ -4203,8 +5224,16 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
             Navigator.of(dialogContext).pop(value.isEmpty ? null : value);
           }
 
+          final action = dialogContext.tr(titleKey);
           return _WorkspaceDialogFrame(
-            title: Text(title),
+            title: Text(
+              withSudo
+                  ? dialogContext.tr(
+                      'sftp.sudo.action.title',
+                      args: {'action': action},
+                    )
+                  : action,
+            ),
             content: _WorkspaceInput(
               controller: controller,
               label: label,
@@ -4214,7 +5243,7 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
             ),
             actions: [
               _WorkspaceButton(
-                label: 'Cancel',
+                label: 'common.action.cancel',
                 variant: _WorkspaceButtonVariant.text,
                 onPressed: () => Navigator.of(dialogContext).pop(),
               ),
@@ -4234,26 +5263,28 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
   }
 
   Future<bool> _confirmDeleteRemoteEntries(List<_SftpFileEntry> entries) async {
-    if (!mounted) {
+    if (!mounted || entries.isEmpty) {
       return false;
     }
     final singleEntry = entries.length == 1 ? entries.single : null;
-    final itemKind = singleEntry == null
-        ? '${entries.length} remote items'
-        : singleEntry.isDirectory
-        ? 'folder'
-        : 'file';
-    final message = singleEntry == null
-        ? 'Delete $itemKind from the SFTP server? This cannot be undone.'
-        : 'Delete $itemKind "${singleEntry.name}" from the SFTP server? This cannot be undone.';
     final result = await _showSftpWorkspaceDialog<bool>(
-      builder: (_) {
+      builder: (dialogContext) {
         return _WorkspaceConfirmDialog(
           title: Text(
-            tr('sftp.dialog.deleteRemoteItem', fallback: 'Delete remote item?'),
+            dialogContext.tr(
+              'sftp.delete.dialog.title',
+              fallback: 'Delete remote items?',
+            ),
           ),
-          message: message,
-          confirmLabel: 'Delete',
+          details:
+              singleEntry?.name ??
+              dialogContext.tr(
+                'sftp.delete.selectedCount',
+                fallback: '{count} remote items',
+                args: {'count': entries.length},
+              ),
+          message: 'sftp.delete.confirmation.description',
+          confirmLabel: 'common.action.delete',
         );
       },
     );
@@ -4307,7 +5338,9 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
         }
       case _SftpAction.openWithOtherApplication:
         if (selected != null && !selected.isDirectory && !selected.isParent) {
-          unawaited(_openLocalFileWithOtherApplication(selected));
+          unawaited(
+            _openLocalFileWithOtherApplication(session, slot, selected),
+          );
         }
       case _SftpAction.moveTo:
       case _SftpAction.copyTo:
@@ -4576,6 +5609,82 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     return [...applications, configuredApplication];
   }
 
+  Future<_SftpMenuCommand?> _showSftpFileMenu({
+    required Offset position,
+    required _SftpFileEntry entry,
+    required bool remote,
+    bool sshEditorAvailable = false,
+    _AiAssistantColors? colors,
+  }) async {
+    final menuEntries = _sftpRowMenuEntries(
+      entry,
+      remote: remote,
+      sshEditorAvailable: sshEditorAvailable,
+    );
+    List<NautermContextMenuEntry<_SftpMenuCommand>> buildEntries(
+      List<SystemFileApplication> applications, {
+      String? catalogStatus,
+    }) => _sftpFileContextMenuEntries(
+      menuEntries,
+      fileName: entry.name,
+      applications: applications,
+      sshEditorAvailable: sshEditorAvailable,
+      catalogStatus: catalogStatus,
+    );
+
+    final loading =
+        io.Platform.isMacOS && !entry.isDirectory && !entry.isParent;
+    final initialEntries = buildEntries(
+      const [],
+      catalogStatus: loading
+          ? tr(
+              'applications.catalog.loading',
+              fallback: 'Loading applications…',
+            )
+          : null,
+    );
+    final updates = loading ? ValueNotifier(initialEntries) : null;
+    var closed = false;
+    if (updates != null) {
+      unawaited(() async {
+        try {
+          final applications = await _loadSftpFileApplications(entry.name);
+          if (!closed) updates.value = buildEntries(applications);
+        } on Object catch (error, stackTrace) {
+          NautermLog.warning(
+            'sftp',
+            'Unable to load applications',
+            error: error,
+            stackTrace: stackTrace,
+          );
+          if (!closed) {
+            updates.value = buildEntries(
+              const [],
+              catalogStatus: tr(
+                'applications.catalog.error',
+                fallback: 'Unable to load applications',
+              ),
+            );
+          }
+        }
+      }());
+    }
+    try {
+      return await showNautermContextMenu<_SftpMenuCommand>(
+        context: context,
+        position: position,
+        width: colors == null ? 220 : 210,
+        style: colors == null ? null : _terminalSftpMenuStyle(colors),
+        scaleAnimation: false,
+        entries: initialEntries,
+        updatedEntries: updates,
+      );
+    } finally {
+      closed = true;
+      updates?.dispose();
+    }
+  }
+
   Future<void> _showLocalEntryMenu(
     _SftpLocalPaneSession session,
     _SftpPaneSlot slot,
@@ -4589,33 +5698,25 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
         _selectLocalEntry(session, entry);
       }
     });
-    final applications = entry.isDirectory || entry.isParent
-        ? const <SystemFileApplication>[]
-        : await _loadSftpFileApplications(entry.name);
-    if (!mounted) return;
-    final command = await showNautermContextMenu<_SftpMenuCommand>(
-      context: context,
+    final location = _sftpPaneLocation(slot, _SftpPaneEndpoint.local);
+    final command = await _showSftpFileMenu(
       position: details.globalPosition,
-      scaleAnimation: false,
-      entries: _sftpFileContextMenuEntries(
-        _sftpRowMenuEntries(entry, remote: false),
-        fileName: entry.name,
-        applications: applications,
-        sshEditorAvailable: false,
-      ),
+      entry: entry,
+      remote: false,
     );
-    if (command != null) {
-      unawaited(
-        _dispatchSftpMenuAction(
-          () => _handleAction(
-            session,
-            slot,
-            command.action,
-            application: command.application,
-          ),
-        ),
+    if (command == null) return;
+    await _dispatchSftpMenuAction(() {
+      if (!_sftpPaneLocationIsCurrent(location) ||
+          session.selectedPath != entry.path) {
+        return;
+      }
+      _handleAction(
+        session,
+        slot,
+        command.action,
+        application: command.application,
       );
-    }
+    });
   }
 
   void _showBlankMenu(
@@ -4650,19 +5751,12 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     );
   }
 
-  void _showRemoteEntryMenu(
+  Future<void> _showRemoteEntryMenu(
     _SftpRemotePaneSession session,
     TapDownDetails details,
-    _SftpFileEntry entry,
-  ) {
-    unawaited(_showRemoteEntryMenuWithApplications(session, details, entry));
-  }
-
-  Future<void> _showRemoteEntryMenuWithApplications(
-    _SftpRemotePaneSession session,
-    TapDownDetails details,
-    _SftpFileEntry entry,
-  ) async {
+    _SftpFileEntry entry, {
+    _AiAssistantColors? colors,
+  }) async {
     _setSftpState(() {
       if (session.selectedPaths.contains(entry.path)) {
         session.selectedPath = entry.path;
@@ -4670,101 +5764,30 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
         _selectRemoteEntry(session, entry);
       }
     });
-    final applications = entry.isDirectory || entry.isParent
-        ? const <SystemFileApplication>[]
-        : await _loadSftpFileApplications(entry.name);
-    if (!mounted) return;
-    final command = await showNautermContextMenu<_SftpMenuCommand>(
-      context: context,
-      position: details.globalPosition,
-      scaleAnimation: false,
-      entries: _sftpFileContextMenuEntries(
-        _sftpRowMenuEntries(
-          entry,
-          remote: true,
-          sshEditorAvailable: _remoteSessionSharesSshEditor(session),
-        ),
-        fileName: entry.name,
-        applications: applications,
-        sshEditorAvailable: _remoteSessionSharesSshEditor(session),
-      ),
+    final location = _sftpPaneLocation(
+      _slotForRemoteSession(session),
+      _SftpPaneEndpoint.remote,
     );
-    if (command != null) {
-      unawaited(
-        _dispatchSftpMenuAction(
-          () => _handleRemoteAction(
-            session,
-            command.action,
-            application: command.application,
-            withSudo: command.withSudo,
-          ),
-        ),
-      );
-    }
-  }
-
-  void _showCompactRemoteEntryMenu(
-    _SftpRemotePaneSession session,
-    TapDownDetails details,
-    _SftpFileEntry entry,
-    _AiAssistantColors colors,
-  ) {
-    unawaited(
-      _showCompactRemoteEntryMenuWithApplications(
+    final command = await _showSftpFileMenu(
+      position: details.globalPosition,
+      entry: entry,
+      remote: true,
+      sshEditorAvailable: _remoteSessionSharesSshEditor(session),
+      colors: colors,
+    );
+    if (command == null) return;
+    await _dispatchSftpMenuAction(() {
+      if (!_sftpPaneLocationIsCurrent(location) ||
+          session.selectedPath != entry.path) {
+        return;
+      }
+      _handleRemoteAction(
         session,
-        details,
-        entry,
-        colors,
-      ),
-    );
-  }
-
-  Future<void> _showCompactRemoteEntryMenuWithApplications(
-    _SftpRemotePaneSession session,
-    TapDownDetails details,
-    _SftpFileEntry entry,
-    _AiAssistantColors colors,
-  ) async {
-    _setSftpState(() {
-      if (session.selectedPaths.contains(entry.path)) {
-        session.selectedPath = entry.path;
-      } else {
-        _selectRemoteEntry(session, entry);
-      }
-    });
-    final applications = entry.isDirectory || entry.isParent
-        ? const <SystemFileApplication>[]
-        : await _loadSftpFileApplications(entry.name);
-    if (!mounted) return;
-    final command = await showNautermContextMenu<_SftpMenuCommand>(
-      context: context,
-      position: details.globalPosition,
-      width: 210,
-      style: _terminalSftpMenuStyle(colors),
-      scaleAnimation: false,
-      entries: _sftpFileContextMenuEntries(
-        _sftpRowMenuEntries(
-          entry,
-          remote: true,
-          sshEditorAvailable: _remoteSessionSharesSshEditor(session),
-        ),
-        fileName: entry.name,
-        applications: applications,
-        sshEditorAvailable: _remoteSessionSharesSshEditor(session),
-      ),
-    );
-    if (command != null) {
-      unawaited(
-        _dispatchSftpMenuAction(
-          () => _handleRemoteAction(
-            session,
-            command.action,
-            application: command.application,
-            withSudo: command.withSudo,
-          ),
-        ),
+        command.action,
+        application: command.application,
+        withSudo: command.withSudo,
       );
-    }
+    });
   }
 
   void _showRemoteBlankMenu(
@@ -4888,7 +5911,10 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
                             vertical: 7,
                           ),
                           child: Text(
-                            _fileDropHoverLabel ?? 'Transfer here',
+                            context.tr(
+                              _fileDropHoverLabelKey ??
+                                  'sftp.action.uploadHere',
+                            ),
                             style: TextStyle(
                               color: _text,
                               fontSize: NautermFontSizes.labelMedium,
@@ -4981,6 +6007,7 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
       onTaskDismiss: _dismissSftpTask,
       onTaskCancel: _cancelSftpTask,
       onTaskPauseToggle: _toggleSftpTaskPause,
+      canRetryTask: _controller.taskManager.canRetry,
       onPathPanelDismiss: () {},
       onPathFavoriteToggle: () {},
       onFavoriteListToggle: () {},
@@ -4988,8 +6015,7 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
       onSortChanged: (column) => _sortLocalEntriesBy(session, column),
       onAction: (action) => _handleAction(session, slot, action),
       createDragPayload: (entries) => _SftpPaneDragPayload(
-        sourceSlot: slot,
-        sourceRemote: false,
+        source: _sftpPaneLocation(slot, _SftpPaneEndpoint.local),
         entries: entries,
       ),
     );
@@ -5007,6 +6033,7 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
         return _TerminalSftpConnectionView(
           colors: compactColors,
           state: connection,
+          onClose: () => _closeRemoteEndpoint(session),
           onRetry: () => _retrySftpConnection(session),
           onTrustOnceAndRetry: () => _trustAndRetrySftpConnection(
             session,
@@ -5039,9 +6066,23 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     if (connection != null && !selectingHost) {
       final auth = connection.auth;
       final paneSlot = slot ?? _SftpPaneSlot.right;
+      final favoritesStatus =
+          session.loadingFavorites || session.favoritesError != null
+          ? _SftpFavoritesStatus(
+              error: session.favoritesError,
+              color: compactColors?.muted ?? _mutedText,
+              onRetry: () =>
+                  unawaited(_loadRemoteSftpFavorites(session, connection.host)),
+            )
+          : null;
+      final toggleFavorite =
+          session.loadingFavorites || session.favoritesError != null
+          ? null
+          : () => _toggleRemoteSftpFavoritePath(session, connection.host);
       if (compactColors != null) {
         return _TerminalSftpBrowser(
           colors: compactColors,
+          operationBanner: _sftpOperationBanner(session, colors: compactColors),
           title: connection.host.name,
           path: session.path,
           pathController: session.pathController,
@@ -5067,6 +6108,7 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
               _controller.favoriteListOpen &&
               _controller.favoriteListSlot == paneSlot,
           favoritePaths: session.favoritePaths,
+          favoritesStatus: favoritesStatus,
           onHome: () => _goRemoteHome(session),
           onSshDirectory:
               _remoteSessionSharesSshEditor(session) &&
@@ -5101,13 +6143,14 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
             _setSftpState(() => _setRemoteSelection(session, selection));
           },
           onEntryDoubleTap: (entry) => _openRemoteEntry(session, entry),
-          onEntrySecondaryTapDown: (details, entry) =>
-              _showCompactRemoteEntryMenu(
-                session,
-                details,
-                entry,
-                compactColors,
-              ),
+          onEntrySecondaryTapDown: (details, entry) => unawaited(
+            _showRemoteEntryMenu(
+              session,
+              details,
+              entry,
+              colors: compactColors,
+            ),
+          ),
           onRefresh: auth == null
               ? () {}
               : () => unawaited(
@@ -5124,9 +6167,9 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
           onTaskDismiss: _dismissSftpTask,
           onTaskCancel: _cancelSftpTask,
           onTaskPauseToggle: _toggleSftpTaskPause,
+          canRetryTask: _controller.taskManager.canRetry,
           onPanelsDismiss: _dismissSftpPathPanels,
-          onPathFavoriteToggle: () =>
-              _toggleRemoteSftpFavoritePath(session, connection.host),
+          onPathFavoriteToggle: toggleFavorite,
           onFavoriteListToggle: () => _toggleSftpFavoriteList(paneSlot),
           onFavoritePathSelected: auth == null
               ? (_) {}
@@ -5142,6 +6185,7 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
       }
       return _SftpLocalPane(
         title: connection.host.name,
+        operationBanner: _sftpOperationBanner(session),
         icon: Icons.cloud_sync_rounded,
         iconColor: connection.host.color,
         remote: true,
@@ -5183,6 +6227,7 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
             _controller.favoriteListOpen &&
             _controller.favoriteListSlot == paneSlot,
         favoritePaths: session.favoritePaths,
+        favoritesStatus: favoritesStatus,
         onHome: () => _goRemoteHome(session),
         onBack: () => _goRemoteBack(session),
         onForward: () => _goRemoteForward(session),
@@ -5211,7 +6256,7 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
         },
         onEntryDoubleTap: (entry) => _openRemoteEntry(session, entry),
         onEntrySecondaryTapDown: (details, entry) =>
-            _showRemoteEntryMenu(session, details, entry),
+            unawaited(_showRemoteEntryMenu(session, details, entry)),
         onBlankSecondaryTapDown: (details) =>
             _showRemoteBlankMenu(session, details),
         onTaskListToggle: () => _toggleSftpTaskList(paneSlot),
@@ -5219,9 +6264,9 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
         onTaskDismiss: _dismissSftpTask,
         onTaskCancel: _cancelSftpTask,
         onTaskPauseToggle: _toggleSftpTaskPause,
+        canRetryTask: _controller.taskManager.canRetry,
         onPathPanelDismiss: _dismissSftpPathPanels,
-        onPathFavoriteToggle: () =>
-            _toggleRemoteSftpFavoritePath(session, connection.host),
+        onPathFavoriteToggle: toggleFavorite,
         onFavoriteListToggle: () => _toggleSftpFavoriteList(paneSlot),
         onFavoritePathSelected: auth == null
             ? (_) {}
@@ -5234,8 +6279,7 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
         onSortChanged: (column) => _sortRemoteEntriesBy(session, column),
         onAction: (action) => _handleRemoteAction(session, action),
         createDragPayload: (entries) => _SftpPaneDragPayload(
-          sourceSlot: paneSlot,
-          sourceRemote: true,
+          source: _sftpPaneLocation(paneSlot, _SftpPaneEndpoint.remote),
           entries: entries,
         ),
       );
@@ -5291,6 +6335,23 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     }
 
     if (compactColors != null) {
+      final closed = session.closedEndpoint;
+      if (closed != null) {
+        return _TerminalToolEmptyState(
+          icon: LucideIcons.folderOpen,
+          title: context.tr(
+            'sftp.connection.closed',
+            fallback: 'SFTP connection closed',
+          ),
+          description: _sftpConnectionTarget(closed.host),
+          colors: compactColors,
+          actionLabel: context.tr(
+            'common.label.reconnect',
+            fallback: 'Reconnect',
+          ),
+          onAction: () => _startSftpConnection(closed, session),
+        );
+      }
       return _TerminalToolEmptyState(
         icon: LucideIcons.folderOpen,
         title: 'No SFTP connection',

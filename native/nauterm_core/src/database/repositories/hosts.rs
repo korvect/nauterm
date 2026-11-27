@@ -924,6 +924,15 @@ impl NautermDatabase {
         )
     }
 
+    pub fn delete_port_forwards(&mut self, ids: &[i64]) -> rusqlite::Result<usize> {
+        self.atomic(|database| {
+            ids.iter().try_fold(
+                0,
+                |total, &id| Ok(total + database.delete_port_forward(id)?),
+            )
+        })
+    }
+
     pub fn save_proxy(&mut self, proxy: &ProxyEntry) -> rusqlite::Result<i64> {
         let proxy_type = normalize_proxy_type(&proxy.r#type)?;
         let dek = configured_dek(&self.connection)?;

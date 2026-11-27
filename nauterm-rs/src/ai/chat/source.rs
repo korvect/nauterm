@@ -147,8 +147,8 @@ impl Source {
     }
     pub(super) fn placeholder(&self) -> &'static str {
         match self {
-            Self::Terminal { .. } => "Ask about this terminal...",
-            Self::Workspace { .. } => "Ask about this workspace...",
+            Self::Terminal { .. } => "ai.prompt.terminal",
+            Self::Workspace { .. } => "ai.prompt.workspace",
         }
     }
 }
@@ -204,8 +204,12 @@ impl Chat {
                 .gap(px(6.))
                 .when_some(selection, |chips, label| {
                     chips.child(
-                        chip("ai-context-selection", label)
-                            .tooltip("Remove terminal selection from context")
+                        chip("ai-context-selection", crate::localization::text(cx, label))
+                            .tooltip(if label == "terminal.label.commandBlock" {
+                                "ai.action.removeCommandBlock"
+                            } else {
+                                "ai.action.removeSelection"
+                            })
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.context.include_selection = false;
                                 cx.notify();
@@ -214,12 +218,15 @@ impl Chat {
                 })
                 .when(recent, |chips| {
                     chips.child(
-                        chip("ai-context-output", "Recent output")
-                            .tooltip("Remove recent output from context")
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.context.include_recent_output = false;
-                                cx.notify();
-                            })),
+                        chip(
+                            "ai-context-output",
+                            crate::localization::text(cx, "ai.label.recentOutput"),
+                        )
+                        .tooltip("ai.action.removeRecentOutput")
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.context.include_recent_output = false;
+                            cx.notify();
+                        })),
                     )
                 })
                 .into_any_element(),
@@ -237,7 +244,7 @@ impl Chat {
                     .rounded_full()
                     .icon_size(px(17.))
                     .icon(IconName::Link2)
-                    .tooltip("Include terminal context")
+                    .tooltip("workspace.label.includeTerminalContext")
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.context.include_selection = true;
                         this.context.include_recent_output = true;

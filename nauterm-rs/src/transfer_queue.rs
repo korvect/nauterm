@@ -37,16 +37,16 @@ impl Status {
     pub fn finished(self) -> bool {
         matches!(self, Self::Completed | Self::Failed | Self::Cancelled)
     }
-    pub fn label(self) -> &'static str {
+    pub fn label_key(self) -> &'static str {
         match self {
-            Self::Queued => "Queued",
-            Self::Running => "Running",
-            Self::Pausing => "Pausing…",
-            Self::Cancelling => "Cancelling…",
-            Self::Paused => "Paused",
-            Self::Completed => "Completed",
-            Self::Failed => "Failed",
-            Self::Cancelled => "Cancelled",
+            Self::Queued => "sftp.transfer.status.queued",
+            Self::Running => "sftp.transfer.status.running",
+            Self::Pausing => "sftp.transfer.status.pausing",
+            Self::Cancelling => "sftp.transfer.status.cancelling",
+            Self::Paused => "sftp.transfer.status.paused",
+            Self::Completed => "sftp.transfer.status.completed",
+            Self::Failed => "common.label.failed",
+            Self::Cancelled => "common.status.cancelled",
         }
     }
     fn complete(self, ok: bool) -> Self {

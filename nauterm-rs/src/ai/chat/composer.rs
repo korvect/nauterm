@@ -97,7 +97,7 @@ impl Chat {
                                     .appearance(false)
                                     .bordered(false)
                                     .disabled(waiting)
-                                    .aria_label(crate::localization::text(cx, "AI message")),
+                                    .aria_label(crate::localization::text(cx, "ai.label.message")),
                             ),
                     )
                     .child(div().flex_1())
@@ -131,11 +131,11 @@ impl Chat {
                                         crate::assets::icon(IconName::ArrowUp)
                                     })
                                     .tooltip(if stopping {
-                                        "Stopping"
+                                        "common.status.stopping"
                                     } else if can_stop {
-                                        "Stop conversation"
+                                        "ai.action.stopGenerating"
                                     } else {
-                                        "Send"
+                                        "common.action.send"
                                     })
                                     .disabled(send_disabled)
                                     .on_click(cx.listener(|this, _, window, cx| {

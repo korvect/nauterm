@@ -68,21 +68,25 @@ impl Wizard {
                 .child(Spinner::new().color(p.muted.into()))
                 .child(crate::localization::text(
                     cx,
-                    "rs.ui.copy.scanningFidoDevices",
+                    "workspace.keys.fido2.scanningDevices",
                 ))
                 .into_any_element();
         }
         if self.devices.is_empty() {
-            return EmptyState::new(IconName::Usb, "Insert FIDO2 device", self.dark)
-                .description("Connect your FIDO2 device to show here.")
-                .action(
-                    Button::new("refresh-fido2")
-                        .secondary()
-                        .icon(IconName::RefreshCw)
-                        .label("Refresh")
-                        .on_click(cx.listener(|view, _, _, cx| view.refresh(cx))),
-                )
-                .into_any_element();
+            return EmptyState::new(
+                IconName::Usb,
+                "workspace.keys.fido2.insertDevice",
+                self.dark,
+            )
+            .description("workspace.keys.fido2.empty.description")
+            .action(
+                Button::new("refresh-fido2")
+                    .secondary()
+                    .icon(IconName::RefreshCw)
+                    .label("common.action.refresh")
+                    .on_click(cx.listener(|view, _, _, cx| view.refresh(cx))),
+            )
+            .into_any_element();
         }
         section("Device", p)
             .child(div().text_color(p.muted).child(crate::localization::text(
@@ -177,7 +181,7 @@ impl Wizard {
                 Button::new("rescan-fido2")
                     .ghost()
                     .icon(IconName::RefreshCw)
-                    .label("Refresh")
+                    .label("common.action.refresh")
                     .on_click(cx.listener(|view, _, _, cx| view.refresh(cx))),
             )
             .into_any_element()
@@ -186,9 +190,9 @@ impl Wizard {
         let disabled = self.busy();
         let protected = !self.passphrase.read(cx).value().is_empty();
         vec![
-            section("Key", p)
+            section("common.label.key", p)
                 .child(
-                    Field::input(&self.label, "Label *")
+                    Field::input(&self.label, "workspace.keys.fido2.field.label *")
                         .disabled(disabled)
                         .error(self.validation_hint(ValidationError::Label)),
                 )
@@ -211,13 +215,13 @@ impl Wizard {
                     })),
                 )
                 .into_any_element(),
-            section("Security", p)
+            section("workspace.keys.section.security", p)
                 .child(toggle(
-                    "Require user presence",
-                    "Touch the security key for every SSH signature.",
+                    "workspace.keys.fido2.requireUserPresence",
+                    "workspace.keys.fido2.requireUserPresenceDescription",
                     WorkspaceSwitch::new(
                         "fido2-user-presence",
-                        "Require user presence",
+                        "workspace.keys.fido2.requireUserPresence",
                         self.presence,
                     )
                     .disabled(disabled)
@@ -231,11 +235,11 @@ impl Wizard {
                     self.selected().is_some_and(|device| device.has_pin),
                     |view| {
                         view.child(toggle(
-                            "Require PIN",
-                            "Require the authenticator PIN for every SSH signature.",
+                            "workspace.keys.fido2.requirePin",
+                            "workspace.keys.fido2.requirePinDescription",
                             WorkspaceSwitch::new(
                                 "fido2-require-pin",
-                                "Require PIN",
+                                "workspace.keys.fido2.requirePin",
                                 self.require_pin,
                             )
                             .disabled(disabled)
@@ -266,9 +270,9 @@ impl Wizard {
                     )
                 })
                 .into_any_element(),
-            section("Private key protection", p)
+            section("workspace.keys.fido2.privateKeyProtection", p)
                 .child(
-                    Field::input(&self.passphrase, "Passphrase")
+                    Field::input(&self.passphrase, "common.label.passphrase")
                         .secret(true)
                         .disabled(disabled),
                 )
@@ -277,7 +281,10 @@ impl Wizard {
                         div()
                             .text_size(px(12.))
                             .font_weight(FontWeights::MEDIUM)
-                            .child(crate::localization::text(cx, "rs.ui.copy.cipher")),
+                            .child(crate::localization::text(
+                                cx,
+                                "workspace.keys.fido2.cipher.label",
+                            )),
                     )
                     .child(
                         Segmented::new(
@@ -304,7 +311,10 @@ impl Wizard {
                             .error(self.validation_hint(ValidationError::Rounds)),
                     )
                     .child(div().text_size(px(11.)).text_color(p.muted).child(
-                        crate::localization::text(cx, "workspace.keys.fido2.privateKeyProtectionDescription"),
+                        crate::localization::text(
+                            cx,
+                            "workspace.keys.fido2.privateKeyProtectionDescription",
+                        ),
                     ))
                     .child(toggle(
                         "workspace.keys.label.savePassphrase",
@@ -341,11 +351,28 @@ impl Render for Wizard {
         let sections = match self.step {
             Step::Device => vec![self.device_step(p, cx)],
             Step::Pin => vec![
-                section("Unlock FIDO2 security key", p)
+                section("connection.auth.securityKeyPin.title", p)
                     .child(
-                        div()
-                            .text_color(p.muted)
-                            .child(crate::localization::text(cx, "rs.ui.copy.enterDevicePin")),
+                        div().text_color(p.muted).child(
+                            self.devices
+                                .iter()
+                                .find(|device| self.device.as_ref() == Some(&device.id))
+                                .map_or_else(
+                                    || {
+                                        crate::localization::text(
+                                            cx,
+                                            "workspace.keys.fido2.pinRequired",
+                                        )
+                                    },
+                                    |device| {
+                                        crate::localization::format(
+                                            cx,
+                                            "workspace.keys.fido2.unlockDevice.description",
+                                            &[("device", &device.name)],
+                                        )
+                                    },
+                                ),
+                        ),
                     )
                     .child(
                         Field::input(&self.pin, "PIN")
@@ -361,25 +388,130 @@ impl Render for Wizard {
             .validation
             .filter(|error| matches!(error, ValidationError::Device | ValidationError::Cipher))
             .map(ValidationError::message);
-        div().h_full().min_h_0().relative().track_focus(&self.focus)
-            .child(DrawerFrame::new("fido2-editor", "Generate FIDO2 key", self.dark)
-                .scroll_handle(&self.scroll)
-                .action(Button::new("close-fido2-editor").toolbar().ghost().icon(IconName::ArrowRightToLine).tooltip("Close editor").disabled(self.work != Work::Idle)
-                    .on_click(cx.listener(|view, _, _, cx| view.request_close(cx))))
-                .sections(sections)
-                .when(self.work == Work::Generating, |frame| frame.section(section("Authenticator", p).child(crate::localization::text(cx, "rs.ui.copy.confirmFidoDevice"))))
-                .when(self.pending.is_some() && self.work == Work::Idle, |frame| frame.section(section("Generated key", p).child(crate::localization::text(cx, "rs.ui.copy.keyWaitingToSave"))))
-                .when_some(crate::components::validation_message(form_error, cx), |frame, error| frame.section(error))
-                .when(self.step != Step::Device || !self.devices.is_empty(), |frame| frame.footer(div().flex().gap(px(10.))
-                    .when(self.step != Step::Device, |view| view.child(Button::new("fido2-back").large().h(px(38.)).label("Back").disabled(self.busy()).on_click(cx.listener(|view, _, window, cx| view.back(window, cx)))))
-                    .child(Button::new("fido2-primary").large().h(px(38.)).flex_1().min_w_0().primary().disabled(!can_continue).loading(self.work != Work::Idle)
-                        .label(match self.work { Work::Unlocking => "Unlocking…", Work::Generating => "Waiting for security key…", Work::Saving => "Saving…", Work::Idle if self.pending.is_some() => "Retry save", Work::Idle if self.step == Step::Options => "Generate", Work::Idle => "Continue" })
-                        .on_click(cx.listener(|view, _, window, cx| view.primary(window, cx)))))))
-            .when(self.discard, |view| view.child(Dialog::new("discard-generated-key", "Discard generated key?").return_focus(&self.focus)
-                .on_dismiss(cx.listener(|view, _, _, cx| { view.discard = false; cx.notify(); }))
-                .content(DialogFrame::new("discard-generated-key-frame", "Discard generated key?").width(380.).colors(DialogColors::workspace(self.dark))
-                    .content("This key was generated on the authenticator but has not been saved. Discarding it loses this app's key handle.")
-                    .action(Button::new("keep-generated-key").ghost().label("Keep key").on_click(|_, window, cx| Modal::dismiss(window, cx)))
-                    .action(Button::new("confirm-discard-generated-key").danger().label("Discard").on_click(cx.listener(|view, _, _, cx| { view.pending = None; view.discard = false; cx.emit(Event::Close); cx.notify(); }))))))
+        div()
+            .h_full()
+            .min_h_0()
+            .relative()
+            .track_focus(&self.focus)
+            .child(
+                DrawerFrame::new("fido2-editor", "workspace.keys.fido2.generate", self.dark)
+                    .scroll_handle(&self.scroll)
+                    .action(
+                        Button::new("close-fido2-editor")
+                            .toolbar()
+                            .ghost()
+                            .icon(IconName::ArrowRightToLine)
+                            .tooltip("common.action.close")
+                            .disabled(self.work != Work::Idle)
+                            .on_click(cx.listener(|view, _, _, cx| view.request_close(cx))),
+                    )
+                    .sections(sections)
+                    .when(self.work == Work::Generating, |frame| {
+                        frame.section(section("Authenticator", p).child(crate::localization::text(
+                            cx,
+                            "workspace.keys.fido2.confirmDevice",
+                        )))
+                    })
+                    .when(self.pending.is_some() && self.work == Work::Idle, |frame| {
+                        frame.section(section("workspace.keys.fido2.pending.title", p).child(
+                            crate::localization::text(
+                                cx,
+                                "workspace.keys.fido2.pending.description",
+                            ),
+                        ))
+                    })
+                    .when_some(
+                        crate::components::validation_message(form_error, cx),
+                        |frame, error| frame.section(error),
+                    )
+                    .when(
+                        self.step != Step::Device || !self.devices.is_empty(),
+                        |frame| {
+                            frame.footer(
+                                div()
+                                    .flex()
+                                    .gap(px(10.))
+                                    .when(self.step != Step::Device, |view| {
+                                        view.child(
+                                            Button::new("fido2-back")
+                                                .large()
+                                                .h(px(38.))
+                                                .label("common.action.back")
+                                                .disabled(self.busy())
+                                                .on_click(cx.listener(|view, _, window, cx| {
+                                                    view.back(window, cx)
+                                                })),
+                                        )
+                                    })
+                                    .child(
+                                        Button::new("fido2-primary")
+                                            .large()
+                                            .h(px(38.))
+                                            .flex_1()
+                                            .min_w_0()
+                                            .primary()
+                                            .disabled(!can_continue)
+                                            .loading(self.work != Work::Idle)
+                                            .label(match self.work {
+                                                Work::Unlocking => "workspace.keys.fido2.unlocking",
+                                                Work::Generating => {
+                                                    "workspace.keys.fido2.waitingForDevice"
+                                                }
+                                                Work::Saving => "common.label.saving",
+                                                Work::Idle if self.pending.is_some() => {
+                                                    "common.action.retrySave"
+                                                }
+                                                Work::Idle if self.step == Step::Options => {
+                                                    "workspace.keys.generate"
+                                                }
+                                                Work::Idle => "common.action.continue",
+                                            })
+                                            .on_click(cx.listener(|view, _, window, cx| {
+                                                view.primary(window, cx)
+                                            })),
+                                    ),
+                            )
+                        },
+                    ),
+            )
+            .when(self.discard, |view| {
+                view.child(
+                    Dialog::new(
+                        "discard-generated-key",
+                        "workspace.keys.fido2.discard.title",
+                    )
+                    .return_focus(&self.focus)
+                    .on_dismiss(cx.listener(|view, _, _, cx| {
+                        view.discard = false;
+                        cx.notify();
+                    }))
+                    .content(
+                        DialogFrame::new(
+                            "discard-generated-key-frame",
+                            "workspace.keys.fido2.discard.title",
+                        )
+                        .width(380.)
+                        .colors(DialogColors::workspace(self.dark))
+                        .content("workspace.keys.fido2.discard.description")
+                        .action(
+                            Button::new("keep-generated-key")
+                                .ghost()
+                                .label("workspace.keys.fido2.discard.keep")
+                                .on_click(|_, window, cx| Modal::dismiss(window, cx)),
+                        )
+                        .action(
+                            Button::new("confirm-discard-generated-key")
+                                .danger()
+                                .label("common.action.discard")
+                                .on_click(cx.listener(|view, _, _, cx| {
+                                    view.pending = None;
+                                    view.discard = false;
+                                    cx.emit(Event::Close);
+                                    cx.notify();
+                                })),
+                        ),
+                    ),
+                )
+            })
     }
 }

@@ -30,6 +30,43 @@ pub extern "C" fn nauterm_sftp_list_directory_entries(
     proxy_json: *const c_char,
     ssh_compatibility_mode: bool,
 ) -> *mut c_char {
+    nauterm_sftp_list_directory_entries_with_sudo(
+        request_id,
+        host,
+        port,
+        username,
+        password,
+        private_key,
+        certificate,
+        passphrase,
+        known_hosts_path,
+        directory,
+        host_key_trust_mode,
+        proxy_json,
+        ssh_compatibility_mode,
+        ptr::null(),
+        ptr::null(),
+    )
+}
+
+#[no_mangle]
+pub extern "C" fn nauterm_sftp_list_directory_entries_with_sudo(
+    request_id: u64,
+    host: *const c_char,
+    port: u16,
+    username: *const c_char,
+    password: *const c_char,
+    private_key: *const c_char,
+    certificate: *const c_char,
+    passphrase: *const c_char,
+    known_hosts_path: *const c_char,
+    directory: *const c_char,
+    host_key_trust_mode: u32,
+    proxy_json: *const c_char,
+    ssh_compatibility_mode: bool,
+    sudo_session_id: *const c_char,
+    sudo_password: *const c_char,
+) -> *mut c_char {
     guard(ptr::null_mut(), || {
         let host = string_from_ptr(host).unwrap_or_default();
         let username = string_from_ptr(username).unwrap_or_default();
@@ -40,21 +77,44 @@ pub extern "C" fn nauterm_sftp_list_directory_entries(
         let known_hosts_path = optional_string_from_ptr(known_hosts_path);
         let directory = string_from_ptr(directory).unwrap_or_else(|| "~".to_owned());
         let proxy = super::common::proxy_config_from_json_ptr(proxy_json);
-        let result = ssh::list_sftp_directory_entries_blocking_with_trust(
-            request_id,
-            &host,
-            port,
-            &username,
-            password.as_deref(),
-            private_key.as_deref(),
-            certificate.as_deref(),
-            passphrase.as_deref(),
-            known_hosts_path.as_deref(),
-            proxy,
-            &directory,
-            HostKeyTrustMode::from_u32(host_key_trust_mode),
-            ssh_compatibility_mode,
-        );
+        let trust = HostKeyTrustMode::from_u32(host_key_trust_mode);
+        let result = if let Some(session_id) = optional_string_from_ptr(sudo_session_id) {
+            let sudo_password =
+                optional_string_from_ptr(sudo_password).map(zeroize::Zeroizing::new);
+            ssh::sudo_browsing::list(
+                request_id,
+                &host,
+                port,
+                &username,
+                password.as_deref(),
+                private_key.as_deref(),
+                certificate.as_deref(),
+                passphrase.as_deref(),
+                known_hosts_path.as_deref(),
+                proxy,
+                &directory,
+                trust,
+                &session_id,
+                sudo_password.as_ref().map(|password| password.as_str()),
+                ssh_compatibility_mode,
+            )
+        } else {
+            ssh::list_sftp_directory_entries_blocking_with_trust(
+                request_id,
+                &host,
+                port,
+                &username,
+                password.as_deref(),
+                private_key.as_deref(),
+                certificate.as_deref(),
+                passphrase.as_deref(),
+                known_hosts_path.as_deref(),
+                proxy,
+                &directory,
+                trust,
+                ssh_compatibility_mode,
+            )
+        };
         json_value_to_c_ptr(serde_json::json!({
             "directory": result.directory,
             "entries": result.entries,

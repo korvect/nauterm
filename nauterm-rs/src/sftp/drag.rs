@@ -166,9 +166,7 @@ impl FilePane {
             let _ = this.update_in(cx, |pane, window, cx| {
                 pane.action_work = None;
                 if !scope.matches(pane, cx) {
-                    pane.notice = Some(Message::info(
-                        "Transfer cancelled because a pane or selection changed.",
-                    ));
+                    pane.notice = Some(Message::info("sftp.transfer.scopeChanged.description"));
                     cx.notify();
                     return;
                 }
@@ -256,7 +254,7 @@ impl FilePane {
                 pane.action_work = None;
                 if !scope.matches(pane, cx) {
                     pane.notice = Some(Message::info(
-                        "Upload cancelled because the destination changed.",
+                        "sftp.transfer.destinationChanged.description",
                     ));
                     cx.notify();
                     return;
@@ -281,9 +279,9 @@ impl FilePane {
             content,
             self.data.dark,
             if self.remote.is_some() {
-                "Upload here"
+                "sftp.action.uploadHere"
             } else {
-                "Download here"
+                "sftp.action.downloadHere"
             },
             move |source, cx| {
                 owner

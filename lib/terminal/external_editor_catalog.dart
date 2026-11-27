@@ -109,17 +109,11 @@ Future<List<SystemFileApplication>> loadSystemFileApplications(
   if (!Platform.isMacOS) {
     return const [];
   }
-  try {
-    final values = await _externalEditorsChannel.invokeMethod<List<Object?>>(
-      'listFileApplications',
-      {'extensions': fileExtensions},
-    );
-    return decodeSystemFileApplications(values);
-  } on MissingPluginException {
-    return const [];
-  } on PlatformException {
-    return const [];
-  }
+  final values = await _externalEditorsChannel.invokeMethod<List<Object?>>(
+    'listFileApplications',
+    {'extensions': fileExtensions},
+  );
+  return decodeSystemFileApplications(values);
 }
 
 Future<List<SystemFileApplication>> loadSystemApplicationsForFileName(

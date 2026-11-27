@@ -303,7 +303,10 @@ impl Render for RgbState {
                         div().flex_1().min_w_0().child(
                             Input::new(&self.input)
                                 .small()
-                                .aria_label(crate::localization::text(cx, "Hex color"))
+                                .aria_label(crate::localization::text(
+                                    cx,
+                                    "settings.terminal.theme.hexColor.label",
+                                ))
                                 .invalid(parse_hex(&self.input.read(cx).value()).is_none()),
                         ),
                     ),

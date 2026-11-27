@@ -138,7 +138,9 @@ impl Nauterm {
         let initialize_snippets =
             tab.tools.mode == ToolMode::Snippets && tab.tools.snippet_search.is_none();
         if initialize_snippets {
-            let input = cx.new(|cx| InputState::new(window, cx).placeholder("Search snippets"));
+            let input = cx.new(|cx| {
+                InputState::new(window, cx).placeholder("workspace.terminalTools.snippets.search")
+            });
             let scroll = tab.tools.snippet_scroll.clone();
             let events = cx.subscribe(&input, move |_, _, event: &InputEvent, cx| {
                 if matches!(event, InputEvent::Change) {
@@ -509,7 +511,7 @@ impl Nauterm {
             (
                 ToolMode::Ai,
                 "terminal-tools-ai",
-                "AI Assistant",
+                "common.label.aiAssistant",
                 IconName::Sparkles,
             ),
             (
@@ -521,25 +523,25 @@ impl Nauterm {
             (
                 ToolMode::SystemInfo,
                 "terminal-tools-system",
-                "System information",
+                "workspace.terminalTools.mode.systemInfo",
                 IconName::Activity,
             ),
             (
                 ToolMode::Snippets,
                 "terminal-tools-snippets-mode",
-                "Snippets",
+                "workspace.terminalTools.mode.snippets",
                 IconName::Code,
             ),
             (
                 ToolMode::History,
                 "terminal-tools-history",
-                "Shell history",
+                "workspace.terminalTools.mode.shellHistory",
                 IconName::Clock,
             ),
             (
                 ToolMode::Themes,
                 "terminal-tools-themes",
-                "Terminal settings",
+                "workspace.terminalTools.mode.settings",
                 IconName::Palette,
             ),
         ];
@@ -645,7 +647,7 @@ impl Nauterm {
                     div()
                         .id("terminal-sftp-tools")
                         .role(Role::Group)
-                        .aria_label(crate::localization::text(cx, "Terminal tools"))
+                        .aria_label(crate::localization::text(cx, "workspace.label.terminalTools"))
                         .w(px(width))
                         .h_full()
                         .py(px(8.))
@@ -685,7 +687,7 @@ impl Nauterm {
                                 )
                                 .child(
                                     div().flex_1().min_h_0().pb(px(if tab.tools.mode == ToolMode::Ai || (tab.tools.mode == ToolMode::Snippets && tab.tools.snippet_editor.is_some()) { 0. } else { 10. })).child(match tab.tools.mode {
-                                        ToolMode::Ai => tab.tools.chats.get(&session.id).map(|chat| chat.view.clone().into_any_element()).unwrap_or_else(|| div().p(px(20.)).text_color(p.muted).child(crate::localization::text(cx, "rs.ui.copy.aiAvailableAfterTerminal")).into_any_element()),
+                                        ToolMode::Ai => tab.tools.chats.get(&session.id).map(|chat| chat.view.clone().into_any_element()).unwrap_or_else(|| div().p(px(20.)).text_color(p.muted).child(crate::localization::text(cx, "workspace.terminalTools.ai.waiting.description")).into_any_element()),
                                         ToolMode::Snippets => self.snippet_library(tab, cx),
                                         ToolMode::History => self.history_tool(tab, cx),
                                         ToolMode::Themes => self.themes_tool(tab, width, cx),
@@ -711,7 +713,7 @@ impl Nauterm {
                                             .child(icon(IconName::Folder))
                                             .child(crate::localization::text(cx, "workspace.label.noSshSession"))
                                             .child(div().text_color(p.muted).text_center().child(
-                                                crate::localization::text(cx, "SFTP is available after connecting with SSH."),
+                                                crate::localization::text(cx, "workspace.terminalTools.sftp.noSession.description"),
                                             ))
                                             .into_any_element()
                                             }),

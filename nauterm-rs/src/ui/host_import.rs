@@ -198,7 +198,7 @@ impl Nauterm {
                         state.refilter("");
                         state.scroll.scroll_to_item(0, ScrollStrategy::Nearest);
                         if state.rows.is_empty() && state.keys.is_empty() {
-                            state.error = Some("No supported hosts or keys were found.".into());
+                            state.error = Some("workspace.import.empty".into());
                         }
                     }
                     Ok(None) => {}
@@ -493,7 +493,11 @@ impl Nauterm {
                                 IconName::ChevronRight
                             })
                             .disabled(busy)
-                            .tooltip(if expanded { "Collapse" } else { "Expand" })
+                            .tooltip(if expanded {
+                                "common.action.collapse"
+                            } else {
+                                "common.action.expand"
+                            })
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 if let Some(state) = this.host_import.as_mut().filter(|state| {
                                     state.filter.entity_id() == token
@@ -750,18 +754,23 @@ impl Nauterm {
                 .when(state.visible.is_empty(), |body| {
                     body.child(div().text_color(p.muted).child(crate::localization::text(
                         cx,
-                        "rs.ui.copy.noMatchingHostsOrKeys",
+                        if state.rows.is_empty() && state.keys.is_empty() {
+                            "workspace.import.empty"
+                        } else {
+                            "workspace.import.noMatchingEntries"
+                        },
                     )))
                 })
                 .child(div().text_size(px(12.)).text_color(p.muted).child(
-                    crate::localization::text(cx, "rs.ui.copy.existingImportEntries"),
+                    crate::localization::text(cx, "workspace.import.preview.description"),
                 ))
                 .when(state.skipped_files > 0, |body| {
                     body.child(div().text_size(px(12.)).text_color(p.muted).child(
-                        crate::localization::view(format!(
-                            "{} unreadable or oversized files were skipped.",
-                            state.skipped_files
-                        )),
+                        crate::localization::format(
+                            cx,
+                            "workspace.import.filesSkipped",
+                            &[("count", &state.skipped_files.to_string())],
+                        ),
                     ))
                 });
         }
@@ -780,7 +789,7 @@ impl Nauterm {
             frame = frame.action(
                 Button::new("back-host-import")
                     .ghost()
-                    .label("Back")
+                    .label("common.action.back")
                     .disabled(state.loading || state.saving)
                     .on_click(cx.listener(|this, _, window, cx| {
                         if let Some(state) = this
@@ -810,7 +819,7 @@ impl Nauterm {
                 .label(if state.source.is_some() {
                     "workspace.import.chooseAgain"
                 } else {
-                    "Cancel"
+                    "common.action.cancel"
                 })
                 .disabled(state.loading || state.saving)
                 .on_click(cx.listener(|this, _, window, cx| {

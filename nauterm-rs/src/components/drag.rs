@@ -30,7 +30,11 @@ impl Render for Preview {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = Palette::new(self.dark);
         let label: SharedString = if self.count > 1 {
-            crate::localization::text(cx, &format!("{} items", self.count))
+            crate::localization::format(
+                cx,
+                "workspace.selection.dragCount",
+                &[("count", &self.count.to_string())],
+            )
         } else {
             self.label.clone().into()
         };
@@ -164,7 +168,14 @@ pub fn external_target(
     accepts: impl Fn(&ExternalPaths, &App) -> bool + 'static,
     receive: impl Fn(&ExternalPaths, &mut Window, &mut App) + 'static,
 ) -> AnyElement {
-    target_for(id, content, dark, "Upload here", accepts, receive)
+    target_for(
+        id,
+        content,
+        dark,
+        "sftp.action.uploadHere",
+        accepts,
+        receive,
+    )
 }
 fn target_for<T: 'static>(
     id: impl Into<SharedString>,

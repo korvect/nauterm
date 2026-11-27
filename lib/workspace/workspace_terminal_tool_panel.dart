@@ -186,6 +186,13 @@ enum _TerminalToolPanelMode {
   String get label => tr(localizationKey, fallback: fallbackLabel);
 }
 
+typedef _TerminalSnippetOrigin = ({
+  TerminalController terminal,
+  SshConnectionProfile? profile,
+  int? hostId,
+  String label,
+});
+
 class _AiAssistantPanel extends StatefulWidget {
   const _AiAssistantPanel({
     required this.colors,
@@ -269,14 +276,14 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
   String? _attachmentError;
   bool _historyOpen = false;
   bool _historyLoading = false;
-  bool _creatingSnippet = false;
+  _TerminalSnippetOrigin? _snippetOrigin;
   List<AiConversationEntry> _historyEntries = const [];
   String? _historyError;
   String _historyQuery = '';
   final Set<String> _deletingHistoryIds = {};
   List<AiProviderEntry> _providers = [];
-  String? _selectedProviderUuid;
-  String? _selectedModel;
+  int _providerLoadGeneration = 0;
+  bool _providersLoaded = false;
 
   _TerminalToolPanelMode get _toolMode => widget.terminalToolMode;
 
@@ -295,48 +302,22 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
   void _handleProvidersChanged() => unawaited(_loadProviders());
 
   Future<void> _loadProviders() async {
+    final generation = ++_providerLoadGeneration;
     try {
       final paths = NautermPaths.resolve();
       final providers = (await AiProviderStore(
         paths,
       ).loadCatalogAsync(aiAssistantConfig)).providers;
-      if (mounted) {
-        AiProviderEntry? provider;
-        String? model;
-        final conversationProviderUuid = widget.conversation.providerUuid;
-        final conversationModel = widget.conversation.currentModel;
-        if (conversationProviderUuid != null) {
-          provider = providers
-              .where((candidate) => candidate.uuid == conversationProviderUuid)
-              .firstOrNull;
-          if (provider != null) {
-            model = _resolveProviderModel(
-              provider,
-              preferred: conversationModel,
-            );
-          }
-        }
-        provider ??= providers
-            .where((candidate) => candidate.active)
-            .firstOrNull;
-        provider ??= providers.firstOrNull;
-        if (provider != null) {
-          model = _resolveProviderModel(provider, preferred: model);
-        }
-        setState(() {
-          _providers = providers;
-          _selectedProviderUuid = provider?.uuid;
-          _selectedModel = model;
-        });
-        if (provider != null && model != null) {
-          _updateConversationProvider(provider, model, notify: false);
-        } else {
-          widget.conversation.updateProvider(null, null);
-          widget.conversation.updateConfig(aiAssistantConfig);
-        }
+      if (!mounted || generation != _providerLoadGeneration) return;
+      setState(() {
+        _providers = providers;
+        _providersLoaded = true;
+      });
+      _syncSelectedProviderFromConversation();
+    } on Object {
+      if (mounted && generation == _providerLoadGeneration) {
+        setState(() => _providersLoaded = true);
       }
-    } catch (_) {
-      // Ignore errors loading providers
     }
   }
 
@@ -405,24 +386,33 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
   }
 
   Widget _buildProviderSelector() {
-    final activeProvider = _providers.where((p) => p.active).firstOrNull;
-    final selectedProvider = _providers
-        .where((p) => p.uuid == _selectedProviderUuid)
+    final conversation = widget.conversation;
+    final provider = _providers
+        .where((p) => p.uuid == conversation.providerUuid)
         .firstOrNull;
-    final provider =
-        selectedProvider ?? activeProvider ?? _providers.firstOrNull;
-
-    final providerUuid = provider?.uuid;
     final currentModel = provider == null
         ? ''
-        : _resolveProviderModel(provider, preferred: _selectedModel);
+        : conversation.currentModel ?? '';
+    final providerName =
+        provider?.name ??
+        (conversation.providerUnavailable
+            ? _providersLoaded
+                  ? context.tr(
+                      'ai.label.unavailableProvider',
+                      fallback: 'Unavailable provider',
+                    )
+                  : context.tr(
+                      'settings.ai.providers.loading',
+                      fallback: 'Loading providers…',
+                    )
+            : context.tr(
+                'ai.label.selectProvider',
+                fallback: 'Select Provider',
+              ));
     final options = [
       for (final item in _providers)
         if (item.uuid case final uuid?)
-          for (final model
-              in item.models.isEmpty
-                  ? [_resolveProviderModel(item)]
-                  : item.models)
+          for (final model in item.models.isEmpty ? [''] : item.models)
             _AiProviderModelOption(
               value: (providerUuid: uuid, model: model),
               providerName: item.name,
@@ -435,121 +425,31 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
       child: Align(
         alignment: Alignment.centerRight,
         child: _AiProviderModelSelector(
-          value: (providerUuid: providerUuid ?? '', model: currentModel),
-          providerName:
-              provider?.name ??
-              tr('ai.label.selectProvider', fallback: 'Select Provider'),
+          value: (providerUuid: provider?.uuid ?? '', model: currentModel),
+          providerName: providerName,
           model: currentModel,
           options: options,
           colors: widget.colors,
           onChanged: (value) {
-            final nextProvider = _providers.firstWhere(
-              (item) => item.uuid == value.providerUuid,
-            );
-            final model = _resolveProviderModel(
+            final nextProvider = _providers
+                .where((item) => item.uuid == value.providerUuid)
+                .firstOrNull;
+            if (nextProvider == null) return;
+            widget.conversation.selectProvider(
               nextProvider,
-              preferred: value.model,
+              aiAssistantConfig,
+              preferredModel: value.model,
             );
-            setState(() {
-              _selectedProviderUuid = value.providerUuid;
-              _selectedModel = model;
-            });
-            _updateConversationProvider(nextProvider, model);
           },
         ),
       ),
     );
   }
 
-  AiProviderEntry? get _selectedProvider {
-    return _providers
-            .where((provider) => provider.uuid == _selectedProviderUuid)
-            .firstOrNull ??
-        _providers.where((provider) => provider.active).firstOrNull ??
-        _providers.firstOrNull;
-  }
-
-  String _resolveProviderModel(AiProviderEntry provider, {String? preferred}) {
-    final models = provider.models;
-    final preferredModel = _singleModel(preferred);
-    if (preferredModel.isNotEmpty &&
-        (models.isEmpty || models.contains(preferredModel))) {
-      return preferredModel;
-    }
-    return models.firstOrNull ?? _singleModel(provider.model);
-  }
-
-  String _singleModel(String? model) {
-    final value = model?.trim() ?? '';
-    if (value.isEmpty) {
-      return '';
-    }
-    return value.contains(',') ? value.split(',').first.trim() : value;
-  }
-
-  AiAssistantConfig _configForProvider(AiProviderEntry provider, String model) {
-    final currentConfig = widget.conversation.config;
-    return AiAssistantConfig(
-      protocol: AiApiProtocol.fromString(provider.protocol),
-      baseUrl: provider.baseUrl,
-      model: _resolveProviderModel(provider, preferred: model),
-      apiKey: provider.apiKey,
-      maxTokens: provider.maxTokens,
-      temperature: provider.temperature,
-      includeTerminalSelection: currentConfig.includeTerminalSelection,
-      includeRecentTerminalOutput: currentConfig.includeRecentTerminalOutput,
-    );
-  }
-
-  AiAssistantConfig _requestConfig() {
-    final provider = _selectedProvider;
-    if (provider == null) {
-      return widget.conversation.config;
-    }
-    final model = _resolveProviderModel(provider, preferred: _selectedModel);
-    return _configForProvider(provider, model);
-  }
-
-  void _updateConversationProvider(
-    AiProviderEntry provider,
-    String model, {
-    bool notify = true,
-  }) {
-    final resolvedModel = _resolveProviderModel(provider, preferred: model);
-    final config = _configForProvider(provider, resolvedModel);
-    widget.conversation.updateConfig(config);
-    widget.conversation.updateProvider(provider.uuid, resolvedModel);
-    if (notify) {
-      setState(() {
-        _selectedProviderUuid = provider.uuid;
-        _selectedModel = resolvedModel;
-      });
-    }
-  }
-
   void _syncSelectedProviderFromConversation() {
-    if (_providers.isEmpty) {
-      return;
+    if (_providersLoaded) {
+      widget.conversation.applyProviderCatalog(_providers, aiAssistantConfig);
     }
-    final conversationProviderUuid = widget.conversation.providerUuid;
-    final conversationProvider = conversationProviderUuid == null
-        ? null
-        : _providers
-              .where((provider) => provider.uuid == conversationProviderUuid)
-              .firstOrNull;
-    final provider =
-        conversationProvider ??
-        _providers.where((candidate) => candidate.active).firstOrNull ??
-        _providers.first;
-    final model = _resolveProviderModel(
-      provider,
-      preferred: widget.conversation.currentModel,
-    );
-    setState(() {
-      _selectedProviderUuid = provider.uuid;
-      _selectedModel = model;
-    });
-    _updateConversationProvider(provider, model, notify: false);
   }
 
   bool get _terminalAvailable {
@@ -568,6 +468,7 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
     final text = _composerController.text.trim();
     if ((text.isEmpty && widget.conversation.pendingAttachments.isEmpty) ||
         widget.conversation.sending ||
+        widget.conversation.providerUnavailable ||
         widget.conversation.hasUnresolvedTerminalCommands) {
       return;
     }
@@ -576,7 +477,7 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
     unawaited(
       widget.conversation.send(
         text,
-        config: _requestConfig(),
+        config: widget.conversation.config,
         systemPrompt: _systemPrompt(),
         enableTerminalTool: _terminalAvailable,
         terminalContext: _terminalContext(),
@@ -601,11 +502,12 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
   }
 
   void _editMessage(AiChatMessage message, String content) {
+    if (widget.conversation.providerUnavailable) return;
     unawaited(
       widget.conversation.editUserMessage(
         message.sequence,
         content,
-        config: _requestConfig(),
+        config: widget.conversation.config,
         systemPrompt: _systemPrompt(),
         enableTerminalTool: _terminalAvailable,
       ),
@@ -618,6 +520,11 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
         command: command,
         colors: widget.colors,
         terminalAvailable: _terminalAvailable,
+        providerAvailable: !widget.conversation.providerUnavailable,
+        ownsRunningCommand: widget.conversation.ownsTerminalCommand(
+          command.id,
+          widget.terminalControllerResolver(),
+        ),
         anotherCommandRunning: widget.conversation.hasRunningTerminalCommand,
         onRun: () => _runTerminalCommand(command),
         onSkip: () => _skipTerminalCommand(command),
@@ -631,6 +538,7 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
         editable:
             message.role == AiChatRole.user &&
             !widget.conversation.sending &&
+            !widget.conversation.providerUnavailable &&
             !widget.conversation.hasUnresolvedTerminalCommands,
         onEdit: (content) => _editMessage(message, content),
       ),
@@ -742,7 +650,7 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
       widget.conversation.executeTerminalCommand(
         command.id,
         controller: controller,
-        config: _requestConfig(),
+        config: widget.conversation.config,
         systemPrompt: _systemPrompt(),
         enableTerminalTool: _terminalAvailable,
       ),
@@ -750,12 +658,45 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
   }
 
   void _stopTerminalCommand(AiTerminalCommand command) {
-    if (command.status != AiTerminalCommandStatus.running ||
+    final terminal = widget.terminalControllerResolver();
+    if (terminal == null ||
+        command.status != AiTerminalCommandStatus.running ||
         command.cancellationRequested) {
       return;
     }
-    widget.conversation.cancelTerminalCommand(command.id);
+    widget.conversation.cancelTerminalCommand(
+      command.id,
+      fromController: terminal,
+    );
   }
+
+  void _startTerminalSnippet() {
+    if (widget.onSaveSnippet == null) {
+      widget.onCreateSnippetUnavailable?.call();
+      return;
+    }
+    final terminal = widget.terminalControllerResolver();
+    if (terminal == null || terminal.isDisposed) return;
+    setState(() {
+      _snippetOrigin = (
+        terminal: terminal,
+        profile: terminal.sshProfile,
+        hostId: widget.snippetTargetHostId,
+        label:
+            widget.snippetTargetLabel ??
+            context.tr(
+              'workspace.terminalTools.snippets.currentHost',
+              fallback: 'Current host',
+            ),
+      );
+    });
+  }
+
+  bool _isOriginalSnippetTerminal(_TerminalSnippetOrigin origin) =>
+      !origin.terminal.isDisposed &&
+      identical(widget.terminalControllerResolver(), origin.terminal) &&
+      identical(origin.terminal.sshProfile, origin.profile) &&
+      widget.snippetTargetHostId == origin.hostId;
 
   void _skipTerminalCommand(AiTerminalCommand command) {
     if (command.status != AiTerminalCommandStatus.pending) {
@@ -764,7 +705,7 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
     unawaited(
       widget.conversation.skipTerminalCommand(
         command.id,
-        config: _requestConfig(),
+        config: widget.conversation.config,
         systemPrompt: _systemPrompt(),
         enableTerminalTool: _terminalAvailable,
       ),
@@ -1122,7 +1063,11 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
               ),
             ),
           ),
-          if (!widget.terminalTools ||
+          if (widget.terminalTools &&
+              _toolMode == _TerminalToolPanelMode.ai &&
+              _boundTerminalController == null)
+            _TerminalToolPlaceholder(mode: _toolMode, colors: widget.colors)
+          else if (!widget.terminalTools ||
               _toolMode == _TerminalToolPanelMode.ai) ...[
             Divider(height: 1, color: border),
             Expanded(
@@ -1291,34 +1236,40 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
                               ],
                             ),
                           ),
-                        TextField(
-                          key: const ValueKey('ai-assistant-composer'),
-                          controller: _composerController,
-                          focusNode: _composerFocusNode,
-                          enabled: !waitingForCommands,
-                          minLines: 1,
-                          maxLines: 6,
-                          textInputAction: TextInputAction.newline,
-                          style: TextStyle(
-                            fontSize: 13,
-                            height: 1.45,
-                            letterSpacing: 0,
-                          ).copyWith(color: foreground),
-                          cursorColor: accent,
-                          decoration: InputDecoration(
-                            hintText: composerHint,
-                            hintStyle: TextStyle(
-                              color: muted,
+                        Semantics(
+                          label: context.tr(
+                            'ai.label.message',
+                            fallback: 'AI message',
+                          ),
+                          child: TextField(
+                            key: const ValueKey('ai-assistant-composer'),
+                            controller: _composerController,
+                            focusNode: _composerFocusNode,
+                            enabled: !waitingForCommands,
+                            minLines: 1,
+                            maxLines: 6,
+                            textInputAction: TextInputAction.newline,
+                            style: TextStyle(
                               fontSize: 13,
+                              height: 1.45,
                               letterSpacing: 0,
-                            ),
-                            disabledBorder: InputBorder.none,
-                            border: InputBorder.none,
-                            contentPadding: EdgeInsets.fromLTRB(
-                              14,
-                              hasComposerChips ? 14 : 8,
-                              14,
-                              hasComposerChips ? 7 : 3,
+                            ).copyWith(color: foreground),
+                            cursorColor: accent,
+                            decoration: InputDecoration(
+                              hintText: composerHint,
+                              hintStyle: TextStyle(
+                                color: muted,
+                                fontSize: 13,
+                                letterSpacing: 0,
+                              ),
+                              disabledBorder: InputBorder.none,
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.fromLTRB(
+                                14,
+                                hasComposerChips ? 14 : 8,
+                                14,
+                                hasComposerChips ? 7 : 3,
+                              ),
                             ),
                           ),
                         ),
@@ -1331,9 +1282,10 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
                                 key: const ValueKey(
                                   'ai-assistant-add-attachment',
                                 ),
-                                tooltip: tr(
-                                  'workspace.label.attachFiles',
-                                  fallback: 'Attach files',
+                                tooltip: context.tr(
+                                  _pickingAttachments
+                                      ? 'ai.attachment.loading'
+                                      : 'workspace.label.attachFiles',
                                 ),
                                 onPressed:
                                     !_pickingAttachments &&
@@ -1365,9 +1317,13 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
                               _buildProviderSelector(),
                               const SizedBox(width: 8),
                               _AiComposerIconButton(
-                                tooltip: widget.conversation.sending
-                                    ? 'Stop generating'
-                                    : 'Send',
+                                tooltip: context.tr(
+                                  widget.conversation.stopping
+                                      ? 'common.status.stopping'
+                                      : widget.conversation.sending
+                                      ? 'ai.action.stopGenerating'
+                                      : 'common.action.send',
+                                ),
                                 onPressed: widget.conversation.sending
                                     ? widget.conversation.stopping
                                           ? null
@@ -1376,6 +1332,9 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
                                                   .stopGenerating(),
                                             )
                                     : !waitingForCommands &&
+                                          !widget
+                                              .conversation
+                                              .providerUnavailable &&
                                           (_composerController.text
                                                   .trim()
                                                   .isNotEmpty ||
@@ -1415,27 +1374,32 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
               colors: widget.colors,
               load: widget.loadSystemInfo,
               target: widget.systemTarget,
+              source: _boundTerminalController,
+              sessionConnected:
+                  _boundTerminalController?.connectionStatus.phase ==
+                  TerminalConnectionPhase.connected,
             )
           else if (_toolMode == _TerminalToolPanelMode.snippets &&
               widget.onRunSnippet != null &&
               widget.onCopySnippet != null)
-            if (_creatingSnippet && widget.onSaveSnippet != null)
+            if (_snippetOrigin case final origin?)
               _TerminalSnippetEditor(
                 colors: widget.colors,
                 packages: widget.snippetPackages,
-                targetLabel:
-                    widget.snippetTargetLabel ??
-                    tr(
-                      'workspace.terminalTools.snippets.currentHost',
-                      fallback: 'Current host',
-                    ),
-                targetHostId: widget.snippetTargetHostId,
+                targetLabel: origin.label,
+                targetHostId: origin.hostId,
+                isOriginalTerminal: () => _isOriginalSnippetTerminal(origin),
+                saveAvailable: widget.onSaveSnippet != null,
                 onCreatePackage: widget.onCreateSnippetPackage,
-                onCancel: () => setState(() => _creatingSnippet = false),
+                onCancel: () => setState(() => _snippetOrigin = null),
                 onSave: (draft) async {
-                  await widget.onSaveSnippet!(draft);
-                  if (mounted) {
-                    setState(() => _creatingSnippet = false);
+                  final save = widget.onSaveSnippet;
+                  if (!_isOriginalSnippetTerminal(origin) || save == null) {
+                    return;
+                  }
+                  await save(draft);
+                  if (mounted && _snippetOrigin == origin) {
+                    setState(() => _snippetOrigin = null);
                   }
                 },
               )
@@ -1466,16 +1430,13 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
                   'workspace.terminalTools.snippets.run',
                   fallback: 'Run snippet',
                 ),
-                copyTooltip: tr('common.action.copy', fallback: 'Copy'),
+                copyTooltip: context.tr(
+                  'workspace.terminalTools.action.copyToPrompt',
+                  fallback: 'Copy to terminal prompt',
+                ),
                 onCopy: widget.onCopySnippet!,
                 onRun: widget.onRunSnippet!,
-                onCreate: () {
-                  if (widget.onSaveSnippet == null) {
-                    widget.onCreateSnippetUnavailable?.call();
-                    return;
-                  }
-                  setState(() => _creatingSnippet = true);
-                },
+                onCreate: _startTerminalSnippet,
                 sortItems: (items, order) => _sortWorkspaceItems(
                   items,
                   order,
@@ -1484,6 +1445,10 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
                 ),
               )
           else if (_toolMode == _TerminalToolPanelMode.shellHistory &&
+              _boundTerminalController != null &&
+              (_boundTerminalController!.connectionStatus.phase ==
+                      TerminalConnectionPhase.connected ||
+                  widget.shellHistory.isNotEmpty) &&
               widget.onRunHistory != null &&
               widget.onCopyHistory != null)
             _TerminalCommandLibrary<ShellHistoryEntry>(
@@ -1513,7 +1478,10 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
                 'workspace.terminalTools.shellHistory.run',
                 fallback: 'Run command',
               ),
-              copyTooltip: tr('common.action.copy', fallback: 'Copy'),
+              copyTooltip: context.tr(
+                'workspace.terminalTools.action.copyToPrompt',
+                fallback: 'Copy to terminal prompt',
+              ),
               onCopy: widget.onCopyHistory!,
               onRun: widget.onRunHistory!,
             )

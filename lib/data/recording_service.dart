@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../terminal/terminal_recording.dart';
 import '../terminal/terminal_ffi.dart' show TerminalRecordingLease;
+import 'nauterm_data_store.dart';
 import 'terminal_recording_store.dart';
 
 typedef TerminalCaptureWriterFactory =
@@ -155,17 +156,96 @@ class RecordingService {
     _captureReferences.remove(recordingId);
   }
 
-  void stopAllRecordings() {
-    _ignoredIds.addAll(recorders.map((entry) => entry.id));
-    _pendingIds.clear();
-    _captureReferences.clear();
+  ({List<TerminalLogEntry> finished, bool hasActive}) prepareLogDeletion(
+    NautermDataStore dataStore,
+    TerminalLogCaptureStore captureStore, {
+    TerminalLogEntry? only,
+  }) {
+    final logs = only == null ? _allTerminalLogs(dataStore) : [only];
+    final finished = <TerminalLogEntry>[];
+    for (final log in logs) {
+      if (leaseFor(log.id) != null) continue;
+      if (log.endedAt == null) {
+        final probe = captureStore.tryAcquireLease(log.id, existingOnly: true);
+        if (probe == null) continue;
+        probe.close();
+      }
+      finished.add(log);
+    }
+    return (finished: finished, hasActive: finished.length < logs.length);
   }
 
-  void clearRecordings() {
-    releaseAllLeases();
-    _finalizedIds.clear();
-    recorders.clear();
-    _contexts.clear();
+  List<TerminalLogEntry> _allTerminalLogs(NautermDataStore store) {
+    const pageSize = 500;
+    final logs = <TerminalLogEntry>[];
+    while (true) {
+      final page = store.listTerminalLogs(limit: pageSize, offset: logs.length);
+      logs.addAll(page);
+      if (page.length < pageSize) return logs;
+    }
+  }
+
+  Future<({Set<String> deleted, Object? cleanupError})> deleteFinishedLogs(
+    NautermDataStore dataStore,
+    TerminalLogCaptureStore captureStore,
+    List<TerminalLogEntry> logs, {
+    required bool Function() isCurrent,
+  }) async {
+    final deleted = <String>{};
+    Object? cleanupError;
+    await enqueueSave(() async {
+      if (!isCurrent()) return;
+      final leases = <TerminalRecordingLease>[];
+      try {
+        for (final expected in logs) {
+          if (leaseFor(expected.id) != null) {
+            throw const NautermDataException(
+              'Close the selected sessions before deleting their logs.',
+            );
+          }
+          final lease = captureStore.tryAcquireLease(
+            expected.id,
+            existingOnly: expected.endedAt == null,
+          );
+          if (lease == null) {
+            throw const NautermDataException(
+              'A selected recording is in use in another window.',
+            );
+          }
+          leases.add(lease);
+          final current = dataStore.getTerminalLog(expected.id);
+          if (current == null ||
+              current.endedAt != expected.endedAt ||
+              current.captureFile != expected.captureFile ||
+              current.captureSha256 != expected.captureSha256) {
+            throw const NautermDataException(
+              'The recording changed. Refresh and try again.',
+            );
+          }
+        }
+
+        final files = dataStore.deleteTerminalLogs(
+          logs.map((entry) => entry.id),
+        );
+        for (final log in logs) {
+          deleted.add(log.id);
+          removeRecording(log.id);
+        }
+        for (final file in files) {
+          if (file.isEmpty) continue;
+          try {
+            await captureStore.deleteCapture(file);
+          } on Object catch (error) {
+            cleanupError ??= error;
+          }
+        }
+      } finally {
+        for (final lease in leases) {
+          lease.close();
+        }
+      }
+    });
+    return (deleted: deleted, cleanupError: cleanupError);
   }
 
   void ignoreAllRecorders() {

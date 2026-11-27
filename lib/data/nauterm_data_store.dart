@@ -2310,6 +2310,69 @@ class NautermDataStore {
     );
   }
 
+  SyncKeyRotationReview reviewSyncKeyRotation() {
+    final review = _jsonMap(_call('review_sync_key_rotation'));
+    return (
+      stamp: review['stamp'] as String,
+      targets: [
+        for (final item in _jsonList(review['targets']))
+          (
+            scope: _jsonMap(item)['scope'] as String,
+            name: _jsonMap(item)['name'] as String,
+          ),
+      ],
+    );
+  }
+
+  SyncKeyRotationResult rotateSyncMasterKey({
+    required String reviewStamp,
+    required String currentMasterKey,
+    required String newMasterKey,
+    required int backupCount,
+    void Function(SyncKeyRotationProgress)? onProgress,
+  }) {
+    final callback = onProgress == null
+        ? null
+        : NativeCallable<_SyncKeyProgressNative>.isolateLocal((
+            Pointer<Utf8> message,
+          ) {
+            final progress = _jsonMap(jsonDecode(message.toDartString()));
+            onProgress((
+              scope: _jsonMap(progress['target'])['scope'] as String,
+              phase: SyncKeyRotationPhase.values.byName(
+                progress['phase'] as String,
+              ),
+            ));
+          });
+    try {
+      final result = _jsonMap(
+        _call('rotate_sync_master_key', {
+          'review_stamp': reviewStamp,
+          'current_master_key': currentMasterKey,
+          'new_master_key': newMasterKey,
+          'backup_count': backupCount,
+        }, callback?.nativeFunction),
+      );
+      final failed = result['failed'];
+      return (
+        completed: [
+          for (final target in _jsonList(result['completed']))
+            _jsonMap(target)['scope'] as String,
+        ],
+        failed: failed == null
+            ? null
+            : (
+                scope: _jsonMap(failed)['scope'] as String,
+                error: _jsonMap(failed)['error'] as String,
+              ),
+        retryStamp: result['retry_stamp'] as String?,
+        hasLocalKey: result['has_local_sync_key'] as bool?,
+      );
+    } finally {
+      callback?.close();
+    }
+  }
+
   List<Map<String, dynamic>> localSyncBackups() {
     return (_call('local_sync_backup_list') as List)
         .map((item) => Map<String, dynamic>.from(item as Map))
@@ -2456,6 +2519,10 @@ class NautermDataStore {
 
   int deletePortForward(int id) {
     return _callInt('delete_port_forward', {'id': id});
+  }
+
+  int deletePortForwards(List<int> ids) {
+    return _callInt('delete_port_forwards', {'ids': ids});
   }
 
   int saveProxy(ProxyEntry proxy) {
@@ -2676,7 +2743,11 @@ class NautermDataStore {
     return _callInt('delete_ai_conversation', {'uuid': uuid});
   }
 
-  Object? _call(String operation, [Map<String, Object?> payload = const {}]) {
+  Object? _call(
+    String operation, [
+    Map<String, Object?> payload = const {},
+    Pointer<NativeFunction<_SyncKeyProgressNative>>? progress,
+  ]) {
     if (_handle == nullptr) {
       throw const NautermDataException('Database is closed.');
     }
@@ -2686,7 +2757,13 @@ class NautermDataStore {
     Pointer<Utf8> responsePointer = nullptr;
 
     try {
-      responsePointer = _bindings.call(_handle, requestPointer);
+      responsePointer = progress == null
+          ? _bindings.call(_handle, requestPointer)
+          : _bindings.callWithSyncKeyProgress(
+              _handle,
+              requestPointer,
+              progress,
+            );
       if (responsePointer == nullptr) {
         throw const NautermDataException('Database call returned null.');
       }
@@ -2752,6 +2829,28 @@ typedef _CallDart = Pointer<Utf8> Function(
   Pointer<Void> handle,
   Pointer<Utf8> request,
 );
+typedef _SyncKeyProgressNative = Void Function(Pointer<Utf8> message);
+typedef _CallWithSyncKeyProgress = Pointer<Utf8> Function(
+  Pointer<Void> handle,
+  Pointer<Utf8> request,
+  Pointer<NativeFunction<_SyncKeyProgressNative>> progress,
+);
+
+typedef SyncKeyRotationTarget = ({String scope, String name});
+typedef SyncKeyRotationReview = ({
+  String stamp,
+  List<SyncKeyRotationTarget> targets,
+});
+
+enum SyncKeyRotationPhase { updating, updated, failed }
+
+typedef SyncKeyRotationProgress = ({String scope, SyncKeyRotationPhase phase});
+typedef SyncKeyRotationResult = ({
+  List<String> completed,
+  ({String scope, String error})? failed,
+  String? retryStamp,
+  bool? hasLocalKey,
+});
 
 typedef _DefaultPathNative = Pointer<Utf8> Function();
 typedef _DefaultPathDart = Pointer<Utf8> Function();
@@ -2815,6 +2914,10 @@ class _NautermDataBindings {
   }
 
   final DynamicLibrary library;
+  late final callWithSyncKeyProgress = library
+      .lookupFunction<_CallWithSyncKeyProgress, _CallWithSyncKeyProgress>(
+        'nauterm_database_call_with_sync_key_progress',
+      );
   static bool _loadLogged = false;
   final _OpenDefaultDart openDefault;
   final _OpenPathDart openPath;

@@ -367,7 +367,7 @@ class _HostTagFilterButtonState extends State<_HostTagFilterButton> {
           children: [
             _WorkspaceInput(
               controller: controller,
-              label: 'Name',
+              label: tr('common.label.name', fallback: 'Name'),
               autofocus: true,
             ),
           ],
@@ -700,7 +700,11 @@ class _ToolbarSplitButton extends StatelessWidget {
         ),
         SizedBox(width: 2),
         Tooltip(
-          message: tr('$label actions'),
+          message: context.tr(
+            'workspace.action.creationOptions',
+            fallback: '{action} actions',
+            args: {'action': context.tr(label)},
+          ),
           child: Builder(
             builder: (buttonContext) => _WorkspaceButton(
               icon: Icons.keyboard_arrow_down_rounded,
@@ -976,6 +980,10 @@ class _WorkspaceToolbarSearchState extends State<_WorkspaceToolbarSearch> {
             minHeight: 28,
           ),
           suffixIcon: IconButton(
+            tooltip: context.tr(
+              'common.action.closeSearch',
+              fallback: 'Close search',
+            ),
             icon: Icon(Icons.close_rounded, size: 15),
             color: _mutedText,
             padding: EdgeInsets.zero,

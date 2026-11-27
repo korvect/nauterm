@@ -164,18 +164,18 @@ impl Panel {
         let saved = editor.draft.has_credentials();
         let running = self.authorization_running();
         let caption = if running {
-            "Complete sign-in in your browser."
+            "settings.sync.authorization.browser.description"
         } else if pending {
-            "Authorization is ready. Save settings to keep it."
+            "settings.sync.authorization.pending.description"
         } else if saved {
-            "Authorization is saved on this device."
+            "settings.sync.authorization.saved.description"
         } else {
-            "Sign in to connect this storage provider."
+            "settings.sync.authorization.required.description"
         };
         let control = if running {
             Button::new("cancel-sync-provider-sign-in")
                 .outline()
-                .label("Cancel sign-in")
+                .label("settings.sync.authorization.action.cancel")
                 .on_click(cx.listener(|this, _, _, cx| {
                     if this.cancel_authorization(cx) {
                         cx.emit(Event::Settled(true));
@@ -186,9 +186,9 @@ impl Panel {
             Button::new("sync-provider-sign-in")
                 .outline()
                 .label(if pending || saved {
-                    "Authorize again"
+                    "common.label.reconnect"
                 } else {
-                    "Sign in"
+                    "common.action.connect"
                 })
                 .disabled(self.storage_busy())
                 .on_click(cx.listener(|this, _, window, cx| this.start_authorization(window, cx)))
@@ -199,10 +199,14 @@ impl Panel {
             .flex()
             .flex_col()
             .gap(px(12.))
-            .child(self.row("Authorization", caption, control));
+            .child(self.row("settings.label.authorization", caption, control));
         if let Some(account) = editor.authorized_account.as_ref().filter(|_| pending) {
             body = body.child(div().text_size(px(12.)).text_color(p.muted).child(
-                crate::localization::message(cx, &format!("Authorized as @{account}.")),
+                crate::localization::format(
+                    cx,
+                    "settings.sync.github.authorized",
+                    &[("account", account)],
+                ),
             ));
         }
         if let Some(authorization) = &editor.authorizing {
@@ -212,7 +216,10 @@ impl Panel {
                     .items_center()
                     .gap(px(8.))
                     .child(Spinner::new())
-                    .child(crate::localization::text(cx, "rs.ui.copy.startingSignIn")),
+                    .child(crate::localization::text(
+                        cx,
+                        "settings.sync.authorization.status.starting",
+                    )),
                 Stage::Exchanging => div()
                     .flex()
                     .items_center()
@@ -220,7 +227,7 @@ impl Panel {
                     .child(Spinner::new())
                     .child(crate::localization::text(
                         cx,
-                        "rs.ui.copy.completingAuthorization",
+                        "settings.sync.authorization.status.exchanging",
                     )),
                 Stage::Device {
                     code,
@@ -240,12 +247,10 @@ impl Panel {
                                 .child(code.clone()),
                         )
                         .child(div().text_size(px(12.)).text_color(p.muted).child(
-                            crate::localization::message(
+                            crate::localization::format(
                                 cx,
-                                &format!(
-                                    "Enter this code on GitHub. It expires after {} minutes.",
-                                    expires_in.div_ceil(60)
-                                ),
+                                "settings.sync.github.deviceCode.description",
+                                &[("minutes", &expires_in.div_ceil(60).to_string())],
                             ),
                         ))
                         .child(
@@ -256,7 +261,7 @@ impl Panel {
                                 .child(
                                     Button::new("copy-github-device-code")
                                         .outline()
-                                        .label("Copy code")
+                                        .label("common.action.copyCode")
                                         .icon(IconName::Copy)
                                         .on_click(move |_, _, cx| {
                                             cx.write_to_clipboard(ClipboardItem::new_string(
@@ -267,7 +272,7 @@ impl Panel {
                                 .child(
                                     Button::new("open-github-device-sign-in")
                                         .primary()
-                                        .label("Open GitHub")
+                                        .label("settings.label.openGithub")
                                         .on_click(move |_, _, cx| cx.open_url(&browser)),
                                 ),
                         )
@@ -293,12 +298,15 @@ impl Panel {
                         .gap(px(8.))
                         .child(Spinner::new())
                         .child(div().flex_1().text_size(px(12.)).text_color(p.muted).child(
-                            crate::localization::text(cx, "rs.ui.copy.waitingForBrowser"),
+                            crate::localization::text(
+                                cx,
+                                "settings.sync.authorization.status.waitingForBrowser",
+                            ),
                         ))
                         .child(
                             Button::new("reopen-storage-sign-in")
                                 .outline()
-                                .label("Open browser")
+                                .label("settings.sync.authorization.action.openBrowser")
                                 .on_click(move |_, _, cx| cx.open_url(&browser)),
                         )
                 }

@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
@@ -130,7 +132,9 @@ class DesktopUpdateRelease {
   final String notes;
   final Uri releaseUri;
   final DesktopUpdateAsset asset;
-  final Uri checksumsUri;
+  final Uri? checksumsUri;
+
+  bool get canDownloadInApp => checksumsUri != null;
 }
 
 class DesktopUpdateCheck {
@@ -153,22 +157,59 @@ class DesktopUpdateException implements Exception {
   String toString() => message;
 }
 
+enum DesktopUpdateDownloadStage { checkingChecksums, downloading, verifying }
+
+class DesktopUpdateDownloadCancelled implements Exception {
+  const DesktopUpdateDownloadCancelled();
+}
+
+class DesktopUpdateCancellation {
+  final _signal = Completer<void>();
+
+  bool get isCancelled => _signal.isCompleted;
+
+  void cancel() {
+    if (!isCancelled) _signal.complete();
+  }
+
+  void _check() {
+    if (isCancelled) throw const DesktopUpdateDownloadCancelled();
+  }
+}
+
+class VerifiedDesktopUpdate {
+  const VerifiedDesktopUpdate._(this.file, this._directory, this._checksum);
+
+  final File file;
+  final Directory _directory;
+  final String _checksum;
+
+  Future<void> discard() async {
+    if (await _directory.exists()) await _directory.delete(recursive: true);
+  }
+}
+
 class DesktopUpdateService {
   DesktopUpdateService({
     http.Client? client,
     this.repository = defaultUpdateRepository,
     DesktopUpdateTarget? target,
     DesktopUpdateProcessRunner? processRunner,
+    Directory? stagingRoot,
   }) : _client = client ?? http.Client(),
        target = target ?? DesktopUpdateTarget.current(),
-       _processRunner = processRunner ?? _runProcess;
+       _processRunner = processRunner ?? _runProcess,
+       _stagingRoot = stagingRoot ?? Directory.systemTemp;
 
   final http.Client _client;
   final DesktopUpdateProcessRunner _processRunner;
+  final Directory _stagingRoot;
   final String repository;
   final DesktopUpdateTarget target;
   static const Duration _requestTimeout = Duration(seconds: 20);
   static const Duration _downloadIdleTimeout = Duration(seconds: 30);
+  static const int _maximumChecksumsBytes = 512 * 1024;
+  static const int _maximumPackageBytes = 4 * 1024 * 1024 * 1024;
 
   Future<DesktopUpdateCheck> check(String currentVersion) async {
     final operation = NautermLog.begin(
@@ -229,10 +270,13 @@ class DesktopUpdateService {
     return DesktopUpdateCheck(currentVersion: currentVersion, release: release);
   }
 
-  Future<File> download(
+  Future<VerifiedDesktopUpdate> download(
     DesktopUpdateRelease release, {
+    DesktopUpdateCancellation? cancellation,
+    void Function(DesktopUpdateDownloadStage stage)? onStage,
     void Function(int received, int total)? onProgress,
   }) async {
+    final token = cancellation ?? DesktopUpdateCancellation();
     final operation = NautermLog.begin(
       'update',
       'Download update',
@@ -242,69 +286,165 @@ class DesktopUpdateService {
       },
     );
     try {
-      final file = await _download(release, onProgress: onProgress);
-      operation.succeed(fields: {'size_bytes': await file.length()});
-      return file;
+      final download = await _download(release, token, onStage, onProgress);
+      operation.succeed();
+      return download;
     } on Object catch (error, stackTrace) {
+      if (token.isCancelled) {
+        operation.warn(fields: {'status': 'cancelled'});
+        throw const DesktopUpdateDownloadCancelled();
+      }
       operation.fail(error, stackTrace: stackTrace);
       rethrow;
     }
   }
 
-  Future<File> _download(
-    DesktopUpdateRelease release, {
+  Future<VerifiedDesktopUpdate> _download(
+    DesktopUpdateRelease release,
+    DesktopUpdateCancellation token,
+    void Function(DesktopUpdateDownloadStage stage)? onStage,
     void Function(int received, int total)? onProgress,
-  }) async {
-    final checksums = await _loadChecksums(release.checksumsUri);
-    final expected = checksums[release.asset.name];
+  ) async {
+    final asset = release.asset;
+    final checksumUri = release.checksumsUri;
+    token._check();
+    if (checksumUri == null) {
+      throw const DesktopUpdateException(
+        'This release has no SHA-256 checksum manifest.',
+      );
+    }
+    if (asset.name.isEmpty ||
+        asset.name == '.' ||
+        asset.name == '..' ||
+        asset.name.contains(RegExp(r'[:/\\\x00]'))) {
+      throw const DesktopUpdateException('Invalid update package name.');
+    }
+    onStage?.call(DesktopUpdateDownloadStage.checkingChecksums);
+    final checksums = await _loadChecksums(checksumUri, token);
+    final expected = checksums[asset.name]?.toLowerCase();
     if (expected == null) {
       throw DesktopUpdateException(
-        'The release does not contain a checksum for ${release.asset.name}.',
+        'The release does not contain a checksum for ${asset.name}.',
       );
     }
 
-    final directory = await _downloadDirectory();
-    final file = File('${directory.path}/${release.asset.name}');
-    final request = http.Request('GET', release.asset.downloadUri)
-      ..headers['User-Agent'] = 'Nauterm-Desktop-Updater';
-    final response = await _client.send(request).timeout(_requestTimeout);
-    if (response.statusCode != 200) {
-      throw DesktopUpdateException(
-        'Unable to download the update (HTTP ${response.statusCode}).',
-      );
-    }
-
-    final sink = file.openWrite();
-    final digestSink = _DigestSink();
-    final hashSink = sha256.startChunkedConversion(digestSink);
-    var received = 0;
+    final directory = await _stagingRoot.createTemp('nauterm-update-');
+    final file = File(
+      '${directory.path}${Platform.pathSeparator}${asset.name}',
+    );
+    final download = VerifiedDesktopUpdate._(file, directory, expected);
     try {
-      await for (final chunk in response.stream.timeout(_downloadIdleTimeout)) {
-        sink.add(chunk);
-        hashSink.add(chunk);
-        received += chunk.length;
-        onProgress?.call(
-          received,
-          response.contentLength ?? release.asset.size,
+      onStage?.call(DesktopUpdateDownloadStage.downloading);
+      final actual = await _withDownloadResponse(asset.downloadUri, token, (
+        response,
+      ) async {
+        if (response.statusCode != 200) {
+          throw DesktopUpdateException(
+            'Unable to download the update (HTTP ${response.statusCode}).',
+          );
+        }
+
+        final total = response.contentLength ?? asset.size;
+        if (total > _maximumPackageBytes) {
+          throw const DesktopUpdateException(
+            'The update package exceeds the download limit.',
+          );
+        }
+        final output = await file.open(mode: FileMode.write);
+        final digestSink = _DigestSink();
+        final hashSink = sha256.startChunkedConversion(digestSink);
+        var received = 0;
+        try {
+          await for (final chunk in response.stream.timeout(
+            _downloadIdleTimeout,
+          )) {
+            token._check();
+            received += chunk.length;
+            if (received > _maximumPackageBytes) {
+              throw const DesktopUpdateException(
+                'The update package exceeds the download limit.',
+              );
+            }
+            await output.writeFrom(chunk);
+            hashSink.add(chunk);
+            onProgress?.call(received, total);
+          }
+          if (received == 0) {
+            throw const DesktopUpdateException('The update package is empty.');
+          }
+          await output.flush();
+        } finally {
+          hashSink.close();
+          await output.close();
+        }
+        onStage?.call(DesktopUpdateDownloadStage.verifying);
+        return digestSink.value.toString();
+      });
+      token._check();
+      if (actual != expected) {
+        throw const DesktopUpdateException(
+          'The downloaded update failed SHA-256 verification.',
         );
       }
-      await sink.flush();
+      return download;
     } on Object {
-      await sink.close();
-      hashSink.close();
-      if (await file.exists()) await file.delete();
+      await download.discard();
       rethrow;
     }
-    await sink.close();
-    hashSink.close();
-    final actual = digestSink.value!.toString();
-    if (actual.toLowerCase() != expected.toLowerCase()) {
-      await file.delete();
+  }
+
+  Future<T> _withDownloadResponse<T>(
+    Uri uri,
+    DesktopUpdateCancellation token,
+    Future<T> Function(http.StreamedResponse response) consume,
+  ) async {
+    token._check();
+    final finished = Completer<void>();
+    final request = http.AbortableRequest(
+      'GET',
+      uri,
+      abortTrigger: Future.any([token._signal.future, finished.future]),
+    )..headers['User-Agent'] = 'Nauterm-Desktop-Updater';
+    try {
+      final response = await _client.send(request).timeout(_requestTimeout);
+      token._check();
+      return await consume(response);
+    } finally {
+      finished.complete();
+    }
+  }
+
+  Future<void> openInBrowser(Uri uri) async {
+    if (!_isUpdateWebUri(uri)) {
+      throw const DesktopUpdateException('The update link is invalid.');
+    }
+    final (executable, arguments) = switch (target.platform) {
+      DesktopUpdatePlatform.macos => ('open', [uri.toString()]),
+      DesktopUpdatePlatform.windows => (
+        'rundll32',
+        ['url.dll,FileProtocolHandler', uri.toString()],
+      ),
+      DesktopUpdatePlatform.linux => ('xdg-open', [uri.toString()]),
+    };
+    final result = await _processRunner(executable, arguments);
+    if (result.exitCode != 0) {
+      throw DesktopUpdateException(
+        'Could not open the browser (exit code ${result.exitCode}).',
+      );
+    }
+  }
+
+  Future<DesktopUpdateInstallDisposition> installVerified(
+    VerifiedDesktopUpdate download,
+    DesktopUpdateAssetKind kind,
+  ) async {
+    final checksum = await sha256.bind(download.file.openRead()).first;
+    if (checksum.toString() != download._checksum) {
       throw const DesktopUpdateException(
         'The downloaded update failed SHA-256 verification.',
       );
     }
-    return file;
+    return launchInstaller(download.file, kind);
   }
 
   Future<DesktopUpdateInstallDisposition> launchInstaller(
@@ -477,34 +617,33 @@ rmdir "\$helper_dir"
     }
   }
 
-  Future<Map<String, String>> _loadChecksums(Uri uri) async {
-    final response = await _client
-        .get(uri, headers: const {'User-Agent': 'Nauterm-Desktop-Updater'})
-        .timeout(_requestTimeout);
+  Future<Map<String, String>> _loadChecksums(
+    Uri uri,
+    DesktopUpdateCancellation token,
+  ) => _withDownloadResponse(uri, token, (response) async {
     if (response.statusCode != 200) {
       throw DesktopUpdateException(
         'Unable to verify the update (HTTP ${response.statusCode}).',
       );
     }
-    return parseSha256Sums(response.body);
-  }
-
-  static Future<Directory> _downloadDirectory() async {
-    final home =
-        Platform.environment[Platform.isWindows ? 'USERPROFILE' : 'HOME'];
-    if (home != null && home.isNotEmpty) {
-      final downloads = Directory('$home${Platform.pathSeparator}Downloads');
-      if (await downloads.exists()) return downloads;
+    final bytes = BytesBuilder(copy: false);
+    await for (final chunk in response.stream.timeout(_downloadIdleTimeout)) {
+      token._check();
+      if (bytes.length + chunk.length > _maximumChecksumsBytes) {
+        throw const DesktopUpdateException(
+          'The checksum file exceeds the download limit.',
+        );
+      }
+      bytes.add(chunk);
     }
-    final fallback = Directory(
-      '${Directory.systemTemp.path}${Platform.pathSeparator}nauterm-updates',
-    );
-    await fallback.create(recursive: true);
-    return fallback;
-  }
+    return parseSha256Sums(utf8.decode(bytes.takeBytes()));
+  });
 
   void close() => _client.close();
 }
+
+bool _isUpdateWebUri(Uri uri) =>
+    uri.scheme == 'https' && uri.host.isNotEmpty && uri.userInfo.isEmpty;
 
 DesktopUpdateRelease parseGitHubRelease(
   Map<String, dynamic> json,
@@ -513,7 +652,10 @@ DesktopUpdateRelease parseGitHubRelease(
   final tag = (json['tag_name'] as String? ?? '').trim();
   final releaseUrl = Uri.tryParse(json['html_url'] as String? ?? '');
   final rawAssets = json['assets'];
-  if (tag.isEmpty || releaseUrl == null || rawAssets is! List) {
+  if (tag.isEmpty ||
+      releaseUrl == null ||
+      !_isUpdateWebUri(releaseUrl) ||
+      rawAssets is! List) {
     throw const DesktopUpdateException('The release response is incomplete.');
   }
 
@@ -527,18 +669,17 @@ DesktopUpdateRelease parseGitHubRelease(
           size: map['size'] as int? ?? 0,
         );
       })
-      .where((asset) => asset.name.isNotEmpty && asset.uri != null)
+      .where(
+        (asset) =>
+            asset.name.isNotEmpty &&
+            asset.uri != null &&
+            _isUpdateWebUri(asset.uri!),
+      )
       .toList();
 
   final checksum = assets
       .where((asset) => asset.name == 'SHA256SUMS.txt')
       .firstOrNull;
-  if (checksum == null) {
-    throw const DesktopUpdateException(
-      'This release has no SHA-256 checksum manifest.',
-    );
-  }
-
   final match = selectUpdateAsset(assets, target);
   if (match == null) {
     throw const DesktopUpdateException(
@@ -558,7 +699,7 @@ DesktopUpdateRelease parseGitHubRelease(
       size: match.$1.size,
       kind: match.$2,
     ),
-    checksumsUri: checksum.uri!,
+    checksumsUri: checksum?.uri,
   );
 }
 

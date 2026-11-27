@@ -256,7 +256,7 @@ impl Nauterm {
                 .text_color(p.muted)
                 .child(crate::localization::text(
                     cx,
-                    "rs.ui.copy.shellHistoryAfterConnect",
+                    "workspace.terminalTools.shellHistory.waiting.description",
                 ))
                 .into_any_element();
         };
@@ -307,7 +307,7 @@ impl Nauterm {
                         .child(crate::localization::view(if query.is_empty() {
                             "workspace.terminalTools.shellHistory.empty"
                         } else {
-                            "No matching commands"
+                            "workspace.terminalTools.empty.noMatches"
                         })),
                 )
             })
@@ -367,7 +367,7 @@ impl Nauterm {
                                                 .ghost().custom(crate::components::ButtonCustomVariant::for_surface(p))
                                                 .icon_size(px(13.))
                                                 .icon(IconName::Copy)
-                                                .tooltip("Copy command")
+                                                .tooltip("ai.action.copyCommand")
                                                 .on_click(move |_, _, cx| {
                                                     cx.write_to_clipboard(
                                                         ClipboardItem::new_string(copy.clone()),
@@ -382,7 +382,7 @@ impl Nauterm {
                                                 .icon(IconName::Play)
                                                 .text_color(p.accent)
                                                 .disabled(!can_run)
-                                                .tooltip("Run command")
+                                                .tooltip("workspace.terminalTools.shellHistory.run")
                                                 .on_click(move |_, window, cx| {
                                                     let result = terminal.update(cx, |terminal, cx| {
                                                         terminal.run_history(&run, window, cx)
@@ -453,11 +453,11 @@ impl Nauterm {
                         .flex()
                         .gap(px(8.))
                         .child(div().flex_1().min_w_0().child(field(
-                            "Font",
+                            "common.label.font",
                             controls.family.terminal_control("Font", p, true),
                         )))
                         .child(div().w(px(82.)).flex_shrink_0().child(field(
-                            "Size",
+                            "common.label.size",
                             controls.size.terminal_control("Font size", p, false),
                         ))),
                 )
@@ -467,7 +467,7 @@ impl Nauterm {
                     .palette(p)
                     .bg(p.control)
                     .h(px(34.))
-                    .aria_label(crate::localization::text(cx, "Search themes"))
+                    .aria_label(crate::localization::text(cx, "common.label.searchThemes"))
                     .prefix(icon(IconName::Search).size(px(14.))),
             );
         let mut body = div()

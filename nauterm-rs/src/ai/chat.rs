@@ -122,9 +122,9 @@ impl Chat {
                 .submit_on_enter(true)
                 .auto_grow(1, 6)
         });
-        let model = cx.new(|cx| InputState::new(window, cx).placeholder("Model"));
+        let model = cx.new(|cx| InputState::new(window, cx));
         let history_search =
-            cx.new(|cx| InputState::new(window, cx).placeholder("Search conversations"));
+            cx.new(|cx| InputState::new(window, cx).placeholder("ai.label.searchConversations"));
         let mut events = vec![
             cx.subscribe_in(&input, window, |this, _, event: &InputEvent, window, cx| {
                 if matches!(
@@ -693,7 +693,7 @@ impl Render for Chat {
                                 .xsmall()
                                 .ghost()
                                 .custom(ButtonCustomVariant::for_surface(p))
-                                .label("Retry save")
+                                .label("common.action.retrySave")
                                 .disabled(self.history_loading)
                                 .on_click(
                                     cx.listener(|this, _, window, cx| this.retry_save(window, cx)),
@@ -704,7 +704,7 @@ impl Render for Chat {
                                 .xsmall()
                                 .ghost()
                                 .custom(ButtonCustomVariant::for_surface(p))
-                                .label("Discard draft")
+                                .label("workspace.action.discardChanges")
                                 .disabled(self.history_loading)
                                 .on_click(cx.listener(|this, _, window, cx| {
                                     this.discard_draft(window, cx)

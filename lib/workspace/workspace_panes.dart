@@ -340,12 +340,14 @@ class _TerminalReplayLoadingOverlay extends StatelessWidget {
 class _KnownHostsPane extends StatefulWidget {
   const _KnownHostsPane({
     required this.text,
+    required this.loading,
     required this.onImport,
     required this.onContextAction,
     required this.onContextActions,
   });
 
   final String text;
+  final bool loading;
   final VoidCallback onImport;
   final _WorkspaceContextAction<_KnownHostItem> onContextAction;
   final _WorkspaceContextActions<_KnownHostItem> onContextActions;
@@ -403,16 +405,20 @@ class _KnownHostsPaneState extends State<_KnownHostsPane> {
                         ),
                         child: _WorkspaceEmptyState(
                           icon: LucideIcons.fingerprint,
-                          title: isSearching
+                          title: widget.loading
+                              ? 'workspace.knownHosts.load.loading'
+                              : isSearching
                               ? 'workspace.label.noKnownHostsFound'
                               : 'workspace.label.noKnownHostsYet',
-                          description: isSearching
+                          description: widget.loading || isSearching
                               ? null
                               : 'workspace.description.knownHosts',
-                          actionLabel: isSearching
+                          actionLabel: widget.loading || isSearching
                               ? null
                               : 'workspace.action.importKnownHosts',
-                          onAction: isSearching ? null : widget.onImport,
+                          onAction: widget.loading || isSearching
+                              ? null
+                              : widget.onImport,
                         ),
                       ),
                     ),
@@ -495,6 +501,7 @@ class _SnippetsPane extends StatefulWidget {
   const _SnippetsPane({
     required this.packages,
     required this.snippets,
+    required this.loading,
     required this.onCreateSnippet,
     required this.onCreatePackage,
     required this.onShowShellHistory,
@@ -507,6 +514,7 @@ class _SnippetsPane extends StatefulWidget {
 
   final List<_SnippetPackageItem> packages;
   final List<_SnippetItem> snippets;
+  final bool loading;
   final ValueChanged<int?> onCreateSnippet;
   final VoidCallback onCreatePackage;
   final VoidCallback onShowShellHistory;
@@ -589,14 +597,20 @@ class _SnippetsPaneState extends State<_SnippetsPane> {
             child: showEmptyState
                 ? _WorkspaceEmptyState(
                     icon: LucideIcons.code,
-                    title: searching
+                    title: widget.loading
+                        ? 'workspace.snippets.load.loading'
+                        : searching
                         ? 'workspace.label.noSnippetsFound'
                         : 'workspace.label.noSnippetsYet',
-                    description: searching
+                    description: widget.loading
+                        ? null
+                        : searching
                         ? 'workspace.description.tryAnotherSearch'
                         : 'workspace.empty.snippets.description',
-                    actionLabel: searching ? null : 'Add snippet',
-                    onAction: searching
+                    actionLabel: widget.loading || searching
+                        ? null
+                        : 'Add snippet',
+                    onAction: widget.loading || searching
                         ? null
                         : () => widget.onCreateSnippet(currentPackageId),
                     leading: selectedPackage == null
@@ -726,12 +740,14 @@ class _PortForwardingPane extends StatefulWidget {
     required this.onCreateForward,
     required this.onEditForward,
     required this.onToggleForward,
+    required this.onDeleteForwards,
   });
 
   final List<_PortForwardItem> forwards;
   final ValueChanged<String> onCreateForward;
   final ValueChanged<_PortForwardItem> onEditForward;
   final void Function(_PortForwardItem item, bool enabled) onToggleForward;
+  final ValueChanged<List<_PortForwardItem>> onDeleteForwards;
 
   @override
   State<_PortForwardingPane> createState() => _PortForwardingPaneState();
@@ -786,7 +802,9 @@ class _PortForwardingPaneState extends State<_PortForwardingPane> {
                     description: searching
                         ? 'workspace.description.tryAnotherSearch'
                         : 'workspace.empty.forwarding.description',
-                    actionLabel: searching ? null : 'Add forwarding',
+                    actionLabel: searching
+                        ? null
+                        : 'workspace.label.addForwarding',
                     onAction: searching
                         ? null
                         : () => widget.onCreateForward('local'),
@@ -796,22 +814,35 @@ class _PortForwardingPaneState extends State<_PortForwardingPane> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const _SectionTitle('Port Forwarding'),
+                        const _SectionTitle('workspace.label.portForwarding'),
                         SizedBox(height: 14),
-                        Column(
-                          children: [
-                            for (final forward in forwards) ...[
-                              _PortForwardCard(
-                                forward: forward,
-                                onEdit: () => widget.onEditForward(forward),
-                                onToggle: () => widget.onToggleForward(
-                                  forward,
-                                  !forward.enabled,
-                                ),
-                              ),
-                              SizedBox(height: 12),
-                            ],
-                          ],
+                        _WorkspaceItemList<_PortForwardItem>(
+                          items: forwards,
+                          spacing: 12,
+                          rowBorder: (forward) => BorderSide(
+                            color: forward.enabled ? _blue : _sidebarDivider,
+                          ),
+                          rowContent: (forward) => _PortForwardCardContent(
+                            forward: forward,
+                            onEdit: () => widget.onEditForward(forward),
+                            onToggle: () => widget.onToggleForward(
+                              forward,
+                              !forward.enabled,
+                            ),
+                          ),
+                          onItemDoubleTap: widget.onEditForward,
+                          onContextAction: (forward, action) {
+                            if (action == _ContextMenuActionId.edit) {
+                              widget.onEditForward(forward);
+                            } else if (action == _ContextMenuActionId.delete) {
+                              widget.onDeleteForwards([forward]);
+                            }
+                          },
+                          onContextActions: (items, action) {
+                            if (action == _ContextMenuActionId.delete) {
+                              widget.onDeleteForwards(items);
+                            }
+                          },
                         ),
                       ],
                     ),
@@ -826,6 +857,7 @@ class _PortForwardingPaneState extends State<_PortForwardingPane> {
 class _ProxiesPane extends StatefulWidget {
   const _ProxiesPane({
     required this.proxies,
+    required this.loading,
     required this.onCreateProxy,
     required this.onEditProxy,
     required this.onContextAction,
@@ -833,6 +865,7 @@ class _ProxiesPane extends StatefulWidget {
   });
 
   final List<_ProxyItem> proxies;
+  final bool loading;
   final VoidCallback onCreateProxy;
   final ValueChanged<_ProxyItem> onEditProxy;
   final _WorkspaceContextAction<_ProxyItem> onContextAction;
@@ -885,12 +918,20 @@ class _ProxiesPaneState extends State<_ProxiesPane> {
             child: proxies.isEmpty
                 ? _WorkspaceEmptyState(
                     icon: LucideIcons.network,
-                    title: searching
+                    title: widget.loading
+                        ? 'workspace.proxies.load.loading'
+                        : searching
                         ? 'workspace.label.noProxiesFound'
                         : 'workspace.label.noProxiesYet',
-                    description: 'workspace.empty.proxies.description',
-                    actionLabel: searching ? null : 'Add proxy',
-                    onAction: searching ? null : widget.onCreateProxy,
+                    description: widget.loading
+                        ? null
+                        : 'workspace.empty.proxies.description',
+                    actionLabel: widget.loading || searching
+                        ? null
+                        : 'Add proxy',
+                    onAction: widget.loading || searching
+                        ? null
+                        : widget.onCreateProxy,
                   )
                 : _WorkspaceItemScrollView(
                     padding: _workspacePanePadding,
@@ -1025,8 +1066,8 @@ class _PortForwardingToolbar extends StatelessWidget {
   }
 }
 
-class _PortForwardCard extends StatelessWidget {
-  const _PortForwardCard({
+class _PortForwardCardContent extends StatelessWidget {
+  const _PortForwardCardContent({
     required this.forward,
     required this.onEdit,
     required this.onToggle,
@@ -1054,14 +1095,8 @@ class _PortForwardCard extends StatelessWidget {
         : forward.enabled
         ? tr('common.label.enabled', fallback: 'Enabled')
         : tr('common.label.stopped', fallback: 'Stopped');
-    return Container(
-      width: double.infinity,
+    return Padding(
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: forward.enabled ? _blue : _sidebarDivider),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1221,7 +1256,7 @@ class _PortForwardCard extends StatelessWidget {
               ),
               SizedBox(width: 8),
               _WorkspaceButton(
-                label: 'Edit',
+                label: 'common.action.edit',
                 size: _WorkspaceControlSize.tiny,
                 variant: _WorkspaceButtonVariant.text,
                 onPressed: onEdit,
@@ -1328,7 +1363,7 @@ class _SnippetsToolbar extends StatelessWidget {
         SizedBox(width: 10),
         _ModeButton(
           icon: Icons.history_rounded,
-          label: 'Shell History',
+          label: 'workspace.label.shellHistory',
           onTap: onShowShellHistory,
         ),
         Expanded(
@@ -1358,8 +1393,10 @@ typedef _TerminalLogExportCallback = void Function(
 class _LogsPane extends StatefulWidget {
   const _LogsPane({
     required this.terminalLogs,
+    required this.loading,
     required this.hasMore,
     required this.loadingMore,
+    required this.loadError,
     required this.captureDiskUsage,
     required this.shellHistory,
     required this.selectedLogId,
@@ -1369,12 +1406,15 @@ class _LogsPane extends StatefulWidget {
     required this.onLogExport,
     required this.onClearLogs,
     required this.onLoadMore,
+    required this.onRetry,
     this.dataStore,
   });
 
   final List<TerminalLogEntry> terminalLogs;
+  final bool loading;
   final bool hasMore;
   final bool loadingMore;
+  final String? loadError;
   final int captureDiskUsage;
   final List<ShellHistoryEntry> shellHistory;
   final String? selectedLogId;
@@ -1384,6 +1424,7 @@ class _LogsPane extends StatefulWidget {
   final _TerminalLogExportCallback onLogExport;
   final VoidCallback onClearLogs;
   final VoidCallback onLoadMore;
+  final VoidCallback onRetry;
   final NautermDataStore? dataStore;
 
   @override
@@ -1428,6 +1469,7 @@ class _LogsPaneState extends State<_LogsPane> {
               Expanded(
                 child: _LogsTableCard(
                   terminalLogs: sortedLogs,
+                  loading: widget.loading,
                   selectedLogId: widget.selectedLogId,
                   onLogReplay: widget.onLogReplay,
                   onLogSelected: widget.onLogSelected,
@@ -1435,7 +1477,9 @@ class _LogsPaneState extends State<_LogsPane> {
                   onLogExport: widget.onLogExport,
                   hasMore: widget.hasMore,
                   loadingMore: widget.loadingMore,
+                  loadError: widget.loadError,
                   onLoadMore: widget.onLoadMore,
+                  onRetry: widget.onRetry,
                   dataStore: widget.dataStore,
                 ),
               ),
@@ -1463,7 +1507,10 @@ class _LogsFooter extends StatelessWidget {
           Icon(LucideIcons.hardDrive, size: 14, color: _mutedText),
           SizedBox(width: 7),
           Text(
-            tr('Capture storage  ${_formatStorageBytes(captureDiskUsage)}'),
+            context.tr(
+              'workspace.logs.storage.size',
+              args: {'size': _formatStorageBytes(captureDiskUsage)},
+            ),
             style: TextStyle(
               color: _mutedText,
               fontSize: NautermFontSizes.labelSmall,
@@ -1532,10 +1579,7 @@ class _LogsTableHeader extends StatelessWidget {
                 _LogsActionButton(
                   onPressed: canClear ? onClearLogs : null,
                   icon: LucideIcons.trash2,
-                  tooltip: tr(
-                    'workspace.label.deleteAllTerminalHistoryAndCaptures',
-                    fallback: 'Delete all terminal history and captures',
-                  ),
+                  tooltip: tr('workspace.logs.delete.action'),
                   dimension: 24,
                 ),
               ],
@@ -1599,6 +1643,7 @@ class _LogsHeaderCell extends StatelessWidget {
 class _LogsTableCard extends StatelessWidget {
   const _LogsTableCard({
     required this.terminalLogs,
+    required this.loading,
     required this.selectedLogId,
     required this.onLogReplay,
     required this.onLogSelected,
@@ -1606,11 +1651,14 @@ class _LogsTableCard extends StatelessWidget {
     required this.onLogExport,
     required this.hasMore,
     required this.loadingMore,
+    required this.loadError,
     required this.onLoadMore,
+    required this.onRetry,
     this.dataStore,
   });
 
   final List<TerminalLogEntry> terminalLogs;
+  final bool loading;
   final String? selectedLogId;
   final ValueChanged<TerminalLogEntry> onLogReplay;
   final ValueChanged<TerminalLogEntry> onLogSelected;
@@ -1618,11 +1666,21 @@ class _LogsTableCard extends StatelessWidget {
   final _TerminalLogExportCallback onLogExport;
   final bool hasMore;
   final bool loadingMore;
+  final String? loadError;
   final VoidCallback onLoadMore;
+  final VoidCallback onRetry;
   final NautermDataStore? dataStore;
 
   @override
   Widget build(BuildContext context) {
+    final error = loadError;
+    final Widget? footer = error != null
+        ? _LogsLoadFailure(error: error, onRetry: onRetry)
+        : loadingMore
+        ? const _WorkspaceLoadingLine(
+            semanticsLabelKey: 'workspace.logs.load.loading',
+          )
+        : null;
     return ClipRRect(
       key: const ValueKey('logs-table-body'),
       borderRadius: BorderRadius.circular(7),
@@ -1635,15 +1693,22 @@ class _LogsTableCard extends StatelessWidget {
         child: Material(
           type: MaterialType.transparency,
           child: terminalLogs.isEmpty
-              ? const _WorkspaceEmptyState(
-                  key: ValueKey('logs-table-empty-state'),
-                  icon: LucideIcons.clock,
-                  title: 'workspace.label.noTerminalSessionsRecorded',
+              ? Center(
+                  child:
+                      footer ??
+                      _WorkspaceEmptyState(
+                        key: const ValueKey('logs-table-empty-state'),
+                        icon: LucideIcons.clock,
+                        title: loading
+                            ? 'workspace.logs.load.loading'
+                            : 'workspace.label.noTerminalSessionsRecorded',
+                      ),
                 )
               : NotificationListener<ScrollNotification>(
                   onNotification: (notification) {
                     if (hasMore &&
                         !loadingMore &&
+                        error == null &&
                         notification.metrics.extentAfter < 240) {
                       onLoadMore();
                     }
@@ -1651,12 +1716,12 @@ class _LogsTableCard extends StatelessWidget {
                   },
                   child: ListView.separated(
                     padding: EdgeInsets.zero,
-                    itemCount: terminalLogs.length + (loadingMore ? 1 : 0),
+                    itemCount: terminalLogs.length + (footer == null ? 0 : 1),
                     separatorBuilder: (context, index) =>
                         Divider(height: 1, color: _sidebarDivider),
                     itemBuilder: (context, index) {
                       if (index == terminalLogs.length) {
-                        return const _WorkspaceLoadingLine();
+                        return footer!;
                       }
                       final log = terminalLogs[index];
                       return _LogsTableRow(
@@ -1676,6 +1741,46 @@ class _LogsTableCard extends StatelessWidget {
                   ),
                 ),
         ),
+      ),
+    );
+  }
+}
+
+class _LogsLoadFailure extends StatelessWidget {
+  const _LogsLoadFailure({required this.error, required this.onRetry});
+
+  final String error;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            context.tr('workspace.logs.load.unavailable'),
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: _text,
+              fontSize: 12,
+              fontWeight: NautermFontWeights.medium,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            error,
+            textAlign: TextAlign.center,
+            style: TextStyle(color: _mutedText, fontSize: 12),
+          ),
+          const SizedBox(height: 8),
+          _WorkspaceButton(
+            label: 'workspace.logs.load.retry',
+            size: _WorkspaceControlSize.tiny,
+            onPressed: onRetry,
+          ),
+        ],
       ),
     );
   }
@@ -1799,6 +1904,10 @@ class _LogsTableRow extends StatelessWidget {
             child: ConstrainedBox(
               constraints: const BoxConstraints(minHeight: 60),
               child: _LogsRowInteraction(
+                label: context.tr(
+                  'workspace.logs.row.accessibility',
+                  args: {'name': log.title},
+                ),
                 onSelect: onTap,
                 onDoubleTap: _canRead ? onReplay : null,
                 child: Padding(
@@ -2026,11 +2135,13 @@ class _LogDetailsDialogState extends State<_LogDetailsDialog> {
 
 class _LogsRowInteraction extends StatefulWidget {
   const _LogsRowInteraction({
+    required this.label,
     required this.onSelect,
     required this.onDoubleTap,
     required this.child,
   });
 
+  final String label;
   final VoidCallback onSelect;
   final VoidCallback? onDoubleTap;
   final Widget child;
@@ -2066,15 +2177,18 @@ class _LogsRowInteractionState extends State<_LogsRowInteraction> {
 
   @override
   Widget build(BuildContext context) {
-    return Listener(
-      onPointerDown: _handlePointerDown,
-      child: InkWell(
-        splashFactory: InkRipple.splashFactory,
-        onTap: widget.onSelect,
-        hoverColor: _cardHover,
-        highlightColor: _blue.withValues(alpha: _workspaceDark ? 0.10 : 0.06),
-        splashColor: _blue.withValues(alpha: _workspaceDark ? 0.18 : 0.12),
-        child: widget.child,
+    return Semantics(
+      label: widget.label,
+      child: Listener(
+        onPointerDown: _handlePointerDown,
+        child: InkWell(
+          splashFactory: InkRipple.splashFactory,
+          onTap: widget.onSelect,
+          hoverColor: _cardHover,
+          highlightColor: _blue.withValues(alpha: _workspaceDark ? 0.10 : 0.06),
+          splashColor: _blue.withValues(alpha: _workspaceDark ? 0.18 : 0.12),
+          child: widget.child,
+        ),
       ),
     );
   }

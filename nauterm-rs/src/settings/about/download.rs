@@ -64,18 +64,22 @@ impl Panel {
                             return false;
                         };
                         match event {
-                            Event::Checksums => download.phase = "Checking release checksums…",
+                            Event::Checksums => {
+                                download.phase = "settings.update.status.checkingChecksums"
+                            }
                             Event::Progress { received, total } => {
                                 download.received = received;
                                 download.total = total;
-                                download.phase = "Downloading update…";
+                                download.phase = "settings.update.action.downloading";
                             }
-                            Event::Verifying => download.phase = "Verifying SHA-256…",
+                            Event::Verifying => {
+                                download.phase = "settings.update.status.verifyingChecksum"
+                            }
                             Event::Ready(ready) => {
                                 download.running = false;
                                 download.ready = Some(Arc::new(ready));
                                 this.download_notice =
-                                    Some("Download complete. SHA-256 verification passed.".into());
+                                    Some("settings.update.status.downloadVerified".into());
                             }
                             Event::Failed(error) => {
                                 download.running = false;
@@ -107,7 +111,7 @@ impl Panel {
             id,
             ready: None,
             running: true,
-            phase: "Preparing download…",
+            phase: "settings.update.status.preparingDownload",
             received: 0,
             total: 0,
             cancel,
@@ -137,15 +141,27 @@ impl Panel {
                 Err(error) => Err(error),
             };
             let outcome = match launched {
-                Ok(receiver) => receiver.recv().await.unwrap_or_else(|_| Err(anyhow::anyhow!("The system did not confirm opening the update package."))),
+                Ok(receiver) => receiver.recv().await.unwrap_or_else(|_| {
+                    Err(anyhow::anyhow!(
+                        "The system did not confirm opening the update package."
+                    ))
+                }),
                 Err(error) => Err(error),
             };
             let _ = this.update_in(cx, |this, _, cx| {
                 this.opening_package = false;
                 this.open_task = None;
                 match outcome {
-                    Ok(()) => { this.restart_available = true; this.download_notice = Some("The verified package is open. Complete installation before restarting Nauterm RS.".into()); },
-                    Err(error) => this.error = Some(format!("Could not open the verified update package: {error}")),
+                    Ok(()) => {
+                        this.restart_available = true;
+                        this.download_notice =
+                            Some("settings.update.status.installerLaunched".into());
+                    }
+                    Err(error) => {
+                        this.error = Some(format!(
+                            "Could not open the verified update package: {error}"
+                        ))
+                    }
                 }
                 cx.notify();
             });
@@ -198,11 +214,11 @@ impl Panel {
                 div().flex().justify_end().child(
                     Button::new("cancel-update-download")
                         .outline()
-                        .label("Cancel download")
+                        .label("settings.update.action.cancelDownload")
                         .on_click(cx.listener(|this, _, _, cx| {
                             this.download = None;
                             this.error = None;
-                            this.download_notice = Some("Download cancelled.".into());
+                            this.download_notice = Some("settings.update.status.cancelled".into());
                             cx.notify();
                         })),
                 ),
@@ -221,9 +237,9 @@ impl Panel {
                             .outline()
                             .icon(IconName::PackageOpen)
                             .label(if self.opening_package {
-                                "Opening…"
+                                "common.status.opening"
                             } else {
-                                "Open verified package"
+                                "settings.update.action.openVerifiedPackage"
                             })
                             .disabled(self.opening_package)
                             .on_click(cx.listener(|this, _, window, cx| {
@@ -236,9 +252,9 @@ impl Panel {
                     Button::new("discard-verified-update")
                         .ghost()
                         .label(if ready.retained() {
-                            "Dismiss"
+                            "common.action.dismiss"
                         } else {
-                            "Discard download"
+                            "settings.update.action.discardDownload"
                         })
                         .disabled(self.opening_package)
                         .on_click(cx.listener(|this, _, _, cx| {
@@ -264,7 +280,11 @@ impl Panel {
                     Button::new("restart-nauterm-after-update")
                         .outline()
                         .icon(IconName::RefreshCw)
-                        .label("Restart Nauterm RS")
+                        .label(crate::localization::format_for(
+                            crate::localization::language(cx),
+                            "settings.update.action.restart",
+                            &[("appName", crate::APPLICATION_NAME)],
+                        ))
                         .disabled(self.opening_package || self.download_running())
                         .on_click(cx.listener(|_, _, _, cx| cx.emit(super::Event::Restart))),
                 ),

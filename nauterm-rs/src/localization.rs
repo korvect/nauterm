@@ -1,13 +1,9 @@
 //! Explicit UI-copy translation. Never apply this to terminal output, host names,
 //! paths, commands, provider/model IDs or arbitrary editable/user-owned strings.
 use gpui_kit::{App, Global, IntoElement, RenderOnce, SharedString, Window};
-use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{
-    collections::{BTreeMap, HashMap},
-    sync::OnceLock,
-};
+use std::{collections::BTreeMap, sync::OnceLock};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Language {
@@ -120,56 +116,26 @@ pub fn language(cx: &App) -> Language {
         .map_or(Language::System, |active| active.0)
 }
 pub fn text_for(language: Language, source: &str) -> SharedString {
-    catalog()
-        .translate(language.resolve(system_locale()), source)
-        .into()
+    format_for(language, source, &[])
 }
 pub fn message(cx: &App, source: &str) -> SharedString {
-    message_for(language(cx), source)
+    text_for(language(cx), source)
 }
 pub fn message_for(language: Language, source: &str) -> SharedString {
-    let locale = language.resolve(system_locale());
-    let catalog = catalog();
-    let translated = catalog.translate(locale, source);
-    if translated != source {
-        return translated.into();
+    text_for(language, source)
+}
+pub fn format_for(language: Language, key: &str, args: &[(&str, &str)]) -> SharedString {
+    let template = catalog().lookup(language.resolve(system_locale()), key);
+    let app_name = template.map(|_| crate::APPLICATION_NAME);
+    interpolate(template.unwrap_or(key), args, app_name).into()
+}
+pub fn format(cx: &App, key: &str, args: &[(&str, &str)]) -> SharedString {
+    format_for(language(cx), key, args)
+}
+fn interpolate(template: &str, args: &[(&str, &str)], app_name: Option<&str>) -> String {
+    if args.is_empty() && (app_name.is_none() || !template.contains("{appName}")) {
+        return template.to_owned();
     }
-
-    let mut output = String::with_capacity(source.len());
-    let mut changed = false;
-    for line in source.split_inclusive('\n') {
-        let (content, newline) = line
-            .strip_suffix('\n')
-            .map_or((line, ""), |content| (content, "\n"));
-        let translated_line = catalog.translate(locale, content);
-        if translated_line != content {
-            output.push_str(&translated_line);
-            changed = true;
-        } else {
-            for (index, part) in content.split(": ").enumerate() {
-                if index > 0 {
-                    output.push_str(": ");
-                }
-                let translated_part = catalog.translate(locale, part);
-                changed |= translated_part != part;
-                output.push_str(&translated_part);
-            }
-        }
-        output.push_str(newline);
-    }
-    if changed { output } else { source.to_owned() }.into()
-}
-pub fn format_for(language: Language, source: &str, args: &[(&str, &str)]) -> SharedString {
-    interpolate(&text_for(language, source), args).into()
-}
-fn interpolate(template: &str, args: &[(&str, &str)]) -> String {
-    interpolate_with(template, |key| {
-        args.iter()
-            .find(|(name, _)| *name == key)
-            .map(|(_, value)| *value)
-    })
-}
-fn interpolate_with<'a>(template: &str, value: impl Fn(&str) -> Option<&'a str>) -> String {
     let mut output = String::new();
     let mut rest = template;
     while let Some(start) = rest.find('{') {
@@ -178,8 +144,12 @@ fn interpolate_with<'a>(template: &str, value: impl Fn(&str) -> Option<&'a str>)
         };
         output.push_str(&rest[..start]);
         let key = &rest[start + 1..end];
-        if let Some(value) = value(key) {
+        if let Some((_, value)) = args.iter().find(|(name, _)| *name == key) {
             output.push_str(value);
+        } else if key == "appName"
+            && let Some(app_name) = app_name
+        {
+            output.push_str(app_name);
         } else {
             output.push_str(&rest[start..=end]);
         }
@@ -192,9 +162,6 @@ fn interpolate_with<'a>(template: &str, value: impl Fn(&str) -> Option<&'a str>)
 struct Catalog {
     english: BTreeMap<String, String>,
     chinese: BTreeMap<String, String>,
-    by_english: HashMap<String, String>,
-    by_chinese: HashMap<String, String>,
-    patterns: Vec<(Regex, String)>,
 }
 fn messages(value: &Value) -> BTreeMap<String, String> {
     value
@@ -211,82 +178,26 @@ fn catalog() -> &'static Catalog {
             .expect("English localization resource");
         let chinese: Value = serde_json::from_str(include_str!("../../assets/i18n/zh_CN.json"))
             .expect("Chinese localization resource");
-        let english = messages(&english);
-        let mut by_english = HashMap::new();
-        let mut by_chinese = HashMap::new();
-        let patterns = chinese
-            .get("_patterns")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .map(|entry| {
-                (
-                    Regex::new(entry["pattern"].as_str().expect("translation pattern"))
-                        .expect("supported translation regex"),
-                    entry["replacement"]
-                        .as_str()
-                        .expect("translation replacement")
-                        .to_owned(),
-                )
-            })
-            .collect();
-        let chinese = messages(&chinese);
-        for (key, source) in &english {
-            if let Some(target) = chinese.get(key) {
-                by_english
-                    .entry(source.to_ascii_lowercase())
-                    .or_insert_with(|| target.clone());
-                by_chinese
-                    .entry(target.clone())
-                    .or_insert_with(|| source.clone());
-            }
-        }
         Catalog {
-            english,
-            chinese,
-            by_english,
-            by_chinese,
-            patterns,
+            english: messages(&english),
+            chinese: messages(&chinese),
         }
     })
 }
 impl Catalog {
-    fn translate(&self, locale: Locale, source: &str) -> String {
-        if locale == Locale::English {
-            return self
-                .english
-                .get(source)
-                .or_else(|| self.by_chinese.get(source))
-                .map_or(source, String::as_str)
-                .to_owned();
+    fn lookup(&self, locale: Locale, key: &str) -> Option<&str> {
+        match locale {
+            Locale::English => self.english.get(key),
+            Locale::Chinese => self.chinese.get(key).or_else(|| self.english.get(key)),
         }
-        if let Some(value) = self
-            .chinese
-            .get(source)
-            .or_else(|| self.by_english.get(&source.to_ascii_lowercase()))
-        {
-            return value.clone();
-        }
-        for (pattern, replacement) in &self.patterns {
-            if let Some(captures) = pattern.captures(source) {
-                return interpolate_with(replacement, |key| {
-                    key.parse::<usize>()
-                        .ok()
-                        .filter(|index| *index > 0 && *index < captures.len())
-                        .map(|index| captures.get(index).map_or("", |capture| capture.as_str()))
-                });
-            }
-        }
-        self.english
-            .get(source)
-            .map_or(source, String::as_str)
-            .to_owned()
+        .map(String::as_str)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use regex::Regex;
     #[test]
     fn localization_preferences_match_original_config_and_system_fallbacks() {
         for (config, expected) in [
@@ -309,112 +220,115 @@ mod tests {
         assert_eq!(serde_json::to_value(Language::Chinese).unwrap(), "zh-CN");
     }
     #[test]
-    fn localization_shared_catalogs_have_the_same_keys_and_usable_patterns() {
-        let catalog = catalog();
+    fn localization_catalogs_resolve_keys_only() {
         assert_eq!(
-            catalog.english.keys().collect::<Vec<_>>(),
-            catalog.chinese.keys().collect::<Vec<_>>()
+            catalog().english.keys().collect::<Vec<_>>(),
+            catalog().chinese.keys().collect::<Vec<_>>()
         );
-        assert!(!catalog.patterns.is_empty());
         assert_eq!(
-            catalog.translate(Locale::English, "settings.general.language.system"),
+            text_for(Language::English, "settings.general.language.system"),
             "System Default"
         );
         assert_eq!(
-            catalog.translate(Locale::Chinese, "language.simplifiedChinese.autonym"),
+            text_for(Language::Chinese, "language.simplifiedChinese.autonym"),
             "简体中文"
         );
+        assert_eq!(text_for(Language::Chinese, "HOSTS"), "HOSTS");
+        assert_eq!(text_for(Language::English, "主机"), "主机");
+        let english_command = "Delete \"prod.example\"? This cannot be undone.";
         assert_eq!(
-            catalog.translate(Locale::Chinese, "HOSTS"),
-            catalog.chinese["workspace.sidebar.hosts.label"]
-        );
-        assert_eq!(
-            catalog.translate(Locale::Chinese, "unknown-static-copy"),
-            "unknown-static-copy"
-        );
-        assert_eq!(
-            catalog.translate(
-                Locale::English,
-                &catalog.translate(Locale::Chinese, "settings.search.providers.hint")
-            ),
-            "Search providers..."
+            text_for(Language::Chinese, english_command),
+            english_command
         );
     }
+
     #[test]
-    fn localization_patterns_retain_dynamic_names_in_ui_sentences() {
+    fn formatted_copy_keeps_inserted_names_and_braces_literal() {
         assert_eq!(
-            catalog().translate(
-                Locale::Chinese,
-                "Delete \"prod.example\"? This cannot be undone."
+            format_for(
+                Language::Chinese,
+                "workspace.contextMenu.host.openInWorkspace",
+                &[("workspace", "My {workspace}")],
             ),
-            "删除“prod.example”？此操作无法撤销。"
+            "在 My {workspace} 工作区中打开"
         );
         assert_eq!(
-            catalog().translate(Locale::Chinese, "Open in My custom Workspace"),
-            "在 My custom 工作区中打开"
-        );
-        assert_eq!(
-            catalog().translate(Locale::Chinese, "printf '%s' Host"),
-            "printf '%s' Host"
-        );
-        assert_eq!(
-            catalog().translate(
-                Locale::Chinese,
-                "This operation runs with sudo on admin@prod.example."
+            interpolate(
+                "{query}: {count}",
+                &[("query", "{count}"), ("count", "2")],
+                None
             ),
-            "此操作在 admin@prod.example 上以 sudo 执行。"
-        );
-        assert_eq!(
-            catalog().translate(
-                Locale::Chinese,
-                "Exported ED25519 key laptop to /tmp/laptop."
-            ),
-            "已将 ED25519 密钥 laptop 导出到 /tmp/laptop。"
-        );
-        assert_eq!(
-            interpolate("{query}: {count}", &[("query", "{count}"), ("count", "2")]),
             "{count}: 2"
         );
     }
     #[test]
-    fn localization_preserves_captured_braces_names_and_multiline_errors() {
+    fn application_name_and_host_are_values_in_keyed_copy() {
+        use super::{Language, format_for};
         assert_eq!(
-            text_for(
-                Language::Chinese,
-                "Key export stopped after creating /tmp/{2}. The remaining files were not published."
+            text_for(Language::Chinese, "workspace.restore.unexpectedExit.title"),
+            "Nauterm RS 意外关闭"
+        );
+        assert_eq!(
+            format_for(
+                Language::English,
+                "settings.general.defaultUrlHandler.isDefault",
+                &[("scheme", "SSH")],
             ),
-            "创建 /tmp/{2} 后密钥导出已停止，其余文件未发布。"
+            "Nauterm RS is the default application for SSH."
         );
         assert_eq!(
-            text_for(
+            format_for(
                 Language::Chinese,
-                "Could not recover /tmp/{2}: permission denied"
+                "workspace.knownHosts.authenticity.description",
+                &[("host", "server{appName}")],
             ),
-            "无法恢复 /tmp/{2}：permission denied"
+            "Nauterm RS 的 known_hosts 中尚无 server{appName} 的身份信息。你可以仅在本次连接中信任它，也可以保存指纹后重新连接。"
         );
         assert_eq!(
-            text_for(Language::Chinese, "settings.general.applicationTheme.light"),
-            "浅色"
+            text_for(Language::Chinese, "Diagnostic {appName}"),
+            "Diagnostic {appName}"
         );
-        assert_eq!(text_for(Language::Chinese, "Black"), "黑色");
-        assert_eq!(text_for(Language::Chinese, "18 days"), "18 天");
+        assert_eq!(
+            format_for(
+                Language::English,
+                "settings.pages.about.title",
+                &[("appName", "Nauterm RS")]
+            ),
+            "About Nauterm RS"
+        );
+        assert_eq!(
+            format_for(
+                Language::Chinese,
+                "settings.pages.about.title",
+                &[("appName", "Nauterm")]
+            ),
+            "关于 Nauterm"
+        );
+        assert_eq!(
+            format_for(
+                Language::Chinese,
+                "sftp.conflict.itemExists.description",
+                &[("name", "{name}.txt")]
+            ),
+            "目标位置已存在名为“{name}.txt”的项目。"
+        );
     }
     #[test]
-    fn dynamic_messages_translate_known_lines_and_context_fragments() {
+    fn message_keys_translate_and_diagnostics_stay_verbatim() {
         assert_eq!(
-            message_for(
-                Language::Chinese,
-                "Delete \"prod.example\"? This cannot be undone."
-            ),
-            "删除“prod.example”？此操作无法撤销。"
+            message_for(Language::Chinese, "common.label.failed"),
+            "失败"
         );
-        assert_eq!(
-            message_for(
-                Language::Chinese,
-                "provider request failed: Delete \"prod.example\"? This cannot be undone.\nunknown detail"
-            ),
-            "provider request failed: 删除“prod.example”？此操作无法撤销。\nunknown detail"
-        );
+        for source in [
+            "Error: Failed\nFailed to export key: /tmp/{2}",
+            "Could not recover /tmp/{2}: permission denied",
+            "Key export stopped after creating /tmp/{2}. The remaining files were not published.",
+            "18 days",
+            "Black",
+        ] {
+            assert_eq!(message_for(Language::Chinese, source), source);
+            assert_eq!(text_for(Language::Chinese, source), source);
+        }
     }
     #[test]
     fn localization_keys_referenced_by_rs_sources_exist_and_are_translated() {
@@ -433,7 +347,7 @@ mod tests {
             &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src"),
             &mut files,
         );
-        let key = Regex::new(r#""((?:rs|settings|common|workspace|ai|sftp|language)\.[A-Za-z0-9]+(?:\.[A-Za-z0-9]+)+)""#)
+        let key = Regex::new(r#""((?:rs|settings|common|workspace|ai|sftp|language|connection|terminal)\.[A-Za-z0-9]+(?:\.[A-Za-z0-9]+)+)""#)
             .expect("key pattern");
         let catalog = catalog();
         let mut checked = 0;
@@ -455,12 +369,10 @@ mod tests {
             }
         }
         assert!(checked > 100);
-        for (key, english) in catalog.english.range("rs.".to_owned()..) {
-            if !key.starts_with("rs.") {
-                break;
-            }
-            assert_ne!(&catalog.chinese[key], english, "untranslated {key}");
-        }
+        assert!(
+            catalog.english.keys().all(|key| !key.starts_with("rs.")),
+            "localization keys should use feature namespaces"
+        );
     }
     #[test]
     fn static_control_labels_tooltips_and_placeholders_are_translated() {
@@ -498,6 +410,7 @@ mod tests {
             "sel",
         ];
         let mut checked = 0;
+        let mut missing = Vec::new();
         for file in files {
             let source = std::fs::read_to_string(&file).expect("source file");
             let source = source
@@ -509,22 +422,26 @@ mod tests {
                 if intentionally_untranslated.contains(&source) {
                     continue;
                 }
-                let translated = catalog().translate(Locale::Chinese, source);
-                assert_ne!(
-                    translated,
-                    source,
-                    "{}: untranslated {source:?}",
-                    file.display()
-                );
+                let translated = catalog().lookup(Locale::Chinese, source).unwrap_or(source);
+                if translated == source {
+                    missing.push(format!("{}: untranslated {source:?}", file.display()));
+                }
                 checked += 1;
             }
         }
         assert!(checked > 100);
+        assert!(missing.is_empty(), "{}", missing.join("\n"));
     }
     #[test]
     fn localization_required_field_markers_follow_the_translated_caption() {
-        assert_eq!(label_for(Language::Chinese, "Name *"), "名称 *");
-        assert_eq!(label_for(Language::English, "Name *"), "Name *");
+        assert_eq!(
+            label_for(Language::Chinese, "common.label.name *"),
+            "名称 *"
+        );
+        assert_eq!(
+            label_for(Language::English, "common.label.name *"),
+            "Name *"
+        );
         assert_eq!(
             label_for(Language::Chinese, "unknown caption *"),
             "unknown caption *"

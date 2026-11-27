@@ -97,15 +97,15 @@ impl Section {
 }
 
 impl Page {
-    fn label(self) -> &'static str {
+    pub(super) fn label(self) -> &'static str {
         match self {
-            Self::General => "General",
-            Self::Terminal => "Terminal",
-            Self::Sftp => "SFTP",
-            Self::Ai => "AI Assistant",
-            Self::Shortcuts => "Shortcuts",
-            Self::Sync => "Sync & Backup",
-            Self::About => "About",
+            Self::General => "settings.sidebar.general.label",
+            Self::Terminal => "settings.sidebar.terminal.label",
+            Self::Sftp => "settings.sidebar.sftp.label",
+            Self::Ai => "settings.sidebar.aiAssistant.label",
+            Self::Shortcuts => "settings.sidebar.shortcuts.label",
+            Self::Sync => "settings.sidebar.syncBackup.label",
+            Self::About => "settings.sidebar.about.label",
         }
     }
 }
@@ -137,21 +137,30 @@ impl Entry {
         self
     }
     fn matches(&self, terms: &[&str], language: crate::localization::Language) -> bool {
-        use crate::localization::{Language, text_for};
+        use crate::localization::{Language, format_for, text_for};
+        let title = |language| {
+            format_for(
+                language,
+                self.title,
+                &[("appName", crate::APPLICATION_NAME)],
+            )
+        };
         let page = self.section.page().label();
         let description = |language| {
-            self.index_description
-                .then(|| text_for(language, self.description))
-                .unwrap_or_default()
+            if self.index_description {
+                text_for(language, self.description)
+            } else {
+                SharedString::default()
+            }
         };
         let haystack = format!(
             "{} {} {} {} {} {} {}",
             text_for(Language::English, page),
-            text_for(Language::English, self.title),
+            title(Language::English),
             description(Language::English),
             self.keywords,
             text_for(language, page),
-            text_for(language, self.title),
+            title(language),
             description(language),
         )
         .to_lowercase();
@@ -174,7 +183,7 @@ const ENTRIES: &[Entry] = &[
     ),
     Entry::new(
         S::About,
-        "rs.settings.pages.about.title",
+        "settings.pages.about.title",
         "settings.pages.about.description",
         "release source third party license update build version platform 关于 版本 更新 许可证 开源 构建 平台",
     ),
@@ -248,7 +257,7 @@ const ENTRIES: &[Entry] = &[
     Entry::new(
         S::Font,
         "settings.terminal.cjkFont.label",
-        "rs.settings.terminal.cjkFont.description",
+        "settings.terminal.cjkFont.description",
         "han glyph 中文 汉字 日文 韩文 字体",
     ),
     Entry::new(
@@ -385,8 +394,8 @@ const ENTRIES: &[Entry] = &[
     ),
     Entry::new(
         S::Recording,
-        "rs.settings.search.recordingStorage.title",
-        "rs.settings.search.recordingStorage.description",
+        "settings.terminal.recording.storage.title",
+        "settings.terminal.recording.storage.description",
         "location folder directory days quota cleanup 存储 目录 保留 清理",
     ),
     Entry::new(
@@ -517,8 +526,10 @@ impl Settings {
         cx: &mut Context<Self>,
     ) -> State {
         let input = cx.new(|cx| {
-            InputState::new(window, cx)
-                .placeholder(crate::localization::text_for(language, "Search settings"))
+            InputState::new(window, cx).placeholder(crate::localization::text_for(
+                language,
+                "settings.label.searchSettings",
+            ))
         });
         let events = cx.subscribe(&input, |this, input, event: &InputEvent, cx| {
             if matches!(event, InputEvent::Change) {

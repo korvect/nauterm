@@ -215,7 +215,7 @@ impl Keychain {
                         )
                     })
                     .item(
-                        MenuItem::localized("Duplicate")
+                        MenuItem::localized("workspace.action.duplicate")
                             .icon(IconName::Copy)
                             .on_click(move |_, _, cx| {
                                 let _ = duplicate.update(cx, |this, cx| {
@@ -225,7 +225,7 @@ impl Keychain {
                             }),
                     )
                     .item(
-                        MenuItem::localized("Delete")
+                        MenuItem::localized("common.action.delete")
                             .icon(IconName::Trash)
                             .destructive(true)
                             .on_click(move |_, _, cx| {

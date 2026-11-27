@@ -130,6 +130,7 @@ class _SftpTaskBar extends StatelessWidget {
     required this.onDismissTask,
     required this.onCancelTask,
     required this.onPauseToggle,
+    required this.canRetryTask,
   });
 
   final List<_SftpTask> tasks;
@@ -137,6 +138,7 @@ class _SftpTaskBar extends StatelessWidget {
   final ValueChanged<int> onDismissTask;
   final ValueChanged<int> onCancelTask;
   final ValueChanged<int> onPauseToggle;
+  final bool Function(_SftpTask) canRetryTask;
 
   @override
   Widget build(BuildContext context) {
@@ -197,6 +199,7 @@ class _SftpTaskBar extends StatelessWidget {
                           onDismiss: () => onDismissTask(task.id),
                           onCancel: () => onCancelTask(task.id),
                           onPauseToggle: () => onPauseToggle(task.id),
+                          canRetry: canRetryTask(task),
                         );
                       },
                     ),
@@ -233,6 +236,7 @@ class _SftpTaskRow extends StatelessWidget {
     required this.onDismiss,
     required this.onCancel,
     required this.onPauseToggle,
+    required this.canRetry,
     this.queuePosition,
   });
 
@@ -240,6 +244,7 @@ class _SftpTaskRow extends StatelessWidget {
   final VoidCallback onDismiss;
   final VoidCallback onCancel;
   final VoidCallback onPauseToggle;
+  final bool canRetry;
   final int? queuePosition;
 
   @override
@@ -253,6 +258,7 @@ class _SftpTaskRow extends StatelessWidget {
         ? (task.bytes / task.totalBytes).clamp(0.0, 1.0).toDouble()
         : null;
     final pathUnavailable = _sftpTaskLocalPathUnavailable(task);
+    final transferControl = _sftpTransferControl(task, canRetry: canRetry);
 
     return SizedBox(
       height: 45,
@@ -335,35 +341,21 @@ class _SftpTaskRow extends StatelessWidget {
                 ),
               ),
             ),
-          if (_isPausableSftpTask(task) &&
-              (task.status == _SftpTaskStatus.queued ||
-                  task.status == _SftpTaskStatus.running ||
-                  task.status == _SftpTaskStatus.paused))
+          if (transferControl != null)
             Positioned(
               right: 35,
               top: 8,
               child: Tooltip(
-                message: task.status == _SftpTaskStatus.paused
-                    ? tr('common.action.continue', fallback: 'Continue')
-                    : tr('common.action.pause', fallback: 'Pause'),
+                message: transferControl.label,
                 child: InkResponse(
                   radius: 15,
-                  onTap:
-                      task.pauseRequested ||
-                          task.cancelRequested ||
-                          (task.status != _SftpTaskStatus.queued &&
-                              task.status != _SftpTaskStatus.running &&
-                              task.status != _SftpTaskStatus.paused)
-                      ? null
-                      : onPauseToggle,
+                  onTap: transferControl.enabled ? onPauseToggle : null,
                   child: Icon(
-                    task.status == _SftpTaskStatus.paused
-                        ? LucideIcons.play
-                        : LucideIcons.circlePause,
+                    transferControl.icon,
                     size: 13,
-                    color: task.pauseRequested || task.cancelRequested
-                        ? const Color(0xffb7c6cc)
-                        : const Color(0xff182433),
+                    color: transferControl.enabled
+                        ? const Color(0xff182433)
+                        : const Color(0xffb7c6cc),
                   ),
                 ),
               ),
@@ -399,6 +391,32 @@ class _SftpTaskRow extends StatelessWidget {
       ),
     );
   }
+}
+
+({String label, IconData icon, bool enabled})? _sftpTransferControl(
+  _SftpTask task, {
+  required bool canRetry,
+}) {
+  if (!_isPausableSftpTask(task)) return null;
+  final enabled = !task.pauseRequested && !task.cancelRequested;
+  return switch (task.status) {
+    _SftpTaskStatus.failed when canRetry => (
+      label: tr('sftp.transfer.action.retry', fallback: 'Retry transfer'),
+      icon: LucideIcons.play,
+      enabled: enabled,
+    ),
+    _SftpTaskStatus.paused => (
+      label: tr('common.action.continue', fallback: 'Continue'),
+      icon: LucideIcons.play,
+      enabled: enabled,
+    ),
+    _SftpTaskStatus.queued || _SftpTaskStatus.running => (
+      label: tr('common.action.pause', fallback: 'Pause'),
+      icon: LucideIcons.circlePause,
+      enabled: enabled,
+    ),
+    _ => null,
+  };
 }
 
 class _SftpTaskTextAction extends StatelessWidget {

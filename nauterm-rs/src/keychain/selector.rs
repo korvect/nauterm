@@ -35,10 +35,12 @@ impl KeyKind {
     }
     fn action(self) -> SelectAction {
         match self {
-            Self::Key => SelectAction::new("key", "Create key", self.icon()),
-            Self::Certificate => {
-                SelectAction::new("certificate", "Create certificate", self.icon())
-            }
+            Self::Key => SelectAction::new("key", "workspace.credentials.createKey", self.icon()),
+            Self::Certificate => SelectAction::new(
+                "certificate",
+                "workspace.credentials.createCertificate",
+                self.icon(),
+            ),
         }
     }
 }

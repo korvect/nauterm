@@ -162,8 +162,11 @@ class _QueuedSftpTaskExecution {
     required this.refreshRemote,
     this.localSession,
     this.remoteSession,
-    this.persistHistory = true,
+    required this.persistHistory,
+    this.historyUuid,
+    this.hostUuid,
     this.withSudo = false,
+    this.verifiedSudoSessionId,
   });
 
   final int nativeTaskId;
@@ -174,7 +177,10 @@ class _QueuedSftpTaskExecution {
   final _SftpLocalPaneSession? localSession;
   final _SftpRemotePaneSession? remoteSession;
   final bool persistHistory;
+  final String? historyUuid;
+  final String? hostUuid;
   final bool withSudo;
+  final String? verifiedSudoSessionId;
 
   _QueuedSftpTaskExecution withNativeTaskId(int value) {
     return _QueuedSftpTaskExecution(
@@ -186,7 +192,10 @@ class _QueuedSftpTaskExecution {
       localSession: localSession,
       remoteSession: remoteSession,
       persistHistory: persistHistory,
+      historyUuid: historyUuid,
+      hostUuid: hostUuid,
       withSudo: withSudo,
+      verifiedSudoSessionId: verifiedSudoSessionId,
     );
   }
 }

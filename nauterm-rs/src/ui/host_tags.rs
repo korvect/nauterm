@@ -157,7 +157,7 @@ impl Nauterm {
         let draft = self.rename_tag.as_ref()?;
         let focus = draft.input.read(cx).focus_handle(cx);
         Some(
-            Modal::new("rename-tag-modal", "Rename tag")
+            Modal::new("rename-tag-modal", "workspace.label.renameTag")
                 .return_focus(&self.focus)
                 .initial_focus(&focus)
                 .on_dismiss(cx.listener(|this, _, _, cx| {
@@ -166,23 +166,23 @@ impl Nauterm {
                 }))
                 .on_confirm(cx.listener(|this, _, _, cx| this.save_renamed_tag(cx)))
                 .content(
-                    DialogFrame::new("rename-tag-frame", "Rename tag")
+                    DialogFrame::new("rename-tag-frame", "workspace.label.renameTag")
                         .width(360.)
                         .colors(DialogColors::workspace(self.data.dark))
                         .content(
-                            Field::input(&draft.input, "Name")
+                            Field::input(&draft.input, "common.label.name")
                                 .error(draft.validation_error.clone()),
                         )
                         .action(
                             Button::new("cancel-rename-tag")
                                 .ghost()
-                                .label("Cancel")
+                                .label("common.action.cancel")
                                 .on_click(|_, window, cx| Modal::dismiss(window, cx)),
                         )
                         .action(
                             Button::new("save-rename-tag")
                                 .accent()
-                                .label("Save")
+                                .label("common.action.save")
                                 .disabled(!self.resources_ready())
                                 .on_click(cx.listener(|this, _, _, cx| this.save_renamed_tag(cx))),
                         ),

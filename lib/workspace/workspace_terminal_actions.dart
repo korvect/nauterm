@@ -656,26 +656,54 @@ extension _NautermWorkspaceTerminalActions on _NautermWorkspaceState {
   Future<bool> _confirmApplicationExit({required bool closeWindow}) async {
     final tabCount = _allTerminalTabs.length;
     final forwardCount = _runningPortForwardIds.length;
-    if (tabCount == 0 && forwardCount == 0) {
+    final hasSftpWork = _workspaceSftpPanes.any((pane) => pane._hasPendingWork);
+    final hasExternalEdits = _workspaceSftpPanes.any(
+      (pane) => pane._externalEditSessions.isNotEmpty,
+    );
+    final exportingKey = _workspaceKeyExportsInProgress.isNotEmpty;
+    if (tabCount == 0 &&
+        forwardCount == 0 &&
+        !hasSftpWork &&
+        !hasExternalEdits &&
+        !exportingKey) {
       _restoreOnShutdown = false;
       return true;
     }
 
     final scope = closeWindow ? 'workspace.closeWindow' : 'workspace.quit';
     final messageKey = switch ((tabCount, forwardCount)) {
+      (0, 0) => null,
       (0, _) => 'activeForwards',
       (1, 0) => 'openTab',
       (_, 0) => 'openTabs',
       _ => 'openTabsAndForwards',
     };
-    final message = context.tr(
-      '$scope.$messageKey',
-      args: {
-        'count': tabCount == 0 ? forwardCount : tabCount,
-        'tabs': tabCount,
-        'forwards': forwardCount,
-      },
+    final hasRemoteSessions = _allTerminalTabs.any(
+      (tab) => tab.controllers.any(
+        (terminal) =>
+            terminal.connectionStatus.phase ==
+                TerminalConnectionPhase.connected &&
+            (terminal.sshProfile != null || terminal.telnetProfile != null),
+      ),
     );
+    final message = [
+      if (messageKey != null)
+        context.tr(
+          '$scope.$messageKey',
+          args: {
+            'count': tabCount == 0 ? forwardCount : tabCount,
+            'tabs': tabCount,
+            'forwards': forwardCount,
+          },
+        ),
+      if (hasRemoteSessions)
+        context.tr('workspace.closeWindow.remoteSessions.description'),
+      if (hasSftpWork) context.tr('workspace.closeWindow.sftpInProgress'),
+      if (exportingKey)
+        context.tr('workspace.closeWindow.keyExport.description'),
+      if (hasExternalEdits)
+        context.tr('workspace.closeWindow.externalEdits.description'),
+    ].join('\n\n');
     final result = await _showWorkspaceDialog<bool>(
       builder: (context) => _WorkspaceConfirmDialog(
         title: Text(
@@ -694,6 +722,7 @@ extension _NautermWorkspaceTerminalActions on _NautermWorkspaceState {
     );
     if (result != true) return false;
     _restoreOnShutdown =
+        tabCount + forwardCount > 0 &&
         workspaceRestoreBehavior != WorkspaceRestoreBehavior.never;
     return true;
   }
@@ -701,8 +730,9 @@ extension _NautermWorkspaceTerminalActions on _NautermWorkspaceState {
   Future<bool> _confirmDelete({
     required String title,
     required String message,
+    String? details,
     Map<String, Object?> messageArgs = const {},
-    String confirmLabel = 'Delete',
+    String confirmLabel = 'common.action.delete',
     _AiAssistantColors? colors,
   }) async {
     if (!mounted) {
@@ -713,6 +743,7 @@ extension _NautermWorkspaceTerminalActions on _NautermWorkspaceState {
         final dialog = _WorkspaceConfirmDialog(
           title: Text(context.tr(title)),
           message: message,
+          details: details,
           messageArgs: messageArgs,
           confirmLabel: confirmLabel,
         );
@@ -728,6 +759,7 @@ extension _NautermWorkspaceTerminalActions on _NautermWorkspaceState {
   Future<T?> _showWorkspaceDialog<T>({
     required WidgetBuilder builder,
     bool barrierDismissible = true,
+    Future<void>? dismissWhen,
   }) async {
     _overlayController.dismissTransientOverlays();
     FocusManager.instance.primaryFocus?.unfocus();
@@ -735,6 +767,7 @@ extension _NautermWorkspaceTerminalActions on _NautermWorkspaceState {
     final result = await showNautermDialog<T>(
       context: context,
       barrierDismissible: barrierDismissible,
+      dismissWhen: dismissWhen,
       builder: builder,
     );
     if (mounted) {

@@ -56,7 +56,7 @@ impl Settings {
         let prediction = SelectModel::new(
             crate::terminal_prediction::Mode::ALL
                 .into_iter()
-                .map(|mode| SelectOption::localized(mode, mode.label()))
+                .map(|mode| SelectOption::localized(mode, mode.label_key()))
                 .collect(),
             Some(self.values.terminal.ssh_prediction),
             window,
@@ -163,48 +163,56 @@ impl Settings {
                 .child(self.row(
                     "settings.terminal.shell.label",
                     "settings.terminal.shell.description",
-                    controls.shell.control("Shell", cx),
-                ))
-                .child(self.row(
-                    "settings.terminal.emulator.label",
-                    "settings.terminal.emulator.description",
-                    controls.engine.control("Emulation Engine", cx),
-                ))
-                .child(self.row(
-                    "settings.terminal.emulation.label",
-                    "settings.terminal.emulation.description",
-                    controls.emulation.control("Emulation Type", cx),
+                    controls.shell.control("settings.terminal.shell.label", cx),
                 ))
                 .child(
                     self.row(
-                        "settings.terminal.scrollback.label",
-                        "settings.terminal.scrollback.description",
-                        Input::new(&self.scrollback_lines)
-                            .digits_only()
-                            .aria_label(crate::localization::text(cx, "Scrollback Lines")),
+                        "settings.terminal.emulator.label",
+                        "settings.terminal.emulator.description",
+                        controls
+                            .engine
+                            .control("settings.terminal.emulator.label", cx),
+                    ),
+                )
+                .child(
+                    self.row(
+                        "settings.terminal.emulation.label",
+                        "settings.terminal.emulation.description",
+                        controls
+                            .emulation
+                            .control("settings.terminal.emulation.label", cx),
                     ),
                 )
                 .child(self.row(
-                    "settings.terminal.sshPrediction.label",
-                    "settings.terminal.sshPrediction.description",
-                    controls.prediction.control("SSH Local Predictive Echo", cx),
+                    "settings.terminal.scrollback.label",
+                    "settings.terminal.scrollback.description",
+                    Input::new(&self.scrollback_lines).digits_only().aria_label(
+                        crate::localization::text(cx, "settings.terminal.scrollback.label"),
+                    ),
                 ))
                 .child(
                     self.row(
-                        "settings.terminal.sshKeepalive.label",
-                        "settings.terminal.sshKeepalive.description",
-                        Input::new(&controls.keepalive)
-                            .digits_only()
-                            .aria_label(crate::localization::text(cx, "SSH Keepalive Interval")),
+                        "settings.terminal.sshPrediction.label",
+                        "settings.terminal.sshPrediction.description",
+                        controls
+                            .prediction
+                            .control("settings.terminal.sshPrediction.label", cx),
                     ),
                 )
+                .child(self.row(
+                    "settings.terminal.sshKeepalive.label",
+                    "settings.terminal.sshKeepalive.description",
+                    Input::new(&controls.keepalive).digits_only().aria_label(
+                        crate::localization::text(cx, "settings.terminal.sshKeepalive.label"),
+                    ),
+                ))
                 .child(
                     self.row(
                         "settings.terminal.multipleTabs.label",
                         "settings.terminal.multipleTabs.description",
                         Switch::new(
                             "multiple-tabs",
-                            "Multiple Tabs",
+                            "settings.terminal.multipleTabs.label",
                             self.values.terminal.multiple_tabs,
                         )
                         .on_change(cx.listener(

@@ -16,7 +16,8 @@ pub(super) struct Search {
 }
 impl Search {
     pub fn new(window: &mut Window, cx: &mut Context<Terminal>) -> Self {
-        let input = cx.new(|cx| InputState::new(window, cx).placeholder("Search terminal"));
+        let input =
+            cx.new(|cx| InputState::new(window, cx).placeholder("terminal.label.searchTerminal"));
         let events = cx.subscribe_in(&input, window, |this, _, event: &InputEvent, _, cx| {
             if this.search.visible && matches!(event, InputEvent::Change) {
                 this.run_search(Direction::Next, false, cx);
@@ -118,12 +119,12 @@ impl Terminal {
                 .as_ref()
                 .is_some_and(|result| result.found);
         let status = if self.search.error.is_some() {
-            "Error".into()
+            crate::localization::text(cx, "common.label.error").to_string()
         } else {
             self.search
                 .result
                 .as_ref()
-                .map(NativeResult::status)
+                .map(|result| result.status(crate::localization::language(cx)))
                 .unwrap_or_default()
         };
         let palette = self.appearance.palette();
@@ -147,7 +148,7 @@ impl Terminal {
                     .id("terminal-search")
                     .occlude()
                     .role(Role::Group)
-                    .aria_label(crate::localization::text(cx, "Terminal search"))
+                    .aria_label(crate::localization::text(cx, "terminal.search.label"))
                     .w_full()
                     .max_w(px(356.))
                     .min_w_0()
@@ -192,7 +193,10 @@ impl Terminal {
                                 .px(px(3.))
                                 .text_size(px(13.))
                                 .appearance(false)
-                                .aria_label(crate::localization::text(cx, "Search terminal")),
+                                .aria_label(crate::localization::text(
+                                    cx,
+                                    "terminal.label.searchTerminal",
+                                )),
                         ),
                     )
                     .when(has_query && !status.is_empty(), |view| {
@@ -202,15 +206,17 @@ impl Terminal {
                                 .role(Role::Label)
                                 .aria_label(self.search.error.as_ref().map_or_else(
                                     || {
-                                        crate::localization::message(
+                                        crate::localization::format(
                                             cx,
-                                            &format!("Search results: {status}"),
+                                            "terminal.search.status.accessibility",
+                                            &[("status", &status)],
                                         )
                                     },
                                     |error| {
-                                        crate::localization::message(
+                                        crate::localization::format(
                                             cx,
-                                            &format!("Search error: {error}"),
+                                            "terminal.search.error.accessibility",
+                                            &[("error", error)],
                                         )
                                     },
                                 ))
@@ -221,7 +227,7 @@ impl Terminal {
                                 .text_size(px(11.))
                                 .font_weight(FontWeights::SEMIBOLD)
                                 .text_color(rgb(if has_match { accent } else { error }))
-                                .child(crate::localization::message(cx, &status)),
+                                .child(status.clone()),
                         )
                     })
                     .child(
@@ -229,7 +235,7 @@ impl Terminal {
                             .xsmall()
                             .ghost()
                             .icon(IconName::ChevronUp)
-                            .tooltip("Previous match · Shift+Enter")
+                            .tooltip("terminal.search.action.previous")
                             .disabled(!has_match)
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.run_search(Direction::Previous, true, cx)
@@ -240,7 +246,7 @@ impl Terminal {
                             .xsmall()
                             .ghost()
                             .icon(IconName::ChevronDown)
-                            .tooltip("Next match · Enter")
+                            .tooltip("terminal.search.action.next")
                             .disabled(!has_match)
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.run_search(Direction::Next, true, cx)
@@ -251,7 +257,7 @@ impl Terminal {
                             .xsmall()
                             .ghost()
                             .icon(crate::assets::icon(IconName::X))
-                            .tooltip("Close search · Escape")
+                            .tooltip("terminal.search.action.close")
                             .on_click(
                                 cx.listener(|this, _, window, cx| this.hide_search(window, cx)),
                             ),

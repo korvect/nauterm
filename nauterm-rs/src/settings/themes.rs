@@ -3,6 +3,7 @@ use crate::terminal_appearance::Palette as TerminalPalette;
 use crate::theme_preview::ThemePreview;
 use gpui_kit::component::Selectable;
 
+// Keep the palette's color names in English, matching the Flutter settings.
 const COLOR_NAMES: [&str; 23] = [
     "Accent",
     "Foreground",
@@ -41,13 +42,13 @@ fn color_name(name: &'static str, color: Rgba) -> AnyElement {
         .text_color(color)
         .child(
             canvas(
-                move |bounds, window, cx| {
+                move |bounds, window, _| {
                     if bounds.size.width <= px(0.) {
                         return None;
                     }
                     let style = window.text_style();
                     let font_size = style.font_size.to_pixels(window.rem_size());
-                    let text = crate::localization::text(cx, name);
+                    let text = SharedString::from(name);
                     let run = style.to_run(text.len());
                     let line = window.text_system().shape_line(
                         text.clone(),
@@ -185,13 +186,13 @@ impl Settings {
             }))
             .into_any_element()
     }
-    fn inspector(&self) -> AnyElement {
+    fn inspector(&self, cx: &App) -> AnyElement {
         let p = Palette::settings(self.values.dark);
-        let label = |text: &'static str| {
+        let label = |text: SharedString| {
             SettingsText::Section
                 .apply(div().id(SharedString::from(format!("theme-color-section-{text}"))))
                 .role(Role::Heading)
-                .aria_label(text)
+                .aria_label(text.clone())
                 .text_color(rgb(0x6b7280))
                 .child(TrackedText::new(text, px(0.8)))
         };
@@ -239,14 +240,14 @@ impl Settings {
             .p(px(14.))
             .flex()
             .flex_col()
-            .child(group("PRIMARY", 10., self.color_row(0..3, false)))
+            .child(group("PRIMARY".into(), 10., self.color_row(0..3, false)))
             .child(divider())
-            .child(group("CURSOR", 10., self.color_row(3..5, false)))
+            .child(group("CURSOR".into(), 10., self.color_row(3..5, false)))
             .child(divider())
-            .child(group("SELECTION", 10., self.color_row(5..7, false)))
+            .child(group("SELECTION".into(), 10., self.color_row(5..7, false)))
             .child(divider())
             .child(group(
-                "ANSI COLORS",
+                crate::localization::text(cx, "settings.terminal.theme.ansiColors.label"),
                 12.,
                 div()
                     .w_full()
@@ -282,7 +283,7 @@ impl Settings {
         };
         div().w_full().flex().flex_col().gap(px(14.))
             .child(self.row("settings.terminal.followTheme.title", "settings.terminal.followTheme.description",
-                Switch::new("follow-terminal-appearance", "Switch themes automatically", self.values.terminal.follow_app_theme)
+                Switch::new("follow-terminal-appearance", "settings.terminal.followTheme.title", self.values.terminal.follow_app_theme)
                     .on_change(cx.listener(|this, value, window, cx| {
                         this.values.terminal.follow_app_theme = *value;
                         this.changed(window, cx);
@@ -296,7 +297,7 @@ impl Settings {
                     let (theme, custom) = self.values.terminal.theme_for_mode(dark);
                     let title = if custom.is_some() { "Custom".into() } else { theme.label() };
                     div().flex_1().min_w_0().flex().flex_col().gap(px(4.))
-                        .child(crate::localization::text(cx, if dark { "Dark theme" } else { "Light theme" }))
+                        .child(crate::localization::text(cx, if dark { "settings.terminal.darkTheme" } else { "settings.terminal.lightTheme" }))
                         .child(Button::new(if dark { "edit-dark-terminal-theme" } else { "edit-light-terminal-theme" })
                             .ghost().p_0().h(px(ThemePreview::COMPACT_HEIGHT))
                             .child(ThemePreview::new(title, self.values.terminal.palette_for_mode(dark))
@@ -306,12 +307,12 @@ impl Settings {
                                 this.refresh_theme_colors(window, cx);
                             })))
                 })))
-                .child(self.inspector()))
+                .child(self.inspector(cx)))
             .child(div().min_w_0().h(px(620.))
                 .when(compact, |view| view.w_full())
                 .when(!compact, |view| view.flex_1())
                 .rounded(px(10.)).border_1().border_color(p.border).bg(p.sidebar).p(px(10.)).flex().flex_col().gap(px(10.))
-                .child(Input::new(&self.theme_search).small().aria_label(crate::localization::text(cx, "Search themes")).cleanable(true).prefix(Icon::new(IconName::Search).with_size(px(14.))))
+                .child(Input::new(&self.theme_search).small().aria_label(crate::localization::text(cx, "common.label.searchThemes")).cleanable(true).prefix(Icon::new(IconName::Search).with_size(px(14.))))
                 .child(div().flex_1().min_h_0().overflow_hidden()
                     .when(!ready, |view| view.flex().items_center().justify_center().child(crate::components::Spinner::new()))
                     .when(ready && row_count == 0, |view| view.flex().items_center().justify_center().text_color(p.muted).child(crate::localization::text(cx, "workspace.description.noMatchingThemes")))

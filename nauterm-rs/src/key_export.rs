@@ -215,7 +215,9 @@ impl KeyExport {
             filename: self.filename.read(cx).value().trim().to_owned(),
             script: self.script.read(cx).value().to_string(),
         };
-        self.host_error = host.is_none().then(|| "Select a host.".into());
+        self.host_error = host
+            .is_none()
+            .then(|| "workspace.keys.export.validation.hostRequired".into());
         self.form_errors = request.form_errors();
         let host = match host {
             Some(host) if self.form_errors.is_empty() => host,
@@ -384,7 +386,7 @@ impl KeyExport {
             .scrollbars_with(&self.scroll)
             .p(px(16.))
             .child(
-                self.section("Key").child(
+                self.section("common.label.key").child(
                     div()
                         .h(px(40.))
                         .flex()
@@ -428,7 +430,7 @@ impl KeyExport {
                 ),
             )
             .child(
-                self.section("Destination")
+                self.section("common.label.destination")
                     .mt(px(14.))
                     .child(
                         Field::trigger(
@@ -444,17 +446,17 @@ impl KeyExport {
                                     this.stage = Stage::Selecting;
                                     cx.notify();
                                 })),
-                            "Host *",
+                            "common.label.host *",
                             host.is_some(),
                         )
                         .error(self.host_error.clone()),
                     )
                     .child(
-                        Field::input(&self.location, "Location ($1) *")
+                        Field::input(&self.location, "workspace.keys.export.field.location *")
                             .error(self.form_errors.location.map(SharedString::from)),
                     )
                     .child(
-                        Field::input(&self.filename, "Filename ($2) *")
+                        Field::input(&self.filename, "workspace.keys.export.field.filename *")
                             .error(self.form_errors.filename.map(SharedString::from)),
                     )
                     .child(
@@ -466,7 +468,7 @@ impl KeyExport {
                             .text_color(p.muted)
                             .child(crate::localization::text(
                                 cx,
-                                "rs.ui.copy.exportPublicKeyInstructions",
+                                "workspace.keys.export.description",
                             )),
                     ),
             )
@@ -487,7 +489,7 @@ impl KeyExport {
                     } else {
                         IconName::ChevronRight
                     })
-                    .label("Advanced")
+                    .label("workspace.label.advanced")
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.advanced = !this.advanced;
                         cx.notify();
@@ -495,13 +497,13 @@ impl KeyExport {
             )
             .when(self.advanced, |view| {
                 view.child(
-                    self.section("Script")
+                    self.section("common.label.script")
                         .mt(px(8.))
                         .child(div().text_size(px(12.)).text_color(p.muted).child(
                             crate::localization::text(cx, "workspace.keys.export.scriptHelp"),
                         ))
                         .child(
-                            Field::multiline(&self.script, "Script", 200.)
+                            Field::multiline(&self.script, "common.label.script", 200.)
                                 .error(self.form_errors.script.map(SharedString::from)),
                         ),
                 )
@@ -590,7 +592,10 @@ impl KeyExport {
                     Input::multiline(&self.result_error)
                         .readonly(true)
                         .h(px(150.))
-                        .aria_label(crate::localization::text(cx, "Key export error")),
+                        .aria_label(crate::localization::text(
+                            cx,
+                            "workspace.keys.export.failedTitle",
+                        )),
                 )
                 .child(
                     div()
@@ -647,7 +652,7 @@ impl Render for KeyExport {
             .flex_col()
             .when(self.stage != Stage::Selecting, |view| {
                 view.child(crate::components::management::drawer_header(
-                    "Export Key",
+                    crate::localization::text(cx, "workspace.label.exportKey"),
                     self.data.dark,
                     None,
                     vec![],
@@ -656,7 +661,7 @@ impl Render for KeyExport {
                             .toolbar()
                             .ghost()
                             .icon(IconName::ArrowRightToLine)
-                            .tooltip("Close export")
+                            .tooltip("common.action.close")
                             .disabled(self.running())
                             .on_click(cx.listener(|this, _, _, cx| {
                                 if !this.running() {
@@ -684,10 +689,10 @@ impl Render for KeyExport {
                                 .disabled(self.running())
                                 .loading(self.running())
                                 .label(match self.stage {
-                                    Stage::Form => "Export to host",
+                                    Stage::Form => "workspace.label.exportToHost",
                                     Stage::Running => "workspace.keys.export.inProgress",
-                                    Stage::Success => "Done",
-                                    _ => "Back",
+                                    Stage::Success => "common.action.done",
+                                    _ => "common.action.back",
                                 })
                                 .on_click(cx.listener(|this, _, window, cx| match this.stage {
                                     Stage::Form => this.start(window, cx),

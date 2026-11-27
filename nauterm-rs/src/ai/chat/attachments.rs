@@ -1,11 +1,11 @@
 use super::*;
 use crate::ai::attachment::{Attachment, MAX_COUNT, Summary};
 
-pub(super) fn badge(summary: &Summary, palette: Palette) -> Div {
+pub(super) fn badge(summary: &Summary, palette: Palette, cx: &App) -> Div {
     let name = if summary.redacted {
-        crate::localization::view(format!("{} (redacted)", summary.name)).into_any_element()
+        crate::localization::format(cx, "ai.attachment.redacted", &[("name", &summary.name)])
     } else {
-        summary.name.clone().into_any_element()
+        summary.name.clone().into()
     };
     div()
         .max_w(px(210.))
@@ -62,7 +62,7 @@ impl Chat {
             files: true,
             directories: false,
             multiple: true,
-            prompt: Some(crate::localization::text(cx, "Attach files")),
+            prompt: Some(crate::localization::text(cx, "workspace.label.attachFiles")),
         });
         cx.spawn_in(window, async move |this, cx| {
             let result = match picker.await {
@@ -124,9 +124,9 @@ impl Chat {
             .text_color(palette.muted)
             .icon(crate::assets::Glyph::PlusBold.icon())
             .tooltip(if self.picking_attachments {
-                "Loading attachments…"
+                "ai.attachment.loading"
             } else {
-                "Attach files"
+                "workspace.label.attachFiles"
             })
             .disabled(
                 self.picking_attachments
@@ -161,13 +161,17 @@ impl Chat {
                         image: attachment.kind == crate::ai::attachment::Kind::Image,
                         redacted: attachment.redacted,
                     };
-                    badge(&summary, palette).pr(px(2.)).child(
+                    badge(&summary, palette, cx).pr(px(2.)).child(
                         Button::new(SharedString::from(format!("ai-remove-attachment-{id}")))
                             .xsmall()
                             .ghost()
                             .custom(ButtonCustomVariant::for_surface(palette))
                             .icon(crate::assets::icon(IconName::X))
-                            .tooltip(format!("Remove {}", attachment.name))
+                            .tooltip(crate::localization::format(
+                                cx,
+                                "ai.attachment.remove",
+                                &[("name", &attachment.name)],
+                            ))
                             .disabled(self.picking_attachments || self.busy())
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 this.attachments.retain(|a| a.id != id);

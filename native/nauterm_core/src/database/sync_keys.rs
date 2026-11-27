@@ -1,6 +1,7 @@
 //! Opaque cache/provider snapshots for local key management. Master Keys stay
 //! in caller-owned memory and are used only by the existing envelope rewrap.
 use super::*;
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
@@ -19,7 +20,7 @@ impl SyncKeyState {
         Ok(())
     }
 }
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct SyncKeyTarget {
     pub scope: String,
     pub name: String,
@@ -30,6 +31,16 @@ pub struct SyncKeyManagement {
     providers: Vec<SyncProviderRecord>,
 }
 impl SyncKeyManagement {
+    pub(super) fn review_stamp(&self) -> String {
+        let mut hash = Sha256::new();
+        hash.update(b"nauterm-sync-key-rotation-review-v1");
+        hash.update(self.state.stamp);
+        for provider in &self.providers {
+            hash.update(provider.fingerprint());
+        }
+        URL_SAFE_NO_PAD.encode(hash.finalize())
+    }
+
     pub fn targets(&self) -> Vec<SyncKeyTarget> {
         self.providers.iter().map(target).collect()
     }
@@ -48,13 +59,14 @@ impl SyncKeyManagement {
             })
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum SyncKeyPhase {
     Updating,
     Updated,
     Failed,
 }
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct SyncKeyProgress {
     pub target: SyncKeyTarget,
     pub phase: SyncKeyPhase,
@@ -256,5 +268,49 @@ mod tests {
         }
         assert!(connected("inactive-cloud-provider", true, false));
         assert!(!connected("inactive-cloud-provider", false, true));
+    }
+
+    #[test]
+    fn json_rotation_reports_provider_failure_and_rejects_a_stale_review() {
+        let mut database = NautermDatabase::open_in_memory().unwrap();
+        database.connection.execute(
+            "INSERT INTO sync_providers
+                (uuid, provider, name, config_json, credentials_json, active, created_at, updated_at)
+             VALUES ('rotation-fixture', 'unsupported', 'Fixture', '{}', '{}', 0, 1, 1)",
+            [],
+        ).unwrap();
+        let review = database
+            .handle_json_request(r#"{"op":"review_sync_key_rotation"}"#)
+            .unwrap();
+        assert_eq!(
+            review["targets"],
+            json!([{"scope": "cloud:rotation-fixture", "name": "Fixture"}])
+        );
+        let request = json!({
+            "op": "rotate_sync_master_key",
+            "review_stamp": review["stamp"],
+            "current_master_key": "Fixture-current-123",
+            "new_master_key": "Fixture-new-123",
+            "backup_count": 0,
+        });
+        let mut progress = Vec::new();
+        let result = database
+            .handle_json_request_with_sync_key_progress(&request.to_string(), |event| {
+                progress.push(event.phase);
+            })
+            .unwrap();
+        assert_eq!(progress, [SyncKeyPhase::Updating, SyncKeyPhase::Failed]);
+        assert_eq!(result["completed"], json!([]));
+        assert_eq!(result["failed"]["scope"], "cloud:rotation-fixture");
+        assert!(result["failed"]["error"]
+            .as_str()
+            .is_some_and(|error| !error.is_empty()));
+        assert_eq!(result["retry_stamp"], review["stamp"]);
+
+        database.set_app_meta("sync_revision:fixture", "1").unwrap();
+        let error = database
+            .handle_json_request(&request.to_string())
+            .unwrap_err();
+        assert!(error.to_string().contains("Sync key details changed"));
     }
 }

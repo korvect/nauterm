@@ -146,10 +146,14 @@ impl Draft {
             },
         );
         let types = SelectModel::new(
-            [HostKind::Remote, HostKind::Local, HostKind::Serial]
-                .into_iter()
-                .map(|kind| SelectOption::localized(kind, kind.label()))
-                .collect(),
+            [
+                (HostKind::Remote, "common.label.remote"),
+                (HostKind::Local, "common.label.local"),
+                (HostKind::Serial, "common.label.serial"),
+            ]
+            .into_iter()
+            .map(|(kind, label)| SelectOption::localized(kind, label))
+            .collect(),
             Some(kind),
             window,
             cx,
@@ -400,33 +404,41 @@ impl Nauterm {
         let (endpoint_section, name_field) = if serial {
             (
                 self.editor_section(
-                    &crate::localization::text(cx, "workspace.label.serialDevice"),
+                    "workspace.label.serialDevice",
                     vec![
                         draft
                             .serial
                             .update(cx, |serial, cx| serial.device_field(cx)),
                     ],
                 ),
-                host_icon_row(avatar, self.editor_field(editor, 0, "Name *")),
+                host_icon_row(avatar, self.editor_field(editor, 0, "common.label.name *")),
             )
         } else {
             let (title, field) = if local {
-                ("Shell", draft.shells.filterable_field("Shell", draft.busy))
+                (
+                    "settings.terminal.shell.label",
+                    draft
+                        .shells
+                        .filterable_field("settings.terminal.shell.label", draft.busy),
+                )
             } else {
-                ("Address", self.editor_field(editor, 1, "Host"))
+                (
+                    "common.label.address",
+                    self.editor_field(editor, 1, "common.label.host"),
+                )
             };
             (
                 self.editor_section(title, vec![host_icon_row(avatar, field)]),
-                self.editor_field(editor, 0, "Name *"),
+                self.editor_field(editor, 0, "common.label.name *"),
             )
         };
         let mut sections = vec![
             endpoint_section,
             self.editor_section(
-                "General",
+                "common.label.general",
                 vec![
                     name_field,
-                    draft.types.field("Type", draft.busy),
+                    draft.types.field("common.label.type", draft.busy),
                     self.parent_group_field(editor),
                     editor
                         .tags
@@ -439,14 +451,19 @@ impl Nauterm {
             ),
         ];
         if serial {
-            sections
-                .push(self.editor_section("Serial", vec![draft.serial.clone().into_any_element()]));
-        } else if local {
-            sections.push(self.editor_section("Theme", vec![self.host_theme_section(editor, cx)]));
             sections.push(self.editor_section(
-                "Local",
+                "common.label.serial",
+                vec![draft.serial.clone().into_any_element()],
+            ));
+        } else if local {
+            sections.push(self.editor_section(
+                "common.label.theme",
+                vec![self.host_theme_section(editor, cx)],
+            ));
+            sections.push(self.editor_section(
+                "common.label.local",
                 vec![
-                        Field::input(&draft.directory, "Work dir")
+                        Field::input(&draft.directory, "workspace.label.workDir")
                             .disabled(draft.busy)
                             .into_any_element(),
                     ],
@@ -469,20 +486,20 @@ impl Nauterm {
         let mut fields = self.host_authentication_fields(editor, cx);
         if draft.more {
             fields.push(draft.startup.field_with_actions(
-                "Startup snippet",
+                "workspace.label.startupSnippet",
                 draft.busy || !self.snippet_state.ready || self.snippet_state.busy,
                 vec![crate::components::SelectAction::new(
                     "snippet",
-                    "Create snippet",
+                    "workspace.action.createSnippet",
                     IconName::Code,
                 )],
             ));
             fields.push(selects.proxies.field_with_actions(
-                "Proxy",
+                "common.label.proxy",
                 draft.busy,
                 vec![crate::components::SelectAction::new(
                     "proxy",
-                    "Create proxy",
+                    "workspace.action.createProxy",
                     IconName::Network,
                 )],
             ));
@@ -498,7 +515,7 @@ impl Nauterm {
                 })
                 .unwrap_or_else(|| {
                     if draft.setup.environment_id.is_some() {
-                        crate::localization::text(cx, "Configured").to_string()
+                        crate::localization::text(cx, "common.label.configured").to_string()
                     } else {
                         String::new()
                     }
@@ -517,13 +534,13 @@ impl Nauterm {
                         .on_click(cx.listener(|this, _, window, cx| {
                             this.open_host_environment(window, cx)
                         })),
-                    "Environment variables",
+                    "workspace.label.environmentVariables",
                     !summary.is_empty() || draft.setup.environment_id.is_some(),
                 )
                 .disabled(draft.busy || draft.inheriting)
                 .into_any_element(),
             );
-            fields.push(draft.encoding.field("Encoding", draft.busy));
+            fields.push(draft.encoding.field("common.label.encoding", draft.busy));
             fields.extend(draft.mosh.fields(draft.busy));
             if editor.kind == ItemKind::Host {
                 fields.push(self.ssh_compatibility_mode(draft, cx));

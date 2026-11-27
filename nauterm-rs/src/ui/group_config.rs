@@ -25,7 +25,7 @@ impl Nauterm {
     ) -> Vec<AnyElement> {
         let draft = editor.host.as_ref().unwrap();
         let mut sections = vec![self.editor_section(
-            "General",
+            "common.label.general",
             vec![
                 div()
                     .flex()
@@ -36,7 +36,7 @@ impl Nauterm {
                         div()
                             .flex_1()
                             .min_w_0()
-                            .child(self.editor_field(editor, 0, "Name *")),
+                            .child(self.editor_field(editor, 0, "common.label.name *")),
                     )
                     .into_any_element(),
                 self.parent_group_field(editor),

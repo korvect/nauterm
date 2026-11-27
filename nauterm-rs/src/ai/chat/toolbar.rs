@@ -71,9 +71,9 @@ impl Chat {
                     .text_size(px(13.))
                     .font_weight(crate::typography::FontWeights::MEDIUM)
                     .child(crate::localization::view(if state.history {
-                        "Conversation history"
+                        "workspace.label.conversationHistory"
                     } else {
-                        "AI Assistant"
+                        "common.label.aiAssistant"
                     })),
             )
             .when(!state.history, |bar| {
@@ -96,9 +96,9 @@ impl Chat {
                 IconName::RotateCcwClock
             })
             .tooltip(if state.history {
-                "Back to conversation"
+                "workspace.label.backToConversation"
             } else {
-                "Conversation history"
+                "workspace.label.conversationHistory"
             })
             .disabled(state.blocked)
             .on_click(move |_, window, cx| {
@@ -119,9 +119,9 @@ impl Chat {
                 IconName::MessageSquarePlus
             })
             .tooltip(if state.history {
-                "Refresh conversations"
+                "workspace.label.refreshHistory"
             } else {
-                "New conversation"
+                "common.label.newConversation"
             })
             .disabled(state.blocked || (!state.history && state.empty))
             .on_click(move |_, window, cx| {

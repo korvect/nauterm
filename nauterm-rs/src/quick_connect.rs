@@ -402,7 +402,11 @@ impl QuickConnect {
         .rounded_none()
         .when(first, |row| row.rounded_t(px(7.)))
         .when(last, |row| row.rounded_b(px(7.)))
-        .localized_accessibility_label(format!("Connect to {}", host.name))
+        .accessibility_label(crate::localization::format(
+            cx,
+            "workspace.quickConnect.host.accessibility",
+            &[("host", &host.name)],
+        ))
         .on_click(cx.listener(move |_, _, _, cx| {
             cx.emit(QuickConnectEvent::connect(Target::Host(target.clone())))
         }))
@@ -455,7 +459,7 @@ impl QuickConnect {
                             .flex_shrink_0()
                             .px(px(11.))
                             .label("SSH")
-                            .tooltip("Connect with SSH")
+                            .tooltip("workspace.label.connectWithSsh")
                             .on_click(cx.listener(move |_, _, _, cx| {
                                 cx.emit(QuickConnectEvent::connect(Target::SavedSsh(
                                     ssh_target.clone(),
@@ -475,7 +479,7 @@ impl QuickConnect {
                         .flex_shrink_0()
                         .px(px(11.))
                         .label("Mosh")
-                        .tooltip("Connect with Mosh")
+                        .tooltip("workspace.label.connectWithMosh")
                         .on_click(cx.listener(move |_, _, _, cx| {
                             cx.emit(QuickConnectEvent::connect(Target::SavedMosh(
                                 mosh_target.clone(),
@@ -495,7 +499,7 @@ impl QuickConnect {
                         .flex_shrink_0()
                         .px(px(11.))
                         .label("Telnet")
-                        .tooltip("Connect with Telnet")
+                        .tooltip("workspace.label.connectWithTelnet")
                         .on_click(cx.listener(move |_, _, _, cx| {
                             cx.emit(QuickConnectEvent::connect(Target::SavedTelnet(
                                 telnet_target.clone(),
@@ -511,8 +515,8 @@ impl QuickConnect {
                             .outline()
                             .flex_shrink_0()
                             .px(px(11.))
-                            .label("SFTP")
-                            .tooltip("Connect with SFTP")
+                            .label("settings.pages.sftp.title")
+                            .tooltip("workspace.label.connectWithSftp")
                             .on_click(cx.listener(move |_, _, _, cx| {
                                 cx.emit(QuickConnectEvent::connect(Target::Sftp(
                                     sftp_target.clone(),
@@ -546,7 +550,7 @@ impl QuickConnect {
             format!("{}@{}", host.username, address_label(&host))
         };
         let action = if host.connections.mosh {
-            "Connect"
+            "common.action.connect"
         } else {
             "SSH"
         };
@@ -592,7 +596,11 @@ impl QuickConnect {
                     .flex_shrink_0()
                     .px(px(12.))
                     .label(action)
-                    .localized_accessibility_label(format!("Connect to {label}"))
+                    .accessibility_label(crate::localization::format(
+                        cx,
+                        "workspace.quickConnect.host.accessibility",
+                        &[("host", &label)],
+                    ))
                     .on_click(cx.listener(move |_, _, _, cx| {
                         cx.emit(QuickConnectEvent::connect(Target::Host(host.clone())))
                     })),
@@ -707,7 +715,7 @@ impl Render for QuickConnect {
                                     .xsmall()
                                     .ghost()
                                     .icon(crate::assets::icon(IconName::X))
-                                    .tooltip("Close")
+                                    .tooltip("common.action.close")
                                     .on_click(cx.listener(|_, _, _, cx| {
                                         cx.emit(QuickConnectEvent::Dismiss)
                                     })),
@@ -730,7 +738,10 @@ impl Render for QuickConnect {
                                     .with_size(px(16.))
                                     .text_color(p.muted),
                             )
-                            .aria_label(crate::localization::text(cx, "Quick Connect search")),
+                            .aria_label(crate::localization::text(
+                                cx,
+                                "workspace.search.quickConnect.placeholder",
+                            )),
                     ),
             )
             .child(
@@ -751,7 +762,7 @@ impl Render for QuickConnect {
                             .flex()
                             .items_center()
                             .mb(px(6.))
-                            .child(section_label("Shells").flex_1())
+                            .child(section_label("common.label.shells").flex_1())
                             .when(self.shells.len() > columns * 2, |view| {
                                 view.child(
                                     Button::new("quick-shell-show-all")
@@ -763,9 +774,9 @@ impl Render for QuickConnect {
                                             IconName::ChevronDown
                                         })
                                         .label(if self.show_all {
-                                            "Show Less"
+                                            "common.label.showLess"
                                         } else {
-                                            "Show All"
+                                            "common.label.showAll"
                                         })
                                         .on_click(cx.listener(|this, _, _, cx| {
                                             this.show_all = !this.show_all;
@@ -775,7 +786,7 @@ impl Render for QuickConnect {
                             }),
                     )
                     .when(shells.is_empty(), |view| {
-                        view.child(empty_state("No local shells found.", p, cx))
+                        view.child(empty_state("workspace.quickConnect.shells.empty", p, cx))
                     })
                     .child(
                         div()
@@ -822,7 +833,7 @@ impl Render for QuickConnect {
                                     )
                             })),
                     )
-                    .child(section_label("Hosts").mt(px(14.)).mb(px(6.)))
+                    .child(section_label("common.label.hosts").mt(px(14.)).mb(px(6.)))
                     .when_some(target, |view, target| match target {
                         Target::Telnet(options) => view.child(self.telnet_row(options, cx)),
                         Target::Host(host) => view.child(self.direct_row(host, cx)),
@@ -841,7 +852,7 @@ impl Render for QuickConnect {
                         _ => view,
                     })
                     .when(host_count == 0, |view| {
-                        view.child(empty_state("No hosts found.", p, cx))
+                        view.child(empty_state("workspace.label.noHostsFound", p, cx))
                     })
                     .when(host_count > 0, |view| view.child(host_list)),
             )

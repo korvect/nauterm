@@ -1,15 +1,20 @@
 part of 'nauterm_workspace.dart';
 
-class _SftpPaneDragPayload {
-  const _SftpPaneDragPayload({
-    required this.sourceSlot,
-    required this.sourceRemote,
-    required this.entries,
-  });
+typedef _SftpPaneLocation = ({
+  String sessionId,
+  _SftpPaneSlot slot,
+  _SftpPaneEndpoint endpoint,
+  String path,
+  int revision,
+});
 
-  final _SftpPaneSlot sourceSlot;
-  final bool sourceRemote;
+class _SftpPaneDragPayload {
+  const _SftpPaneDragPayload({required this.source, required this.entries});
+
+  final _SftpPaneLocation source;
   final List<_SftpFileEntry> entries;
+
+  bool get sourceRemote => source.endpoint == _SftpPaneEndpoint.remote;
 }
 
 class _SftpLocalPane extends StatelessWidget {
@@ -18,6 +23,7 @@ class _SftpLocalPane extends StatelessWidget {
     required this.icon,
     required this.iconColor,
     required this.remote,
+    this.operationBanner,
     this.onEndpointTap,
     required this.path,
     required this.pathController,
@@ -47,6 +53,7 @@ class _SftpLocalPane extends StatelessWidget {
     required this.taskListOpen,
     required this.favoriteListOpen,
     required this.favoritePaths,
+    this.favoritesStatus,
     required this.onHome,
     required this.onBack,
     required this.onForward,
@@ -58,6 +65,7 @@ class _SftpLocalPane extends StatelessWidget {
     required this.onTaskDismiss,
     required this.onTaskCancel,
     required this.onTaskPauseToggle,
+    required this.canRetryTask,
     required this.onPathPanelDismiss,
     required this.onPathFavoriteToggle,
     required this.onFavoriteListToggle,
@@ -75,6 +83,7 @@ class _SftpLocalPane extends StatelessWidget {
   final IconData icon;
   final Color iconColor;
   final bool remote;
+  final Widget? operationBanner;
   final VoidCallback? onEndpointTap;
   final String path;
   final TextEditingController pathController;
@@ -104,6 +113,7 @@ class _SftpLocalPane extends StatelessWidget {
   final bool taskListOpen;
   final bool favoriteListOpen;
   final List<String> favoritePaths;
+  final Widget? favoritesStatus;
   final VoidCallback onHome;
   final VoidCallback onBack;
   final VoidCallback onForward;
@@ -115,8 +125,9 @@ class _SftpLocalPane extends StatelessWidget {
   final ValueChanged<int> onTaskDismiss;
   final ValueChanged<int> onTaskCancel;
   final ValueChanged<int> onTaskPauseToggle;
+  final bool Function(_SftpTask) canRetryTask;
   final VoidCallback onPathPanelDismiss;
-  final VoidCallback onPathFavoriteToggle;
+  final VoidCallback? onPathFavoriteToggle;
   final VoidCallback onFavoriteListToggle;
   final ValueChanged<String> onFavoritePathSelected;
   final ValueChanged<_SftpSelectionChange> onSelectionChanged;
@@ -209,6 +220,7 @@ class _SftpLocalPane extends StatelessWidget {
                     onPathFavoriteToggle: onPathFavoriteToggle,
                     onFavoriteListToggle: onFavoriteListToggle,
                   ),
+                  ?operationBanner,
                   _SftpTableHeader(
                     sortColumn: sortColumn,
                     sortAscending: sortAscending,
@@ -258,6 +270,7 @@ class _SftpLocalPane extends StatelessWidget {
                     onDismissTask: onTaskDismiss,
                     onCancelTask: onTaskCancel,
                     onPauseToggle: onTaskPauseToggle,
+                    canRetryTask: canRetryTask,
                   ),
                 ),
               if (remote &&
@@ -270,6 +283,7 @@ class _SftpLocalPane extends StatelessWidget {
                   width: panelWidth,
                   child: _SftpFavoritePathsPanel(
                     favoritePaths: favoritePaths,
+                    status: favoritesStatus,
                     onSelected: onFavoritePathSelected,
                   ),
                 ),
@@ -334,10 +348,16 @@ class _SftpLocalToolbar extends StatelessWidget {
           _SftpToolbarFilter(controller: filterController),
           if (onSshSelected != null) ...[
             SizedBox(width: 10),
-            _SftpToolbarTextButton(
-              icon: LucideIcons.squareTerminal,
-              label: 'SSH',
-              onTap: onSshSelected,
+            Tooltip(
+              message: context.tr(
+                'sftp.action.showTerminal',
+                fallback: 'Show terminal',
+              ),
+              child: _SftpToolbarTextButton(
+                icon: LucideIcons.squareTerminal,
+                label: 'SSH',
+                onTap: onSshSelected,
+              ),
             ),
           ],
           SizedBox(width: 14),
@@ -768,7 +788,7 @@ class _SftpPathBar extends StatelessWidget {
   final List<String> favoritePaths;
   final bool pathFavorited;
   final VoidCallback onTaskListToggle;
-  final VoidCallback onPathFavoriteToggle;
+  final VoidCallback? onPathFavoriteToggle;
   final VoidCallback onFavoriteListToggle;
 
   @override
@@ -1039,10 +1059,12 @@ class _SftpFavoritePathsPanel extends StatelessWidget {
   const _SftpFavoritePathsPanel({
     required this.favoritePaths,
     required this.onSelected,
+    this.status,
   });
 
   final List<String> favoritePaths;
   final ValueChanged<String> onSelected;
+  final Widget? status;
 
   @override
   Widget build(BuildContext context) {
@@ -1068,33 +1090,80 @@ class _SftpFavoritePathsPanel extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: favoritePaths.isEmpty
-                ? const _SftpFavoritePathsEmptyState()
-                : ClipRRect(
-                    borderRadius: const BorderRadius.vertical(
-                      bottom: Radius.circular(8),
-                    ),
-                    child: ListView.separated(
-                      padding: EdgeInsets.zero,
-                      itemCount: favoritePaths.length,
-                      separatorBuilder: (_, _) => Divider(
-                        height: 1,
-                        thickness: 1,
-                        indent: 13,
-                        endIndent: 13,
-                        color: _workspaceMenuBorder,
-                      ),
-                      itemBuilder: (context, index) {
-                        final path = favoritePaths[index];
-                        return _SftpFavoritePathRow(
-                          path: path,
-                          onTap: () => onSelected(path),
-                        );
-                      },
-                    ),
-                  ),
+            child:
+                status ??
+                (favoritePaths.isEmpty
+                    ? const _SftpFavoritePathsEmptyState()
+                    : ClipRRect(
+                        borderRadius: const BorderRadius.vertical(
+                          bottom: Radius.circular(8),
+                        ),
+                        child: ListView.separated(
+                          padding: EdgeInsets.zero,
+                          itemCount: favoritePaths.length,
+                          separatorBuilder: (_, _) => Divider(
+                            height: 1,
+                            thickness: 1,
+                            indent: 13,
+                            endIndent: 13,
+                            color: _workspaceMenuBorder,
+                          ),
+                          itemBuilder: (context, index) {
+                            final path = favoritePaths[index];
+                            return _SftpFavoritePathRow(
+                              path: path,
+                              onTap: () => onSelected(path),
+                            );
+                          },
+                        ),
+                      )),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _SftpFavoritesStatus extends StatelessWidget {
+  const _SftpFavoritesStatus({
+    required this.error,
+    required this.color,
+    required this.onRetry,
+  });
+
+  final Object? error;
+  final Color color;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              error?.toString() ??
+                  context.tr(
+                    'sftp.favorites.loading',
+                    fallback: 'Loading favorites…',
+                  ),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: color,
+                fontSize: NautermFontSizes.labelSmall,
+              ),
+            ),
+            if (error != null)
+              TextButton(
+                onPressed: onRetry,
+                child: Text(
+                  context.tr('common.action.retry', fallback: 'Retry'),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -1210,37 +1279,59 @@ class _SftpPathInput extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       height: 32,
-      child: TextField(
-        controller: controller,
-        focusNode: focusNode,
-        autofocus: true,
-        onSubmitted: onSubmitted,
-        onTapOutside: (_) => onCancelled(),
-        style: TextStyle(
-          color: _text,
-          fontSize: NautermFontSizes.labelLarge,
-          fontWeight: NautermFontWeights.medium,
-          letterSpacing: 0,
-        ),
-        decoration: InputDecoration(
-          isDense: true,
-          filled: true,
-          fillColor: _sidebarHover,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 10,
-            vertical: 8,
-          ),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(5),
-            borderSide: BorderSide(color: _sidebarDivider),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(5),
-            borderSide: BorderSide(color: _sidebarDivider),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(5),
-            borderSide: BorderSide(color: _blue.withValues(alpha: 0.52)),
+      child: Semantics(
+        label: tr('sftp.action.editPath', fallback: 'Edit path'),
+        child: CallbackShortcuts(
+          bindings: {
+            const SingleActivator(LogicalKeyboardKey.escape): onCancelled,
+          },
+          child: TextField(
+            key: const ValueKey('sftp-path-editor'),
+            controller: controller,
+            focusNode: focusNode,
+            autofocus: true,
+            onSubmitted: onSubmitted,
+            onTapOutside: (_) => onCancelled(),
+            style: TextStyle(
+              color: _text,
+              fontSize: NautermFontSizes.labelLarge,
+              fontWeight: NautermFontWeights.medium,
+              letterSpacing: 0,
+            ),
+            decoration: InputDecoration(
+              isDense: true,
+              filled: true,
+              fillColor: _sidebarHover,
+              suffixIcon: IconButton(
+                tooltip: context.tr(
+                  'sftp.action.cancelPathEditing',
+                  fallback: 'Cancel path editing',
+                ),
+                onPressed: onCancelled,
+                icon: const Icon(LucideIcons.x, size: 13),
+                padding: EdgeInsets.zero,
+              ),
+              suffixIconConstraints: const BoxConstraints.tightFor(
+                width: 28,
+                height: 28,
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 10,
+                vertical: 8,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(5),
+                borderSide: BorderSide(color: _sidebarDivider),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(5),
+                borderSide: BorderSide(color: _sidebarDivider),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(5),
+                borderSide: BorderSide(color: _blue.withValues(alpha: 0.52)),
+              ),
+            ),
           ),
         ),
       ),
@@ -1290,6 +1381,7 @@ class _SftpBreadcrumbs extends StatelessWidget {
           return SizedBox(
             height: 32,
             child: InkWell(
+              key: const ValueKey('sftp-path-breadcrumbs'),
               borderRadius: BorderRadius.circular(6),
               hoverColor: Colors.transparent,
               highlightColor: Colors.transparent,
@@ -2134,9 +2226,7 @@ class _SftpRemoteEmptyState extends StatelessWidget {
             ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 290),
               child: Text(
-                tr(
-                  'Start by connecting to a saved host\nto manage your files with SFTP.',
-                ),
+                tr('sftp.empty.description'),
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: _mutedText,

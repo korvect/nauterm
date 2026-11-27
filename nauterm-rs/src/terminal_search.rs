@@ -114,18 +114,18 @@ impl NativeResult {
                 + i64::from(self.end_column),
         }))
     }
-    pub fn status(&self) -> String {
+    pub fn status(&self, language: crate::localization::Language) -> String {
         if self.error.is_some() {
-            "Error".into()
+            crate::localization::text_for(language, "common.label.error").to_string()
         } else if let Some(total) = self.total_matches {
             format!(
                 "{} / {total}",
                 self.match_index.map_or(0, |index| index + 1)
             )
         } else if self.found {
-            "Found".into()
+            crate::localization::text_for(language, "terminal.search.found").to_string()
         } else {
-            "No results".into()
+            crate::localization::text_for(language, "terminal.search.empty").to_string()
         }
     }
 }
@@ -325,15 +325,18 @@ mod tests {
     #[test]
     fn counters_are_one_based_but_not_invented_for_uncounted_backends() {
         let mut result = found();
-        assert_eq!(result.status(), "2 / 3");
+        let english = crate::localization::Language::English;
+        let chinese = crate::localization::Language::Chinese;
+        assert_eq!(result.status(english), "2 / 3");
         result.match_index = None;
         result.total_matches = None;
-        assert_eq!(result.status(), "Found");
+        assert_eq!(result.status(english), "Found");
         result.found = false;
-        assert_eq!(result.status(), "No results");
+        assert_eq!(result.status(english), "No results");
+        assert_eq!(result.status(chinese), "无结果");
         result.total_matches = Some(0);
-        assert_eq!(result.status(), "0 / 0");
+        assert_eq!(result.status(english), "0 / 0");
         result.error = Some("failed".into());
-        assert_eq!(result.status(), "Error");
+        assert_eq!(result.status(english), "Error");
     }
 }

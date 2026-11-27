@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -110,6 +112,126 @@ void main() {
     service.close();
   });
 
+  test('cancelling a stalled checksum request stops the download', () async {
+    final directory = Directory.systemTemp.createTempSync(
+      'nauterm-update-test-',
+    );
+    addTearDown(() => directory.deleteSync(recursive: true));
+    final release = _release();
+    final cancellation = DesktopUpdateCancellation();
+    final requesting = Completer<void>();
+    final service = DesktopUpdateService(
+      stagingRoot: directory,
+      client: MockClient.streaming((request, _) async {
+        expect(request.url, release.checksumsUri);
+        requesting.complete();
+        await (request as http.Abortable).abortTrigger;
+        throw http.RequestAbortedException(request.url);
+      }),
+    );
+    addTearDown(service.close);
+
+    final download = service.download(release, cancellation: cancellation);
+    final stopped = expectLater(
+      download,
+      throwsA(isA<DesktopUpdateDownloadCancelled>()),
+    );
+    await requesting.future;
+    cancellation.cancel();
+    await stopped;
+    expect(directory.listSync(), isEmpty);
+  });
+
+  test('cancelled and invalid update downloads remove staged files', () async {
+    final directory = Directory.systemTemp.createTempSync(
+      'nauterm-update-test-',
+    );
+    addTearDown(() => directory.deleteSync(recursive: true));
+    final release = _release();
+    final cancellation = DesktopUpdateCancellation();
+    final received = Completer<void>();
+    final body = StreamController<List<int>>();
+    final service = DesktopUpdateService(
+      stagingRoot: directory,
+      client: MockClient.streaming((request, _) async {
+        if (request.url == release.checksumsUri) {
+          return http.StreamedResponse(Stream.value(_manifest(release)), 200);
+        }
+        if (cancellation.isCancelled) {
+          return http.StreamedResponse(
+            Stream.value(utf8.encode('different bytes')),
+            200,
+          );
+        }
+        unawaited(
+          (request as http.Abortable).abortTrigger!.then((_) {
+            body.addError(http.RequestAbortedException(request.url));
+            return body.close();
+          }),
+        );
+        body.add(utf8.encode('partial'));
+        return http.StreamedResponse(body.stream, 200);
+      }),
+    );
+    addTearDown(service.close);
+
+    final download = service.download(
+      release,
+      cancellation: cancellation,
+      onProgress: (_, _) => received.complete(),
+    );
+    final stopped = expectLater(
+      download,
+      throwsA(isA<DesktopUpdateDownloadCancelled>()),
+    );
+    await received.future;
+    expect(directory.listSync(), hasLength(1));
+    cancellation.cancel();
+    await stopped;
+    expect(directory.listSync(), isEmpty);
+
+    await expectLater(
+      service.download(release),
+      throwsA(isA<DesktopUpdateException>()),
+    );
+    expect(directory.listSync(), isEmpty);
+  });
+
+  test(
+    'verified updates can be discarded and modified packages are refused',
+    () async {
+      final directory = Directory.systemTemp.createTempSync(
+        'nauterm-update-test-',
+      );
+      addTearDown(() => directory.deleteSync(recursive: true));
+      final release = _release();
+      final stages = <DesktopUpdateDownloadStage>[];
+      final service = DesktopUpdateService(
+        stagingRoot: directory,
+        client: MockClient(
+          (request) async => http.Response.bytes(
+            request.url == release.checksumsUri ? _manifest(release) : _package,
+            200,
+          ),
+        ),
+        processRunner: (_, _) =>
+            throw StateError('The installer must not run.'),
+      );
+      addTearDown(service.close);
+
+      final download = await service.download(release, onStage: stages.add);
+      expect(stages, DesktopUpdateDownloadStage.values);
+      expect(download.file.readAsBytesSync(), _package);
+      await download.file.writeAsString('modified');
+      await expectLater(
+        service.installVerified(download, DesktopUpdateAssetKind.deb),
+        throwsA(isA<DesktopUpdateException>()),
+      );
+      await download.discard();
+      expect(directory.listSync(), isEmpty);
+    },
+  );
+
   test(
     'Linux package installation waits for the installer to finish',
     () async {
@@ -180,3 +302,22 @@ void main() {
 
 ({String name, Uri? uri, int size}) _asset(String name) =>
     (name: name, uri: Uri.parse('https://example.com/$name'), size: 100);
+
+final _package = utf8.encode('synthetic package bytes');
+
+DesktopUpdateRelease _release() => DesktopUpdateRelease(
+  version: '2.0.0',
+  title: 'Nauterm 2.0.0',
+  notes: 'Example release',
+  releaseUri: Uri.parse('https://example.com/releases/2.0.0'),
+  asset: DesktopUpdateAsset(
+    name: 'nauterm_2.0.0_amd64.deb',
+    downloadUri: Uri.parse('https://example.com/package'),
+    size: _package.length,
+    kind: DesktopUpdateAssetKind.deb,
+  ),
+  checksumsUri: Uri.parse('https://example.com/SHA256SUMS.txt'),
+);
+
+List<int> _manifest(DesktopUpdateRelease release) =>
+    utf8.encode('${sha256.convert(_package)}  ${release.asset.name}\n');

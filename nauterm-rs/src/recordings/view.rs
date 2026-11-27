@@ -59,6 +59,7 @@ pub struct Logs {
     busy: bool,
     dark: bool,
     error: Option<String>,
+    catalog_error: Option<(String, bool)>,
     notice: Option<crate::components::message::Message>,
     deletion: Option<Vec<Entry>>,
     detail: Option<Entry>,
@@ -183,6 +184,7 @@ impl Logs {
             refresh_pending: false,
             busy: false,
             error: None,
+            catalog_error: None,
             notice: None,
             deletion: None,
             detail: None,
@@ -220,6 +222,7 @@ impl Logs {
         self.refresh_pending = false;
         self.loading = true;
         self.error = None;
+        self.catalog_error = None;
         let service = self.service.clone();
         let limit = self.catalog.next_offset.max(PAGE_SIZE);
         cx.spawn(async move |view, cx| {
@@ -242,7 +245,7 @@ impl Logs {
                             view.detail = entry;
                         }
                     }
-                    Err(error) => view.error = Some(error.to_string()),
+                    Err(error) => view.catalog_error = Some((error.to_string(), false)),
                 }
                 if view.refresh_pending {
                     view.refresh(cx);
@@ -259,7 +262,7 @@ impl Logs {
             || self.busy
             || self.deletion.is_some()
             || !self.catalog.has_more
-            || self.error.is_some()
+            || self.catalog_error.is_some()
         {
             return;
         }
@@ -277,7 +280,7 @@ impl Logs {
                         view.catalog = Rc::new(catalog);
                         view.rebuild_visible(cx);
                     }
-                    Err(error) => view.error = Some(format!("Could not load more logs: {error}")),
+                    Err(error) => view.catalog_error = Some((error.to_string(), true)),
                 }
                 if view.refresh_pending {
                     view.refresh(cx);
@@ -343,7 +346,7 @@ impl Logs {
                         }
                         Ok(_) => {
                             view.notice = Some(crate::components::message::Message::info(
-                                "There are no finished logs to delete.",
+                                "workspace.logs.delete.noneFinished",
                             ))
                         }
                         Err(error) => view.error = Some(error.to_string()),
@@ -366,8 +369,17 @@ impl Logs {
             .cloned()
             .collect();
         if selected.is_empty() {
+            let active_selected = self
+                .catalog
+                .active
+                .iter()
+                .any(|id| all || self.selection.contains(id));
             self.notice = Some(crate::components::message::Message::info(
-                "There are no finished logs to delete. Close a session before deleting its log.",
+                if active_selected {
+                    "workspace.logs.delete.closeSessionsFirst"
+                } else {
+                    "workspace.logs.delete.noneFinished"
+                },
             ));
         } else {
             self.deletion = Some(selected);
@@ -434,8 +446,9 @@ impl Logs {
                 view.busy = false;
                 match result {
                     Ok(true) => {
-                        view.notice =
-                            Some(crate::components::message::Message::info("Log exported."))
+                        view.notice = Some(crate::components::message::Message::info(
+                            "workspace.logs.export.raw.success",
+                        ))
                     }
                     Ok(false) => {}
                     Err(error) => view.error = Some(error.to_string()),
@@ -485,7 +498,7 @@ impl Logs {
                 match result {
                     Ok(true) => {
                         view.notice = Some(crate::components::message::Message::info(
-                            "Readable text exported.",
+                            "workspace.logs.export.readable.success",
                         ))
                     }
                     Ok(false) => {}
@@ -524,7 +537,7 @@ impl Logs {
                             .h(px(26.))
                             .p_0()
                             .icon_size(px(15.))
-                            .tooltip("Sort by date")
+                            .tooltip("workspace.label.sortByDate")
                             .icon(if self.preferences.sort == SortOrder::NewestFirst {
                                 IconName::ArrowDownWideNarrow
                             } else {
@@ -552,7 +565,7 @@ impl Logs {
                             .toolbar()
                             .ghost()
                             .icon(IconName::Trash)
-                            .tooltip("Delete all finished terminal history and captures")
+                            .tooltip("workspace.logs.delete.action")
                             .disabled(self.loading || self.busy || self.catalog.entries.is_empty())
                             .on_click(cx.listener(|view, _, _, cx| view.request_delete(true, cx))),
                     ),
@@ -625,7 +638,11 @@ impl Logs {
             .content_gap(px(0.))
             .focusable(false)
             .aria_selected(selected)
-            .localized_accessibility_label(format!("Session log: {}", entry.title))
+            .accessibility_label(crate::localization::format(
+                cx,
+                "workspace.logs.row.accessibility",
+                &[("name", &entry.title)],
+            ))
             .custom(
                 ButtonCustomVariant::for_surface(p)
                     .color(
@@ -869,9 +886,11 @@ impl Render for Logs {
             .map(bytes)
             .unwrap_or_else(|| "Unavailable".into());
         let owner = cx.weak_entity();
-        let can_load =
-            self.catalog.has_more && !self.loading && !self.loading_more && self.error.is_none();
-        let extra_row = self.loading_more || (self.catalog.has_more && self.error.is_some());
+        let can_load = self.catalog.has_more
+            && !self.loading
+            && !self.loading_more
+            && self.catalog_error.is_none();
+        let extra_row = self.loading_more;
         if count == 0 && can_load {
             let owner = cx.weak_entity();
             cx.defer(move |cx| {
@@ -892,29 +911,16 @@ impl Render for Logs {
                 range
                     .filter_map(|index| {
                         if index == count {
-                            return Some(owner.update(cx, |view, cx| {
+                            return Some({
                                 div()
                                     .h(px(61.))
                                     .w_full()
                                     .flex()
                                     .items_center()
                                     .justify_center()
-                                    .when(view.loading_more, |row| {
-                                        row.child(crate::components::Spinner::new())
-                                    })
-                                    .when(!view.loading_more, |row| {
-                                        row.child(
-                                            Button::new("retry-log-page")
-                                                .ghost()
-                                                .label("Retry loading logs")
-                                                .on_click(cx.listener(|view, _, _, cx| {
-                                                    view.error = None;
-                                                    view.load_more(cx);
-                                                })),
-                                        )
-                                    })
+                                    .child(crate::components::Spinner::new())
                                     .into_any_element()
-                            }));
+                            });
                         }
                         let entry = catalog.entries.get(*visible.get(index)?)?.clone();
                         Some(owner.update(cx, |view, cx| view.row(entry, cx)))
@@ -967,27 +973,62 @@ impl Render for Logs {
                     .rounded(px(7.))
                     .bg(p.surface)
                     .child(TableFrame::new(
-                        div().size_full().overflow_hidden().flex().flex_col().child(
-                            if count > 0 || extra_row {
-                                crate::components::uniform_scrollbar(
-                                    "logs-table-scrollbar",
-                                    list,
-                                    &self.scroll,
+                        div()
+                            .size_full()
+                            .overflow_hidden()
+                            .flex()
+                            .flex_col()
+                            .when_some(self.catalog_error.clone(), |view, (error, next_page)| {
+                                view.child(
+                                    div()
+                                        .flex()
+                                        .flex_col()
+                                        .items_center()
+                                        .gap(px(6.))
+                                        .p(px(12.))
+                                        .child(crate::localization::view(
+                                            "workspace.logs.load.unavailable",
+                                        ))
+                                        .child(error)
+                                        .child(
+                                            Button::new("retry-log-catalog")
+                                                .ghost()
+                                                .label("workspace.logs.load.retry")
+                                                .on_click(cx.listener(move |view, _, _, cx| {
+                                                    view.catalog_error = None;
+                                                    if next_page {
+                                                        view.load_more(cx);
+                                                    } else {
+                                                        view.refresh(cx);
+                                                    }
+                                                })),
+                                        ),
                                 )
-                                .into_any_element()
-                            } else {
-                                crate::components::EmptyState::new(
-                                    IconName::Clock,
-                                    if self.loading {
-                                        "Loading logs…"
+                            })
+                            .when(
+                                count > 0 || extra_row || self.catalog_error.is_none(),
+                                |view| {
+                                    view.child(if count > 0 || extra_row {
+                                        crate::components::uniform_scrollbar(
+                                            "logs-table-scrollbar",
+                                            list,
+                                            &self.scroll,
+                                        )
+                                        .into_any_element()
                                     } else {
-                                        "workspace.label.noTerminalSessionsRecorded"
-                                    },
-                                    self.dark,
-                                )
-                                .into_any_element()
-                            },
-                        ),
+                                        crate::components::EmptyState::new(
+                                            IconName::Clock,
+                                            if self.loading {
+                                                "workspace.logs.load.loading"
+                                            } else {
+                                                "workspace.label.noTerminalSessionsRecorded"
+                                            },
+                                            self.dark,
+                                        )
+                                        .into_any_element()
+                                    })
+                                },
+                            ),
                         p,
                     )),
             )
@@ -1002,9 +1043,11 @@ impl Render for Logs {
                     .text_size(px(11.))
                     .text_color(p.muted)
                     .child(Icon::new(IconName::HardDrive).with_size(px(14.)))
-                    .child(crate::localization::view(format!(
-                        "Capture storage  {total}"
-                    ))),
+                    .child(crate::localization::format(
+                        cx,
+                        "workspace.logs.storage.size",
+                        &[("size", &total)],
+                    )),
             )
             .when_some(self.detail.as_ref(), |view, entry| {
                 use crate::localization::{format_for, language, text_for};
@@ -1079,7 +1122,7 @@ impl Render for Logs {
                                 .action(
                                     Button::new("done-log-details")
                                         .primary()
-                                        .label("Done")
+                                        .label("common.action.done")
                                         .on_click(|_, window, cx| Modal::dismiss(window, cx)),
                                 ),
                         ),
@@ -1118,14 +1161,14 @@ impl Render for Logs {
                                 .action(
                                     Button::new("cancel-delete-logs")
                                         .ghost()
-                                        .label("Cancel")
+                                        .label("common.action.cancel")
                                         .disabled(self.busy)
                                         .on_click(|_, window, cx| Modal::dismiss(window, cx)),
                                 )
                                 .action(
                                     Button::new("confirm-delete-logs")
                                         .danger()
-                                        .label("Delete")
+                                        .label("common.action.delete")
                                         .disabled(self.busy)
                                         .on_click(cx.listener(|view, _, _, cx| view.delete(cx))),
                                 ),

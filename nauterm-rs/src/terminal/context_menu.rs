@@ -43,7 +43,7 @@ impl Terminal {
                     .item(
                         shortcuts
                             .menu(
-                                MenuItem::localized("Copy")
+                                MenuItem::localized("common.action.copy")
                                     .icon(IconName::Copy)
                                     .disabled(!selected),
                                 Shortcut::Copy,
@@ -58,7 +58,7 @@ impl Terminal {
                     .item(
                         shortcuts
                             .menu(
-                                MenuItem::localized("Paste")
+                                MenuItem::localized("common.label.paste")
                                     .icon(IconName::ClipboardPaste)
                                     .disabled(this.session.is_replay()),
                                 Shortcut::Paste,
@@ -103,7 +103,7 @@ impl Terminal {
                     .item(
                         shortcuts
                             .menu(
-                                MenuItem::localized("Search").icon(IconName::Search),
+                                MenuItem::localized("common.action.search").icon(IconName::Search),
                                 Shortcut::Search,
                             )
                             .on_click({
@@ -116,7 +116,7 @@ impl Terminal {
                     )
                     .separator()
                     .item(
-                        MenuItem::localized("Clear")
+                        MenuItem::localized("common.action.clear")
                             .icon(IconName::Eraser)
                             .disabled(this.session.is_replay())
                             .on_click({
@@ -132,7 +132,8 @@ impl Terminal {
                     .item(
                         shortcuts
                             .menu(
-                                MenuItem::localized("Select All").icon(IconName::ListChecks),
+                                MenuItem::localized("common.label.selectAll")
+                                    .icon(IconName::ListChecks),
                                 Shortcut::SelectAll,
                             )
                             .on_click({

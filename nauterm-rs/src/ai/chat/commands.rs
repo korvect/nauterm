@@ -190,16 +190,6 @@ impl Chat {
                 .is_none_or(|owner| owner.same(current) && owner.validate().is_ok())
         });
         let available = matches && view.entry.host_uuid == self.host_uuid;
-        let status = match block.status.as_str() {
-            "pending" => "Awaiting approval".into(),
-            "running" => if view.stopping { "Stopping" } else { "Running" }.into(),
-            "submitted" => "Submitted · result not tracked".into(),
-            "cancelled" => "Stopped".into(),
-            "skipped" => "Skipped".into(),
-            _ => block
-                .exit_code
-                .map_or_else(|| "Failed".into(), |code| format!("Exited {code}")),
-        };
         let elapsed = block.started_at.map(|start| {
             let end = block
                 .finished_at
@@ -213,21 +203,26 @@ impl Chat {
             let run = id.clone();
             actions = actions
                 .child(
-                    command_action(format!("ai-skip-{id}"), "Skip", false, busy, p).on_click(
-                        cx.listener(move |this, _, window, cx| {
-                            this.skip_command(skip.clone(), window, cx)
-                        }),
-                    ),
+                    command_action(
+                        format!("ai-skip-{id}"),
+                        "common.action.skip",
+                        false,
+                        busy,
+                        p,
+                    )
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        this.skip_command(skip.clone(), window, cx)
+                    })),
                 )
                 .child(
                     command_action(
                         format!("ai-run-{id}"),
                         if !available {
-                            "No active terminal"
+                            "ai.error.noActiveTerminal"
                         } else if another_running {
-                            "Command running"
+                            "ai.commands.running"
                         } else {
-                            "Run"
+                            "common.action.run"
                         },
                         true,
                         busy || !available,
@@ -240,16 +235,20 @@ impl Chat {
             actions = actions.child(
                 command_action(
                     format!("ai-stop-{id}"),
-                    if view.stopping { "Stopping" } else { "Stop" },
+                    if view.stopping {
+                        "common.status.stopping"
+                    } else {
+                        "common.action.stop"
+                    },
                     false,
                     !mine || view.stopping,
                     p,
                 )
                 .icon(crate::assets::Glyph::Stop.icon())
                 .tooltip(if mine {
-                    "Stop command"
+                    "common.action.stop"
                 } else {
-                    "Command belongs to another session"
+                    "ai.commands.belongsToAnotherSession"
                 })
                 .on_click(cx.listener(|this, _, _, cx| {
                     if let Some(session) = &this.session {
@@ -337,7 +336,7 @@ impl Chat {
                             })
                             .text_color(if copied { p.accent } else { p.muted })
                             .tooltip(if copied {
-                                "Copied"
+                                "common.status.copied"
                             } else {
                                 "ai.action.copyCommand"
                             })
@@ -436,9 +435,27 @@ impl Chat {
                 .text_color(if successful { p.accent } else { p.muted })
                 .justify_end()
                 .when(block.status != "pending", |row| {
+                    let text = |key| crate::localization::text(cx, key);
+                    let status = match block.status.as_str() {
+                        "running" if view.stopping => text("common.status.stopping"),
+                        "running" => text("common.status.running"),
+                        "submitted" => text("ai.commands.submitted"),
+                        "cancelled" => text("common.label.stopped"),
+                        "skipped" => text("common.status.skipped"),
+                        _ => block.exit_code.map_or_else(
+                            || text("common.label.failed"),
+                            |code| {
+                                crate::localization::format(
+                                    cx,
+                                    "ai.commands.exited",
+                                    &[("code", &code.to_string())],
+                                )
+                            },
+                        ),
+                    };
                     row.child(selectable_text(
                         SharedString::from(format!("ai-command-status-{id}")),
-                        crate::localization::text(cx, &status),
+                        status,
                         p,
                     ))
                 })

@@ -97,7 +97,7 @@ impl Connection {
         let failed = self.state.phase == Phase::Failed;
         let choosing = matches!(self.target, Target::Choice(_));
         let mut secondary = vec![
-            self.action("cancel-connection", "Close", false)
+            self.action("cancel-connection", "common.action.close", false)
                 .disabled(self.auth.busy)
                 .on_click(cx.listener(|this, _, _, cx| {
                     if !this.auth.busy {
@@ -111,7 +111,7 @@ impl Connection {
             && self.auth_step() == Intervention::PublicKey
         {
             secondary.push(
-                self.action("add-authentication-key", "Add key", false)
+                self.action("add-authentication-key", "workspace.label.addKey", false)
                     .disabled(
                         self.auth.busy || self.auth.vault.is_none() || self.auth.keychain.is_none(),
                     )
@@ -123,7 +123,7 @@ impl Connection {
         }
         if failed && self.host_actions {
             secondary.push(
-                self.action("edit-connection-host", "Edit Host", false)
+                self.action("edit-connection-host", "workspace.label.editHost", false)
                     .on_click(cx.listener(|this, _, _, cx| {
                         if this.state.phase == Phase::Failed {
                             cx.emit(HostAction::Edit);
@@ -135,14 +135,18 @@ impl Connection {
         let mut primary = vec![];
         if choosing {
             primary.push(
-                self.action("connect-selected-protocol", "Connect", true)
+                self.action("connect-selected-protocol", "common.action.connect", true)
                     .disabled(self.confirming_protocol())
                     .on_click(cx.listener(|this, _, _, cx| this.confirm_protocol(cx)))
                     .into_any_element(),
             );
         } else if self.state.phase == Phase::HostKey {
             let save = self.auth.save.unwrap_or(false) && self.can_save_connection();
-            let label = if save { "Continue & Save" } else { "Continue" };
+            let label = if save {
+                "workspace.label.continueSave"
+            } else {
+                "common.action.continue"
+            };
             let confirm = self.action("trust-once", label, true).on_click(
                 cx.listener(move |this, _, window, cx| this.continue_host_key(save, window, cx)),
             );
@@ -159,13 +163,15 @@ impl Connection {
                                 .icon(IconName::ChevronDown),
                             move |menu, _, _| {
                                 let owner = owner.clone();
-                                menu.item(MenuItem::localized("Continue & Save").on_click(
-                                    move |_, window, cx| {
-                                        let _ = owner.update(cx, |this, cx| {
-                                            this.continue_host_key(true, window, cx)
-                                        });
-                                    },
-                                ))
+                                menu.item(
+                                    MenuItem::localized("workspace.label.continueSave").on_click(
+                                        move |_, window, cx| {
+                                            let _ = owner.update(cx, |this, cx| {
+                                                this.continue_host_key(true, window, cx)
+                                            });
+                                        },
+                                    ),
+                                )
                             },
                         )
                         .into_any_element(),
@@ -179,7 +185,7 @@ impl Connection {
             // Retrying a changed key still goes through native verification;
             // the user may have corrected known_hosts since the failure.
             primary.push(
-                self.action("retry-connection", "Start over", true)
+                self.action("retry-connection", "workspace.label.startOver", true)
                     .on_click(cx.listener(|this, _, window, cx| this.start_over(window, cx)))
                     .into_any_element(),
             );

@@ -3,11 +3,107 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nauterm/data/nauterm_data_store.dart';
 import 'package:nauterm/data/recording_service.dart';
 import 'package:nauterm/data/terminal_recording_store.dart';
 import 'package:nauterm/terminal/terminal_recording.dart';
 
 void main() {
+  test(
+    'bulk log deletion keeps active recordings and rechecks leases',
+    () async {
+      final directory = Directory.systemTemp.createTempSync(
+        'nauterm-log-delete-',
+      );
+      addTearDown(() => directory.deleteSync(recursive: true));
+      final dataStore = NautermDataStore.openPath(
+        '${directory.path}/logs.sqlite',
+      );
+      addTearDown(dataStore.dispose);
+      final captureStore = TerminalLogCaptureStore(
+        Directory('${directory.path}/terminal-logs'),
+      );
+      await captureStore.prepare();
+      final service = RecordingService();
+      addTearDown(service.dispose);
+      final recorder = TerminalSessionRecorder(title: 'Active in this window');
+      service.register(
+        recorder,
+        context: const TerminalLogContext(),
+        pending: false,
+        captureStore: captureStore,
+      );
+      const externalId = '01979f62-8548-7000-8000-000000000001';
+      const finishedId = '01979f62-8548-7000-8000-000000000002';
+      final externalLease = captureStore.tryAcquireLease(externalId)!;
+      addTearDown(externalLease.close);
+      final capture = captureStore.captureFileName(finishedId);
+      final file = File('${captureStore.directory.path}/$capture')
+        ..writeAsStringSync('recorded bytes');
+      final started = DateTime.utc(2026, 1, 1);
+      for (final log in [
+        TerminalLogEntry(
+          id: recorder.id,
+          title: 'Active here',
+          captureFile: '',
+          startedAt: started,
+        ),
+        TerminalLogEntry(
+          id: externalId,
+          title: 'Active elsewhere',
+          captureFile: '',
+          startedAt: started,
+        ),
+        TerminalLogEntry(
+          id: finishedId,
+          title: 'Finished',
+          captureFile: capture,
+          startedAt: started,
+          endedAt: started,
+        ),
+      ]) {
+        dataStore.saveTerminalLog(log);
+      }
+
+      final review = service.prepareLogDeletion(dataStore, captureStore);
+      expect(review.hasActive, isTrue);
+      expect(review.finished.map((entry) => entry.id), [finishedId]);
+
+      final newlyHeld = captureStore.tryAcquireLease(finishedId)!;
+      try {
+        await expectLater(
+          service.deleteFinishedLogs(
+            dataStore,
+            captureStore,
+            review.finished,
+            isCurrent: () => true,
+          ),
+          throwsA(isA<NautermDataException>()),
+        );
+        expect(dataStore.listTerminalLogs(), hasLength(3));
+        expect(file.existsSync(), isTrue);
+      } finally {
+        newlyHeld.close();
+      }
+
+      final deletion = await service.deleteFinishedLogs(
+        dataStore,
+        captureStore,
+        review.finished,
+        isCurrent: () => true,
+      );
+      expect(deletion.deleted, {finishedId});
+      expect(deletion.cleanupError, isNull);
+      expect(
+        dataStore.listTerminalLogs().map((entry) => entry.id),
+        unorderedEquals([recorder.id, externalId]),
+      );
+      expect(service.leaseFor(recorder.id), isNotNull);
+      expect(service.isIgnored(recorder.id), isFalse);
+      expect(file.existsSync(), isFalse);
+    },
+  );
+
   test('recording service owns pending and ignored session state', () {
     final service = RecordingService();
     addTearDown(service.dispose);

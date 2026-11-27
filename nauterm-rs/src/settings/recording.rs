@@ -35,18 +35,18 @@ enum Limit {
     Total,
 }
 impl Limit {
-    fn title(self) -> &'static str {
+    fn title_key(self) -> &'static str {
         match self {
-            Self::Retention => "Retention Period",
-            Self::Session => "Per-session Limit",
-            Self::Total => "Total Storage Limit",
+            Self::Retention => "settings.terminal.recording.retention.label",
+            Self::Session => "settings.terminal.recording.sessionLimit.label",
+            Self::Total => "settings.terminal.recording.storageLimit.label",
         }
     }
-    fn description(self) -> &'static str {
+    fn description_key(self) -> &'static str {
         match self {
-            Self::Retention => "Delete completed sessions after this many days.",
-            Self::Session => "Keep the latest output when a session exceeds this size.",
-            Self::Total => "Delete the oldest completed sessions when storage is full.",
+            Self::Retention => "settings.terminal.recording.retention.description",
+            Self::Session => "settings.terminal.recording.sessionLimit.description",
+            Self::Total => "settings.terminal.recording.storageLimit.description",
         }
     }
     fn value(self, config: Preferences) -> u64 {
@@ -56,7 +56,7 @@ impl Limit {
             Self::Total => config.max_total_bytes,
         }
     }
-    fn options(self) -> Vec<SelectOption<u64>> {
+    fn options(self, language: crate::localization::Language) -> Vec<SelectOption<u64>> {
         let (values, multiplier, unit) = match self {
             Self::Retention => (Preferences::DAYS, 1, "days"),
             Self::Session => (Preferences::SESSION_MIB, 1024 * 1024, "MB"),
@@ -64,7 +64,17 @@ impl Limit {
         };
         values
             .into_iter()
-            .map(|value| SelectOption::localized(value * multiplier, format!("{value} {unit}")))
+            .map(|value| {
+                let label = match self {
+                    Self::Retention => crate::localization::format_for(
+                        language,
+                        "common.duration.days",
+                        &[("count", &value.to_string())],
+                    ),
+                    _ => format!("{value} {unit}").into(),
+                };
+                SelectOption::new(value * multiplier, label)
+            })
             .collect()
     }
 }
@@ -121,7 +131,7 @@ impl Settings {
         }
         for limit in [Limit::Retention, Limit::Session, Limit::Total] {
             let select = SelectModel::new(
-                limit.options(),
+                limit.options(self.values.general.language),
                 Some(limit.value(self.values.recordings)),
                 window,
                 cx,
@@ -154,6 +164,18 @@ impl Settings {
             });
         }
     }
+    pub(super) fn sync_recording_labels(&mut self, window: &mut Window, cx: &mut App) {
+        let language = self.values.general.language;
+        for control in &mut self.recording_controls {
+            control.select.reconcile(
+                control.limit.options(language),
+                Some(control.limit.value(self.values.recordings)),
+                window,
+                cx,
+            );
+        }
+    }
+
     pub(super) fn recording_settings(&self, cx: &mut Context<Self>) -> AnyElement {
         self.section(
             Section::Recording,
@@ -164,11 +186,11 @@ impl Settings {
                 .gap(px(18.))
                 .child(
                     self.row(
-                        "Terminal History",
-                        "Save connection history on this device.",
+                        "settings.terminal.recording.history.label",
+                        "settings.terminal.recording.history.description",
                         Switch::new(
                             "session-history",
-                            "Terminal History",
+                            "settings.terminal.recording.history.label",
                             self.values.recordings.enabled,
                         )
                         .on_change(cx.listener(
@@ -181,11 +203,11 @@ impl Settings {
                 )
                 .child(
                     self.row(
-                        "Record Terminal Sessions",
-                        "Encrypt and save terminal output for later replay.",
+                        "settings.terminal.recording.rawOutput.label",
+                        "settings.terminal.recording.rawOutput.description",
                         Switch::new(
                             "record-terminal-output",
-                            "Record Terminal Sessions",
+                            "settings.terminal.recording.rawOutput.label",
                             self.values.recordings.capture,
                         )
                         .on_change(cx.listener(
@@ -198,9 +220,9 @@ impl Settings {
                 )
                 .children(self.recording_controls.iter().map(|control| {
                     self.row(
-                        control.limit.title(),
-                        control.limit.description(),
-                        control.select.control(control.limit.title(), cx),
+                        control.limit.title_key(),
+                        control.limit.description_key(),
+                        control.select.control(control.limit.title_key(), cx),
                     )
                 }))
                 .child(
@@ -226,11 +248,12 @@ impl Settings {
                                 .content_start()
                                 .icon(IconName::Folder)
                                 .label(self.recording_directory.to_string_lossy().into_owned())
-                                .localized_accessibility_label(format!(
-                                    "Open recording location {}",
-                                    self.recording_directory.display()
+                                .accessibility_label(crate::localization::format(
+                                    cx,
+                                    "settings.terminal.recording.location.accessibility",
+                                    &[("path", &self.recording_directory.to_string_lossy())],
                                 ))
-                                .tooltip("Open location")
+                                .tooltip("settings.terminal.recording.location.open")
                                 .disabled(self.recording_location_busy)
                                 .on_click(
                                     cx.listener(|this, _, _, cx| this.open_recording_location(cx)),

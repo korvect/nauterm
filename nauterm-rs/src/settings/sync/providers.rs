@@ -235,7 +235,7 @@ impl Panel {
                 .text_color(p.muted)
                 .child(crate::localization::text(
                     cx,
-                    "rs.ui.copy.chooseSyncStorage",
+                    "settings.sync.provider.description",
                 )),
         );
         let kinds: Vec<_> = Kind::CATALOG.into_iter().enumerate().collect();
@@ -261,7 +261,7 @@ impl Panel {
             body = body.child(line);
         }
         Some(
-            Modal::new("add-sync-provider", "Add Provider")
+            Modal::new("add-sync-provider", "settings.label.addProvider")
                 .focus_scope(&self.catalog_focus)
                 .return_focus(&self.focus)
                 .on_dismiss(cx.listener(|this, _, _, cx| {
@@ -269,14 +269,14 @@ impl Panel {
                     cx.notify();
                 }))
                 .content(
-                    DialogFrame::new("add-sync-provider-frame", "Add Provider")
+                    DialogFrame::new("add-sync-provider-frame", "settings.label.addProvider")
                         .colors(self.colors())
                         .width(400.)
                         .content(body)
                         .action(
                             Button::new("cancel-add-provider")
                                 .outline()
-                                .label("Cancel")
+                                .label("common.action.cancel")
                                 .on_click(|_, window, cx| Modal::dismiss(window, cx)),
                         ),
                 )
@@ -317,10 +317,10 @@ impl Panel {
         if editor.draft.kind.fixed_id().is_none() {
             groups[0].2.push(
                 self.field(
-                    "Display Name",
+                    "settings.label.displayName",
                     "",
                     Input::new(&editor.name)
-                        .aria_label(crate::localization::text(cx, "Provider display name")),
+                        .aria_label(crate::localization::text(cx, "settings.label.displayName")),
                 ),
             );
         }
@@ -333,7 +333,7 @@ impl Panel {
                 0
             };
             let hint = if field.key == "gist_id" {
-                "Leave empty to create a new private gist on the first sync."
+                "settings.sync.gist.id.description"
             } else {
                 ""
             };
@@ -342,7 +342,7 @@ impl Panel {
                 hint,
                 Input::new(input)
                     .readonly(field.readonly)
-                    .aria_label(field.label),
+                    .aria_label(crate::localization::text(cx, field.label)),
             );
             if wide(field.key) || !hint.is_empty() {
                 flush(&mut pending[index], &mut groups[index].2);
@@ -390,9 +390,9 @@ impl Panel {
         } else if editor.fields.iter().all(|(field, _)| !field.credential) {
             body = body.child(div().text_size(px(12.)).text_color(p.muted).child(
                 crate::localization::view(if editor.draft.has_credentials() {
-                    "Authorization is saved on this device."
+                    "settings.sync.authorization.saved.description"
                 } else {
-                    "This provider needs authorization."
+                    "settings.sync.authorization.validation.required"
                 }),
             ));
         }
@@ -416,9 +416,9 @@ impl Panel {
                 Button::new("remove-sync-provider")
                     .outline()
                     .label(if disconnect {
-                        "Disconnect"
+                        "common.action.disconnect"
                     } else {
-                        "Delete Provider"
+                        "settings.ai.provider.delete"
                     })
                     .disabled(self.busy())
                     .on_click(cx.listener(move |this, _, _, cx| {
@@ -432,7 +432,7 @@ impl Panel {
             frame = frame.action(
                 Button::new("reload-sync-provider")
                     .outline()
-                    .label("Reload")
+                    .label("common.action.refresh")
                     .disabled(self.busy())
                     .on_click(cx.listener(move |this, _, window, cx| {
                         this.open_provider_editor(id.clone(), window, cx)
@@ -443,7 +443,7 @@ impl Panel {
             .action(
                 Button::new("cancel-sync-provider-editor")
                     .outline()
-                    .label("Cancel")
+                    .label("common.action.cancel")
                     .disabled(self.storage_busy())
                     .on_click(|_, window, cx| Modal::dismiss(window, cx)),
             )
@@ -451,9 +451,9 @@ impl Panel {
                 Button::new("save-sync-provider")
                     .primary()
                     .label(if self.loading {
-                        "Saving…"
+                        "common.label.saving"
                     } else {
-                        "Save Settings"
+                        "settings.sync.action.saveSettings"
                     })
                     .disabled(self.busy())
                     .on_click(
@@ -477,24 +477,23 @@ impl Panel {
         let disconnect = self.remove_provider?;
         let editor = self.editor.as_ref()?;
         let title = if disconnect {
-            "Disconnect Provider"
+            "settings.sync.provider.disconnect.title"
         } else {
-            "Delete Provider"
+            "settings.sync.provider.delete.title"
         };
         let body = div()
             .flex()
             .flex_col()
             .gap(px(10.))
-            .child(crate::localization::view(format!(
-                "{} {}? {} Remote backup files will be retained.",
-                if disconnect { "Disconnect" } else { "Delete" },
-                editor.draft.name,
+            .child(crate::localization::format(
+                cx,
                 if disconnect {
-                    "Saved connection settings remain; local credentials will be removed."
+                    "settings.sync.provider.disconnect.description"
                 } else {
-                    "The saved connection and its local credentials will be removed."
-                }
-            )));
+                    "settings.sync.provider.delete.description"
+                },
+                &[("name", &editor.draft.name)],
+            ));
         Some(
             Dialog::new("remove-sync-provider-confirm", title)
                 .focus_scope(&self.remove_focus)
@@ -513,7 +512,7 @@ impl Panel {
                         .action(
                             Button::new("cancel-remove-sync-provider")
                                 .outline()
-                                .label("Cancel")
+                                .label("common.action.cancel")
                                 .disabled(self.busy())
                                 .on_click(|_, window, cx| Modal::dismiss(window, cx)),
                         )
@@ -521,11 +520,11 @@ impl Panel {
                             Button::new("confirm-remove-sync-provider")
                                 .primary()
                                 .label(if self.loading {
-                                    "Working…"
+                                    "common.status.working"
                                 } else if disconnect {
-                                    "Disconnect"
+                                    "common.action.disconnect"
                                 } else {
-                                    "Delete"
+                                    "common.action.delete"
                                 })
                                 .disabled(self.busy())
                                 .on_click(cx.listener(|this, _, window, cx| {

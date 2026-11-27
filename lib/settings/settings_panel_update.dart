@@ -1,5 +1,8 @@
 part of 'settings_panel.dart';
 
+@visibleForTesting
+DesktopUpdateService Function()? settingsDesktopUpdateServiceFactoryOverride;
+
 enum _UpdateUiState {
   idle,
   checking,
@@ -22,17 +25,29 @@ class _AboutSettingsPage extends StatefulWidget {
 class _AboutSettingsPageState extends State<_AboutSettingsPage> {
   DesktopUpdateService? _service;
   final MacosSparkleUpdater _sparkle = const MacosSparkleUpdater();
+  bool? _sparkleConfigured;
   _UpdateUiState _state = _UpdateUiState.idle;
+  String _applicationName = nautermApplicationName;
   String _currentVersion = '...';
   String _buildNumber = '...';
   String _packageName = '...';
   DesktopUpdateRelease? _release;
-  File? _downloadedFile;
+  VerifiedDesktopUpdate? _downloaded;
+  DesktopUpdateCancellation? _downloadCancellation;
+  bool _discarding = false;
+  bool _restarting = false;
+  bool _handedToInstaller = false;
+  bool _messageIsError = false;
   double? _progress;
   String? _message;
   DesktopUpdateInstallDisposition? _installDisposition;
 
+  bool get _usesSparkle =>
+      Platform.isMacOS && settingsDesktopUpdateServiceFactoryOverride == null;
+
   bool get _busy =>
+      _discarding ||
+      _restarting ||
       _state == _UpdateUiState.checking ||
       _state == _UpdateUiState.downloading ||
       _state == _UpdateUiState.installing;
@@ -41,6 +56,21 @@ class _AboutSettingsPageState extends State<_AboutSettingsPage> {
   void initState() {
     super.initState();
     unawaited(_loadVersion());
+    if (_usesSparkle) unawaited(_loadSparkleConfiguration());
+  }
+
+  Future<void> _loadSparkleConfiguration() async {
+    final bool configured;
+    try {
+      configured = await _sparkle.isConfigured();
+    } on MissingPluginException {
+      if (mounted) setState(() => _sparkleConfigured = false);
+      return;
+    } on PlatformException catch (error) {
+      _showError(error);
+      return;
+    }
+    if (mounted) setState(() => _sparkleConfigured = configured);
   }
 
   Future<void> _loadVersion() async {
@@ -51,19 +81,24 @@ class _AboutSettingsPageState extends State<_AboutSettingsPage> {
         _currentVersion = info.version;
         _buildNumber = info.buildNumber;
         _packageName = info.packageName;
+        if (info.appName.trim().isNotEmpty) _applicationName = info.appName;
       });
     } on Object {
       if (!mounted) return;
       setState(() {
         _currentVersion = 'unknown';
         _state = _UpdateUiState.error;
-        _message = 'Unable to read the installed application version.';
+        _messageIsError = true;
+        _message = tr('settings.update.error.versionUnavailable');
       });
     }
   }
 
   Future<void> _check() async {
-    if (_busy || _currentVersion == '...' || _currentVersion == 'unknown') {
+    if (_busy ||
+        _currentVersion == '...' ||
+        _currentVersion == 'unknown' ||
+        (_usesSparkle && _sparkleConfigured != true)) {
       return;
     }
     setState(() {
@@ -71,20 +106,21 @@ class _AboutSettingsPageState extends State<_AboutSettingsPage> {
       _message = null;
       _progress = null;
       _release = null;
-      _downloadedFile = null;
+      _messageIsError = false;
       _installDisposition = null;
     });
     try {
-      if (Platform.isMacOS) {
+      if (_usesSparkle) {
         await _sparkle.checkForUpdates();
         if (!mounted) return;
         setState(() {
           _state = _UpdateUiState.idle;
-          _message = 'Sparkle is checking the signed macOS update feed.';
         });
         return;
       }
-      final service = _service ??= DesktopUpdateService();
+      final service = _service ??=
+          settingsDesktopUpdateServiceFactoryOverride?.call() ??
+          DesktopUpdateService();
       final result = await service.check(_currentVersion);
       if (!mounted) return;
       setState(() {
@@ -93,8 +129,14 @@ class _AboutSettingsPageState extends State<_AboutSettingsPage> {
             ? _UpdateUiState.available
             : _UpdateUiState.current;
         _message = result.updateAvailable
-            ? 'Nauterm ${result.release!.version} is ready to download.'
-            : 'You are using the latest version.';
+            ? tr(
+                'settings.update.status.available',
+                args: {
+                  'appName': _applicationName,
+                  'version': result.release!.version,
+                },
+              )
+            : tr('settings.update.status.current');
       });
     } on Object catch (error) {
       _showError(error);
@@ -103,50 +145,129 @@ class _AboutSettingsPageState extends State<_AboutSettingsPage> {
 
   Future<void> _download() async {
     final release = _release;
-    if (release == null || _busy) return;
+    if (release == null || !release.canDownloadInApp || _busy) return;
+    final cancellation = DesktopUpdateCancellation();
     setState(() {
+      _downloadCancellation = cancellation;
       _state = _UpdateUiState.downloading;
-      _progress = 0;
-      _message = 'Downloading and verifying ${release.asset.name}...';
+      _progress = null;
+      _message = tr('settings.update.status.preparingDownload');
+      _messageIsError = false;
     });
     try {
-      final file = await _service!.download(
+      final download = await _service!.download(
         release,
+        cancellation: cancellation,
+        onStage: (stage) {
+          if (!mounted || cancellation.isCancelled) return;
+          setState(() {
+            _message = tr(switch (stage) {
+              DesktopUpdateDownloadStage.checkingChecksums =>
+                'settings.update.status.checkingChecksums',
+              DesktopUpdateDownloadStage.downloading =>
+                'settings.update.action.downloading',
+              DesktopUpdateDownloadStage.verifying =>
+                'settings.update.status.verifyingChecksum',
+            });
+          });
+        },
         onProgress: (received, total) {
-          if (!mounted) return;
+          if (!mounted || cancellation.isCancelled) return;
           setState(() {
             _progress = total > 0 ? (received / total).clamp(0, 1) : null;
           });
         },
       );
-      if (!mounted) return;
+      if (!mounted || cancellation.isCancelled) {
+        await download.discard();
+        if (mounted) _showDownloadCancelled();
+        return;
+      }
       setState(() {
-        _downloadedFile = file;
+        _downloaded = download;
+        _handedToInstaller = false;
         _state = _UpdateUiState.ready;
         _progress = 1;
-        _message = 'Download complete. SHA-256 verification passed.';
+        _message = tr('settings.update.status.downloadVerified');
+      });
+    } on DesktopUpdateDownloadCancelled {
+      if (mounted) _showDownloadCancelled();
+    } on Object catch (error) {
+      _showError(error, recovery: _UpdateUiState.available);
+    } finally {
+      _downloadCancellation = null;
+    }
+  }
+
+  void _showDownloadCancelled() {
+    setState(() {
+      _state = _UpdateUiState.available;
+      _progress = null;
+      _message = tr('settings.update.status.cancelled');
+    });
+  }
+
+  void _cancelDownload() {
+    setState(() => _downloadCancellation?.cancel());
+  }
+
+  Future<void> _discardDownload() async {
+    final download = _downloaded;
+    if (_busy || download == null) return;
+    final retained = _handedToInstaller;
+    setState(() {
+      _downloaded = null;
+      _discarding = true;
+    });
+    try {
+      if (!retained) await download.discard();
+      if (!mounted) return;
+      setState(() {
+        _handedToInstaller = false;
+        _state = _UpdateUiState.available;
+        _progress = null;
+        _message = null;
+        _messageIsError = false;
       });
     } on Object catch (error) {
-      _showError(error);
+      if (!mounted) return;
+      _downloaded = download;
+      _showError(error, recovery: _UpdateUiState.ready);
+    } finally {
+      if (mounted) setState(() => _discarding = false);
+    }
+  }
+
+  Future<void> _openUpdateLink(Uri uri) async {
+    try {
+      await _service!.openInBrowser(uri);
+    } on Object catch (error) {
+      _showError(error, recovery: _state);
     }
   }
 
   Future<void> _install() async {
     final release = _release;
-    final file = _downloadedFile;
-    if (release == null || file == null) return;
+    final download = _downloaded;
+    if (release == null || download == null || _busy) return;
+    final previouslyHandedOff = _handedToInstaller;
     setState(() {
       _state = _UpdateUiState.installing;
+      _handedToInstaller = true;
+      _messageIsError = false;
       _message = tr(
         'settings.update.status.installing',
         fallback: 'Installing the update...',
       );
     });
     try {
-      final disposition = await _service!.launchInstaller(
-        file,
+      final disposition = await _service!.installVerified(
+        download,
         release.asset.kind,
       );
+      if (disposition == DesktopUpdateInstallDisposition.restartRequired) {
+        unawaited(_discardSafely(download));
+      }
       if (!mounted) return;
       if (disposition == DesktopUpdateInstallDisposition.installerLaunched) {
         setState(() {
@@ -168,8 +289,9 @@ class _AboutSettingsPageState extends State<_AboutSettingsPage> {
               ? 'settings.update.status.installed'
               : 'settings.update.status.readyToRestart',
           fallback: packageInstalled
-              ? 'Update installed successfully. Restart Nauterm to use the new version.'
-              : 'Update ready. Restart Nauterm to finish applying it.',
+              ? 'Update installed successfully. Restart {appName} to use the new version.'
+              : 'Update ready. Restart {appName} to finish applying it.',
+          args: {'appName': _applicationName},
         );
       });
       final restart = await showNautermDialog<bool>(
@@ -178,33 +300,85 @@ class _AboutSettingsPageState extends State<_AboutSettingsPage> {
         builder: (_) => _UpdateInstalledDialog(
           version: release.version,
           packageInstalled: packageInstalled,
+          applicationName: _applicationName,
         ),
       );
       if (restart == true && mounted) {
         await _restartAfterUpdate();
       }
     } on Object catch (error) {
-      _showError(error);
+      _handedToInstaller = previouslyHandedOff;
+      if (!mounted) {
+        if (!previouslyHandedOff) await _discardSafely(download);
+        return;
+      }
+      _showError(
+        error,
+        recovery: _installDisposition == null
+            ? _UpdateUiState.ready
+            : _UpdateUiState.restartPending,
+      );
     }
   }
 
   Future<void> _restartAfterUpdate() async {
     final disposition = _installDisposition;
-    if (disposition == null) return;
-    await restartNautermApplication(
-      launchInstalledExecutable:
-          disposition == DesktopUpdateInstallDisposition.restartRequired,
-    );
+    if (disposition == null || _restarting) return;
+    setState(() => _restarting = true);
+    final completed = Completer<void>();
+    final showProgress = Timer(const Duration(milliseconds: 200), () {
+      if (!mounted) return;
+      unawaited(
+        showNautermDialog<void>(
+          context: context,
+          barrierDismissible: false,
+          dismissWhen: completed.future,
+          builder: (_) => const _SyncDialogFrame(
+            icon: LucideIcons.refreshCw,
+            title: 'settings.exit.finishing',
+            subtitle: 'settings.exit.continueMainWindow',
+            width: 360,
+            canClose: false,
+            child: Center(
+              child: SizedBox.square(
+                dimension: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          ),
+        ),
+      );
+    });
+    try {
+      await restartNautermApplication(
+        launchInstalledExecutable:
+            disposition == DesktopUpdateInstallDisposition.restartRequired,
+      );
+    } on Object catch (error) {
+      _showError(error, recovery: _UpdateUiState.restartPending);
+    } finally {
+      showProgress.cancel();
+      completed.complete();
+      if (mounted) setState(() => _restarting = false);
+    }
   }
 
-  void _showError(Object error) {
+  void _showError(
+    Object error, {
+    _UpdateUiState recovery = _UpdateUiState.error,
+  }) {
     if (!mounted) return;
     setState(() {
-      _state = _UpdateUiState.error;
+      _state = recovery;
+      _messageIsError = true;
       _progress = null;
-      _message = error is DesktopUpdateException
-          ? error.message
-          : 'Update failed: $error';
+      _message = switch (error) {
+        PlatformException(code: 'sparkle_not_configured') => tr(
+          'settings.update.sparkle.notConfigured',
+        ),
+        DesktopUpdateException(:final message) => message,
+        _ => tr('settings.update.error.failed', args: {'error': error}),
+      };
     });
   }
 
@@ -221,8 +395,25 @@ class _AboutSettingsPageState extends State<_AboutSettingsPage> {
 
   @override
   void dispose() {
+    _downloadCancellation?.cancel();
+    if (_downloaded case final download? when !_handedToInstaller) {
+      unawaited(_discardSafely(download));
+    }
     _service?.close();
     super.dispose();
+  }
+
+  Future<void> _discardSafely(VerifiedDesktopUpdate download) async {
+    try {
+      await download.discard();
+    } on Object catch (error, stackTrace) {
+      NautermLog.warning(
+        'update',
+        'Unable to remove a staged update package.',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
   }
 
   @override
@@ -238,7 +429,7 @@ class _AboutSettingsPageState extends State<_AboutSettingsPage> {
         padding: _settingsContentPadding(context),
         children: [
           Text(
-            tr('settings.pages.about.title', fallback: 'About Nauterm'),
+            _aboutTitle(_applicationName),
             style: TextStyle(
               color: _text,
               fontSize: 20,
@@ -266,8 +457,8 @@ class _AboutSettingsPageState extends State<_AboutSettingsPage> {
               child: Column(
                 children: [
                   _SettingsRow(
-                    title: 'Version',
-                    subtitle: 'Release channel: stable',
+                    title: 'common.label.version',
+                    subtitle: 'settings.label.releaseChannelStable',
                     trailing: Align(
                       alignment: Alignment.centerRight,
                       child: Text(
@@ -283,7 +474,7 @@ class _AboutSettingsPageState extends State<_AboutSettingsPage> {
                   ),
                   const SizedBox(height: 18),
                   _SettingsRow(
-                    title: 'Build',
+                    title: 'common.label.build',
                     subtitle: _packageName,
                     trailing: Align(
                       alignment: Alignment.centerRight,
@@ -296,8 +487,8 @@ class _AboutSettingsPageState extends State<_AboutSettingsPage> {
                   ),
                   const SizedBox(height: 18),
                   _SettingsRow(
-                    title: 'Platform',
-                    subtitle: 'Current operating system and architecture',
+                    title: 'common.label.platform',
+                    subtitle: 'settings.label.currentPlatformArchitecture',
                     trailing: Align(
                       alignment: Alignment.centerRight,
                       child: Text(
@@ -310,7 +501,7 @@ class _AboutSettingsPageState extends State<_AboutSettingsPage> {
                   if (release != null) ...[
                     const SizedBox(height: 18),
                     _SettingsRow(
-                      title: 'Available version',
+                      title: 'settings.label.availableVersion',
                       subtitle: release.asset.name,
                       trailing: Align(
                         alignment: Alignment.centerRight,
@@ -337,8 +528,8 @@ class _AboutSettingsPageState extends State<_AboutSettingsPage> {
               child: Column(
                 children: [
                   _SettingsRow(
-                    title: 'Source license',
-                    subtitle: 'See LICENSE for the complete terms.',
+                    title: 'settings.label.sourceLicense',
+                    subtitle: 'settings.about.license.help',
                     trailing: Align(
                       alignment: Alignment.centerRight,
                       child: Text(
@@ -352,15 +543,15 @@ class _AboutSettingsPageState extends State<_AboutSettingsPage> {
                   ),
                   const SizedBox(height: 18),
                   _SettingsRow(
-                    title: 'Third-party licenses',
-                    subtitle: 'Licenses for bundled Flutter, Dart, Rust, and native components.',
+                    title: 'settings.label.thirdPartyLicenses',
+                    subtitle: 'settings.about.licenses.description',
                     trailing: Align(
                       alignment: Alignment.centerRight,
                       child: _SettingsOutlineButton(
                         key: const ValueKey(
                           'settings-about-third-party-licenses',
                         ),
-                        label: 'View',
+                        label: 'common.label.view',
                         onTap: _showThirdPartyLicenses,
                       ),
                     ),
@@ -381,7 +572,28 @@ class _AboutSettingsPageState extends State<_AboutSettingsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (_progress != null) ...[
+                  if (_usesSparkle) ...[
+                    Text(
+                      context.tr(
+                        'settings.update.sparkle.managed',
+                        fallback: 'Updates are managed by Sparkle.',
+                      ),
+                      style: TextStyle(color: _mutedText, fontSize: 12),
+                    ),
+                    if (_sparkleConfigured == false) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        context.tr(
+                          'settings.update.sparkle.notConfigured',
+                          fallback: 'This build does not include a Sparkle update feed and public key.',
+                        ),
+                        style: TextStyle(color: _mutedText, fontSize: 12),
+                      ),
+                    ],
+                    const SizedBox(height: 14),
+                  ],
+                  if (_progress != null ||
+                      _state == _UpdateUiState.downloading) ...[
                     LinearProgressIndicator(
                       value: _progress,
                       minHeight: 4,
@@ -396,7 +608,7 @@ class _AboutSettingsPageState extends State<_AboutSettingsPage> {
                       _message!,
                       key: const ValueKey('settings-update-status'),
                       style: TextStyle(
-                        color: _state == _UpdateUiState.error
+                        color: _messageIsError
                             ? const Color(0xffdc2626)
                             : _mutedText,
                         fontSize: 12,
@@ -405,65 +617,121 @@ class _AboutSettingsPageState extends State<_AboutSettingsPage> {
                     ),
                     const SizedBox(height: 14),
                   ],
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: _SettingsOutlineButton(
-                      key: const ValueKey('settings-update-action'),
-                      onTap: _busy
-                          ? null
-                          : switch (_state) {
-                              _UpdateUiState.available => _download,
-                              _UpdateUiState.ready => _install,
-                              _UpdateUiState.restartPending =>
-                                _restartAfterUpdate,
-                              _ => _check,
-                            },
-                      leading: _busy
-                          ? const SizedBox.square(
-                              dimension: 14,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : Icon(
-                              _state == _UpdateUiState.ready
-                                  ? LucideIcons.packageOpen
-                                  : _state == _UpdateUiState.restartPending
-                                  ? LucideIcons.refreshCw
-                                  : _state == _UpdateUiState.available
-                                  ? LucideIcons.download
-                                  : LucideIcons.refreshCw,
-                              size: 15,
-                            ),
-                      label: switch (_state) {
-                        _UpdateUiState.checking => tr(
-                          'settings.update.action.checking',
-                          fallback: 'Checking...',
-                        ),
-                        _UpdateUiState.downloading => tr(
-                          'settings.update.action.downloading',
-                          fallback: 'Downloading...',
-                        ),
-                        _UpdateUiState.installing => tr(
-                          'settings.update.action.installing',
-                          fallback: 'Installing...',
-                        ),
-                        _UpdateUiState.available => tr(
-                          'settings.update.action.download',
-                          fallback: 'Download update',
-                        ),
-                        _UpdateUiState.ready => tr(
-                          'settings.update.action.install',
-                          fallback: 'Install update',
-                        ),
-                        _UpdateUiState.restartPending => tr(
-                          'settings.update.action.restart',
-                          fallback: 'Restart Nauterm',
-                        ),
-                        _ => tr(
-                          'settings.update.action.check',
-                          fallback: 'Check for updates',
-                        ),
-                      },
+                  if (release != null && !release.canDownloadInApp) ...[
+                    Text(
+                      context.tr('settings.update.status.browserOnly'),
+                      style: TextStyle(color: _mutedText, fontSize: 12),
                     ),
+                    const SizedBox(height: 14),
+                  ],
+                  Wrap(
+                    alignment: WrapAlignment.end,
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      if (release != null) ...[
+                        _SettingsOutlineButton(
+                          label: 'settings.update.action.releaseDetails',
+                          onTap: _busy
+                              ? null
+                              : () => _openUpdateLink(release.releaseUri),
+                        ),
+                        _SettingsOutlineButton(
+                          label: 'settings.update.action.downloadInBrowser',
+                          onTap: _busy
+                              ? null
+                              : () =>
+                                    _openUpdateLink(release.asset.downloadUri),
+                        ),
+                      ],
+                      if (_state == _UpdateUiState.downloading)
+                        _SettingsOutlineButton(
+                          label: 'settings.update.action.cancelDownload',
+                          onTap: _downloadCancellation?.isCancelled == false
+                              ? _cancelDownload
+                              : null,
+                        ),
+                      if (_state == _UpdateUiState.ready)
+                        _SettingsOutlineButton(
+                          label: _handedToInstaller
+                              ? 'common.action.dismiss'
+                              : 'settings.update.action.discardDownload',
+                          onTap: _busy ? null : _discardDownload,
+                        ),
+                      _SettingsOutlineButton(
+                        key: const ValueKey('settings-update-action'),
+                        onTap:
+                            _busy ||
+                                (_usesSparkle && _sparkleConfigured != true)
+                            ? null
+                            : switch (_state) {
+                                _UpdateUiState.available
+                                    when release?.canDownloadInApp == true =>
+                                  _download,
+                                _UpdateUiState.ready => _install,
+                                _UpdateUiState.restartPending =>
+                                  _restartAfterUpdate,
+                                _ => _check,
+                              },
+                        leading: _busy
+                            ? const SizedBox.square(
+                                dimension: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : Icon(
+                                _state == _UpdateUiState.ready
+                                    ? LucideIcons.packageOpen
+                                    : _state == _UpdateUiState.restartPending
+                                    ? LucideIcons.refreshCw
+                                    : _state == _UpdateUiState.available &&
+                                          release?.canDownloadInApp == true
+                                    ? LucideIcons.download
+                                    : LucideIcons.refreshCw,
+                                size: 15,
+                              ),
+                        label: switch (_state) {
+                          _UpdateUiState.checking => tr(
+                            'settings.update.action.checking',
+                            fallback: 'Checking for updates…',
+                          ),
+                          _UpdateUiState.downloading => tr(
+                            'settings.update.action.downloading',
+                            fallback: 'Downloading...',
+                          ),
+                          _UpdateUiState.installing => tr(
+                            'settings.update.action.installing',
+                            fallback: 'Installing...',
+                          ),
+                          _UpdateUiState.available
+                              when release?.canDownloadInApp == true =>
+                            tr(
+                              'settings.update.action.download',
+                              fallback: 'Download update',
+                            ),
+                          _UpdateUiState.ready
+                              when release?.asset.kind ==
+                                  DesktopUpdateAssetKind.windowsInstaller =>
+                            tr(
+                              'settings.update.action.openVerifiedPackage',
+                              fallback: 'Open verified package',
+                            ),
+                          _UpdateUiState.ready => tr(
+                            'settings.update.action.install',
+                          ),
+                          _UpdateUiState.restartPending => tr(
+                            'settings.update.action.restart',
+                            fallback: 'Restart {appName}',
+                            args: {'appName': _applicationName},
+                          ),
+                          _ => tr(
+                            'settings.update.action.check',
+                            fallback: 'Check for updates',
+                          ),
+                        },
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -501,10 +769,12 @@ class _UpdateInstalledDialog extends StatelessWidget {
   const _UpdateInstalledDialog({
     required this.version,
     required this.packageInstalled,
+    required this.applicationName,
   });
 
   final String version;
   final bool packageInstalled;
+  final String applicationName;
 
   @override
   Widget build(BuildContext context) {
@@ -526,9 +796,9 @@ class _UpdateInstalledDialog extends StatelessWidget {
                   ? 'settings.update.dialog.installed.description'
                   : 'settings.update.dialog.ready.description',
               fallback: packageInstalled
-                  ? 'Nauterm {version} was installed successfully. Restart now to use the new version.'
-                  : 'Nauterm {version} is ready. Restart now to replace the current AppImage and launch the update.',
-              args: {'version': version},
+                  ? '{appName} {version} was installed successfully. Restart now to use the new version.'
+                  : '{appName} {version} is ready. Restart now to replace the current AppImage and launch the update.',
+              args: {'appName': applicationName, 'version': version},
             ),
             style: TextStyle(color: _mutedText, fontSize: 12, height: 1.5),
           ),
@@ -546,7 +816,8 @@ class _UpdateInstalledDialog extends StatelessWidget {
                 key: const ValueKey('settings-update-restart-now'),
                 label: tr(
                   'settings.update.action.restart',
-                  fallback: 'Restart Nauterm',
+                  fallback: 'Restart {appName}',
+                  args: {'appName': applicationName},
                 ),
                 onTap: () => Navigator.of(context).pop(true),
               ),
@@ -721,10 +992,15 @@ class _ThirdPartyLicensesDialogState extends State<_ThirdPartyLicensesDialog> {
                 Divider(height: 1, color: _softOutline),
                 Expanded(
                   child: _loading
-                      ? const Center(
+                      ? Center(
                           child: SizedBox.square(
                             dimension: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              semanticsLabel: context.tr(
+                                'settings.about.licenses.loading',
+                              ),
+                            ),
                           ),
                         )
                       : Row(
@@ -961,13 +1237,16 @@ class _ThirdPartyLicensesDialogState extends State<_ThirdPartyLicensesDialog> {
               child: Divider(height: 1, color: _softOutline),
             ),
             itemBuilder: (context, index) {
-              return SelectableText(
-                record.licenses[index].body,
-                style: TextStyle(
-                  color: _mutedText,
-                  fontFamily: 'monospace',
-                  fontSize: 11,
-                  height: 1.5,
+              return Semantics(
+                label: context.tr('settings.about.licenses.text.label'),
+                child: SelectableText(
+                  record.licenses[index].body,
+                  style: TextStyle(
+                    color: _mutedText,
+                    fontFamily: 'monospace',
+                    fontSize: 11,
+                    height: 1.5,
+                  ),
                 ),
               );
             },

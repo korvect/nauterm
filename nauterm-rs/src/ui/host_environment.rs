@@ -285,7 +285,7 @@ impl Nauterm {
             || (page.error.is_some() && editor.host.as_ref().unwrap().environment.is_none());
         let mut frame = crate::components::DrawerFrame::new(
             "host-environment-editor",
-            "Environment Variables",
+            "workspace.label.environmentVariables",
             self.data.dark,
         )
         .scroll_handle(&page.scroll)
@@ -294,28 +294,32 @@ impl Nauterm {
                 .toolbar()
                 .ghost()
                 .icon(IconName::ArrowRightToLine)
-                .tooltip("Back to Host")
+                .tooltip("common.action.close")
                 .on_click(
                     cx.listener(|this, _, window, cx| this.leave_host_environment(window, cx)),
                 ),
         )
         .section(self.editor_section(
-            "Environment variables",
+            "workspace.label.environmentVariables",
             vec![
                     div()
-                        .child(crate::localization::view(format!(
-                            "Set environment variables for {}.",
-                            editor.fields[0].1.read(cx).value()
-                        )))
+                        .child(crate::localization::format(
+                            cx,
+                            "workspace.host.environment.edit.description",
+                            &[("host", &editor.fields[0].1.read(cx).value())],
+                        ))
                         .into_any_element(),
                     div()
                         .text_color(p.muted)
-                        .child(crate::localization::text(cx, "rs.ui.copy.sshAcceptEnv"))
+                        .child(crate::localization::text(
+                            cx,
+                            "workspace.host.environment.description",
+                        ))
                         .into_any_element(),
                     Button::new("add-host-variable")
                         .large()
                         .w_full()
-                        .label("Add variable")
+                        .label("workspace.label.addVariable")
                         .icon(crate::assets::icon(IconName::Plus))
                         .disabled(unavailable)
                         .on_click(
@@ -356,7 +360,7 @@ impl Nauterm {
                                             .xsmall()
                                             .ghost()
                                             .icon(crate::assets::icon(IconName::X))
-                                            .tooltip("Remove variable")
+                                            .tooltip("workspace.label.removeVariable")
                                             .on_click(cx.listener(move |this, _, _, cx| {
                                                 if let Some(page) = this
                                                     .editor
@@ -374,8 +378,8 @@ impl Nauterm {
                                     ),
                             ),
                     )
-                    .child(Field::input(&row.name, "Variable"))
-                    .child(Field::input(&row.value, "Value")),
+                    .child(Field::input(&row.name, "common.label.variable"))
+                    .child(Field::input(&row.value, "common.label.value")),
             );
         }
         frame
@@ -386,10 +390,7 @@ impl Nauterm {
             .section(
                 div()
                     .when(page.loading, |view| {
-                        view.child(crate::localization::text(
-                            cx,
-                            "rs.ui.copy.loadingEnvironment",
-                        ))
+                        view.child(crate::localization::text(cx, "common.status.loading"))
                     })
                     .when(page.error.is_some(), |view| {
                         view.when(unavailable && !page.loading, |view| {
@@ -397,7 +398,7 @@ impl Nauterm {
                                 Button::new("retry-host-environment")
                                     .small()
                                     .ghost()
-                                    .label("Retry")
+                                    .label("common.action.retry")
                                     .on_click(cx.listener(|this, _, window, cx| {
                                         this.open_host_environment(window, cx)
                                     })),
@@ -410,7 +411,7 @@ impl Nauterm {
                     .large()
                     .w_full()
                     .accent()
-                    .label("Save")
+                    .label("common.action.save")
                     .disabled(unavailable)
                     .on_click(
                         cx.listener(|this, _, window, cx| {

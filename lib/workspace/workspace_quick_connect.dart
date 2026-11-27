@@ -281,7 +281,7 @@ class _QuickConnectDialogState extends State<_QuickConnectDialog> {
                                       CrossAxisAlignment.stretch,
                                   children: [
                                     _QuickConnectSectionHeader(
-                                      label: 'Shells',
+                                      label: tr('common.label.shells'),
                                       trailing: hasMoreShells
                                           ? _WorkspaceButton(
                                               label: _showAllShells
@@ -322,7 +322,9 @@ class _QuickConnectDialogState extends State<_QuickConnectDialog> {
                               },
                             ),
                             const SizedBox(height: 14),
-                            const _QuickConnectSectionLabel('Hosts'),
+                            _QuickConnectSectionLabel(
+                              context.tr('common.label.hosts'),
+                            ),
                             SizedBox(height: 6),
                             if (directQuery != null) ...[
                               _QuickConnectDirectRow(
@@ -335,7 +337,9 @@ class _QuickConnectDialogState extends State<_QuickConnectDialog> {
                             if (widget.loading)
                               const _QuickConnectEmptyState('Loading hosts...')
                             else if (hosts.isEmpty)
-                              const _QuickConnectEmptyState('No hosts found.')
+                              const _QuickConnectEmptyState(
+                                'workspace.label.noHostsFound',
+                              )
                             else
                               _QuickConnectHostList(
                                 hosts: hosts,
@@ -535,7 +539,9 @@ class _QuickConnectShellGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (shells.isEmpty) {
-      return const SizedBox.shrink();
+      return const _QuickConnectEmptyState(
+        'workspace.quickConnect.shells.empty',
+      );
     }
 
     return GridView.builder(
@@ -689,6 +695,10 @@ class _QuickConnectHostRow extends StatelessWidget {
                 children: [
                   Text(
                     host.name,
+                    semanticsLabel: context.tr(
+                      'workspace.quickConnect.host.accessibility',
+                      args: {'host': host.name},
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
@@ -718,6 +728,12 @@ class _QuickConnectHostRow extends StatelessWidget {
             SizedBox(width: 8),
             _WorkspaceButton(
               label: hasSsh ? 'SSH' : 'Open',
+              tooltip: hasSsh
+                  ? context.tr(
+                      'workspace.label.connectWithSsh',
+                      fallback: 'Connect with SSH',
+                    )
+                  : null,
               variant: _WorkspaceButtonVariant.outlined,
               size: _WorkspaceControlSize.tiny,
               horizontalPadding: 11,

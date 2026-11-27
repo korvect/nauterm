@@ -134,7 +134,11 @@ impl Nauterm {
                 window_min_size: Some(size(px(950.), px(440.))),
                 titlebar: Some(TitlebarOptions {
                     title: Some(
-                        format!("Nauterm RS {}", crate::localization::text(cx, "Settings")).into(),
+                        format!(
+                            "Nauterm RS {}",
+                            crate::localization::text(cx, "common.label.settings"),
+                        )
+                        .into(),
                     ),
                     appears_transparent: !standard_titlebar,
                     ..Default::default()

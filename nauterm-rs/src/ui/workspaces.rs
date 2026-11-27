@@ -482,7 +482,7 @@ impl Nauterm {
                     .secondary()
                     .mx(px(12.))
                     .h(px(32.))
-                    .label("New workspace")
+                    .label("workspace.label.newWorkspace")
                     .icon(crate::assets::icon(IconName::Plus))
                     .on_click(
                         cx.listener(|this, _, window, cx| {
@@ -509,6 +509,15 @@ impl Nauterm {
                             .in_workspace(id)
                             .map(|tab| tab.tree.sessions().count())
                             .sum::<usize>();
+                        let sessions = crate::localization::format(
+                            cx,
+                            if count == 1 {
+                                "workspace.overview.sessions.single"
+                            } else {
+                                "workspace.overview.sessions.count"
+                            },
+                            &[("count", &count.to_string())],
+                        );
                         let group: SharedString = format!("workspace-card-{id}").into();
                         Button::new(("workspace", id))
                             .large()
@@ -531,11 +540,7 @@ impl Nauterm {
                             } else {
                                 p.sidebar
                             })
-                            .localized_accessibility_label(format!(
-                                "Workspace {} — {count} {}",
-                                workspace.name,
-                                if count == 1 { "session" } else { "sessions" }
-                            ))
+                            .accessibility_label(format!("{} — {sessions}", workspace.name))
                             .on_click(cx.listener(move |this, _, window, cx| {
                                 this.select_workspace(id, window, cx)
                             }))
@@ -574,10 +579,7 @@ impl Nauterm {
                                             .text_size(px(12.))
                                             .font_weight(FontWeights::MEDIUM)
                                             .text_color(p.muted)
-                                            .child(format!(
-                                                "{count} {}",
-                                                if count == 1 { "session" } else { "sessions" }
-                                            )),
+                                            .child(sessions),
                                     ),
                             )
                             .child(
@@ -591,7 +593,7 @@ impl Nauterm {
                                             .ghost()
                                             .icon(IconName::Pencil)
                                             .icon_size(px(15.))
-                                            .tooltip("Rename workspace")
+                                            .tooltip("workspace.label.renameWorkspace")
                                             .on_click(cx.listener(move |this, _, window, cx| {
                                                 cx.stop_propagation();
                                                 this.rename_workspace(id, window, cx);
@@ -603,7 +605,7 @@ impl Nauterm {
                                             .ghost()
                                             .icon(crate::assets::icon(IconName::X))
                                             .icon_size(px(15.))
-                                            .tooltip("Close workspace")
+                                            .tooltip("workspace.label.closeWorkspace")
                                             .text_color(rgb(0xef4444))
                                             .on_click(cx.listener(move |this, _, window, cx| {
                                                 cx.stop_propagation();
@@ -617,15 +619,16 @@ impl Nauterm {
                             .context_menu(move |menu, _, _| {
                                 let close = owner.clone();
                                 let rename = rename.clone();
-                                menu.item(MenuItem::localized("Rename workspace").on_click(
-                                    move |_, window, cx| {
-                                        let _ = rename.update(cx, |this, cx| {
-                                            this.rename_workspace(id, window, cx)
-                                        });
-                                    },
-                                ))
+                                menu.item(
+                                    MenuItem::localized("workspace.label.renameWorkspace")
+                                        .on_click(move |_, window, cx| {
+                                            let _ = rename.update(cx, |this, cx| {
+                                                this.rename_workspace(id, window, cx)
+                                            });
+                                        }),
+                                )
                                 .item(
-                                    MenuItem::localized("Close workspace").on_click(
+                                    MenuItem::localized("workspace.label.closeWorkspace").on_click(
                                         move |_, window, cx| {
                                             let _ = close.update(cx, |this, cx| {
                                                 this.close_pending =
@@ -768,7 +771,7 @@ impl Nauterm {
                                     .ghost()
                                     .text_color(if selected { p.text } else { p.muted })
                                     .icon(IconName::Maximize2)
-                                    .tooltip("Open terminal")
+                                    .tooltip("workspace.label.openTerminalTab")
                                     .on_click(cx.listener(move |this, _, window, cx| {
                                         if let Some(tab) =
                                             this.terminals.iter_mut().find(|tab| tab.id == id)
@@ -871,7 +874,7 @@ impl Nauterm {
                 .child(
                     Button::new("workspace-empty-connect")
                         .primary()
-                        .label("New Connect")
+                        .label("workspace.label.newConnect")
                         .icon(crate::assets::icon(IconName::Plus))
                         .on_click(cx.listener(|this, _, window, cx| {
                             this.open_quick_connect(false, window, cx)
@@ -931,17 +934,20 @@ impl Nauterm {
                 )
                 .width(360.)
                 .colors(crate::components::DialogColors::workspace(self.data.dark))
-                .content(Field::input(&dialog.input, "Name").error(dialog.validation_error.clone()))
+                .content(
+                    Field::input(&dialog.input, "common.label.name")
+                        .error(dialog.validation_error.clone()),
+                )
                 .action(
                     Button::new("cancel-workspace-rename")
                         .ghost()
-                        .label("Cancel")
+                        .label("common.action.cancel")
                         .on_click(|_, window, cx| crate::components::Modal::dismiss(window, cx)),
                 )
                 .action(
                     Button::new("confirm-workspace-rename")
                         .primary()
-                        .label("Rename")
+                        .label("common.action.rename")
                         .on_click(
                             cx.listener(|this, _, window, cx| this.save_workspace_name(window, cx)),
                         ),
@@ -1010,12 +1016,10 @@ impl Nauterm {
                 .any(|tab| tab.tree.sessions().any(editing)),
         };
         if has_edits {
-            return crate::localization::format_for(
-                crate::localization::language(cx),
-                "rs.ui.copy.externalEditSessionsWillCloseStable",
-                &[("base", &base)],
-            )
-            .to_string();
+            return format!(
+                "{base}\n\n{}",
+                crate::localization::text(cx, "workspace.closeWindow.externalEdits.description"),
+            );
         }
         base
     }
@@ -1027,22 +1031,23 @@ impl Nauterm {
             )
             .to_string();
         }
-        let work_warning = || {
+        let work_warnings = || {
+            let mut warnings = Vec::new();
             if self
                 .sftp
                 .as_ref()
                 .is_some_and(|view| view.read(cx).has_request(cx))
             {
-                Some("workspace.closeWindow.sftpInProgress")
-            } else if self
+                warnings.push("workspace.closeWindow.sftpInProgress");
+            }
+            if self
                 .keychain
                 .as_ref()
                 .is_some_and(|view| view.read(cx).has_connection(cx))
             {
-                Some("rs.ui.copy.runningSessionsWillBeDisconnectedKey")
-            } else {
-                None
+                warnings.push("workspace.closeWindow.keyExport.description");
             }
+            warnings
         };
         if matches!(target, CloseTarget::Quit | CloseTarget::Window) {
             let tabs = self.terminals.iter().count();
@@ -1072,12 +1077,13 @@ impl Nauterm {
                         ("forwards", &forwards.to_string()),
                     ],
                 );
-                return match work_warning() {
-                    Some(warning) => {
-                        format!("{message}\n\n{}", crate::localization::text(cx, warning))
-                    }
-                    None => message.to_string(),
-                };
+                let mut paragraphs = vec![message.to_string()];
+                paragraphs.extend(
+                    work_warnings()
+                        .into_iter()
+                        .map(|key| crate::localization::text(cx, key).to_string()),
+                );
+                return paragraphs.join("\n\n");
             }
         }
         if matches!(target, CloseTarget::Restart) && !self.has_open_sessions(cx) {
@@ -1113,10 +1119,14 @@ impl Nauterm {
             )
             .to_string();
         }
-        crate::localization::text(
-            cx,
-            work_warning().unwrap_or("rs.ui.copy.runningSessionsWillBeDisconnected"),
-        )
-        .to_string()
+        let mut warnings = work_warnings();
+        if warnings.is_empty() {
+            warnings.push("workspace.closeWindow.remoteSessions.description");
+        }
+        warnings
+            .into_iter()
+            .map(|key| crate::localization::text(cx, key).to_string())
+            .collect::<Vec<_>>()
+            .join("\n\n")
     }
 }

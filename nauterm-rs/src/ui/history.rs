@@ -209,7 +209,7 @@ impl Render for History {
                                 .toolbar()
                                 .ghost()
                                 .icon(IconName::RefreshCw)
-                                .tooltip("Reload shell history")
+                                .tooltip("common.action.retry")
                                 .disabled(self.loading || self.busy)
                                 .on_click(cx.listener(|view, _, _, cx| view.refresh(cx))),
                         )
@@ -219,12 +219,12 @@ impl Render for History {
                             .toolbar()
                             .ghost()
                             .icon(IconName::Ellipsis)
-                            .tooltip("More")
+                            .tooltip("workspace.label.more")
                             .disabled(self.loading || self.busy)
                             .dropdown_menu(move |menu, _, _| {
                                 let owner = owner.clone();
                                 menu.width(170.).item(
-                                    MenuItem::localized("Clear all")
+                                    MenuItem::localized("workspace.label.clearAll")
                                         .icon(IconName::Trash)
                                         .destructive(true)
                                         .on_click(move |_, _, cx| {
@@ -242,7 +242,7 @@ impl Render for History {
                             .toolbar()
                             .ghost()
                             .icon(IconName::ArrowRightToLine)
-                            .tooltip("Close")
+                            .tooltip("common.action.close")
                             .on_click(cx.listener(|_, _, _, cx| cx.emit(Action::Close))),
                     ),
             )
@@ -258,9 +258,9 @@ impl Render for History {
                         .font_weight(FontWeights::MEDIUM)
                         .text_color(p.muted)
                         .child(crate::localization::view(if self.loading {
-                            "Loading shell history…"
+                            "workspace.history.loading"
                         } else {
-                            "No shell history recorded yet."
+                            "workspace.description.noShellHistoryRecordedYet"
                         })),
                 )
             })
@@ -337,7 +337,7 @@ impl Render for History {
                                                                 .min_w(px(58.))
                                                                 .xsmall()
                                                                 .primary()
-                                                                .label("SAVE")
+                                                                .label("common.action.save")
                                                                 .disabled(!can_save)
                                                                 .on_click(move |_, _, cx| {
                                                                     let _ = owner.update(
@@ -400,14 +400,14 @@ impl Render for History {
                         .action(
                             Button::new("cancel-clear-history")
                                 .ghost()
-                                .label("Cancel")
+                                .label("common.action.cancel")
                                 .disabled(self.busy)
                                 .on_click(|_, window, cx| Modal::dismiss(window, cx)),
                         )
                         .action(
                             Button::new("confirm-clear-history")
                                 .danger()
-                                .label("Clear all")
+                                .label("workspace.label.clearAll")
                                 .disabled(self.busy)
                                 .on_click(cx.listener(|view, _, _, cx| view.clear(cx))),
                         ),

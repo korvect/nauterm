@@ -74,7 +74,7 @@ impl Panel {
             return None;
         }
         Some(
-            Modal::new("about-source-license-modal", "Source License")
+            Modal::new("about-source-license-modal", "settings.label.sourceLicense")
                 .focus_scope(&self.source_focus)
                 .return_focus(&self.focus)
                 .on_dismiss(cx.listener(|this, _, _, cx| {
@@ -91,13 +91,13 @@ impl Panel {
                                 .h(px(350.))
                                 .aria_label(crate::localization::text(
                                     cx,
-                                    "Nauterm source license",
+                                    "settings.label.sourceLicense",
                                 )),
                         )
                         .action(
                             Button::new("copy-source-license")
                                 .outline()
-                                .label("Copy")
+                                .label("common.action.copy")
                                 .on_click(|_, _, cx| {
                                     cx.write_to_clipboard(ClipboardItem::new_string(
                                         model::SOURCE_LICENSE.into(),
@@ -106,7 +106,7 @@ impl Panel {
                         )
                         .action(
                             Button::new("close-source-license")
-                                .label("Done")
+                                .label("common.action.done")
                                 .on_click(|_, window, cx| Modal::dismiss(window, cx)),
                         ),
                 )
@@ -129,14 +129,20 @@ impl Panel {
                 .flex_col()
                 .gap(px(12.))
                 .child(div().text_size(px(12.)).text_color(p.muted).child(
-                    crate::localization::view(format!(
-                        "Nauterm RS {} · Dependencies across all supported platforms.",
-                        model::VERSION
-                    )),
+                    crate::localization::format(
+                        cx,
+                        "settings.about.licenses.bundledPackages",
+                        &[
+                            ("appName", crate::APPLICATION_NAME),
+                            ("version", model::VERSION),
+                        ],
+                    ),
                 ))
                 .child(
-                    Input::new(&self.query)
-                        .aria_label(crate::localization::text(cx, "Search third-party packages")),
+                    Input::new(&self.query).aria_label(crate::localization::text(
+                        cx,
+                        "settings.search.packages.hint",
+                    )),
                 );
         if self.license_loading {
             body = body.child(
@@ -145,7 +151,10 @@ impl Panel {
                     .items_center()
                     .gap(px(8.))
                     .child(Spinner::new())
-                    .child(crate::localization::text(cx, "rs.ui.copy.loadingLicenses")),
+                    .child(crate::localization::text(
+                        cx,
+                        "settings.about.licenses.loading",
+                    )),
             );
         }
         if let Some(catalog) = &self.catalog {
@@ -227,7 +236,10 @@ impl Panel {
                         Input::multiline(&self.text)
                             .readonly(true)
                             .h(px(if compact { 230. } else { 290. }))
-                            .aria_label(crate::localization::text(cx, "Third-party license text")),
+                            .aria_label(crate::localization::text(
+                                cx,
+                                "settings.about.licenses.text.label",
+                            )),
                     );
             } else {
                 detail = detail.child(div().p(px(12.)).text_color(p.muted).child(
@@ -244,43 +256,50 @@ impl Panel {
             );
         }
         Some(
-            Modal::new("about-third-party-modal", "Third-party Licenses")
-                .focus_scope(&self.license_focus)
-                .return_focus(&self.focus)
-                .on_dismiss(cx.listener(|this, _, _, cx| {
-                    this.licenses_open = false;
-                    this.license_task = None;
-                    cx.notify();
-                }))
-                .content(
-                    DialogFrame::new("about-third-party-frame", "Third-party Licenses")
-                        .colors(self.colors())
-                        .width(870.)
-                        .content(body)
-                        .action(
-                            Button::new("copy-third-party-license")
-                                .outline()
-                                .label("Copy")
-                                .disabled(self.selected.is_none())
-                                .on_click(cx.listener(|this, _, _, cx| {
-                                    if let Some(package) = this.selected.and_then(|index| {
-                                        this.catalog.as_ref()?.packages.get(index)
-                                    }) {
-                                        cx.write_to_clipboard(ClipboardItem::new_string(format!(
-                                            "{}\n\n{}",
-                                            package.label(),
-                                            package.text()
-                                        )));
-                                    }
-                                })),
-                        )
-                        .action(
-                            Button::new("close-third-party-licenses")
-                                .label("Done")
-                                .on_click(|_, window, cx| Modal::dismiss(window, cx)),
-                        ),
+            Modal::new(
+                "about-third-party-modal",
+                "settings.label.thirdPartyLicenses",
+            )
+            .focus_scope(&self.license_focus)
+            .return_focus(&self.focus)
+            .on_dismiss(cx.listener(|this, _, _, cx| {
+                this.licenses_open = false;
+                this.license_task = None;
+                cx.notify();
+            }))
+            .content(
+                DialogFrame::new(
+                    "about-third-party-frame",
+                    "settings.label.thirdPartyLicenses",
                 )
-                .into_any_element(),
+                .colors(self.colors())
+                .width(870.)
+                .content(body)
+                .action(
+                    Button::new("copy-third-party-license")
+                        .outline()
+                        .label("common.action.copy")
+                        .disabled(self.selected.is_none())
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            if let Some(package) = this
+                                .selected
+                                .and_then(|index| this.catalog.as_ref()?.packages.get(index))
+                            {
+                                cx.write_to_clipboard(ClipboardItem::new_string(format!(
+                                    "{}\n\n{}",
+                                    package.label(),
+                                    package.text()
+                                )));
+                            }
+                        })),
+                )
+                .action(
+                    Button::new("close-third-party-licenses")
+                        .label("common.action.done")
+                        .on_click(|_, window, cx| Modal::dismiss(window, cx)),
+                ),
+            )
+            .into_any_element(),
         )
     }
 }

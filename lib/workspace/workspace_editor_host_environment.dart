@@ -170,7 +170,12 @@ class _HostEnvironmentEditorContentState
         continue;
       }
       if (!names.add(variable)) {
-        setState(() => _error = 'Environment variable names must be unique.');
+        setState(() {
+          _error = context.tr(
+            'workspace.host.environment.validation.duplicateName',
+            fallback: 'Environment variable names must be unique.',
+          );
+        });
         return;
       }
       variables.add(
@@ -188,17 +193,21 @@ class _HostEnvironmentEditorContentState
     return KeyedSubtree(
       key: const ValueKey('host-environment-editor'),
       child: _EditorShell(
-        title: 'Environment Variables',
+        title: tr(
+          'workspace.label.environmentVariables',
+          fallback: 'Environment Variables',
+        ),
         onClose: widget.onClose,
         onSave: _save,
         error: _error,
         children: [
           _WorkspaceFormSection(
-            title: 'Environment variables',
             children: [
               Text(
-                tr(
-                  'Set environment variables for ${widget.request.hostLabel}.',
+                context.tr(
+                  'workspace.host.environment.edit.description',
+                  fallback: 'Set environment variables for {host}.',
+                  args: {'host': widget.request.hostLabel},
                 ),
                 style: TextStyle(
                   color: _text,
@@ -210,8 +219,10 @@ class _HostEnvironmentEditorContentState
               ),
               SizedBox(height: 5),
               Text(
-                'Some SSH servers by default only allow variables with prefix '
-                'LC_ and LANG_.',
+                context.tr(
+                  'workspace.host.environment.description',
+                  fallback: 'Some SSH servers only accept environment variables allowed by their AcceptEnv configuration.',
+                ),
                 style: TextStyle(
                   color: _mutedText,
                   fontSize: NautermFontSizes.labelMedium,
@@ -223,7 +234,7 @@ class _HostEnvironmentEditorContentState
               SizedBox(height: 14),
               _WorkspaceButton(
                 icon: Icons.add_rounded,
-                label: 'Add variable',
+                label: 'workspace.label.addVariable',
                 variant: _WorkspaceButtonVariant.filled,
                 size: _WorkspaceControlSize.large,
                 fullWidth: true,
@@ -344,13 +355,13 @@ class _HostEnvironmentVariableCardState
               SizedBox(height: 12),
               _WorkspaceInput(
                 controller: widget.draft.variableController,
-                label: 'Variable',
+                label: tr('common.label.variable', fallback: 'Variable'),
                 autofocus: widget.autofocus,
               ),
               SizedBox(height: _workspaceFormFieldGap),
               _WorkspaceInput(
                 controller: widget.draft.valueController,
-                label: 'Value',
+                label: tr('common.label.value', fallback: 'Value'),
               ),
             ],
           ),

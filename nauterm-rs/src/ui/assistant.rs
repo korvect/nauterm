@@ -91,7 +91,9 @@ impl Nauterm {
                     .terminals
                     .iter()
                     .find(|tab| Some(tab.id) == self.active_terminal())
-                    .is_some_and(|tab| !tab.show_sftp))
+                    .is_some_and(|tab| {
+                        !tab.show_sftp && matches!(tab.active().content, TabContent::Terminal(_))
+                    }))
     }
     pub(super) fn assistant_open(&self) -> bool {
         if self.workspace_overview_visible() {

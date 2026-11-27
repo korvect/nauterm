@@ -163,7 +163,7 @@ class _IdentityEditorContentState extends State<_IdentityEditorContent>
     final username = _usernameController.text.trim();
     if (username.isEmpty) {
       setState(() {
-        _usernameError = 'Username is required.';
+        _usernameError = context.tr('workspace.validation.usernameRequired');
         _error = null;
       });
       return;
@@ -172,7 +172,7 @@ class _IdentityEditorContentState extends State<_IdentityEditorContent>
         ? _nameController.text.trim()
         : _suggestedName();
     if (name.isEmpty) {
-      setState(() => _error = 'Name is required.');
+      setState(() => _error = tr('common.validation.nameRequired'));
       return;
     }
 
@@ -196,7 +196,12 @@ class _IdentityEditorContentState extends State<_IdentityEditorContent>
     final initial = widget.request.initial;
 
     return _EditorShell(
-      title: initial == null ? 'New Identity' : 'Edit Identity',
+      title: tr(
+        initial == null
+            ? 'workspace.label.newIdentity'
+            : 'workspace.label.editIdentity',
+        fallback: initial == null ? 'New Identity' : 'Edit Identity',
+      ),
       onClose: widget.onClose,
       onSave: _save,
       saving: _saving,
@@ -215,20 +220,20 @@ class _IdentityEditorContentState extends State<_IdentityEditorContent>
           children: [
             _WorkspaceInput(
               controller: _nameController,
-              label: 'Name',
+              label: tr('common.label.name', fallback: 'Name'),
               autofocus: true,
             ),
             SizedBox(height: _workspaceFormFieldGap),
             _WorkspaceInput(
               controller: _usernameController,
-              label: 'Username',
+              label: tr('common.label.username', fallback: 'Username'),
               isRequired: true,
               errorText: _usernameError,
             ),
             SizedBox(height: _workspaceFormFieldGap),
             _WorkspaceInput(
               controller: _passwordController,
-              label: 'Password',
+              label: tr('common.label.password', fallback: 'Password'),
               obscureText: true,
             ),
             SizedBox(height: _workspaceFormFieldGap),
@@ -524,6 +529,7 @@ class _PortForwardEditorContentState extends State<_PortForwardEditorContent>
           ? tr('workspace.label.newForwarding', fallback: 'New forwarding')
           : tr('workspace.label.editForward', fallback: 'Edit Forward'),
       saving: _saving,
+      savingLabel: 'common.label.saving',
       error: _error,
       onClose: widget.onClose,
       onSave: _save,
@@ -1086,7 +1092,7 @@ class _SnippetPackageEditorContentState
     final name = _nameController.text.trim();
     if (name.isEmpty) {
       setState(() {
-        _nameError = 'Name is required.';
+        _nameError = tr('common.validation.nameRequired');
         _error = null;
       });
       return;
@@ -1114,9 +1120,14 @@ class _SnippetPackageEditorContentState
   @override
   Widget build(BuildContext context) {
     return _EditorShell(
-      title: widget.request.initial == null
-          ? 'New Snippet Package'
-          : 'Rename Snippet Package',
+      title: tr(
+        widget.request.initial == null
+            ? 'workspace.label.newSnippetPackage'
+            : 'workspace.label.renameSnippetPackage',
+        fallback: widget.request.initial == null
+            ? 'New Snippet Package'
+            : 'Rename Snippet Package',
+      ),
       saving: _saving,
       error: _error,
       onClose: widget.onClose,
@@ -1130,11 +1141,11 @@ class _SnippetPackageEditorContentState
             ],
       children: [
         _WorkspaceFormSection(
-          title: 'Package',
+          title: 'common.label.package',
           children: [
             _WorkspaceInput(
               controller: _nameController,
-              label: 'Name',
+              label: tr('common.label.name', fallback: 'Name'),
               isRequired: true,
               errorText: _nameError,
               autofocus: true,
@@ -1307,15 +1318,15 @@ class _SnippetEditorContentState extends State<_SnippetEditorContent>
             ],
       children: [
         _WorkspaceFormSection(
-          title: 'Snippet',
+          title: 'common.label.snippet',
           children: [
             _WorkspaceSelect<int?>(
-              label: 'Package',
+              label: tr('common.label.package', fallback: 'Package'),
               value: _packageId,
               editable: true,
               filterable: true,
               clearable: true,
-              createLabel: 'Create package',
+              createLabel: 'workspace.action.createSnippetPackage',
               onCreate: _createPackage,
               onChanged: (value) {
                 setState(() => _packageId = value);
@@ -1331,7 +1342,7 @@ class _SnippetEditorContentState extends State<_SnippetEditorContent>
             SizedBox(height: _workspaceFormFieldGap),
             _WorkspaceInput(
               controller: _descriptionController,
-              label: 'Description',
+              label: tr('common.label.description', fallback: 'Description'),
               autofocus: initial == null,
             ),
             SizedBox(height: _workspaceFormFieldGap),
@@ -1347,11 +1358,11 @@ class _SnippetEditorContentState extends State<_SnippetEditorContent>
         ),
         SizedBox(height: 14),
         _WorkspaceFormSection(
-          title: 'Targets',
+          title: 'common.label.targets',
           children: [
             _SnippetTargetList<HostGroup>(
-              title: 'Groups',
-              emptyLabel: 'No groups',
+              title: 'common.label.groups',
+              emptyLabel: 'workspace.label.noGroups',
               items: widget.groups,
               selectedIds: _targetGroupIds,
               idOf: (group) => group.id,
@@ -1368,8 +1379,8 @@ class _SnippetEditorContentState extends State<_SnippetEditorContent>
             ),
             SizedBox(height: 12),
             _SnippetTargetList<HostEntry>(
-              title: 'Hosts',
-              emptyLabel: 'No hosts',
+              title: 'common.label.hosts',
+              emptyLabel: 'workspace.label.noHosts',
               items: widget.hosts,
               selectedIds: _targetHostIds,
               idOf: (host) => host.id,
@@ -1424,7 +1435,7 @@ class _SnippetTargetList<T> extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          title,
+          context.tr(title),
           style: TextStyle(
             color: _text,
             fontSize: NautermFontSizes.labelMedium,
@@ -1442,7 +1453,7 @@ class _SnippetTargetList<T> extends StatelessWidget {
               ? Padding(
                   padding: const EdgeInsets.all(12),
                   child: Text(
-                    emptyLabel,
+                    context.tr(emptyLabel),
                     style: TextStyle(
                       color: _mutedText,
                       fontSize: NautermFontSizes.labelMedium,

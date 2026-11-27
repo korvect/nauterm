@@ -11,7 +11,7 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
   Future<void> _loadWorkspaceData() async {
     NautermDataStore? pendingDataStore;
     try {
-      final paths = NautermPaths.resolve();
+      final paths = widget.controller?._dataPaths ?? NautermPaths.resolve();
       final configStore = NautermConfigStore(paths);
       await configStore.ensureDefaultConfig();
       final settings = await configStore.loadRuntimeSettings();
@@ -91,6 +91,7 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
         _terminalCaptureDiskUsage = data.captureDiskUsage;
         _terminalLogsHasMore = terminalLogs.length == _terminalLogPageSize;
         _terminalLogsLoading = false;
+        _terminalLogsLoadError = null;
         _shellHistory = data.shellHistory;
         _loadingData = false;
       });
@@ -111,6 +112,7 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
       }
       _setWorkspaceState(() {
         _loadingData = false;
+        if (_dataStore == null) _terminalLogsLoadError = error.toString();
       });
       _showWorkspaceMessage(
         _workspaceDataLoadNotification(error),
@@ -119,12 +121,18 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
     }
   }
 
-  void _loadMoreTerminalLogs() {
+  void _loadMoreTerminalLogs({bool retry = false}) {
     final store = _dataStore;
-    if (store == null || _terminalLogsLoading || !_terminalLogsHasMore) {
+    if (store == null ||
+        _terminalLogsLoading ||
+        !_terminalLogsHasMore ||
+        (!retry && _terminalLogsLoadError != null)) {
       return;
     }
-    _setWorkspaceState(() => _terminalLogsLoading = true);
+    _setWorkspaceState(() {
+      _terminalLogsLoading = true;
+      _terminalLogsLoadError = null;
+    });
     try {
       final page = store.listTerminalLogs(
         limit: _terminalLogPageSize,
@@ -145,10 +153,25 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
       });
     } catch (error) {
       if (mounted) {
-        _setWorkspaceState(() => _terminalLogsLoading = false);
-        _showWorkspaceMessage('Failed to load more terminal logs: $error');
+        _setWorkspaceState(() {
+          _terminalLogsLoading = false;
+          _terminalLogsLoadError = error.toString();
+        });
       }
     }
+  }
+
+  void _retryTerminalLogs() {
+    if (_loadingData || _terminalLogsLoading) return;
+    if (_dataStore != null) {
+      _loadMoreTerminalLogs(retry: true);
+      return;
+    }
+    _setWorkspaceState(() {
+      _loadingData = true;
+      _terminalLogsLoadError = null;
+    });
+    unawaited(_loadWorkspaceData());
   }
 
   void _detectHostOsAfterConnect(
@@ -789,7 +812,13 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
     _HostItem item, {
     _HostConnectProtocol? protocol,
   }) async {
-    final rawHost = _dataStore?.getHost(item.id);
+    final HostEntry? rawHost;
+    try {
+      rawHost = _dataStore?.getHost(item.id);
+    } on NautermDataException catch (error) {
+      _showHostConnectionPreparationError(error);
+      return;
+    }
     if (rawHost == null) {
       _showWorkspaceMessage('Host is not available.');
       return;
@@ -966,11 +995,18 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
     bool openSftp = false,
     String? sftpPath,
   }) async {
-    final auth = _sshAuthForHost(
-      host,
-      feature: useMosh ? 'Mosh' : 'SSH',
-      portOverride: port,
-    );
+    final _PortForwardSshAuth? savedAuth;
+    try {
+      savedAuth = _sshAuthForHost(
+        host,
+        feature: useMosh ? 'Mosh' : 'SSH',
+        portOverride: port,
+      );
+    } on NautermDataException catch (error) {
+      _showHostConnectionPreparationError(error);
+      return;
+    }
+    final auth = savedAuth;
     if (auth == null) {
       return;
     }
@@ -1106,6 +1142,12 @@ extension _NautermWorkspaceSessionActions on _NautermWorkspaceState {
       _editorRequest = null;
     });
     widget.controller?._notifyTabsChanged();
+  }
+
+  void _showHostConnectionPreparationError(NautermDataException error) {
+    _showWorkspaceMessage(
+      '${tr('workspace.connection.preparation.retryFromHosts')}\n$error',
+    );
   }
 
   Future<void> _connectMoshHost(
@@ -1989,163 +2031,177 @@ class _HostProtocolCard extends StatelessWidget {
         letterSpacing: 0,
       ),
     );
-    return Material(
-      color: selected
-          ? _card
-          : _card.withValues(alpha: _workspaceDark ? 0.72 : 0.86),
-      borderRadius: BorderRadius.circular(9),
-      child: InkWell(
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: context.tr(
+        'connection.protocol.select',
+        args: {'protocol': title},
+      ),
+      child: Material(
+        color: selected
+            ? _card
+            : _card.withValues(alpha: _workspaceDark ? 0.72 : 0.86),
         borderRadius: BorderRadius.circular(9),
-        hoverColor: _workspaceDark ? _sidebarHover : null,
-        splashColor: _workspaceDark ? _workspaceMenuPressed : null,
-        highlightColor: _workspaceDark ? _workspaceMenuPressed : null,
-        onTap: enabled ? onTap : null,
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 62),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(9),
-            border: Border.all(
-              color: selected ? color : Colors.transparent,
-              width: selected ? 2 : 1,
-            ),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          child: Row(
-            children: [
-              Container(
-                width: 4,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: color,
-                  borderRadius: BorderRadius.circular(999),
-                ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(9),
+          hoverColor: _workspaceDark ? _sidebarHover : null,
+          splashColor: _workspaceDark ? _workspaceMenuPressed : null,
+          highlightColor: _workspaceDark ? _workspaceMenuPressed : null,
+          onTap: enabled ? onTap : null,
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 62),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(
+                color: selected ? color : Colors.transparent,
+                width: selected ? 2 : 1,
               ),
-              SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.baseline,
-                      textBaseline: TextBaseline.alphabetic,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            title,
-                            style: TextStyle(
-                              color: _text,
-                              fontSize: NautermFontSizes.labelLarge,
-                              fontWeight: NautermFontWeights.semibold,
-                              letterSpacing: 0,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Text(
-                          'port:',
-                          style: portTextStyle.copyWith(color: _mutedText),
-                        ),
-                        const SizedBox(width: 5),
-                        SizedBox(
-                          width: 52,
-                          height: 24,
-                          child: TextField(
-                            key: ValueKey('host-protocol-port:$title'),
-                            controller: portController,
-                            enabled: enabled,
-                            onTap: onTap,
-                            onChanged: (_) => onTap(),
-                            maxLines: 1,
-                            keyboardType: TextInputType.number,
-                            inputFormatters: [
-                              FilteringTextInputFormatter.digitsOnly,
-                            ],
-                            textAlign: TextAlign.left,
-                            textDirection: TextDirection.ltr,
-                            style: portTextStyle.copyWith(color: _text),
-                            decoration: InputDecoration(
-                              isDense: true,
-                              contentPadding: const EdgeInsets.only(bottom: 4),
-                              border: UnderlineInputBorder(
-                                borderSide: BorderSide(color: _sidebarDivider),
-                              ),
-                              enabledBorder: UnderlineInputBorder(
-                                borderSide: BorderSide(color: _sidebarDivider),
-                              ),
-                              focusedBorder: UnderlineInputBorder(
-                                borderSide: BorderSide(color: color),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 3),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.baseline,
-                      textBaseline: TextBaseline.alphabetic,
-                      children: [
-                        if (commandController == null)
-                          Flexible(child: commandPreview)
-                        else
-                          ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 150),
-                            child: commandPreview,
-                          ),
-                        if (commandController != null) ...[
-                          const SizedBox(width: 10),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            child: Row(
+              children: [
+                Container(
+                  width: 4,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: color,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
+                        children: [
                           Expanded(
-                            child: SizedBox(
-                              height: 24,
-                              child: TextField(
-                                key: const ValueKey(
-                                  'host-protocol-mosh-command',
+                            child: Text(
+                              title,
+                              style: TextStyle(
+                                color: _text,
+                                fontSize: NautermFontSizes.labelLarge,
+                                fontWeight: NautermFontWeights.semibold,
+                                letterSpacing: 0,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            'port:',
+                            style: portTextStyle.copyWith(color: _mutedText),
+                          ),
+                          const SizedBox(width: 5),
+                          SizedBox(
+                            width: 52,
+                            height: 24,
+                            child: TextField(
+                              key: ValueKey('host-protocol-port:$title'),
+                              controller: portController,
+                              enabled: enabled,
+                              onTap: onTap,
+                              onChanged: (_) => onTap(),
+                              maxLines: 1,
+                              keyboardType: TextInputType.number,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                              ],
+                              textAlign: TextAlign.left,
+                              textDirection: TextDirection.ltr,
+                              style: portTextStyle.copyWith(color: _text),
+                              decoration: InputDecoration(
+                                isDense: true,
+                                contentPadding: const EdgeInsets.only(
+                                  bottom: 4,
                                 ),
-                                controller: commandController,
-                                enabled: enabled,
-                                onTap: onTap,
-                                maxLines: 1,
-                                style: TextStyle(
-                                  color: _text,
-                                  fontSize: NautermFontSizes.labelLarge,
-                                  fontWeight: NautermFontWeights.regular,
-                                  letterSpacing: 0,
+                                border: UnderlineInputBorder(
+                                  borderSide: BorderSide(
+                                    color: _sidebarDivider,
+                                  ),
                                 ),
-                                decoration: InputDecoration(
-                                  isDense: true,
-                                  hintText: defaultMoshServerCommand,
-                                  hintStyle: TextStyle(
-                                    color: _mutedText.withValues(alpha: 0.72),
-                                    fontSize: NautermFontSizes.labelLarge,
+                                enabledBorder: UnderlineInputBorder(
+                                  borderSide: BorderSide(
+                                    color: _sidebarDivider,
                                   ),
-                                  contentPadding: const EdgeInsets.only(
-                                    bottom: 4,
-                                  ),
-                                  border: UnderlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color: _sidebarDivider,
-                                    ),
-                                  ),
-                                  enabledBorder: UnderlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color: _sidebarDivider,
-                                    ),
-                                  ),
-                                  focusedBorder: UnderlineInputBorder(
-                                    borderSide: BorderSide(color: color),
-                                  ),
+                                ),
+                                focusedBorder: UnderlineInputBorder(
+                                  borderSide: BorderSide(color: color),
                                 ),
                               ),
                             ),
                           ),
                         ],
-                      ],
-                    ),
-                  ],
+                      ),
+                      const SizedBox(height: 3),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
+                        children: [
+                          if (commandController == null)
+                            Flexible(child: commandPreview)
+                          else
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 150),
+                              child: commandPreview,
+                            ),
+                          if (commandController != null) ...[
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: SizedBox(
+                                height: 24,
+                                child: TextField(
+                                  key: const ValueKey(
+                                    'host-protocol-mosh-command',
+                                  ),
+                                  controller: commandController,
+                                  enabled: enabled,
+                                  onTap: onTap,
+                                  maxLines: 1,
+                                  style: TextStyle(
+                                    color: _text,
+                                    fontSize: NautermFontSizes.labelLarge,
+                                    fontWeight: NautermFontWeights.regular,
+                                    letterSpacing: 0,
+                                  ),
+                                  decoration: InputDecoration(
+                                    isDense: true,
+                                    hintText: defaultMoshServerCommand,
+                                    hintStyle: TextStyle(
+                                      color: _mutedText.withValues(alpha: 0.72),
+                                      fontSize: NautermFontSizes.labelLarge,
+                                    ),
+                                    contentPadding: const EdgeInsets.only(
+                                      bottom: 4,
+                                    ),
+                                    border: UnderlineInputBorder(
+                                      borderSide: BorderSide(
+                                        color: _sidebarDivider,
+                                      ),
+                                    ),
+                                    enabledBorder: UnderlineInputBorder(
+                                      borderSide: BorderSide(
+                                        color: _sidebarDivider,
+                                      ),
+                                    ),
+                                    focusedBorder: UnderlineInputBorder(
+                                      borderSide: BorderSide(color: color),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

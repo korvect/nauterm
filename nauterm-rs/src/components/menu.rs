@@ -1328,12 +1328,13 @@ mod tests {
     #[test]
     fn product_menu_copy_translates_but_user_owned_labels_and_identity_stay_literal() {
         use crate::localization::Language;
-        let action = MenuItem::localized("Copy");
+        let action = MenuItem::localized("common.action.copy");
         let named = MenuItem::new(String::from("Copy"));
         assert_eq!(action.display_for(Language::Chinese), "复制");
         assert_eq!(action.display_for(Language::English), "Copy");
         assert_eq!(named.display_for(Language::Chinese), "Copy");
-        assert_eq!(action.label, named.label);
+        assert_eq!(action.label, "common.action.copy");
+        assert_eq!(named.label, "Copy");
         let model = MenuItem::new("provider/model:latest".to_owned()).caption("Provider");
         assert_eq!(
             model.display_for(Language::Chinese),

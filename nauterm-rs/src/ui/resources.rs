@@ -34,7 +34,7 @@ impl Nauterm {
                 Some(service)
             }
             Err(error) => {
-                self.notice = Some(format!("Session history unavailable: {error}"));
+                self.notice = Some(error.to_string());
                 None
             }
         }

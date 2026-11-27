@@ -63,7 +63,7 @@ Widget _buildSettingsGeneralContent(_SettingsPanelState state) {
                 _SettingsRow(
                   localizationKey: 'settings.general.language',
                   title: 'Language',
-                  subtitle: 'Choose the language used by Nauterm.',
+                  subtitle: 'Choose the language used by {appName}.',
                   trailing: _SettingsSelect(
                     key: const ValueKey('settings-language-select'),
                     label: state.context.tr(
@@ -94,13 +94,14 @@ Widget _buildSettingsGeneralContent(_SettingsPanelState state) {
                   title: 'Host Icon',
                   subtitle: 'How to display host icons in the workspace.',
                   trailing: _SettingsSelect(
-                    label: 'Host Icon',
+                    label: 'settings.general.hostIcon.label',
                     showLabel: false,
                     value: hostIconMode.name,
                     values: HostIconMode.values
                         .map((m) => m.name)
                         .toList(growable: false),
                     format: _hostIconModeLabel,
+                    localizeOptions: false,
                     onChanged: (value) {
                       final mode = HostIconMode.values.byName(value);
                       state._mutate(() => hostIconMode = mode);
@@ -232,7 +233,7 @@ Widget _buildSettingsGeneralContent(_SettingsPanelState state) {
                   subtitle: 'Tabs, split panes, connections, and active port forwards.',
                   trailing: _SettingsSelect(
                     key: const ValueKey('settings-workspace-restore-behavior'),
-                    label: 'Restore Workspace on Startup',
+                    label: 'settings.general.workspaceRestore.label',
                     showLabel: false,
                     value: state._workspaceRestoreBehavior.name,
                     values: WorkspaceRestoreBehavior.values
@@ -264,17 +265,28 @@ Widget _buildSettingsGeneralContent(_SettingsPanelState state) {
 
 Widget _buildSettingsExternalEditorSelect(_SettingsPanelState state) {
   if (state._externalEditors.isEmpty) {
+    final status = switch (state._editorCatalogState) {
+      _EditorCatalogState.loading => state.context.tr(
+        'applications.catalog.loading',
+        fallback: 'Loading applications…',
+      ),
+      _EditorCatalogState.ready => state.context.tr(
+        'settings.sftp.externalEditor.noRecommendations',
+        fallback: 'No recommended text applications found',
+      ),
+      _EditorCatalogState.failed => state.context.tr(
+        'applications.catalog.error',
+        fallback: 'Unable to load applications',
+      ),
+    };
     return _SettingsRow(
       localizationKey: 'settings.sftp.externalEditor',
       title: 'External Editor',
       subtitle: 'Editor used for configured text file extensions.',
-      trailing: _SettingsSelect(
-        label: 'External Editor',
-        showLabel: false,
-        value: 'none',
-        values: const ['none'],
-        format: (_) => 'Detecting editors...',
-        onChanged: (_) {},
+      trailing: Text(
+        status,
+        textAlign: TextAlign.end,
+        style: TextStyle(color: _mutedText, fontSize: 12),
       ),
     );
   }
@@ -284,7 +296,7 @@ Widget _buildSettingsExternalEditorSelect(_SettingsPanelState state) {
     title: 'External Editor',
     subtitle: 'Editor used for configured text file extensions.',
     trailing: _SettingsSelect(
-      label: 'External Editor',
+      label: 'settings.sftp.externalEditor.label',
       showLabel: false,
       value:
           state._externalEditors
@@ -410,7 +422,7 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
                   builder: (context, constraints) {
                     final fontField = _SettingsSelect(
                       key: const ValueKey('settings-terminal-font-select'),
-                      label: 'Font',
+                      label: 'common.label.font',
                       semanticsLabel: 'Terminal Font select',
                       value: state._fontFamily,
                       values: fontOptions,
@@ -424,7 +436,7 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
                     );
                     final fontSizeField = _SettingsSelect(
                       key: const ValueKey('settings-terminal-font-size-select'),
-                      label: 'Font Size',
+                      label: 'settings.label.fontSize',
                       value: state._fontSize,
                       values: fontSizeOptions,
                       onChanged: (value) {
@@ -458,10 +470,11 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
                 _SettingsRow(
                   localizationKey: 'settings.terminal.cjkFont',
                   title: 'CJK Font',
-                  subtitle: 'Fallback font for Chinese, Japanese, and Korean text. Automatic uses the application language to guide system font fallback.',
+                  subtitle:
+                      'Fallback font for Chinese, Japanese, and Korean text.',
                   trailing: _SettingsSelect(
                     key: const ValueKey('settings-terminal-cjk-font-select'),
-                    label: 'CJK Font',
+                    label: 'settings.terminal.cjkFont.label',
                     showLabel: false,
                     value: state._cjkFontFamily,
                     values: cjkFontOptions,
@@ -483,7 +496,7 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
                   title: 'Line Height',
                   subtitle: 'Multiplier for line spacing.',
                   trailing: _SettingsSelect(
-                    label: 'Line Height',
+                    label: 'settings.terminal.lineHeight.label',
                     showLabel: false,
                     value: terminalFontConfig.lineHeight.toStringAsFixed(2),
                     values: const [
@@ -510,7 +523,7 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
                   title: 'Letter Spacing',
                   subtitle: 'Extra space between characters (px).',
                   trailing: _SettingsSelect(
-                    label: 'Letter Spacing',
+                    label: 'settings.terminal.letterSpacing.label',
                     showLabel: false,
                     value: terminalFontConfig.letterSpacing.toStringAsFixed(1),
                     values: const ['0.0', '0.5', '1.0', '1.5', '2.0'],
@@ -597,7 +610,7 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
                   title: 'Shape',
                   subtitle: 'Cursor appearance in the terminal.',
                   trailing: _SettingsSelect(
-                    label: 'Shape',
+                    label: 'settings.terminal.cursorShape.label',
                     showLabel: false,
                     value: terminalCursorShape.name,
                     values: TerminalCursorShape.values
@@ -727,7 +740,7 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
                   subtitle: 'Selects the emulation engine used by new terminal sessions.',
                   trailing: _SettingsSelect(
                     key: const ValueKey('settings-terminal-emulator-select'),
-                    label: 'Emulation Engine',
+                    label: 'settings.terminal.emulator.label',
                     showLabel: false,
                     value: state._emulatorBackend.name,
                     values: TerminalEmulatorBackend.values
@@ -751,7 +764,7 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
                   title: 'Emulation Type',
                   subtitle: 'Set the TERM value for new terminal sessions.',
                   trailing: _SettingsSelect(
-                    label: 'Emulation Type',
+                    label: 'settings.terminal.emulation.label',
                     showLabel: false,
                     value: state._emulationType.term,
                     values: TerminalType.values
@@ -798,7 +811,7 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
                     key: const ValueKey(
                       'settings-terminal-ssh-prediction-select',
                     ),
-                    label: 'SSH Local Predictive Echo',
+                    label: 'settings.terminal.sshPrediction.label',
                     showLabel: false,
                     value: terminalSshPredictionMode.name,
                     values: TerminalSshPredictionMode.values
@@ -1140,11 +1153,13 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
                     key: const ValueKey(
                       'settings-terminal-retention-days-select',
                     ),
-                    label: 'Retention Period',
+                    label: 'settings.terminal.recording.retention.label',
                     showLabel: false,
                     value: terminalRecordingConfig.retentionDays.toString(),
                     values: const ['7', '30', '90', '180', '365'],
-                    format: (value) => '$value days',
+                    format: (value) =>
+                        tr('common.duration.days', args: {'count': value}),
+                    localizeOptions: false,
                     onChanged: (value) {
                       state._mutate(() {
                         terminalRecordingConfig = terminalRecordingConfig
@@ -1163,7 +1178,7 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
                     key: const ValueKey(
                       'settings-terminal-session-limit-select',
                     ),
-                    label: 'Per-session Limit',
+                    label: 'settings.terminal.recording.sessionLimit.label',
                     showLabel: false,
                     value:
                         '${terminalRecordingConfig.maxSessionBytes ~/ (1024 * 1024)}',
@@ -1187,7 +1202,7 @@ Widget _buildSettingsTerminalContent(_SettingsPanelState state) {
                   subtitle: 'Delete the oldest completed sessions when storage is full.',
                   trailing: _SettingsSelect(
                     key: const ValueKey('settings-terminal-total-limit-select'),
-                    label: 'Total Storage Limit',
+                    label: 'settings.terminal.recording.storageLimit.label',
                     showLabel: false,
                     value:
                         '${terminalRecordingConfig.maxTotalBytes ~/ (1024 * 1024 * 1024)}',
@@ -1456,7 +1471,7 @@ Widget _buildSettingsSftpContent(_SettingsPanelState state) {
                   title: 'Concurrent Tasks',
                   subtitle: 'Maximum number of SFTP tasks running at once.',
                   trailing: _SettingsSelect(
-                    label: 'Concurrent Tasks',
+                    label: 'settings.sftp.concurrentTasks.label',
                     showLabel: false,
                     localizeOptions: false,
                     value: state._sftpConcurrentTasks.toString(),
@@ -1476,7 +1491,7 @@ Widget _buildSettingsSftpContent(_SettingsPanelState state) {
                   title: 'Transfer Concurrency',
                   subtitle: 'Maximum parallel SFTP requests or files within each transfer task.',
                   trailing: _SettingsSelect(
-                    label: 'Transfer Concurrency',
+                    label: 'settings.sftp.transferConcurrency.label',
                     showLabel: false,
                     localizeOptions: false,
                     value: state._sftpTransferThreads.toString(),
@@ -1687,6 +1702,7 @@ Widget _buildSettingsAiContent(_SettingsPanelState state) {
             ),
             child: _AiProvidersEditor(
               providers: state._aiProviders,
+              providersLoading: state._aiProvidersLoading,
               onProviderSelected: state._selectAiProvider,
               onProviderAdded: state._addAiProvider,
               onProviderDeleted: (index) =>
@@ -1798,9 +1814,9 @@ String _normalizedSettingsShellPath(String? value) {
 
 String _hostIconModeLabel(String value) {
   return switch (value) {
-    'defaultIcon' => 'Default',
-    'osBadge' => 'With OS Badge',
-    'osIcon' => 'OS Icon',
+    'defaultIcon' => tr('common.label.default'),
+    'osBadge' => tr('settings.general.hostIcon.mode.osBadge'),
+    'osIcon' => tr('settings.general.hostIcon.mode.osIcon'),
     _ => value,
   };
 }

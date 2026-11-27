@@ -67,14 +67,23 @@ impl Settings {
         Button::new("reset-settings")
             .ghost()
             .text_color(Palette::settings(self.values.dark).muted)
-            .label(self.text("Reset"))
+            .label(self.text("common.action.reset"))
             .icon(IconName::RotateCcw)
-            .tooltip("Reset settings")
+            .icon_size(px(14.))
+            .tooltip("settings.label.resetSettings")
             .dropdown_menu(move |menu, _, _| {
                 let mut menu = menu.width(210.);
                 for (label, scope, icon) in [
-                    ("Reset Current Page", Scope::Page(page), IconName::RotateCcw),
-                    ("Reset All Settings", Scope::All, IconName::RefreshCw),
+                    (
+                        "settings.reset.page.action",
+                        Scope::Page(page),
+                        IconName::RotateCcw,
+                    ),
+                    (
+                        "settings.label.resetAllSettings",
+                        Scope::All,
+                        IconName::RefreshCw,
+                    ),
                 ] {
                     if matches!(scope, Scope::Page(Page::About)) {
                         continue;

@@ -255,6 +255,12 @@ pub fn normalize_proxy_config(mut proxy: SshProxyConfig) -> Option<SshProxyConfi
 }
 
 #[derive(Clone, Debug, Deserialize)]
+struct SftpRemoteFileVersion {
+    modified: u32,
+    size: u64,
+}
+
+#[derive(Clone, Debug, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 enum SftpTaskRequest {
     Download {
@@ -274,6 +280,8 @@ enum SftpTaskRequest {
         transfer_threads: usize,
         #[serde(default)]
         replace_existing: bool,
+        #[serde(default)]
+        expected_remote_version: Option<SftpRemoteFileVersion>,
         #[serde(default)]
         sudo_password: Option<String>,
         #[serde(default)]
@@ -1120,6 +1128,7 @@ async fn execute_sftp_request(
             remote_path,
             transfer_threads,
             replace_existing,
+            expected_remote_version,
             ..
         } => {
             upload_sftp_path(
@@ -1128,6 +1137,7 @@ async fn execute_sftp_request(
                 &remote_path,
                 replace_existing,
                 transfer_threads.clamp(1, 32),
+                expected_remote_version.as_ref(),
                 progress,
             )
             .await

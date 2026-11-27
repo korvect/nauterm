@@ -141,6 +141,7 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
         terminalLogs: _visibleTerminalLogs(),
         terminalLogsHasMore: _terminalLogsHasMore,
         terminalLogsLoading: _terminalLogsLoading,
+        terminalLogsLoadError: _terminalLogsLoadError,
         terminalCaptureDiskUsage: _terminalCaptureDiskUsage,
         shellHistory: _shellHistory,
         selectedLogId: _selectedLogId,
@@ -165,6 +166,7 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
         onCreatePortForward: _createPortForward,
         onPortForwardEdit: _editPortForward,
         onPortForwardToggle: _togglePortForward,
+        onPortForwardDelete: _deleteSelectedPortForwards,
         onCreateProxy: _createProxy,
         onProxyEdit: _editProxy,
         onProxyContextAction: _handleProxyContextAction,
@@ -189,6 +191,7 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
         onLogExport: _exportTerminalLog,
         onClearLogs: _clearTerminalLogs,
         onLoadMoreLogs: _loadMoreTerminalLogs,
+        onRetryLogs: _retryTerminalLogs,
         onImportKnownHosts: _importKnownHosts,
         onKnownHostContextAction: _handleKnownHostContextAction,
         onKnownHostContextActions: _handleKnownHostContextActions,
@@ -565,6 +568,7 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
                                   onCreateSnippetFromShellHistory:
                                       _createSnippetFromShellHistory,
                                   onClearShellHistory: _clearShellHistory,
+                                  onReloadShellHistory: _reloadShellHistory,
                                 ),
                               ),
                             ),
@@ -1583,9 +1587,9 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
       return false;
     }
     final confirmed = await _confirmDelete(
-      title: 'Delete Conversation?',
-      message: 'Delete "${entry.title}" from conversation history?',
-      confirmLabel: 'Delete',
+      title: 'workspace.dialog.deleteConversation',
+      message: 'ai.dialog.deleteConversation.description',
+      messageArgs: {'name': entry.title},
       colors: _workspaceOverviewActive
           ? null
           : _aiAssistantColors(_selectedTerminalTab),

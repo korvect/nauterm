@@ -508,9 +508,9 @@ class _DashedShapeBorderPainter extends CustomPainter {
 }
 
 class _WorkspaceFormSection extends StatelessWidget {
-  const _WorkspaceFormSection({required this.title, required this.children});
+  const _WorkspaceFormSection({this.title, required this.children});
 
-  final String title;
+  final String? title;
   final List<Widget> children;
 
   @override
@@ -525,16 +525,18 @@ class _WorkspaceFormSection extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              tr(title),
-              style: TextStyle(
-                color: _text,
-                fontSize: NautermFontSizes.labelLarge,
-                fontWeight: NautermFontWeights.semibold,
-                letterSpacing: 0,
+            if (title case final heading?) ...[
+              Text(
+                tr(heading),
+                style: TextStyle(
+                  color: _text,
+                  fontSize: NautermFontSizes.labelLarge,
+                  fontWeight: NautermFontWeights.semibold,
+                  letterSpacing: 0,
+                ),
               ),
-            ),
-            SizedBox(height: 12),
+              const SizedBox(height: 12),
+            ],
             ...children,
           ],
         ),
@@ -788,7 +790,10 @@ class _WorkspaceInputFieldState extends State<_WorkspaceInputField> {
                       child: _WorkspaceAffixVisibility(
                         visible: showClear,
                         child: _WorkspaceClearButton(
-                          tooltip: tr('Clear ${widget.label}'),
+                          tooltip: context.tr(
+                            'common.action.clearField',
+                            args: {'field': context.tr(widget.label)},
+                          ),
                           onPressed: () {
                             _focusNode.requestFocus();
                             widget.controller.clear();
@@ -813,7 +818,10 @@ class _WorkspaceInputFieldState extends State<_WorkspaceInputField> {
                   child: _WorkspaceAffixVisibility(
                     visible: showClear,
                     child: _WorkspaceClearButton(
-                      tooltip: tr('Clear ${widget.label}'),
+                      tooltip: context.tr(
+                        'common.action.clearField',
+                        args: {'field': context.tr(widget.label)},
+                      ),
                       onPressed: () {
                         _focusNode.requestFocus();
                         widget.controller.clear();
@@ -938,6 +946,8 @@ class _WorkspaceSelect<T> extends StatefulWidget {
     this.colors,
     this.errorText,
     this.activationToken = 0,
+    this.optionsTooltipKey = 'common.action.showOptions',
+    this.clearTooltipKey,
   }) : assert((!filterable && !clearable) || editable),
        assert((createLabel == null) == (onCreate == null)),
        assert(createLabel == null || filterable);
@@ -962,6 +972,8 @@ class _WorkspaceSelect<T> extends StatefulWidget {
   final Iterable<String> createConflictLabels;
   final _AiAssistantColors? colors;
   final String? errorText;
+  final String optionsTooltipKey;
+  final String? clearTooltipKey;
 
   /// Increment this to focus and open an editable select after it appears.
   final int activationToken;
@@ -983,6 +995,7 @@ class _WorkspaceSelectState<T> extends State<_WorkspaceSelect<T>> {
   bool _hovered = false;
   bool _rebuildScheduled = false;
   bool _scrollRebuildScheduled = false;
+  bool _restoringSelectedText = false;
 
   bool get _open => _overlayEntry != null;
   TextEditingController get _inputController =>
@@ -1018,7 +1031,11 @@ class _WorkspaceSelectState<T> extends State<_WorkspaceSelect<T>> {
         widget.activationToken != oldWidget.activationToken) {
       _scheduleActivation();
     }
-    _markMenuNeedsBuild();
+    if (_open && !_shouldOpenPanel) {
+      _scheduleMenuClose();
+    } else {
+      _markMenuNeedsBuild();
+    }
   }
 
   @override
@@ -1111,6 +1128,9 @@ class _WorkspaceSelectState<T> extends State<_WorkspaceSelect<T>> {
   }
 
   void _handleInputTextChanged() {
+    if (_restoringSelectedText) {
+      return;
+    }
     _scheduleRebuild();
     if (!widget.filterable) {
       return;
@@ -1215,10 +1235,15 @@ class _WorkspaceSelectState<T> extends State<_WorkspaceSelect<T>> {
     if (_inputController.text == selectedText) {
       return;
     }
-    _inputController.value = TextEditingValue(
-      text: selectedText,
-      selection: TextSelection.collapsed(offset: selectedText.length),
-    );
+    _restoringSelectedText = true;
+    try {
+      _inputController.value = TextEditingValue(
+        text: selectedText,
+        selection: TextSelection.collapsed(offset: selectedText.length),
+      );
+    } finally {
+      _restoringSelectedText = false;
+    }
   }
 
   List<DropdownMenuItem<T>> get _visibleItems {
@@ -1601,6 +1626,7 @@ class _WorkspaceSelectState<T> extends State<_WorkspaceSelect<T>> {
                           visible: !showClear,
                           child: _WorkspaceSelectSuffixButton(
                             icon: Icons.keyboard_arrow_down_rounded,
+                            tooltip: context.tr(widget.optionsTooltipKey),
                             expanded: _open,
                             width: _workspaceFieldAffixWidth,
                             onPressed: widget.editable
@@ -1613,7 +1639,13 @@ class _WorkspaceSelectState<T> extends State<_WorkspaceSelect<T>> {
                           _WorkspaceAffixVisibility(
                             visible: showClear,
                             child: _WorkspaceClearButton(
-                              tooltip: tr('Clear ${widget.label}'),
+                              tooltip: widget.clearTooltipKey == null
+                                  ? context.tr(
+                                      'common.action.clearField',
+                                      fallback: 'Clear {field}',
+                                      args: {'field': context.tr(widget.label)},
+                                    )
+                                  : context.tr(widget.clearTooltipKey!),
                               onPressed: _clearInput,
                             ),
                           ),

@@ -213,11 +213,19 @@ impl Policy {
 fn context_menu(menu: NativeMenu, capabilities: InputContextMenuCapabilities) -> NativeMenu {
     let enabled = !capabilities.is_disabled();
     let copy = enabled && capabilities.is_copyable();
-    menu.menu_with_disabled("Cut", !(capabilities.is_editable() && copy), Box::new(Cut))
-        .menu_with_disabled("Copy", !copy, Box::new(Copy))
-        .menu_with_disabled("Paste", !capabilities.is_editable(), Box::new(Paste))
-        .separator()
-        .menu_with_disabled("Select All", !enabled, Box::new(SelectAll))
+    menu.menu_with_disabled(
+        "common.action.cut",
+        !(capabilities.is_editable() && copy),
+        Box::new(Cut),
+    )
+    .menu_with_disabled("common.action.copy", !copy, Box::new(Copy))
+    .menu_with_disabled(
+        "common.label.paste",
+        !capabilities.is_editable(),
+        Box::new(Paste),
+    )
+    .separator()
+    .menu_with_disabled("common.label.selectAll", !enabled, Box::new(SelectAll))
 }
 fn action_allowed(capabilities: InputContextMenuCapabilities, action: &dyn Action) -> bool {
     if capabilities.is_disabled() {
@@ -694,9 +702,9 @@ impl<const S: bool> RenderOnce for Input<S> {
                             .tab_stop(false)
                             .disabled(self.disabled)
                             .tooltip(if presentation.is_masked() {
-                                "Show password"
+                                "common.action.showPassword"
                             } else {
-                                "Hide password"
+                                "common.action.hidePassword"
                             })
                             .on_click(move |_, w, cx| mask.toggle_mask(w, cx)),
                     )
@@ -712,7 +720,7 @@ impl<const S: bool> RenderOnce for Input<S> {
                             )
                             .opacity(clear_amount)
                             .disabled(!show_clear)
-                            .tooltip("Clear input")
+                            .tooltip("common.action.clear")
                             .on_click(move |_, w, cx| clear.clear(w, cx)),
                         )
                     }))
@@ -847,10 +855,10 @@ mod tests {
                     .selection(true)
             ),
             vec![
-                ("Cut".into(), true),
-                ("Copy".into(), false),
-                ("Paste".into(), true),
-                ("Select All".into(), false)
+                ("common.action.cut".into(), true),
+                ("common.action.copy".into(), false),
+                ("common.label.paste".into(), true),
+                ("common.label.selectAll".into(), false)
             ]
         );
     }

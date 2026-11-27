@@ -172,9 +172,9 @@ impl FilePane {
             )
             .icon(IconName::Star)
             .tooltip(if selected {
-                "Remove path favorite"
+                "sftp.tooltip.removePathFavorite"
             } else {
-                "Favorite current path"
+                "sftp.tooltip.favoriteCurrentPath"
             })
             .disabled(self.favorites.loading || self.favorites.busy || current.trim().is_empty())
             .on_click(move |_, _, cx| {
@@ -186,7 +186,7 @@ impl FilePane {
                 .tool_button(
                     "sftp-favorites-toggle",
                     IconName::Bookmark,
-                    "Favorite paths",
+                    "workspace.label.favoritePaths",
                     open,
                 )
                 .on_click(cx.listener(|this, _, _, cx| {
@@ -241,9 +241,9 @@ impl FilePane {
                     )
                     .icon(IconName::Bookmark)
                     .tooltip(if open {
-                        "Hide favorite paths"
+                        "sftp.label.hideFavoritePaths"
                     } else {
-                        "Show favorite paths"
+                        "sftp.label.showFavoritePaths"
                     })
                     .when(count > 0, |button| {
                         button.child(
@@ -323,9 +323,9 @@ impl FilePane {
                             .child(crate::localization::message(
                                 cx,
                                 if self.favorites.loading {
-                                    "Loading favorites…"
+                                    "sftp.favorites.loading"
                                 } else {
-                                    "No favorite paths"
+                                    "common.label.noFavoritePaths"
                                 },
                             ))
                     })
@@ -431,9 +431,9 @@ impl FilePane {
                             .line_height(px(16.))
                             .text_color(p.muted)
                             .child(crate::localization::view(if self.favorites.loading {
-                                "Loading favorites…"
+                                "sftp.favorites.loading"
                             } else {
-                                "No favorite paths"
+                                "common.label.noFavoritePaths"
                             }))
                     })
                     .children(

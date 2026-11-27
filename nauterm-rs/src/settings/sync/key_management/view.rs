@@ -38,17 +38,31 @@ impl Panel {
                     .child(Spinner::new())
                     .child(crate::localization::text(
                         cx,
-                        "rs.ui.copy.loadingKeyDetails",
+                        "settings.sync.keyRotation.loading",
                     )),
             );
         }
         if changing {
-            body = body.child(div().text_size(px(12.)).text_color(p.muted).child(
-                crate::localization::text(cx, "settings.sync.keyRotation.warning"),
-            ));
+            body = body.child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(4.))
+                    .text_size(px(12.))
+                    .text_color(p.muted)
+                    .child(crate::localization::text(
+                        cx,
+                        "settings.sync.keyRotation.description",
+                    ))
+                    .child(crate::localization::text(
+                        cx,
+                        "settings.sync.keyRotation.warning",
+                    )),
+            );
             if management.attempted {
                 body = body.child(div().text_size(px(12.)).text_color(p.accent).child(
-                    crate::localization::text(cx, "Keep both keys until every provider is updated. Retry with this same pair; a failed upload may still have reached the provider.")));
+                    crate::localization::text(cx, "settings.sync.keyRotation.retryWithSameKeys"),
+                ));
             }
             let field = |label: &'static str, state: &Entity<InputState>| {
                 div()
@@ -93,19 +107,62 @@ impl Panel {
                 );
             body = body.child(div().text_size(px(11.)).text_color(p.muted).child(
                 crate::localization::view(if self.preferences.backup_count == 0 {
-                    "Local backups are disabled. Providers are updated one at a time."
+                    "settings.sync.keyRotation.backupDisabled"
                 } else {
-                    "A local backup is created first. Providers are updated one at a time."
+                    "settings.sync.keyRotation.backupFirst"
                 }),
             ));
         } else if let Some(info) = info {
-            body = body.child(div().p(px(12.)).flex().items_start().gap(px(10.))
-                .border_1().border_color(p.border).rounded(px(8.)).bg(p.sidebar)
-                .child(Icon::new(IconName::KeyRound).with_size(px(18.)).text_color(p.accent))
-                .child(div().flex_1().min_w_0().flex().flex_col().gap(px(4.))
-                    .child(div().font_weight(FontWeights::MEDIUM).child(crate::localization::view(if info.state.has_key { "Sync DEK is cached on this device" } else { "No Sync DEK cached on this device" })))
-                    .child(div().text_size(px(12.)).text_color(p.muted).child(
-                        crate::localization::text(cx, "Your Master Key is never stored; it only wraps the random Sync DEK that encrypts cloud data. This cache belongs to Nauterm RS.")))));
+            body = body.child(
+                div()
+                    .p(px(12.))
+                    .flex()
+                    .items_start()
+                    .gap(px(10.))
+                    .border_1()
+                    .border_color(p.border)
+                    .rounded(px(8.))
+                    .bg(p.sidebar)
+                    .child(
+                        Icon::new(IconName::KeyRound)
+                            .with_size(px(18.))
+                            .text_color(p.accent),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .flex()
+                            .flex_col()
+                            .gap(px(4.))
+                            .child(div().font_weight(FontWeights::MEDIUM).child(
+                                crate::localization::view(if info.state.has_key {
+                                    "settings.sync.key.localAvailable.label"
+                                } else {
+                                    "settings.sync.key.localMissing.label"
+                                }),
+                            ))
+                            .child(div().text_size(px(12.)).text_color(p.muted).child(
+                                crate::localization::view(if info.state.has_key {
+                                    "settings.sync.key.localAvailable.description"
+                                } else {
+                                    "settings.sync.key.localMissing.description"
+                                }),
+                            ))
+                            .child(div().text_size(px(12.)).text_color(p.muted).child(
+                                crate::localization::text(
+                                    cx,
+                                    "settings.label.masterKeyIsNotStored",
+                                ),
+                            ))
+                            .child(div().text_size(px(12.)).text_color(p.muted).child(
+                                crate::localization::text(
+                                    cx,
+                                    "settings.sync.key.masterKeyNotStored.description",
+                                ),
+                            )),
+                    ),
+            );
         }
         if let Some(info) = info {
             let mut list = div().flex().flex_col().gap(px(7.)).child(
@@ -113,14 +170,15 @@ impl Panel {
                     .text_size(px(11.))
                     .font_weight(FontWeights::MEDIUM)
                     .text_color(p.muted)
-                    .child(crate::localization::view(format!(
-                        "CONNECTED PROVIDERS · {}",
-                        info.targets().len()
-                    ))),
+                    .child(crate::localization::format(
+                        cx,
+                        "settings.sync.key.connectedProviders",
+                        &[("count", &info.targets().len().to_string())],
+                    )),
             );
             if !info.can_rotate() {
                 list = list.child(div().text_size(px(12.)).text_color(p.muted).child(
-                    crate::localization::text(cx, "rs.ui.copy.noConnectedProviders"),
+                    crate::localization::text(cx, "settings.sync.key.noConnectedProviders"),
                 ));
             }
             for target in info.targets() {
@@ -145,8 +203,10 @@ impl Panel {
                                 .child(crate::localization::text_for(
                                     self.language,
                                     match phase {
-                                        Some(Phase::Updating) => "rs.ui.copy.updating",
-                                        Some(Phase::Updated) => "rs.ui.copy.updated2",
+                                        Some(Phase::Updating) => {
+                                            "settings.sync.keyRotation.updating"
+                                        }
+                                        Some(Phase::Updated) => "settings.sync.keyRotation.updated",
                                         Some(Phase::Failed) => "common.label.failed",
                                         None if changing => "settings.sync.keyRotation.pending",
                                         None => "common.label.connected",
@@ -188,7 +248,7 @@ impl Panel {
         .action(
             Button::new("reload-sync-key-details")
                 .outline()
-                .label("Reload")
+                .label("common.action.refresh")
                 .disabled(self.busy())
                 .on_click(cx.listener(|this, _, window, cx| this.read_key_management(window, cx))),
         );
@@ -197,7 +257,7 @@ impl Panel {
                 .action(
                     Button::new("cancel-sync-key-change")
                         .outline()
-                        .label("Cancel")
+                        .label("common.action.cancel")
                         .disabled(self.busy())
                         .on_click(|_, window, cx| Modal::dismiss(window, cx)),
                 )
@@ -205,9 +265,9 @@ impl Panel {
                     Button::new("apply-sync-key-change")
                         .primary()
                         .label(if self.mutating {
-                            "Updating…"
+                            "settings.sync.keyRotation.updating"
                         } else if management.attempted {
-                            "Retry"
+                            "common.action.retry"
                         } else {
                             "settings.label.changeMasterKey"
                         })
@@ -274,7 +334,7 @@ impl Panel {
             )
             .action(
                 Button::new("close-sync-key-details")
-                    .label("Done")
+                    .label("common.action.done")
                     .disabled(self.busy())
                     .on_click(|_, window, cx| Modal::dismiss(window, cx)),
             );
@@ -339,7 +399,7 @@ impl Panel {
                         .action(
                             Button::new("cancel-forget-sync-key")
                                 .outline()
-                                .label("Cancel")
+                                .label("common.action.cancel")
                                 .disabled(self.busy())
                                 .on_click(|_, window, cx| Modal::dismiss(window, cx)),
                         )

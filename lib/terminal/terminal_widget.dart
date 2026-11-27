@@ -1704,15 +1704,17 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
       dark ? 0.045 : 0.025,
     )!;
     final mutedForeground = foreground.withValues(alpha: 0.58);
+    final searchError = _searchError;
+    final hasError = searchError != null && searchError.isNotEmpty;
     final statusText = query.isEmpty
         ? ''
-        : (_searchError?.isNotEmpty ?? false)
-        ? 'Error'
+        : hasError
+        ? tr('common.label.error', fallback: 'Error')
         : _searchTotalMatches != null
         ? '${_searchHasResult ? (_searchMatchIndex ?? -1) + 1 : 0} / $_searchTotalMatches'
         : _searchHasResult
-        ? 'Found'
-        : 'No results';
+        ? tr('terminal.search.found', fallback: 'Found')
+        : tr('terminal.search.empty', fallback: 'No results');
     final statusColor = _searchHasResult
         ? theme.primary.accent
         : theme.normal.red;
@@ -1800,10 +1802,7 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
                               Align(
                                 alignment: Alignment.centerLeft,
                                 child: Semantics(
-                                  label: tr(
-                                    'terminal.label.searchTerminal',
-                                    fallback: 'Search terminal',
-                                  ),
+                                  label: context.tr('terminal.search.label'),
                                   textField: true,
                                   child: SizedBox(
                                     height: 13,
@@ -1850,6 +1849,15 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
                           constraints: const BoxConstraints(maxWidth: 74),
                           child: Text(
                             statusText,
+                            semanticsLabel: hasError
+                                ? context.tr(
+                                    'terminal.search.error.accessibility',
+                                    args: {'error': searchError},
+                                  )
+                                : context.tr(
+                                    'terminal.search.status.accessibility',
+                                    args: {'status': statusText},
+                                  ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
@@ -1866,8 +1874,8 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
                       _TerminalSearchButton(
                         icon: Icons.keyboard_arrow_up_rounded,
                         tooltip: tr(
-                          'common.action.previous',
-                          fallback: 'Previous',
+                          'terminal.search.action.previous',
+                          fallback: 'Previous match · Shift+Enter',
                         ),
                         theme: theme,
                         background: background,
@@ -1875,14 +1883,20 @@ class _TerminalWidgetState extends State<TerminalWidget> with TextInputClient {
                       ),
                       _TerminalSearchButton(
                         icon: Icons.keyboard_arrow_down_rounded,
-                        tooltip: tr('common.action.next', fallback: 'Next'),
+                        tooltip: tr(
+                          'terminal.search.action.next',
+                          fallback: 'Next match · Enter',
+                        ),
                         theme: theme,
                         background: background,
                         onPressed: _searchHasResult ? _searchNext : null,
                       ),
                       _TerminalSearchButton(
                         icon: Icons.close_rounded,
-                        tooltip: tr('common.action.close', fallback: 'Close'),
+                        tooltip: tr(
+                          'terminal.search.action.close',
+                          fallback: 'Close search · Escape',
+                        ),
                         theme: theme,
                         background: background,
                         onPressed: _hideSearch,
@@ -3497,7 +3511,7 @@ class _TerminalSearchButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final foreground = theme.primary.foreground;
     return Tooltip(
-      message: tr(tooltip),
+      message: tooltip,
       waitDuration: const Duration(milliseconds: 450),
       child: SizedBox(
         width: 28,

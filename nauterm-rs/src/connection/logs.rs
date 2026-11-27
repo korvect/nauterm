@@ -272,7 +272,10 @@ impl Render for View {
             .track_focus(&self.focus)
             .key_context("ConnectionLogs")
             .role(Role::Log)
-            .aria_label(crate::localization::text(cx, "Connection diagnostics"))
+            .aria_label(crate::localization::text(
+                cx,
+                "workspace.label.connectionDiagnostics",
+            ))
             .on_key_down(cx.listener(Self::key_down))
             .cursor_text()
             .overflow_y_scroll()
@@ -294,7 +297,7 @@ impl Render for View {
                 let text = TextSelection::selected_text(window, cx);
                 let owner = owner.clone();
                 menu.item(
-                    MenuItem::localized("Copy")
+                    MenuItem::localized("common.action.copy")
                         .icon(IconName::Copy)
                         .disabled(text.is_empty())
                         .on_click(move |_, _, cx| {
@@ -302,11 +305,13 @@ impl Render for View {
                         }),
                 )
                 .separator()
-                .item(MenuItem::localized("Select all").disabled(empty).on_click(
-                    move |_, window, cx| {
-                        let _ = owner.update(cx, |view, cx| view.select_all(window, cx));
-                    },
-                ))
+                .item(
+                    MenuItem::localized("common.label.selectAll")
+                        .disabled(empty)
+                        .on_click(move |_, window, cx| {
+                            let _ = owner.update(cx, |view, cx| view.select_all(window, cx));
+                        }),
+                )
             })
     }
 }

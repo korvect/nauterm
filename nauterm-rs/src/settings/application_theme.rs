@@ -57,11 +57,24 @@ impl Settings {
             .gap(px(12.))
             .children(
                 [
-                    (AppTheme::Light, "Light"),
-                    (AppTheme::System, "System"),
-                    (AppTheme::Dark, "Dark"),
+                    (
+                        AppTheme::Light,
+                        "Light",
+                        "settings.general.applicationTheme.light",
+                    ),
+                    (
+                        AppTheme::System,
+                        "System",
+                        "settings.general.applicationTheme.system",
+                    ),
+                    (
+                        AppTheme::Dark,
+                        "Dark",
+                        "settings.general.applicationTheme.dark",
+                    ),
                 ]
-                .map(|(theme, label)| {
+                .map(|(theme, id, label_key)| {
+                    let label = self.text(label_key);
                     let selected = self.values.theme == theme;
                     div()
                         .flex_1()
@@ -70,10 +83,14 @@ impl Settings {
                         .flex_col()
                         .gap(px(7.))
                         .child(
-                            Button::new(label)
+                            Button::new(id)
                                 .ghost()
                                 .selected(selected)
-                                .localized_accessibility_label(format!("{label} application theme"))
+                                .accessibility_label(crate::localization::format(
+                                    cx,
+                                    "settings.general.applicationTheme.accessibility",
+                                    &[("theme", label.as_ref())],
+                                ))
                                 .w_full()
                                 .h_auto()
                                 .aspect_ratio(1.72)
@@ -129,7 +146,7 @@ impl Settings {
                                 .apply(div())
                                 .text_center()
                                 .text_color(if selected { p.accent } else { p.text })
-                                .child(self.text(label)),
+                                .child(label),
                         )
                 }),
             )

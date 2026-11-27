@@ -9,7 +9,6 @@ use crate::{
     model::Proxy as LegacyProxy,
     native::Core,
     palette::Palette,
-    typography::FontWeights,
     ui::{CloseEditor, DeleteCards, NewItem, SelectCards},
     vault::{Inventory, Vault},
 };
@@ -1278,7 +1277,7 @@ impl Proxies {
                     menu.item(
                         shortcuts
                             .menu(
-                                MenuItem::localized("Edit Proxy"),
+                                MenuItem::localized("workspace.label.editProxy"),
                                 crate::shortcuts::Command::Edit,
                             )
                             .icon(IconName::Pencil)
@@ -1291,7 +1290,7 @@ impl Proxies {
                 .item(
                     shortcuts
                         .menu(
-                            MenuItem::localized("Duplicate"),
+                            MenuItem::localized("workspace.action.duplicate"),
                             crate::shortcuts::Command::Duplicate,
                         )
                         .icon(IconName::Copy)
@@ -1302,7 +1301,7 @@ impl Proxies {
                 )
                 .separator()
                 .item(
-                    MenuItem::localized("Delete Proxy")
+                    MenuItem::localized("workspace.label.deleteProxy")
                         .icon(IconName::Trash)
                         .destructive(true)
                         .disabled(busy)
@@ -1338,67 +1337,56 @@ impl Proxies {
             .reconcile(identities(&self.inventory), None, window, cx);
         let mut authentication = vec![editor.identities.field_with_actions(
             if editor.identity.is_some() {
-                "Identity"
+                "common.label.identity"
             } else {
-                "Username"
+                "common.label.username"
             },
             self.saving,
             vec![crate::components::SelectAction::new(
                 "identity",
-                "Create identity",
+                "workspace.label.createIdentity",
                 IconName::Contact,
             )],
         )];
         if editor.identity.is_none() {
-            authentication.push(editor.password_identities.field("Password", self.saving));
+            authentication.push(
+                editor
+                    .password_identities
+                    .field("common.label.password", self.saving),
+            );
         }
-        let section = |title: &str, fields: Vec<AnyElement>| {
-            div()
-                .rounded(px(10.))
-                .bg(p.surface)
-                .p(px(16.))
-                .flex()
-                .flex_col()
-                .gap(px(12.))
-                .child(
-                    div()
-                        .font_weight(FontWeights::MEDIUM)
-                        .child(title.to_owned()),
-                )
-                .children(fields)
-        };
+        let section =
+            |title, fields| crate::components::management::editor_section(p.surface, title, fields);
         let title = if editor.id.is_some() {
-            "Edit Proxy"
+            "workspace.label.editProxy"
         } else {
-            "New Proxy"
+            "workspace.label.newProxy"
         };
         let sections = vec![
             section(
-                "Proxy",
+                "common.label.proxy",
                 vec![
-                    Field::input(&editor.name, "Proxy name *")
+                    Field::input(&editor.name, "workspace.label.proxyName *")
                         .disabled(self.saving)
                         .into_any_element(),
-                    editor.kinds.field("Type", self.saving),
+                    editor.kinds.field("common.label.type", self.saving),
                 ],
-            )
-            .into_any_element(),
+            ),
             section(
-                "Endpoint",
+                "common.label.endpoint",
                 vec![
-                    Field::input(&editor.host, "Host *")
+                    Field::input(&editor.host, "common.label.host *")
                         .disabled(self.saving)
                         .into_any_element(),
-                    Field::input(&editor.port, "Port *")
+                    Field::input(&editor.port, "common.label.port *")
                         .digits_only()
                         .disabled(self.saving)
                         .into_any_element(),
                     crate::components::validation_message(editor.validation_error.as_deref(), cx)
                         .unwrap_or_else(|| div().into_any_element()),
                 ],
-            )
-            .into_any_element(),
-            section("Authentication", authentication).into_any_element(),
+            ),
+            section("common.label.authentication", authentication),
         ];
         let id = editor.id;
         let token = editor.name.entity_id();
@@ -1414,7 +1402,7 @@ impl Proxies {
                     let duplicate = owner.clone();
                     let delete = owner.clone();
                     menu.item(
-                        MenuItem::localized("Duplicate")
+                        MenuItem::localized("workspace.action.duplicate")
                             .icon(IconName::Copy)
                             .on_click(move |_, _, cx| {
                                 let _ = duplicate.update(cx, |view, cx| {
@@ -1424,7 +1412,7 @@ impl Proxies {
                             }),
                     )
                     .item(
-                        MenuItem::localized("Delete")
+                        MenuItem::localized("common.action.delete")
                             .icon(IconName::Trash)
                             .destructive(true)
                             .on_click(move |_, _, cx| {
@@ -1464,7 +1452,7 @@ impl Proxies {
                         .toolbar()
                         .ghost()
                         .icon(IconName::ArrowLeft)
-                        .tooltip("Back")
+                        .tooltip("common.action.back")
                         .disabled(self.saving)
                         .on_click(cx.listener(|view, _, window, cx| view.back_editor(window, cx))),
                 )
@@ -1475,7 +1463,7 @@ impl Proxies {
                         .toolbar()
                         .ghost()
                         .icon(IconName::ArrowRightToLine)
-                        .tooltip("Close editor")
+                        .tooltip("common.action.close")
                         .disabled(self.saving)
                         .on_click(cx.listener(|view, _, window, cx| view.close_editor(window, cx))),
                 )
@@ -1485,7 +1473,7 @@ impl Proxies {
                 Button::new("save-proxy")
                     .large()
                     .accent()
-                    .label("Save")
+                    .label("common.action.save")
                     .w_full()
                     .disabled(self.saving || !self.ready)
                     .on_click(cx.listener(|view, _, window, cx| view.save(window, cx))),
@@ -1543,44 +1531,238 @@ impl Render for Proxies {
                 content,
             )
         });
-        div().size_full().relative().flex().min_h_0().track_focus(&self.focus).key_context("Nauterm")
+        div()
+            .size_full()
+            .relative()
+            .flex()
+            .min_h_0()
+            .track_focus(&self.focus)
+            .key_context("Nauterm")
             .on_key_down(cx.listener(Self::navigate_cards))
-            .on_action(cx.listener(|view, _: &NewItem, window, cx| { if !crate::components::overlay::is_modal_open(window, cx) { view.create(window, cx); } cx.stop_propagation(); }))
-            .on_action(cx.listener(|view, _: &CloseEditor, window, cx| { view.back_editor(window, cx); cx.stop_propagation(); }))
-            .on_action(cx.listener(|view, _: &SelectCards, window, cx| { if !crate::components::overlay::is_modal_open(window, cx) && !view.selection.is_empty() { view.selection = view.visible(cx).iter().map(|entry| entry.id).collect(); cx.notify(); } cx.stop_propagation(); }))
-            .on_action(cx.listener(|view, _: &DeleteCards, window, cx| { if !crate::components::overlay::is_modal_open(window, cx) { view.request_delete(cx); } cx.stop_propagation(); }))
-            .child(div().flex_1().min_w_0().min_h_0().flex().flex_col()
-                .child(crate::components::management::toolbar(self.dark)
-                    .child(Button::new("new-proxy").toolbar().icon(crate::assets::icon(IconName::Plus)).label("New proxy").label_collapsed(collapse_labels).disabled(self.busy()).on_click(cx.listener(|view, _, window, cx| view.create(window, cx))))
-                    .child(div().flex_1())
-                    .when(self.error.is_some() || self.reference_error.is_some(), |view| view.child(Button::new("reload-proxies").toolbar().ghost().icon(IconName::RefreshCw).tooltip("Reload proxies").disabled(self.loading || self.saving || self.deletion.is_some()).on_click(cx.listener(|view, _, _, cx| view.refresh(cx)))))
-                    .child(Button::new("sort-proxies").toolbar().ghost().icon(sort.icon()).tooltip(sort.label()).dropdown_menu(move |menu, _, _| { let owner = owner.clone(); sort_menu(menu, sort, move |sort, _, cx| { let _ = owner.update(cx, |view, cx| { view.preferences.sort = sort; cx.notify(); }); }) }))
-                    .child({ let owner = cx.weak_entity(); crate::components::management::toolbar_search("proxies-search", &self.search, self.preferences.search_open, move |open, window, cx| { let _ = owner.update(cx, |view, cx| { view.preferences.search_open = open; if open { view.search.update(cx, |input, cx| input.focus(window, cx)); } else { view.focus.focus(window, cx); } cx.notify(); }); }, cx) })
-                    .child(crate::components::management::view_mode_button("proxy-view", self.preferences.list).on_click(cx.listener(|view, _, _, cx| { view.preferences.list = !view.preferences.list; cx.notify(); }))))
-                .child(div().id("proxies-scroll").flex_1().min_h_0().overflow_y_scroll().scrollbars().map(crate::components::management::collection_padding).flex().flex_col()
-                    .on_click(cx.listener(|view, _: &ClickEvent, window, cx| view.close_editor(window, cx)))
-                    .when(!entries.is_empty(), |view| view.child(crate::components::management::section_title("Proxies", cx).mb(px(crate::components::management::COLLECTION_TITLE_GAP))))
-                    .child(crate::components::card_grid(grid).children(entries.iter().cloned().map(|entry| self.card(entry, cx))))
-                    .when(entries.is_empty(), |view| view.child({
-                        let empty = crate::components::EmptyState::new(IconName::Network, if self.loading { "Loading proxies…" } else if self.search.read(cx).value().is_empty() { "No proxies yet" } else { "workspace.label.noProxiesFound" }, self.dark)
-                            .description("Add a proxy once and reuse it across hosts that share the same route.");
-                        if !self.loading && self.search.read(cx).value().is_empty() { empty.action(Button::new("empty-add-proxy").primary().icon(crate::assets::icon(IconName::Plus)).label("Add proxy").disabled(self.busy()).on_click(cx.listener(|view, _, window, cx| view.create(window, cx)))) } else { empty }
-                    }))))
+            .on_action(cx.listener(|view, _: &NewItem, window, cx| {
+                if !crate::components::overlay::is_modal_open(window, cx) {
+                    view.create(window, cx);
+                }
+                cx.stop_propagation();
+            }))
+            .on_action(cx.listener(|view, _: &CloseEditor, window, cx| {
+                view.back_editor(window, cx);
+                cx.stop_propagation();
+            }))
+            .on_action(cx.listener(|view, _: &SelectCards, window, cx| {
+                if !crate::components::overlay::is_modal_open(window, cx)
+                    && !view.selection.is_empty()
+                {
+                    view.selection = view.visible(cx).iter().map(|entry| entry.id).collect();
+                    cx.notify();
+                }
+                cx.stop_propagation();
+            }))
+            .on_action(cx.listener(|view, _: &DeleteCards, window, cx| {
+                if !crate::components::overlay::is_modal_open(window, cx) {
+                    view.request_delete(cx);
+                }
+                cx.stop_propagation();
+            }))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .min_h_0()
+                    .flex()
+                    .flex_col()
+                    .child(
+                        crate::components::management::toolbar(self.dark)
+                            .child(
+                                Button::new("new-proxy")
+                                    .toolbar()
+                                    .icon(crate::assets::icon(IconName::Plus))
+                                    .label("workspace.label.newProxy")
+                                    .label_collapsed(collapse_labels)
+                                    .disabled(self.busy())
+                                    .on_click(
+                                        cx.listener(|view, _, window, cx| view.create(window, cx)),
+                                    ),
+                            )
+                            .child(div().flex_1())
+                            .when(
+                                self.error.is_some() || self.reference_error.is_some(),
+                                |view| {
+                                    view.child(
+                                        Button::new("reload-proxies")
+                                            .toolbar()
+                                            .ghost()
+                                            .icon(IconName::RefreshCw)
+                                            .tooltip("common.action.retry")
+                                            .disabled(
+                                                self.loading
+                                                    || self.saving
+                                                    || self.deletion.is_some(),
+                                            )
+                                            .on_click(
+                                                cx.listener(|view, _, _, cx| view.refresh(cx)),
+                                            ),
+                                    )
+                                },
+                            )
+                            .child(
+                                Button::new("sort-proxies")
+                                    .toolbar()
+                                    .ghost()
+                                    .icon(sort.icon())
+                                    .tooltip(sort.label_key())
+                                    .dropdown_menu(move |menu, _, _| {
+                                        let owner = owner.clone();
+                                        sort_menu(menu, sort, move |sort, _, cx| {
+                                            let _ = owner.update(cx, |view, cx| {
+                                                view.preferences.sort = sort;
+                                                cx.notify();
+                                            });
+                                        })
+                                    }),
+                            )
+                            .child({
+                                let owner = cx.weak_entity();
+                                crate::components::management::toolbar_search(
+                                    "proxies-search",
+                                    &self.search,
+                                    self.preferences.search_open,
+                                    move |open, window, cx| {
+                                        let _ = owner.update(cx, |view, cx| {
+                                            view.preferences.search_open = open;
+                                            if open {
+                                                view.search.update(cx, |input, cx| {
+                                                    input.focus(window, cx)
+                                                });
+                                            } else {
+                                                view.focus.focus(window, cx);
+                                            }
+                                            cx.notify();
+                                        });
+                                    },
+                                    cx,
+                                )
+                            })
+                            .child(
+                                crate::components::management::view_mode_button(
+                                    "proxy-view",
+                                    self.preferences.list,
+                                )
+                                .on_click(cx.listener(
+                                    |view, _, _, cx| {
+                                        view.preferences.list = !view.preferences.list;
+                                        cx.notify();
+                                    },
+                                )),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .id("proxies-scroll")
+                            .flex_1()
+                            .min_h_0()
+                            .overflow_y_scroll()
+                            .scrollbars()
+                            .map(crate::components::management::collection_padding)
+                            .flex()
+                            .flex_col()
+                            .on_click(cx.listener(|view, _: &ClickEvent, window, cx| {
+                                view.close_editor(window, cx)
+                            }))
+                            .when(!entries.is_empty(), |view| {
+                                view.child(
+                                    crate::components::management::section_title(
+                                        "common.label.proxies",
+                                        cx,
+                                    )
+                                    .mb(px(crate::components::management::COLLECTION_TITLE_GAP)),
+                                )
+                            })
+                            .child(crate::components::card_grid(grid).children(
+                                entries.iter().cloned().map(|entry| self.card(entry, cx)),
+                            ))
+                            .when(entries.is_empty(), |view| {
+                                view.child({
+                                    let empty = crate::components::EmptyState::new(
+                                        IconName::Network,
+                                        if self.loading {
+                                            "workspace.proxies.load.loading"
+                                        } else if self.search.read(cx).value().is_empty() {
+                                            "workspace.label.noProxiesYet"
+                                        } else {
+                                            "workspace.label.noProxiesFound"
+                                        },
+                                        self.dark,
+                                    )
+                                    .description("workspace.empty.proxies.description");
+                                    if !self.loading && self.search.read(cx).value().is_empty() {
+                                        empty.action(
+                                            Button::new("empty-add-proxy")
+                                                .primary()
+                                                .icon(crate::assets::icon(IconName::Plus))
+                                                .label("workspace.label.addProxy")
+                                                .disabled(self.busy())
+                                                .on_click(cx.listener(|view, _, window, cx| {
+                                                    view.create(window, cx)
+                                                })),
+                                        )
+                                    } else {
+                                        empty
+                                    }
+                                })
+                            }),
+                    ),
+            )
             .children(drawer)
             .when_some(self.deletion.as_ref(), |view, ids| {
                 use crate::localization::{format_for, language, text};
                 let count = ids.len();
                 let (title, message) = if count == 1 {
-                    (text(cx, "workspace.dialog.deleteProxy"), text(cx, "workspace.dialog.deleteProxy.description"))
+                    (
+                        text(cx, "workspace.dialog.deleteProxy"),
+                        text(cx, "workspace.dialog.deleteProxy.description"),
+                    )
                 } else {
-                    (text(cx, "workspace.dialog.deleteProxies"), format_for(language(cx), "workspace.dialog.deleteProxies.description", &[("count", &count.to_string())]))
+                    (
+                        text(cx, "workspace.dialog.deleteProxies"),
+                        format_for(
+                            language(cx),
+                            "workspace.dialog.deleteProxies.description",
+                            &[("count", &count.to_string())],
+                        ),
+                    )
                 };
-                view.child(crate::components::Dialog::new("delete-proxies-modal", title.clone()).return_focus(&self.focus).dismissible(!self.saving)
-                    .on_dismiss(cx.listener(|view, _, _, cx| { view.deletion = None; cx.notify(); }))
-                    .content(DialogFrame::new("delete-proxies-dialog", title).width(380.).colors(DialogColors::workspace(self.dark))
-                        .content(message)
-                        .action(Button::new("cancel-delete-proxies").ghost().label("Cancel").disabled(self.saving).on_click(|_, window, cx| Modal::dismiss(window, cx)))
-                        .action(Button::new("confirm-delete-proxies").danger().label("Delete").disabled(self.saving).on_click(cx.listener(|view, _, _, cx| view.mutate(true, cx))))))
+                view.child(
+                    crate::components::Dialog::new("delete-proxies-modal", title.clone())
+                        .return_focus(&self.focus)
+                        .dismissible(!self.saving)
+                        .on_dismiss(cx.listener(|view, _, _, cx| {
+                            view.deletion = None;
+                            cx.notify();
+                        }))
+                        .content(
+                            DialogFrame::new("delete-proxies-dialog", title)
+                                .width(380.)
+                                .colors(DialogColors::workspace(self.dark))
+                                .content(message)
+                                .action(
+                                    Button::new("cancel-delete-proxies")
+                                        .ghost()
+                                        .label("common.action.cancel")
+                                        .disabled(self.saving)
+                                        .on_click(|_, window, cx| Modal::dismiss(window, cx)),
+                                )
+                                .action(
+                                    Button::new("confirm-delete-proxies")
+                                        .danger()
+                                        .label("common.action.delete")
+                                        .disabled(self.saving)
+                                        .on_click(
+                                            cx.listener(|view, _, _, cx| view.mutate(true, cx)),
+                                        ),
+                                ),
+                        ),
+                )
             })
             .into_any_element()
     }

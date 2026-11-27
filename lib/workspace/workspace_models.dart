@@ -3,7 +3,7 @@ part of 'nauterm_workspace.dart';
 enum _WorkspaceTab {
   vaults('Vaults', Icons.security_rounded),
   sftp('SFTP', Icons.folder_rounded),
-  sessions('Sessions', Icons.dashboard_rounded);
+  sessions('common.label.sessions', Icons.dashboard_rounded);
 
   const _WorkspaceTab(this.label, this.icon);
 
@@ -949,6 +949,9 @@ List<Object> _contextMenuRowsFor(
   if (item is _ProxyItem) {
     return _proxyMenuRows;
   }
+  if (item is _PortForwardItem) {
+    return _portForwardMenuRows;
+  }
   if (item is _KnownHostItem) {
     return _knownHostMenuRows;
   }
@@ -1035,7 +1038,9 @@ Set<_ContextMenuActionId> _multiSelectionContextActionsFor(
     _ContextMenuActionId.duplicate,
     _ContextMenuActionId.delete,
   },
-  _KnownHostItem() || _SnippetPackageItem() => {_ContextMenuActionId.delete},
+  _KnownHostItem() ||
+  _SnippetPackageItem() ||
+  _PortForwardItem() => {_ContextMenuActionId.delete},
   _ => const <_ContextMenuActionId>{},
 };
 
@@ -1284,6 +1289,23 @@ const List<Object> _identityMenuRows = [
     icon: LucideIcons.trash2,
     label: 'Delete Identity',
     localizationKey: 'workspace.label.deleteIdentity',
+    id: _ContextMenuActionId.delete,
+    destructive: true,
+  ),
+];
+
+const List<Object> _portForwardMenuRows = [
+  _ContextMenuAction(
+    icon: LucideIcons.pencil,
+    label: 'Edit',
+    localizationKey: 'common.action.edit',
+    id: _ContextMenuActionId.edit,
+  ),
+  _MenuDivider.instance,
+  _ContextMenuAction(
+    icon: LucideIcons.trash2,
+    label: 'Delete',
+    localizationKey: 'common.action.delete',
     id: _ContextMenuActionId.delete,
     destructive: true,
   ),

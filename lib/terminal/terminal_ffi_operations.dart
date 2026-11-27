@@ -1606,6 +1606,8 @@ class FfiSftpDirectoryEntryListing {
     TerminalProxyConfig? proxy,
     SshHostKeyTrustMode hostKeyTrustMode = SshHostKeyTrustMode.strict,
     bool sshCompatibilityMode = false,
+    String? sudoSessionId,
+    String? sudoPassword,
   }) {
     final bindings = _TerminalBindings.open();
     final nativeHost = host.toNativeUtf8();
@@ -1623,23 +1625,43 @@ class FfiSftpDirectoryEntryListing {
         ? nullptr
         : passphrase.toNativeUtf8();
     final nativeProxy = _proxyConfigToNative(proxy);
+    final nativeSudoSessionId = sudoSessionId?.toNativeUtf8() ?? nullptr;
+    final nativeSudoPassword = sudoPassword?.toNativeUtf8() ?? nullptr;
     Pointer<Utf8> resultPointer = nullptr;
     try {
-      resultPointer = bindings.sftpListDirectoryEntries(
-        requestId,
-        nativeHost,
-        port,
-        nativeUsername,
-        nativePassword,
-        nativePrivateKey,
-        nativeCertificate,
-        nativePassphrase,
-        nativeKnownHostsPath,
-        nativeDirectory,
-        hostKeyTrustMode.wireValue,
-        nativeProxy,
-        sshCompatibilityMode,
-      );
+      resultPointer = sudoSessionId == null
+          ? bindings.sftpListDirectoryEntries(
+              requestId,
+              nativeHost,
+              port,
+              nativeUsername,
+              nativePassword,
+              nativePrivateKey,
+              nativeCertificate,
+              nativePassphrase,
+              nativeKnownHostsPath,
+              nativeDirectory,
+              hostKeyTrustMode.wireValue,
+              nativeProxy,
+              sshCompatibilityMode,
+            )
+          : bindings.sftpListDirectoryEntriesWithSudo(
+              requestId,
+              nativeHost,
+              port,
+              nativeUsername,
+              nativePassword,
+              nativePrivateKey,
+              nativeCertificate,
+              nativePassphrase,
+              nativeKnownHostsPath,
+              nativeDirectory,
+              hostKeyTrustMode.wireValue,
+              nativeProxy,
+              sshCompatibilityMode,
+              nativeSudoSessionId,
+              nativeSudoPassword,
+            );
       if (resultPointer == nullptr) {
         return const FfiSshDirectoryEntryListingResult(
           entries: [],
@@ -1671,6 +1693,14 @@ class FfiSftpDirectoryEntryListing {
       }
       if (nativeProxy != nullptr) {
         malloc.free(nativeProxy);
+      }
+      if (nativeSudoSessionId != nullptr) malloc.free(nativeSudoSessionId);
+      if (nativeSudoPassword != nullptr) {
+        final bytes = nativeSudoPassword.cast<Uint8>().asTypedList(
+          nativeSudoPassword.length,
+        );
+        bytes.fillRange(0, bytes.length, 0);
+        malloc.free(nativeSudoPassword);
       }
       if (resultPointer != nullptr) {
         bindings.freeString(resultPointer);

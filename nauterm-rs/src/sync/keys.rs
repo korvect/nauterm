@@ -12,22 +12,27 @@ pub struct Change {
     current: Zeroizing<String>,
     new: Zeroizing<String>,
 }
+#[derive(Debug, PartialEq, Eq)]
+pub enum ChangeError {
+    Current(MasterKeyValidationError),
+    New(MasterKeyValidationError),
+    Unchanged,
+    ConfirmationMismatch,
+}
 impl Change {
     pub fn new(
         current: Zeroizing<String>,
         new: Zeroizing<String>,
         confirmation: Zeroizing<String>,
-    ) -> Result<Self> {
-        validate_master_key(&current).context("Current Master Key")?;
-        validate_master_key(&new).context("New Master Key")?;
-        ensure!(
-            current.as_str() != new.as_str(),
-            "New Master Key must be different from the current key."
-        );
-        ensure!(
-            new.as_str() == confirmation.as_str(),
-            "New Master Key confirmation does not match."
-        );
+    ) -> Result<Self, ChangeError> {
+        validate_master_key(&current).map_err(ChangeError::Current)?;
+        validate_master_key(&new).map_err(ChangeError::New)?;
+        if current.as_str() == new.as_str() {
+            return Err(ChangeError::Unchanged);
+        }
+        if new.as_str() != confirmation.as_str() {
+            return Err(ChangeError::ConfirmationMismatch);
+        }
         Ok(Self { current, new })
     }
 }

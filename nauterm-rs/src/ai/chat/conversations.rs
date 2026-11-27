@@ -97,58 +97,65 @@ impl Chat {
         };
         let focus = self.history_search.read(cx).focus_handle(cx);
         Some(
-            Dialog::new("ai-delete-conversation-modal", "Delete Conversation?")
-                .focus_scope(&self.delete_focus)
-                .return_focus(&focus)
-                .dismissible(!self.deleting)
-                .on_dismiss(cx.listener(|this, _, _, cx| {
-                    this.delete_pending = None;
-                    this.delete_error = None;
-                    this.deleting = false;
-                    cx.notify();
-                }))
-                .content(
-                    DialogFrame::new("ai-delete-conversation-dialog", "Delete Conversation?")
-                        .width(400.)
-                        .colors(colors)
-                        .content(
-                            div()
-                                .flex()
-                                .flex_col()
-                                .gap(px(10.))
-                                .text_size(px(13.))
-                                .child(crate::localization::view(format!(
-                                    "Delete \"{}\" from conversation history?",
-                                    target.title
-                                )))
-                                .when_some(self.delete_error.clone(), |body, error| {
-                                    body.child(
-                                        div()
-                                            .text_size(px(11.))
-                                            .text_color(palette.muted)
-                                            .child(crate::localization::message(cx, &error)),
-                                    )
-                                }),
-                        )
-                        .action(
-                            Button::new("ai-cancel-delete")
-                                .ghost()
-                                .custom(ButtonCustomVariant::for_surface(palette))
-                                .label("Cancel")
-                                .disabled(self.deleting)
-                                .on_click(|_, window, cx| Modal::dismiss(window, cx)),
-                        )
-                        .action(
-                            Button::new("ai-confirm-delete")
-                                .danger()
-                                .label("Delete")
-                                .disabled(self.deleting || self.delete_error.is_some())
-                                .on_click(cx.listener(|this, _, window, cx| {
-                                    this.confirm_delete(window, cx)
-                                })),
-                        ),
+            Dialog::new(
+                "ai-delete-conversation-modal",
+                "workspace.dialog.deleteConversation",
+            )
+            .focus_scope(&self.delete_focus)
+            .return_focus(&focus)
+            .dismissible(!self.deleting)
+            .on_dismiss(cx.listener(|this, _, _, cx| {
+                this.delete_pending = None;
+                this.delete_error = None;
+                this.deleting = false;
+                cx.notify();
+            }))
+            .content(
+                DialogFrame::new(
+                    "ai-delete-conversation-dialog",
+                    "workspace.dialog.deleteConversation",
                 )
-                .into_any_element(),
+                .width(400.)
+                .colors(colors)
+                .content(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(10.))
+                        .text_size(px(13.))
+                        .child(crate::localization::format(
+                            cx,
+                            "ai.dialog.deleteConversation.description",
+                            &[("name", &target.title)],
+                        ))
+                        .when_some(self.delete_error.clone(), |body, error| {
+                            body.child(
+                                div()
+                                    .text_size(px(11.))
+                                    .text_color(palette.muted)
+                                    .child(crate::localization::message(cx, &error)),
+                            )
+                        }),
+                )
+                .action(
+                    Button::new("ai-cancel-delete")
+                        .ghost()
+                        .custom(ButtonCustomVariant::for_surface(palette))
+                        .label("common.action.cancel")
+                        .disabled(self.deleting)
+                        .on_click(|_, window, cx| Modal::dismiss(window, cx)),
+                )
+                .action(
+                    Button::new("ai-confirm-delete")
+                        .danger()
+                        .label("common.action.delete")
+                        .disabled(self.deleting || self.delete_error.is_some())
+                        .on_click(
+                            cx.listener(|this, _, window, cx| this.confirm_delete(window, cx)),
+                        ),
+                ),
+            )
+            .into_any_element(),
         )
     }
     fn history_row(&self, index: usize, cx: &mut Context<Self>) -> Option<AnyElement> {
@@ -230,7 +237,7 @@ impl Chat {
                             .ghost()
                             .custom(ButtonCustomVariant::for_surface(palette))
                             .icon(IconName::Trash)
-                            .tooltip("Delete conversation")
+                            .tooltip("ai.label.deleteConversation")
                             .disabled(self.history_loading || self.busy() || self.deleting)
                             .on_click(cx.listener(
                                 move |this, _, window, cx| {
@@ -266,9 +273,9 @@ impl Chat {
                         .font_weight(FontWeights::MEDIUM)
                         .text_color(palette.text)
                         .child(crate::localization::view(if query_empty {
-                            "No conversation history"
+                            "ai.label.noConversationHistory"
                         } else {
-                            "No matching conversations"
+                            "ai.label.noMatchingConversations"
                         })),
                 )
                 .into_any_element()
@@ -318,7 +325,7 @@ impl Chat {
                                     )
                                     .aria_label(crate::localization::text(
                                         cx,
-                                        "Search conversations",
+                                        "ai.label.searchConversations",
                                     )),
                             ),
                     )

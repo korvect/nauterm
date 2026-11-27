@@ -1,7 +1,48 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:nauterm/terminal/terminal_ffi.dart';
+import 'package:nauterm/workspace/nauterm_workspace.dart';
 
 void main() {
+  testWidgets('system information ignores paused samples and resumes polling', (
+    tester,
+  ) async {
+    final requests = <Completer<FfiHostSystemInfoResult>>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: buildTerminalSystemInfoPanelForTesting(() {
+            final request = Completer<FfiHostSystemInfoResult>();
+            requests.add(request);
+            return request.future;
+          }),
+        ),
+      ),
+    );
+    expect(requests, hasLength(1));
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    requests.first.complete(
+      const FfiHostSystemInfoResult(hostname: 'stale-host'),
+    );
+    await tester.pump(const Duration(seconds: 6));
+    expect(find.text('Updates paused'), findsOneWidget);
+    expect(find.textContaining('stale-host'), findsNothing);
+    expect(requests, hasLength(1));
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    expect(requests, hasLength(2));
+    requests.last.complete(
+      const FfiHostSystemInfoResult(hostname: 'current-host'),
+    );
+    await tester.pump();
+    expect(find.text('Updates paused'), findsNothing);
+    expect(find.textContaining('current-host'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   test('host system information parses native JSON values', () {
     final info = FfiHostSystemInfoResult.fromJson({
       'hostname': 'server-01',

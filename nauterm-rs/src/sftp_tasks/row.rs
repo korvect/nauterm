@@ -11,7 +11,23 @@ impl TaskQueue {
         let id = job.id;
         let status = job.status;
         let inset = if compact { 10. } else { 19. };
-        let label = crate::localization::text(cx, job.kind.label());
+        let label = crate::localization::text(
+            cx,
+            match job.kind {
+                crate::transfer_queue::Kind::Download => "sftp.task.download",
+                crate::transfer_queue::Kind::Upload => "sftp.task.upload",
+                crate::transfer_queue::Kind::Edit => "sftp.task.edit",
+                crate::transfer_queue::Kind::Move => "sftp.task.move",
+                crate::transfer_queue::Kind::Copy => "sftp.task.copy",
+                crate::transfer_queue::Kind::Delete => "sftp.task.delete",
+                crate::transfer_queue::Kind::NewFolder => "sftp.action.newFolder",
+            },
+        );
+        let spoken_label = if job.label == job.kind.label() {
+            label.as_ref()
+        } else {
+            job.label.as_str()
+        };
         let text = format!("{label} {}", presentation::primary_path(job));
         let mut highlights = vec![(
             0..label.len(),
@@ -81,9 +97,9 @@ impl TaskQueue {
                         IconName::Pause
                     },
                     match status {
-                        Status::Failed => "Retry transfer",
-                        Status::Paused => "Resume transfer",
-                        _ => "Pause transfer",
+                        Status::Failed => "sftp.transfer.action.retry",
+                        Status::Paused => "common.action.continue",
+                        _ => "common.action.pause",
                     },
                     false,
                 )
@@ -100,7 +116,7 @@ impl TaskQueue {
                 button(
                     "sftp-sudo-task",
                     IconName::RefreshCw,
-                    "Retry with sudo",
+                    "sftp.sudo.permissionDenied.action.retry",
                     true,
                 )
                 .on_click(cx.listener(move |this, _, _, cx| {
@@ -115,9 +131,9 @@ impl TaskQueue {
                 "sftp-cancel-task",
                 IconName::X,
                 if status.finished() {
-                    "Delete record"
+                    "sftp.label.deleteRecord"
                 } else {
-                    "Cancel task"
+                    "sftp.label.cancelTask"
                 },
                 false,
             )
@@ -169,9 +185,9 @@ impl TaskQueue {
             .id(("sftp-task-row", id))
             .aria_label(format!(
                 "{}: {} · {}",
-                job.label,
+                spoken_label,
                 presentation::primary_path(job),
-                status.label()
+                crate::localization::text(cx, status.label_key())
             ))
             .relative()
             .w_full()

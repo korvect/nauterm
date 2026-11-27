@@ -271,15 +271,15 @@ impl EditorSettings {
 impl Render for EditorSettings {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let editor_label = if self.config.external_editor.is_some() {
-            "External Editor"
+            "settings.sftp.externalEditor.label"
         } else {
             match self.catalog_state {
-                CatalogState::Loading => "Loading applications…",
+                CatalogState::Loading => "applications.catalog.loading",
                 CatalogState::Ready if self.catalog.is_empty() => {
-                    "No recommended text applications found"
+                    "settings.sftp.externalEditor.noRecommendations"
                 }
-                CatalogState::Failed if self.catalog.is_empty() => "Unable to load applications",
-                _ => "External Editor",
+                CatalogState::Failed if self.catalog.is_empty() => "applications.catalog.error",
+                _ => "settings.sftp.externalEditor.label",
             }
         };
         div()
@@ -289,9 +289,12 @@ impl Render for EditorSettings {
             .flex_col()
             .gap(px(18.))
             .child(self.row(
-                "SSH Editor",
-                "Terminal editor for remote files (e.g. vim, nano).",
-                Input::new(&self.ssh).aria_label(crate::localization::text(cx, "SSH Editor")),
+                "settings.sftp.sshEditor.label",
+                "settings.sftp.sshEditor.description",
+                Input::new(&self.ssh).aria_label(crate::localization::text(
+                    cx,
+                    "settings.sftp.sshEditor.label",
+                )),
             ))
             .children(crate::components::validation_message(
                 self.validation_error.as_deref(),
@@ -299,20 +302,20 @@ impl Render for EditorSettings {
             ))
             .child(
                 self.row(
-                    "External Editor",
-                    "Editor used for configured text file extensions.",
+                    "settings.sftp.externalEditor.label",
+                    "settings.sftp.externalEditor.description",
                     self.select
                         .control_disabled(editor_label, self.catalog.is_empty()),
                 ),
             )
-            .child(
-                self.row(
-                    "Text File Extensions",
-                    "Extensions that show the configured external editor.",
-                    Input::new(&self.extensions)
-                        .aria_label(crate::localization::text(cx, "Text File Extensions")),
-                ),
-            )
+            .child(self.row(
+                "settings.sftp.textExtensions.label",
+                "settings.sftp.textExtensions.description",
+                Input::new(&self.extensions).aria_label(crate::localization::text(
+                    cx,
+                    "settings.sftp.textExtensions.label",
+                )),
+            ))
     }
 }
 

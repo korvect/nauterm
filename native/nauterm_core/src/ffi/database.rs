@@ -88,6 +88,21 @@ pub unsafe extern "C" fn nauterm_database_call(
     handle: *mut NautermDatabase,
     request: *const c_char,
 ) -> *mut c_char {
+    unsafe { nauterm_database_call_with_sync_key_progress(handle, request, None) }
+}
+
+/// # Safety
+///
+/// The handle, request and returned string follow the same ownership rules as
+/// `nauterm_database_call`. The optional callback runs synchronously on the
+/// calling thread. Its argument is valid only for that callback invocation.
+/// The callback must not re-enter the database handle.
+#[no_mangle]
+pub unsafe extern "C" fn nauterm_database_call_with_sync_key_progress(
+    handle: *mut NautermDatabase,
+    request: *const c_char,
+    progress_callback: Option<extern "C" fn(*const c_char)>,
+) -> *mut c_char {
     guard(ptr::null_mut(), || {
         if handle.is_null() {
             return response_error("null database handle");
@@ -98,7 +113,15 @@ pub unsafe extern "C" fn nauterm_database_call(
         };
 
         let database = unsafe { &mut *handle };
-        match database.handle_json_request(request) {
+        match database.handle_json_request_with_sync_key_progress(request, |progress| {
+            let Some(callback) = progress_callback else {
+                return;
+            };
+            if let Ok(json) = serde_json::to_string(&progress) {
+                let message = CString::new(json).expect("serialized JSON has no NUL byte");
+                callback(message.as_ptr());
+            }
+        }) {
             Ok(data) => response_ok(data),
             Err(error) => response_error(error),
         }

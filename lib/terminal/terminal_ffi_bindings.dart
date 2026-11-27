@@ -518,6 +518,12 @@ class _TerminalBindings {
   final _SshListDirectoriesDart sshListDirectories;
   final _SshListDirectoryEntriesDart sshListDirectoryEntries;
   final _SftpListDirectoryEntriesDart sftpListDirectoryEntries;
+  late final _SftpListDirectoryEntriesWithSudoDart
+  sftpListDirectoryEntriesWithSudo = library
+      .lookupFunction<
+        _SftpListDirectoryEntriesWithSudoNative,
+        _SftpListDirectoryEntriesWithSudoDart
+      >('nauterm_sftp_list_directory_entries_with_sudo');
   final _SftpExecuteTaskDart sftpExecuteTask;
   final _SftpCancelTaskDart sftpCancelTask;
   final _SftpCloseSudoSessionDart sftpCloseSudoSession;

@@ -224,7 +224,11 @@ impl Terminal {
         .text_size(px(self.appearance.size))
         .line_height(px(line_height))
         .h_full()
-        .aria_label(if sensitive { "Password" } else { "Command" });
+        .aria_label(if sensitive {
+            "common.label.password"
+        } else {
+            "common.label.command"
+        });
         let expand = Button::new("expand-composer")
             .ghost()
             .custom(ButtonCustomVariant::for_surface(p).foreground(p.muted.into()))
@@ -247,7 +251,7 @@ impl Terminal {
             .size(px(28.))
             .icon_size(px(17.))
             .icon(IconName::CornerDownLeft)
-            .tooltip("Send · Shift+Enter for a new line")
+            .tooltip("terminal.composer.send.hint")
             .on_click(cx.listener(move |this, _, window, cx| {
                 if this.composer_sensitive() == sensitive {
                     this.submit_composer(window, cx);

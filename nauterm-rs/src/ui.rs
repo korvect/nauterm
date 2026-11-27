@@ -323,17 +323,17 @@ impl TabContent {
                 .child(crate::localization::message_view(
                     error.clone().unwrap_or_else(|| {
                         if replay.is_some() {
-                            "Processing terminal replay…".into()
+                            "workspace.label.processingTerminalReplay".into()
                         } else {
-                            "Loading saved credentials…".into()
+                            "workspace.connection.preparation.loadingCredentials".into()
                         }
                     }),
                 ))
                 .when(error.is_some(), |view| {
                     view.child(crate::localization::view(if replay.is_some() {
-                        "Close this tab and retry from Logs after resolving the recording error."
+                        "workspace.logs.replay.retryFromLogs"
                     } else {
-                        "Close this tab and retry from Hosts after resolving the Keychain error."
+                        "workspace.connection.preparation.retryFromHosts"
                     }))
                 })
                 .into_any_element(),
@@ -474,9 +474,9 @@ fn search_hint(page: Page, language: crate::localization::Language) -> SharedStr
     crate::localization::text_for(
         language,
         if page == Page::Hosts {
-            "Search host:, group:, username:, tag:, or user@host"
+            "workspace.search.hosts.placeholder"
         } else {
-            "Search"
+            "common.action.search"
         },
     )
 }
@@ -1892,7 +1892,7 @@ impl Nauterm {
                         host.map(|h| h.port.to_string()).unwrap_or("22".into()),
                     ),
                     (
-                        "Username",
+                        "common.label.username",
                         host.map(|h| h.username.clone()).unwrap_or_default(),
                     ),
                     ("Tags", host.map(|h| h.tags.join(", ")).unwrap_or_default()),
@@ -1909,7 +1909,7 @@ impl Nauterm {
                     ("Name", existing.map(|g| g.name.clone()).unwrap_or_default()),
                     ("Address", String::new()),
                     ("SSH Port", profile.port.to_string()),
-                    ("Username", profile.username),
+                    ("common.label.username", profile.username),
                     ("Tags", String::new()),
                 ]
             }
@@ -2339,7 +2339,7 @@ impl Nauterm {
         let group_without_ssh = matches!(editor.kind, ItemKind::Host | ItemKind::Group)
             && editor.host.as_ref().is_some_and(|draft| !draft.ssh_enabled);
         let error = if values[0].is_empty() {
-            Some("Name is required.")
+            Some("common.validation.nameRequired")
         } else if matches!(
             editor.kind,
             ItemKind::Host | ItemKind::Proxy | ItemKind::Forward
@@ -2715,30 +2715,24 @@ impl Nauterm {
                     .gap(px(6.))
                     .role(Role::TabList)
                     .child(
-                        Tab::new(
-                            "vault-tab",
-                            crate::localization::text(cx, "Vaults"),
-                            IconName::Shield,
-                        )
-                        .collapsed(!vault_selected)
-                        .selected(vault_selected)
-                        .colors(
-                            if vault_selected {
-                                active_color
-                            } else {
-                                inactive_color
-                            },
-                            if vault_selected {
-                                selected_foreground
-                            } else {
-                                foreground
-                            },
-                        )
-                        .on_click(
-                            cx.listener(|this, _, window, cx| {
+                        Tab::new("vault-tab", "Vaults", IconName::Shield)
+                            .collapsed(!vault_selected)
+                            .selected(vault_selected)
+                            .colors(
+                                if vault_selected {
+                                    active_color
+                                } else {
+                                    inactive_color
+                                },
+                                if vault_selected {
+                                    selected_foreground
+                                } else {
+                                    foreground
+                                },
+                            )
+                            .on_click(cx.listener(|this, _, window, cx| {
                                 this.navigate(Page::Hosts, window, cx)
-                            }),
-                        ),
+                            })),
                     )
                     .when(self.data.sftp.show_tab, |view| {
                         view.child(
@@ -2858,30 +2852,33 @@ impl Nauterm {
                             .flex_shrink_0()
                             .custom(plain_style)
                             .icon(crate::assets::icon(IconName::Plus))
-                            .tooltip("Quick Connect")
+                            .tooltip("common.label.quickConnect")
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.open_quick_connect(false, window, cx)
                             })),
                     )
                     .child(div().flex_1().h_full()),
             )
-            .child(
-                Button::new("toggle-ai-assistant")
-                    .toolbar()
-                    .custom(if self.assistant_open() {
-                        plain_style.foreground(self.assistant_accent().into())
-                    } else {
-                        plain_style
-                    })
-                    .icon(IconName::Sparkles)
-                    .tooltip(if self.assistant_open() {
-                        "Hide AI Assistant"
-                    } else {
-                        "Show AI Assistant"
-                    })
-                    .disabled(!self.assistant_available())
-                    .on_click(cx.listener(|this, _, window, cx| this.toggle_assistant(window, cx))),
-            )
+            .when(self.assistant_available(), |bar| {
+                bar.child(
+                    Button::new("toggle-ai-assistant")
+                        .toolbar()
+                        .custom(if self.assistant_open() {
+                            plain_style.foreground(self.assistant_accent().into())
+                        } else {
+                            plain_style
+                        })
+                        .icon(IconName::Sparkles)
+                        .tooltip(if self.assistant_open() {
+                            "terminal.action.hideAiAssistant"
+                        } else {
+                            "terminal.action.showAiAssistant"
+                        })
+                        .on_click(
+                            cx.listener(|this, _, window, cx| this.toggle_assistant(window, cx)),
+                        ),
+                )
+            })
             .when(session_page, |view| {
                 view.when(
                     !terminal_sftp_page
@@ -2901,9 +2898,9 @@ impl Nauterm {
                                 })
                                 .icon(IconName::PanelRight)
                                 .tooltip(if self.terminal_tools_open() {
-                                    "Hide terminal tools"
+                                    "terminal.action.hideTools"
                                 } else {
-                                    "Show terminal tools"
+                                    "terminal.action.showTools"
                                 })
                                 .on_click(cx.listener(|this, _, window, cx| {
                                     this.toggle_terminal_tools(window, cx)
@@ -2980,13 +2977,13 @@ impl Nauterm {
                     .icon(page_icon(page))
                     .accessibility_label(crate::localization::text_for(
                         self.data.general.language,
-                        page.label(),
+                        page.label_key(),
                     ))
-                    .child(label(page.label()))
+                    .child(label(page.label_key()))
                     .when(collapsed, |button| {
                         button.tooltip(crate::localization::text_for(
                             self.data.general.language,
-                            page.label(),
+                            page.label_key(),
                         ))
                     })
                     .on_click(
@@ -3008,10 +3005,10 @@ impl Nauterm {
                     .rounded(px(7.))
                     .custom(navigation_style(false))
                     .icon(IconName::Settings)
-                    .accessibility_label(crate::localization::text(cx, "Settings"))
-                    .child(label("Settings"))
+                    .accessibility_label(crate::localization::text(cx, "common.label.settings"))
+                    .child(label("common.label.settings"))
                     .when(collapsed, |button| {
-                        button.tooltip(crate::localization::text(cx, "Settings"))
+                        button.tooltip(crate::localization::text(cx, "common.label.settings"))
                     })
                     .on_click(cx.listener(|this, _, window, cx| this.open_settings(window, cx))),
             )
@@ -3081,13 +3078,7 @@ impl Nauterm {
         let preferences = self.collection_view();
         let page = self.page;
         let creation_group = matches!(page, Page::Hosts | Page::Snippets | Page::PortForwards);
-        let primary_label = kind.map(|kind| {
-            if kind == ItemKind::Forward {
-                "New forwarding".to_owned()
-            } else {
-                format!("New {}", kind.label().to_lowercase())
-            }
-        });
+        let primary_label = kind.map(|kind| crate::localization::text(cx, kind.new_label_key()));
         let mut labels = Vec::new();
         if let Some(label) = primary_label.as_deref() {
             labels.push((label, true));
@@ -3134,7 +3125,14 @@ impl Nauterm {
                             .dropdown(
                                 Button::new("new-item-options")
                                     .icon(IconName::ChevronDown)
-                                    .tooltip("More creation actions"),
+                                    .raw_tooltip(crate::localization::format(
+                                        cx,
+                                        "workspace.action.creationOptions",
+                                        &[(
+                                            "action",
+                                            &crate::localization::text(cx, kind.new_label_key()),
+                                        )],
+                                    )),
                                 move |menu, _, cx| {
                                     if page == Page::PortForwards {
                                         let mut menu = menu.width(170.);
@@ -3167,9 +3165,9 @@ impl Nauterm {
                                     let menu =
                                         menu.width(205.).item(
                                             MenuItem::localized(if group {
-                                                "New group"
+                                                "workspace.label.newGroup"
                                             } else {
-                                                "New snippet package"
+                                                "workspace.label.newSnippetPackage"
                                             })
                                             .icon(if group {
                                                 crate::assets::GROUP_ICON
@@ -3242,7 +3240,7 @@ impl Nauterm {
                         .toolbar()
                         .ghost()
                         .icon(IconName::Terminal)
-                        .label("Terminal")
+                        .label("common.label.terminal")
                         .label_collapsed(collapse_labels)
                         .on_click(cx.listener(|this, _, window, cx| this.open_local(window, cx))),
                 )
@@ -3251,7 +3249,7 @@ impl Nauterm {
                         .toolbar()
                         .ghost()
                         .icon(IconName::Cable)
-                        .label("Serial")
+                        .label("common.label.serial")
                         .label_collapsed(collapse_labels)
                         .on_click(
                             cx.listener(|this, _, window, cx| this.open_serial_dialog(window, cx)),
@@ -3264,7 +3262,7 @@ impl Nauterm {
                         .toolbar()
                         .ghost()
                         .icon(IconName::Clock)
-                        .label("Shell History")
+                        .label("workspace.label.shellHistory")
                         .label_collapsed(collapse_labels)
                         .on_click(
                             cx.listener(|this, _, window, cx| this.open_shell_history(window, cx)),
@@ -3280,7 +3278,7 @@ impl Nauterm {
                             .toolbar()
                             .ghost()
                             .icon(IconName::RefreshCw)
-                            .tooltip("Reload snippets")
+                            .tooltip("common.action.retry")
                             .disabled(self.snippet_state.busy)
                             .on_click(cx.listener(|this, _, _, cx| this.load_snippets(cx))),
                     )
@@ -3294,7 +3292,7 @@ impl Nauterm {
                     .toolbar()
                     .ghost()
                     .icon(preferences.sort.icon())
-                    .tooltip(preferences.sort.label())
+                    .tooltip(preferences.sort.label_key())
                     .dropdown_menu(move |menu, _, _| {
                         let owner = sort_owner.clone();
                         crate::management::sort_menu(menu, preferences.sort, move |order, _, cx| {
@@ -3686,14 +3684,14 @@ impl Nauterm {
                 cards = cards.child(self.card(kind, id, name, detail, cx));
             }
         }
+        let filtered = !query.is_empty()
+            || (tag_filter.is_active()
+                && (!self.data.hosts.is_empty() || !self.data.groups.is_empty()));
         if count == 0 && visible_groups == 0 && self.group.is_none() {
-            let filtered = !query.is_empty()
-                || (tag_filter.is_active()
-                    && (!self.data.hosts.is_empty() || !self.data.groups.is_empty()));
             let empty = crate::components::EmptyState::new(
                 IconName::Server,
                 if !filtered {
-                    "No hosts yet"
+                    "workspace.label.noHostsYet"
                 } else {
                     "workspace.label.noHostsFound"
                 },
@@ -3719,7 +3717,7 @@ impl Nauterm {
                         Button::new("empty-add-host")
                             .primary()
                             .icon(crate::assets::icon(IconName::Plus))
-                            .label("Add host")
+                            .label("workspace.label.addHost")
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.open_editor(ItemKind::Host, None, window, cx)
                             })),
@@ -3749,13 +3747,14 @@ impl Nauterm {
             .flex_col()
             .gap(px(18.))
             .when(self.page == Page::Hosts && self.group.is_some(), |view| {
-                let entries = std::iter::once((None, crate::localization::text(cx, "Hosts")))
-                    .chain(
-                        self.group
-                            .into_iter()
-                            .flat_map(|id| self.data.group_path(id))
-                            .map(|group| (Some(group.id), group.name.clone().into())),
-                    );
+                let entries =
+                    std::iter::once((None, crate::localization::text(cx, "common.label.hosts")))
+                        .chain(
+                            self.group
+                                .into_iter()
+                                .flat_map(|id| self.data.group_path(id))
+                                .map(|group| (Some(group.id), group.name.clone().into())),
+                        );
                 view.child(Breadcrumb::new("host-breadcrumb", entries, p).on_select(
                     cx.listener(|this, group, window, cx| this.enter_group(*group, window, cx)),
                 ))
@@ -3768,14 +3767,17 @@ impl Nauterm {
                     .flex_shrink_0()
                     .when(self.page == Page::Hosts && visible_groups > 0, |view| {
                         view.child(
-                            crate::components::management::collection_section("Groups", cx)
-                                .child(groups),
+                            crate::components::management::collection_section(
+                                "common.label.groups",
+                                cx,
+                            )
+                            .child(groups),
                         )
                     })
                     .when(count > 0, |view| {
                         view.child(
                             crate::components::management::collection_section(
-                                self.page.label(),
+                                self.page.label_key(),
                                 cx,
                             )
                             .child(cards),
@@ -3793,15 +3795,16 @@ impl Nauterm {
                                     .gap(px(12.))
                                     .text_color(p.muted)
                                     .child(icon(page_icon(self.page)))
-                                    .child(crate::localization::view(format!(
-                                        "No {}",
-                                        crate::localization::text(cx, self.page.label())
-                                    )))
+                                    .child(crate::localization::view(if filtered {
+                                        "workspace.label.noHostsFound"
+                                    } else {
+                                        "workspace.label.noHostsYet"
+                                    }))
                                     .child(div().text_size(px(12.)).child(
-                                        crate::localization::view(if query.is_empty() {
-                                            "Create an item to get started."
+                                        crate::localization::view(if filtered {
+                                            "workspace.description.tryAnotherSearchOrClearTags"
                                         } else {
-                                            "Try another search."
+                                            "workspace.empty.hosts.description"
                                         }),
                                     )),
                             )
@@ -3816,7 +3819,7 @@ impl Nauterm {
             .validation_error
             .as_deref()
             .filter(|error| match index {
-                0 => error.starts_with("Name is required"),
+                0 => *error == "common.validation.nameRequired",
                 1 => {
                     error.starts_with("Address is required")
                         || error.starts_with("Command is required")
@@ -3841,21 +3844,11 @@ impl Nauterm {
     }
 
     fn editor_section(&self, title: &str, fields: Vec<AnyElement>) -> AnyElement {
-        let p = Palette::new(self.data.dark);
-        div()
-            .rounded(px(10.))
-            .bg(p.surface)
-            .p(px(16.))
-            .flex()
-            .flex_col()
-            .gap(px(12.))
-            .child(
-                div()
-                    .font_weight(FontWeights::MEDIUM)
-                    .child(title.to_owned()),
-            )
-            .children(fields)
-            .into_any_element()
+        crate::components::management::editor_section(
+            Palette::new(self.data.dark).surface,
+            title,
+            fields,
+        )
     }
 
     fn drawer(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
@@ -3949,9 +3942,9 @@ impl Nauterm {
             vec![
                 self.editor_section(
                     if editor.kind == ItemKind::SnippetPackage {
-                        "Package"
+                        "common.label.package"
                     } else {
-                        "General"
+                        "common.label.general"
                     },
                     editor
                         .fields
@@ -3964,25 +3957,19 @@ impl Nauterm {
         };
         crate::components::DrawerFrame::new(
             "resource-editor",
-            if editor.kind == ItemKind::Forward {
-                if editor.id.is_some() {
-                    "Edit Forward".to_owned()
-                } else {
-                    "New forwarding".to_owned()
-                }
-            } else if editor.kind == ItemKind::SnippetPackage {
-                if editor.id.is_some() {
-                    "Rename Snippet Package"
-                } else {
-                    "New Snippet Package"
-                }
-                .to_owned()
-            } else {
-                format!(
-                    "{} {}",
-                    if editor.id.is_some() { "Edit" } else { "New" },
-                    editor.kind.label()
-                )
+            match (editor.kind, editor.id.is_some()) {
+                (ItemKind::Host, false) => "workspace.label.newHost",
+                (ItemKind::Host, true) => "workspace.label.editHost",
+                (ItemKind::Group, false) => "workspace.label.newGroup",
+                (ItemKind::Group, true) => "workspace.label.editGroup",
+                (ItemKind::Forward, false) => "workspace.label.newForwarding",
+                (ItemKind::Forward, true) => "workspace.label.editForward",
+                (ItemKind::Snippet, false) => "workspace.label.newSnippet",
+                (ItemKind::Snippet, true) => "workspace.label.editSnippet",
+                (ItemKind::SnippetPackage, false) => "workspace.label.newSnippetPackage",
+                (ItemKind::SnippetPackage, true) => "workspace.label.renameSnippetPackage",
+                (ItemKind::Proxy, false) => "workspace.label.newProxy",
+                (ItemKind::Proxy, true) => "workspace.label.editProxy",
             },
             self.data.dark,
         )
@@ -3992,7 +3979,7 @@ impl Nauterm {
                     .toolbar()
                     .ghost()
                     .icon(IconName::ArrowLeft)
-                    .tooltip("Back")
+                    .tooltip("common.action.back")
                     .disabled(self.resource_editor_busy(cx))
                     .on_click(cx.listener(|this, _, window, cx| {
                         this.back_related_resource(window, cx);
@@ -4013,7 +4000,7 @@ impl Nauterm {
                         .toolbar()
                         .ghost()
                         .icon(IconName::RefreshCw)
-                        .tooltip("Reload group environment")
+                        .tooltip("common.action.retry")
                         .on_click(cx.listener(|this, _, _, cx| this.merge_editor_environments(cx))),
                 )
             },
@@ -4024,7 +4011,7 @@ impl Nauterm {
                     .toolbar()
                     .ghost()
                     .icon(IconName::ArrowRightToLine)
-                    .tooltip("Close editor")
+                    .tooltip("common.action.close")
                     .on_click(cx.listener(|this, _, window, cx| {
                         if !this.dismiss_editor(cx) {
                             return;
@@ -4055,9 +4042,9 @@ impl Nauterm {
                         .as_ref()
                         .is_some_and(|forward| forward.saving())
                     {
-                        "Saving…"
+                        "common.label.saving"
                     } else {
-                        "Save"
+                        "common.action.save"
                     },
                 )
                 .loading(
@@ -4238,7 +4225,41 @@ impl Render for Nauterm {
                         .into_any_element()
                 })
                 .unwrap_or_else(|| div().into_any_element()),
-            Page::Logs => self.logs.as_ref().map(|view| div().flex_1().min_h_0().child(view.clone()).into_any_element()).unwrap_or_else(|| div().p(px(26.)).child(crate::localization::view("Session history is unavailable. Check the error above and reopen Logs to retry.")).into_any_element()),
+            Page::Logs => self
+                .logs
+                .as_ref()
+                .map(|view| {
+                    div()
+                        .flex_1()
+                        .min_h_0()
+                        .child(view.clone())
+                        .into_any_element()
+                })
+                .unwrap_or_else(|| {
+                    div()
+                        .flex_1()
+                        .flex()
+                        .flex_col()
+                        .items_center()
+                        .justify_center()
+                        .gap(px(10.))
+                        .p(px(26.))
+                        .child(crate::localization::view("workspace.logs.load.unavailable"))
+                        .child(
+                            Button::new("retry-recordings-service")
+                                .ghost()
+                                .label("workspace.logs.load.retry")
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    if let Some(keychain) = this.keychain.clone()
+                                        && keychain.read(cx).vault().is_none()
+                                    {
+                                        keychain.update(cx, |view, cx| view.retry(cx));
+                                    }
+                                    this.navigate(Page::Logs, window, cx);
+                                })),
+                        )
+                        .into_any_element()
+                }),
             Page::KnownHosts => self
                 .known_hosts
                 .as_ref()
@@ -4594,7 +4615,7 @@ impl Render for Nauterm {
                                                             .h(px(24.))
                                                             .px(px(10.))
                                                             .rounded(px(4.))
-                                                            .label("Connect")
+                                                            .label("common.action.connect")
                                                             .disabled(!can_quick_connect)
                                                             .when(!can_quick_connect, |button| {
                                                                 button

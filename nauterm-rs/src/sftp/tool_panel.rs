@@ -4,12 +4,21 @@ use super::*;
 use crate::components::ButtonCustomVariant;
 use crate::typography::FontWeights;
 
+fn sort_column_label(sort: Sort) -> &'static str {
+    match sort {
+        Sort::Name => "common.label.name",
+        Sort::Modified => "sftp.label.dateModified",
+        Sort::Size => "common.label.size",
+        Sort::Kind => "common.label.kind",
+    }
+}
+
 impl FilePane {
     pub(super) fn tool_button(
         &self,
         id: &'static str,
         icon: IconName,
-        label: &'static str,
+        label: impl Into<SharedString>,
         active: bool,
     ) -> Button {
         let p = self.palette();
@@ -54,7 +63,10 @@ impl FilePane {
                                 .palette(p)
                                 .small()
                                 .appearance(false)
-                                .aria_label(crate::localization::text(cx, "Filter files"))
+                                .aria_label(crate::localization::text(
+                                    cx,
+                                    "workspace.label.filterFiles",
+                                ))
                                 .cleanable(true),
                         )
                     })
@@ -81,99 +93,123 @@ impl FilePane {
             )
             .when(!filtering, |view| {
                 view.child(
-                    self.tool_button("tool-sftp-filter", IconName::Search, "Filter files", false)
-                        .on_click(cx.listener(|this, _, window, cx| {
-                            this.filter_open = true;
-                            this.filter
-                                .update(cx, |filter, cx| filter.focus(window, cx));
-                            cx.notify();
-                        })),
+                    self.tool_button(
+                        "tool-sftp-filter",
+                        IconName::Search,
+                        "workspace.label.filterFiles",
+                        false,
+                    )
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.filter_open = true;
+                        this.filter
+                            .update(cx, |filter, cx| filter.focus(window, cx));
+                        cx.notify();
+                    })),
                 )
             })
             .child(
-                self.tool_button("tool-sftp-refresh", IconName::RefreshCw, "Refresh", false)
-                    .on_click(cx.listener(|this, _, window, cx| this.refresh(window, cx))),
+                self.tool_button(
+                    "tool-sftp-refresh",
+                    IconName::RefreshCw,
+                    "common.action.refresh",
+                    false,
+                )
+                .on_click(cx.listener(|this, _, window, cx| this.refresh(window, cx))),
             )
             .child(
-                self.tool_button("tool-sftp-sort", IconName::ArrowDownAZ, "Sort files", false)
-                    .dropdown_menu(move |menu, _, cx| {
-                        let p = sort_owner
-                            .upgrade()
-                            .map(|pane| pane.read(cx).tool_menu_palette())
-                            .unwrap_or(p);
-                        let mut menu = menu.palette(p);
-                        for (column, name) in [
-                            (Sort::Name, "Name"),
-                            (Sort::Modified, "Modified"),
-                            (Sort::Size, "Size"),
-                            (Sort::Kind, "Kind"),
-                        ] {
-                            for ascending in [true, false] {
-                                let owner = sort_owner.clone();
-                                let checked = owner.upgrade().is_some_and(|pane| {
-                                    let pane = pane.read(cx);
-                                    pane.sort == column && pane.ascending == ascending
-                                });
-                                menu = menu.item(
-                                    MenuItem::new(format!(
-                                        "{name} {}",
-                                        if ascending { "↑" } else { "↓" }
-                                    ))
-                                    .checked(checked)
-                                    .on_click(
-                                        move |_, _, cx| {
-                                            let _ = owner.update(cx, |this, cx| {
-                                                this.sort = column;
-                                                this.ascending = ascending;
-                                                cx.notify();
-                                            });
-                                        },
-                                    ),
-                                );
-                            }
+                self.tool_button(
+                    "tool-sftp-sort",
+                    IconName::ArrowDownAZ,
+                    crate::localization::format(
+                        cx,
+                        "sftp.tooltip.sort",
+                        &[(
+                            "column",
+                            &crate::localization::text(cx, sort_column_label(self.sort)),
+                        )],
+                    ),
+                    false,
+                )
+                .dropdown_menu(move |menu, _, cx| {
+                    let p = sort_owner
+                        .upgrade()
+                        .map(|pane| pane.read(cx).tool_menu_palette())
+                        .unwrap_or(p);
+                    let mut menu = menu.palette(p);
+                    for column in [Sort::Name, Sort::Modified, Sort::Size, Sort::Kind] {
+                        let name = crate::localization::text(cx, sort_column_label(column));
+                        for ascending in [true, false] {
+                            let owner = sort_owner.clone();
+                            let checked = owner.upgrade().is_some_and(|pane| {
+                                let pane = pane.read(cx);
+                                pane.sort == column && pane.ascending == ascending
+                            });
+                            menu = menu.item(
+                                MenuItem::new(format!(
+                                    "{name} {}",
+                                    if ascending { "↑" } else { "↓" }
+                                ))
+                                .checked(checked)
+                                .on_click(move |_, _, cx| {
+                                    let _ = owner.update(cx, |this, cx| {
+                                        this.sort = column;
+                                        this.ascending = ascending;
+                                        cx.notify();
+                                    });
+                                }),
+                            );
                         }
-                        menu
-                    }),
+                    }
+                    menu
+                }),
             )
             .child(
-                self.tool_button("tool-sftp-tasks", IconName::List, "Tasks", self.tasks_open)
-                    .when(self.tasks.read(cx).active() > 0, |button| {
-                        button.child({
-                            let count = self.tasks.read(cx).active();
-                            div()
-                                .absolute()
-                                .top(px(1.))
-                                .right(px(1.))
-                                .min_w(px(12.))
-                                .h(px(12.))
-                                .px(px(2.))
-                                .rounded_full()
-                                .bg(p.accent)
-                                .text_color(p.background)
-                                .text_size(px(7.5))
-                                .line_height(px(12.))
-                                .text_center()
-                                .child(if count > 9 {
-                                    "9+".into()
-                                } else {
-                                    count.to_string()
-                                })
-                        })
+                self.tool_button(
+                    "tool-sftp-tasks",
+                    IconName::List,
+                    "common.label.tasks",
+                    self.tasks_open,
+                )
+                .when(self.tasks.read(cx).active() > 0, |button| {
+                    button.child({
+                        let count = self.tasks.read(cx).active();
+                        div()
+                            .absolute()
+                            .top(px(1.))
+                            .right(px(1.))
+                            .min_w(px(12.))
+                            .h(px(12.))
+                            .px(px(2.))
+                            .rounded_full()
+                            .bg(p.accent)
+                            .text_color(p.background)
+                            .text_size(px(7.5))
+                            .line_height(px(12.))
+                            .text_center()
+                            .child(if count > 9 {
+                                "9+".into()
+                            } else {
+                                count.to_string()
+                            })
                     })
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.tasks_open = !this.tasks_open;
-                        if this.tasks_open {
-                            this.tasks.read(cx).reload_history();
-                        }
-                        this.favorites.open = false;
-                        cx.notify();
-                    })),
+                })
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.tasks_open = !this.tasks_open;
+                    if this.tasks_open {
+                        this.tasks.read(cx).reload_history();
+                    }
+                    this.favorites.open = false;
+                    cx.notify();
+                })),
             )
             .child(
-                self.tool_button("tool-sftp-actions", IconName::Ellipsis, "Actions", false)
-                    .dropdown_menu(move |menu, _, cx| {
-                        actions::browser_menu(menu, owner.clone(), cx)
-                    }),
+                self.tool_button(
+                    "tool-sftp-actions",
+                    IconName::Ellipsis,
+                    "common.label.actions",
+                    false,
+                )
+                .dropdown_menu(move |menu, _, cx| actions::browser_menu(menu, owner.clone(), cx)),
             )
             .into_any_element()
     }
@@ -218,15 +254,12 @@ impl FilePane {
                     .text_color(p.muted)
                     .text_size(px(11.5))
                     .line_height(px(18.))
-                    .child(crate::localization::text(
-                        cx,
-                        "rs.ui.copy.sftpConnectionClosed",
-                    ))
+                    .child(crate::localization::text(cx, "sftp.connection.closed"))
                     .child(
                         Button::new("tool-sftp-reconnect")
                             .small()
                             .ghost()
-                            .label("Reconnect")
+                            .label("common.label.reconnect")
                             .custom(ButtonCustomVariant::for_surface(p))
                             .on_click(
                                 cx.listener(|this, _, window, cx| this.reconnect_bound(window, cx)),
@@ -253,28 +286,38 @@ impl FilePane {
             .flex()
             .items_center()
             .child(
-                self.tool_button("tool-sftp-home", IconName::House, "Home", false)
-                    .on_click(cx.listener(|this, _, window, cx| {
-                        this.navigate(this.home(), Navigation::Visit, window, cx)
-                    })),
+                self.tool_button(
+                    "tool-sftp-home",
+                    IconName::House,
+                    "common.label.home",
+                    false,
+                )
+                .on_click(cx.listener(|this, _, window, cx| {
+                    this.navigate(this.home(), Navigation::Visit, window, cx)
+                })),
             )
             .when_some(self.directory_buttons(cx), |view, buttons| {
                 view.child(buttons)
             })
             .child(
-                self.tool_button("tool-sftp-back", IconName::ChevronLeft, "Back", false)
-                    .disabled(self.history.back.is_empty())
-                    .on_click(cx.listener(|this, _, window, cx| {
-                        if let Some(path) = this.history.back.last().cloned() {
-                            this.navigate(path, Navigation::Back, window, cx);
-                        }
-                    })),
+                self.tool_button(
+                    "tool-sftp-back",
+                    IconName::ChevronLeft,
+                    "common.action.back",
+                    false,
+                )
+                .disabled(self.history.back.is_empty())
+                .on_click(cx.listener(|this, _, window, cx| {
+                    if let Some(path) = this.history.back.last().cloned() {
+                        this.navigate(path, Navigation::Back, window, cx);
+                    }
+                })),
             )
             .child(
                 self.tool_button(
                     "tool-sftp-forward",
                     IconName::ChevronRight,
-                    "Forward",
+                    "common.label.forward",
                     false,
                 )
                 .disabled(self.history.forward.is_empty())

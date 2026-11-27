@@ -147,9 +147,9 @@ impl SystemTool {
                 .when(self.active, |v| v.child(Spinner::new().with_size(px(18.))))
                 .when(!self.active, |v| {
                     v.child(crate::localization::view(if self.has_live_session(cx) {
-                        "Updates paused"
+                        "workspace.systemInfo.updatesPaused"
                     } else {
-                        "No live SSH session"
+                        "workspace.label.noSshSession"
                     }))
                 })
                 .into_any_element();
@@ -183,7 +183,7 @@ impl SystemTool {
                         .small()
                         .ghost()
                         .custom(ButtonCustomVariant::for_surface(p))
-                        .label("Retry")
+                        .label("common.action.retry")
                         .disabled(!self.active || self.loading)
                         .on_click(cx.listener(|this, _, _, cx| this.refresh(cx))),
                 )
@@ -196,12 +196,18 @@ impl SystemTool {
         let memory = usage(info.memory_used_bytes, info.memory_total_bytes);
         let swap = usage(info.swap_used_bytes, info.swap_total_bytes);
         let details = [
-            ("Operating system", info.os_name.clone()),
-            ("Kernel", info.kernel.clone()),
-            ("Architecture", info.architecture.clone()),
-            ("Uptime", info.uptime_seconds.map(data::uptime)),
+            ("workspace.systemInfo.operatingSystem", info.os_name.clone()),
+            ("workspace.systemInfo.kernel", info.kernel.clone()),
             (
-                "Load average",
+                "workspace.systemInfo.architecture",
+                info.architecture.clone(),
+            ),
+            (
+                "workspace.systemInfo.uptime",
+                info.uptime_seconds.map(data::uptime),
+            ),
+            (
+                "workspace.systemInfo.loadAverage",
                 info.load_average.map(|_| {
                     [info.load_average, info.load_average_5, info.load_average_15]
                         .into_iter()
@@ -224,15 +230,26 @@ impl SystemTool {
             .flex_col()
             .gap(px(8.))
             .child(metric(
-                "CPU",
+                "workspace.label.cpu",
                 info.cpu_usage_percent
                     .map(|v| format!("{v:.1}%"))
                     .unwrap_or_else(|| "—".into()),
                 [
-                    info.cpu_count
-                        .map(|v| crate::localization::text(cx, &format!("{v} cores")).to_string()),
+                    info.cpu_count.map(|v| {
+                        crate::localization::format(
+                            cx,
+                            "terminal.systemInfo.cpu.cores",
+                            &[("count", &v.to_string())],
+                        )
+                        .to_string()
+                    }),
                     info.load_average.map(|v| {
-                        crate::localization::text(cx, &format!("load {v:.2}")).to_string()
+                        crate::localization::format(
+                            cx,
+                            "terminal.systemInfo.cpu.load",
+                            &[("load", &format!("{v:.2}"))],
+                        )
+                        .to_string()
                     }),
                 ]
                 .into_iter()
@@ -243,21 +260,21 @@ impl SystemTool {
                 p,
             ))
             .child(metric(
-                "Memory",
+                "common.label.memory",
                 percent(memory),
                 used_total(info.memory_used_bytes, info.memory_total_bytes),
                 memory,
                 p,
             ))
             .child(metric(
-                "Swap",
+                "workspace.label.swap",
                 percent(swap),
                 used_total(info.swap_used_bytes, info.swap_total_bytes),
                 swap,
                 p,
             ))
-            .child(
-                section("System", p).children(details.into_iter().filter_map(|(label, value)| {
+            .child(section("workspace.systemInfo.details.title", p).children(
+                details.into_iter().filter_map(|(label, value)| {
                     value.map(|value| {
                         div()
                             .px(px(10.))
@@ -274,19 +291,19 @@ impl SystemTool {
                             )
                             .child(div().flex_1().min_w_0().text_size(px(10.5)).child(value))
                     })
-                })),
-            );
+                }),
+            ));
         if !info.processes.is_empty() {
             let sort = self.samples.sort;
             let ascending = self.samples.ascending;
             body = body.child(
-                section("Top processes", p)
+                section("workspace.label.topProcesses", p)
                     .child(
                         div().px(px(5.)).flex().children(
                             [
-                                ("Memory", Sort::Memory, 0.3),
-                                ("CPU", Sort::Cpu, 0.2),
-                                ("Command", Sort::Command, 0.5),
+                                ("common.label.memory", Sort::Memory, 0.3),
+                                ("workspace.label.cpu", Sort::Cpu, 0.2),
+                                ("common.label.command", Sort::Command, 0.5),
                             ]
                             .map(|(label, value, width)| {
                                 Button::new(label)
@@ -333,7 +350,7 @@ impl SystemTool {
             let menu_selected = selected.clone();
             body = body.child(
                 section_with(
-                    "Network",
+                    "common.label.network",
                     p,
                     Button::new("system-interface")
                         .xsmall()
@@ -406,7 +423,7 @@ impl SystemTool {
             );
         }
         if !info.filesystems.is_empty() {
-            body = body.child(section("Filesystems", p).children(
+            body = body.child(section("workspace.label.filesystems", p).children(
                 info.filesystems.iter().take(12).map(|fs| {
                     div()
                         .px(px(10.))
@@ -428,11 +445,19 @@ impl SystemTool {
                                         .child(fs.path.clone()),
                                 )
                                 .child(div().text_color(p.muted).text_size(px(10.)).child(
-                                    crate::localization::view(format!(
-                                        "{} free / {}",
-                                        bytes(fs.total_bytes.saturating_sub(fs.used_bytes)),
-                                        bytes(fs.total_bytes)
-                                    )),
+                                    crate::localization::format(
+                                        cx,
+                                        "terminal.systemInfo.disk.free",
+                                        &[
+                                            (
+                                                "free",
+                                                &bytes(
+                                                    fs.total_bytes.saturating_sub(fs.used_bytes),
+                                                ),
+                                            ),
+                                            ("total", &bytes(fs.total_bytes)),
+                                        ],
+                                    ),
                                 )),
                         )
                         .child(progress(
@@ -514,7 +539,7 @@ impl Render for SystemTool {
                             .ghost()
                             .custom(ButtonCustomVariant::for_surface(p))
                             .icon(IconName::Copy)
-                            .tooltip("Copy host")
+                            .tooltip("workspace.label.copyHost")
                             .on_click(move |_, _, cx| {
                                 cx.write_to_clipboard(ClipboardItem::new_string(copy.clone()))
                             }),
@@ -527,7 +552,7 @@ impl Render for SystemTool {
                             .icon(IconName::RefreshCw)
                             .loading(self.loading)
                             .disabled(self.loading || !self.active)
-                            .tooltip("Refresh system information")
+                            .tooltip("workspace.label.refreshSystemInformation")
                             .on_click(cx.listener(|this, _, _, cx| this.refresh(cx))),
                     ),
             )
@@ -537,7 +562,7 @@ impl Render for SystemTool {
                     crate::localization::message(
                         cx,
                         if self.has_live_session(cx) {
-                            "Updates paused"
+                            "workspace.systemInfo.updatesPaused"
                         } else {
                             "SSH session is not active"
                         },
@@ -591,18 +616,9 @@ fn metric(
                         .font_weight(FontWeights::MEDIUM)
                         .child(crate::localization::view(label)),
                 )
-                .child(
-                    div()
-                        .text_color(p.accent)
-                        .child(crate::localization::view(value)),
-                ),
+                .child(div().text_color(p.accent).child(value)),
         )
-        .child(
-            div()
-                .text_size(px(10.))
-                .text_color(p.muted)
-                .child(crate::localization::view(detail)),
-        )
+        .child(div().text_size(px(10.)).text_color(p.muted).child(detail))
         .child(progress(ratio, p))
 }
 fn section(title: &'static str, p: Palette) -> Div {

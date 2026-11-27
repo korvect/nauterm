@@ -15,6 +15,12 @@ pub struct SyncProviderRecord {
     pub active: bool,
     fingerprint: [u8; 32],
 }
+
+impl SyncProviderRecord {
+    pub(super) fn fingerprint(&self) -> &[u8; 32] {
+        &self.fingerprint
+    }
+}
 #[derive(Clone, Default)]
 pub struct SyncProviderCredentials {
     pub values: BTreeMap<String, Zeroizing<String>>,

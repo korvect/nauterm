@@ -273,7 +273,10 @@ impl Suggestions {
         div()
             .id(("composer-suggestions", entity.entity_id()))
             .role(Role::ListBox)
-            .aria_label(crate::localization::text(cx, "Command suggestions"))
+            .aria_label(crate::localization::text(
+                cx,
+                "terminal.composer.suggestions.label",
+            ))
             .w(self
                 .width
                 .min((window.viewport_size().width - px(18.)).max(px(1.))))
@@ -376,7 +379,7 @@ impl Render for Suggestions {
                     .palette(editor_palette)
                     .appearance(false)
                     .bordered(false)
-                    .aria_label(crate::localization::text(cx, "Command")),
+                    .aria_label(crate::localization::text(cx, "common.label.command")),
             )
             .child(
                 canvas(

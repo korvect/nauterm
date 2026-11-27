@@ -178,7 +178,15 @@ impl Wizard {
             .find(|device| Some(&device.id) == self.device.as_ref())
     }
     fn validation_hint(&self, error: ValidationError) -> Option<SharedString> {
-        (self.validation == Some(error)).then(|| error.message().into())
+        (self.validation == Some(error)).then(|| {
+            match error {
+                ValidationError::Label => "workspace.keys.fido2.validation.labelRequired",
+                ValidationError::Pin => "workspace.keys.fido2.pinRequired",
+                ValidationError::Rounds => "workspace.keys.fido2.roundsRange",
+                _ => error.message(),
+            }
+            .into()
+        })
     }
     fn refresh(&mut self, cx: &mut Context<Self>) {
         if self.loading || self.busy() || self.step != Step::Device {
@@ -378,12 +386,25 @@ impl Wizard {
             let _ = view.update_in(cx, |view, _, cx| {
                 view.work = Work::Idle;
                 match result {
-                    Ok(id) => { view.pending = None; cx.emit(Event::Saved(id)); }
-                    Err(error) => view.error = Some(format!("The key was generated but could not be saved: {error}. Retry save to keep this key.")),
+                    Ok(id) => {
+                        view.pending = None;
+                        cx.emit(Event::Saved(id));
+                    }
+                    Err(error) => {
+                        view.error = Some(
+                            crate::localization::format(
+                                cx,
+                                "workspace.keys.fido2.pending.saveError",
+                                &[("error", &error.to_string())],
+                            )
+                            .into(),
+                        );
+                    }
                 }
                 cx.notify();
             });
-        }).detach();
+        })
+        .detach();
         cx.notify();
     }
 }

@@ -26,7 +26,7 @@ impl Nauterm {
                                     .child(Spinner::new())
                                     .child(crate::localization::text(
                                         cx,
-                                        "rs.ui.copy.waitingForBackgroundWork",
+                                        "workspace.exit.waitingForBackgroundWork",
                                     )),
                             ),
                     )
@@ -55,14 +55,14 @@ impl Nauterm {
                             .action(
                                 Button::new("keep-terminal")
                                     .ghost()
-                                    .label("Cancel")
+                                    .label("common.action.cancel")
                                     .on_click(|_, window, cx| Modal::dismiss(window, cx)),
                             )
                             .action(
                                 Button::new("close-terminal-confirm")
                                     .danger()
                                     .label(match target {
-                                        CloseTarget::Restart => "Restart",
+                                        CloseTarget::Restart => "common.action.restart",
                                         CloseTarget::Quit => "common.action.quit",
                                         _ => "common.action.close",
                                     })
@@ -117,9 +117,11 @@ impl Nauterm {
                 cx,
                 match kind {
                     ItemKind::Group => "workspace.dialog.deleteGroup.description",
+                    ItemKind::Snippet => "workspace.dialog.deleteSnippet.description",
                     ItemKind::SnippetPackage => "workspace.dialog.deleteSnippetPackage.description",
                     ItemKind::Forward => "workspace.dialog.deleteForward.description",
-                    _ => "workspace.dialog.deleteItem.description",
+                    ItemKind::Proxy => "workspace.dialog.deleteProxy.description",
+                    ItemKind::Host => "workspace.dialog.deleteItem.description",
                 },
             )
         } else {
@@ -148,7 +150,7 @@ impl Nauterm {
                             Button::new("cancel-delete")
                                 .disabled(deleting)
                                 .ghost()
-                                .label("Cancel")
+                                .label("common.action.cancel")
                                 .on_click(|_, window, cx| Modal::dismiss(window, cx)),
                         )
                         .action(
@@ -157,9 +159,9 @@ impl Nauterm {
                                 .loading(self.forward_delete_busy)
                                 .danger()
                                 .label(if self.forward_delete_busy {
-                                    "Deleting…"
+                                    "common.status.deleting"
                                 } else {
-                                    "Delete"
+                                    "common.action.delete"
                                 })
                                 .on_click(cx.listener(|this, _, window, cx| {
                                     if let Some(kind) = this.selection_kind {

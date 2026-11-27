@@ -81,7 +81,7 @@ fn menu_inner(menu: Menu, owner: WeakEntity<FilePane>, sudo: bool, cx: &App) -> 
     });
     if let Some((token, path)) = selected {
         menu.item(
-            MenuItem::localized("Open with SSH Editor")
+            MenuItem::localized("sftp.action.openWithSshEditor")
                 .destructive(sudo)
                 .on_click(move |_, window, cx| {
                     let _ = owner.update(cx, |pane, cx| {
@@ -117,7 +117,7 @@ fn application_menu(menu: Menu, owner: WeakEntity<FilePane>, sudo: bool, cx: &Ap
     });
     let Some(scope) = scope else {
         return menu.item(
-            MenuItem::localized("Open With")
+            MenuItem::localized("sftp.action.openWith")
                 .destructive(sudo)
                 .disabled(true),
         );
@@ -135,20 +135,20 @@ fn application_menu(menu: Menu, owner: WeakEntity<FilePane>, sudo: bool, cx: &Ap
             .is_some_and(|pane| pane.read(cx).configured_editor(&scope).is_some());
         if !implicit && !configured {
             return menu.item(
-                MenuItem::localized("Open With")
+                MenuItem::localized("sftp.action.openWith")
                     .destructive(sudo)
                     .disabled(true),
             );
         }
         return menu.item(
-            MenuItem::localized("Open With")
+            MenuItem::localized("sftp.action.openWith")
                 .destructive(sudo)
                 .submenu(items(&owner, &scope, &[], false, false, cx)),
         );
     }
     let revision = std::rc::Rc::new(std::cell::Cell::new(0u64));
     menu.item(
-        MenuItem::localized("Open With")
+        MenuItem::localized("sftp.action.openWith")
             .destructive(sudo)
             .submenu_with(move |_, window, cx| {
                 let generation = revision.get().wrapping_add(1);
@@ -230,20 +230,22 @@ fn items(
         .and_then(|pane| pane.read(cx).configured_editor(scope));
     let mut menu = Menu::default();
     if implicit {
-        let label = applications
-            .iter()
-            .find(|app| app.is_default)
-            .map(|app| format!("{} (default)", app.name))
-            .unwrap_or_else(|| "System Default Application".into());
+        let default_application = applications.iter().find(|app| app.is_default);
+        let label = match default_application {
+            Some(app) => crate::localization::format(
+                cx,
+                "sftp.action.systemDefaultApplicationName",
+                &[("name", &app.name)],
+            ),
+            None => crate::localization::text(cx, "sftp.action.systemDefaultApplication"),
+        };
         let owner = owner.clone();
         let scope = scope.clone();
         menu = menu
             .item(
                 application_item(
-                    label,
-                    applications
-                        .iter()
-                        .find(|app| app.is_default)
+                    label.to_string(),
+                    default_application
                         .map(|app| Editor::from(app.clone()))
                         .as_ref(),
                     scope.sudo,
@@ -282,9 +284,9 @@ fn items(
     if loading || failed {
         menu = menu.item(
             MenuItem::localized(if loading {
-                "Loading applications…"
+                "applications.catalog.loading"
             } else {
-                "Unable to load applications"
+                "applications.catalog.error"
             })
             .destructive(scope.sudo)
             .disabled(true),
@@ -323,7 +325,7 @@ fn items(
         let owner = owner.clone();
         let scope = scope.clone();
         menu = menu.separator().item(
-            MenuItem::localized("Other...")
+            MenuItem::localized("sftp.action.otherApplication")
                 .destructive(scope.sudo)
                 .icon(IconName::Ellipsis)
                 .on_click(move |_, window, cx| {

@@ -67,7 +67,8 @@ impl Panel {
                 .clone()
                 .map(crate::components::message::Message::error)
         });
-        let query = cx.new(|cx| InputState::new(window, cx).placeholder("Search packages…"));
+        let query =
+            cx.new(|cx| InputState::new(window, cx).placeholder("settings.search.packages.hint"));
         let event = cx.subscribe_in(&query, window, |this, _, event: &InputEvent, window, cx| {
             if matches!(event, InputEvent::Change) {
                 this.filter_licenses(window, cx);
@@ -228,31 +229,26 @@ impl Panel {
             #[cfg(target_os = "macos")]
             {
                 let p = Palette::settings(self.dark);
+                let configured = crate::sparkle::configuration().is_ok();
                 return div()
                     .flex()
                     .flex_col()
                     .gap(px(14.))
-                    .child(
-                        div()
-                            .text_size(px(12.))
-                            .text_color(p.muted)
-                            .child(crate::localization::text(cx, "rs.ui.copy.sparkleUpdates")),
-                    )
-                    .when_some(crate::sparkle::configuration().err(), |view, error| {
-                        view.child(
-                            div()
-                                .text_size(px(12.))
-                                .text_color(p.muted)
-                                .child(crate::localization::message(cx, &error.to_string())),
-                        )
+                    .child(div().text_size(px(12.)).text_color(p.muted).child(
+                        crate::localization::text(cx, "settings.update.sparkle.managed"),
+                    ))
+                    .when(!configured, |view| {
+                        view.child(div().text_size(px(12.)).text_color(p.muted).child(
+                            crate::localization::text(cx, "settings.update.sparkle.notConfigured"),
+                        ))
                     })
                     .child(
                         div().flex().justify_end().child(
                             Button::new("about-check-sparkle")
                                 .outline()
                                 .icon(IconName::RefreshCw)
-                                .label("Check for updates")
-                                .disabled(self.checking || crate::sparkle::configuration().is_err())
+                                .label("settings.update.action.check")
+                                .disabled(self.checking || !configured)
                                 .on_click(cx.listener(|this, _, window, cx| {
                                     this.check_updates(window, cx)
                                 })),
@@ -273,20 +269,33 @@ impl Panel {
                         .child(Spinner::new())
                         .child(crate::localization::text(
                             cx,
-                            "rs.ui.copy.checkingForUpdates",
+                            "settings.update.action.checking",
                         )),
                 );
             }
             if let Some(release) = &self.release {
                 let message = if release.asset.is_none() {
-                    format!(
-                        "Release {} has no Nauterm RS package for this platform.",
-                        release.version
+                    crate::localization::format(
+                        cx,
+                        "settings.update.status.noPackage",
+                        &[
+                            ("appName", crate::APPLICATION_NAME),
+                            ("version", &release.version),
+                        ],
                     )
+                    .to_string()
                 } else if release.newer {
-                    format!("Nauterm RS {} is available.", release.version)
+                    crate::localization::format_for(
+                        crate::localization::language(cx),
+                        "settings.update.status.available",
+                        &[
+                            ("appName", crate::APPLICATION_NAME),
+                            ("version", &release.version),
+                        ],
+                    )
+                    .to_string()
                 } else {
-                    "Your Nauterm RS version is up to date.".into()
+                    crate::localization::text(cx, "settings.update.status.current").to_string()
                 };
                 updates = updates.child(
                     div()
@@ -294,11 +303,16 @@ impl Panel {
                         .text_color(p.muted)
                         .child(crate::localization::message(cx, &message)),
                 );
+                if release.newer && release.asset.is_some() && release.checksums.is_none() {
+                    updates = updates.child(div().text_size(px(12.)).text_color(p.muted).child(
+                        crate::localization::text(cx, "settings.update.status.browserOnly"),
+                    ));
+                }
                 let release_url = release.url.clone();
                 let mut actions = div().flex().justify_end().flex_wrap().gap(px(8.)).child(
                     Button::new("about-release-details")
                         .outline()
-                        .label("Release details")
+                        .label("settings.update.action.releaseDetails")
                         .on_click(move |_, _, cx| cx.open_url(&release_url)),
                 );
                 if release.newer
@@ -309,7 +323,7 @@ impl Panel {
                         Button::new("about-download-rs")
                             .outline()
                             .icon(IconName::Download)
-                            .label("Download in Browser")
+                            .label("settings.update.action.downloadInBrowser")
                             .disabled(self.download_running() || self.opening_package)
                             .tooltip(asset.name.clone())
                             .on_click(move |_, _, cx| cx.open_url(&url)),
@@ -326,7 +340,7 @@ impl Panel {
                             Button::new("about-managed-download")
                                 .outline()
                                 .icon(IconName::Download)
-                                .label("Download update")
+                                .label("settings.update.action.download")
                                 .tooltip(plan_error.clone().unwrap_or_else(|| {
                                     "Download and verify the Nauterm RS package.".into()
                                 }))
@@ -357,7 +371,7 @@ impl Panel {
                     Button::new("about-check-updates")
                         .outline()
                         .icon(IconName::RefreshCw)
-                        .label("Check for updates")
+                        .label("settings.update.action.check")
                         .disabled(
                             self.checking
                                 || self.download_running()
@@ -387,13 +401,13 @@ impl Render for Panel {
                         .flex_col()
                         .gap(px(18.))
                         .child(self.row(
-                            "Version",
+                            "common.label.version",
                             "settings.label.releaseChannelStable",
                             div().font_weight(FontWeights::MEDIUM).child(model::VERSION),
                         ))
-                        .child(self.row("Build", model::PACKAGE, model::BUILD))
+                        .child(self.row("common.label.build", model::PACKAGE, model::BUILD))
                         .child(self.row(
-                            "Platform",
+                            "common.label.platform",
                             "settings.label.currentPlatformArchitecture",
                             model::platform(),
                         )),
@@ -410,8 +424,8 @@ impl Render for Panel {
                         .gap(px(18.))
                         .child(
                             self.row(
-                                "Source license",
-                                "See LICENSE for the complete terms.",
+                                "settings.label.sourceLicense",
+                                "settings.about.license.help",
                                 Button::new("about-source-license")
                                     .ghost()
                                     .label("MIT + Commons Clause")
@@ -423,11 +437,11 @@ impl Render for Panel {
                         )
                         .child(
                             self.row(
-                                "Third-party licenses",
+                                "settings.label.thirdPartyLicenses",
                                 "settings.about.licenses.rustDescription",
                                 Button::new("about-third-party-licenses")
                                     .outline()
-                                    .label("View")
+                                    .label("common.label.view")
                                     .on_click(cx.listener(|this, _, window, cx| {
                                         this.open_licenses(window, cx)
                                     })),

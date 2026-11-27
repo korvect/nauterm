@@ -7,6 +7,36 @@ import 'package:nauterm/data/nauterm_data_store.dart';
 import 'package:nauterm/data/nauterm_paths.dart';
 
 void main() {
+  test('rotation rejects an out-of-date review through the progress FFI', () {
+    final directory = Directory.systemTemp.createTempSync('nauterm-rotation-');
+    addTearDown(() => directory.deleteSync(recursive: true));
+    final store = NautermDataStore.openPath(
+      '${directory.path}/settings.sqlite',
+    );
+    addTearDown(store.dispose);
+    final review = store.reviewSyncKeyRotation();
+    expect(review.targets, isEmpty);
+    store.setAppMetadata('sync_revision:fixture', '1');
+    expect(store.reviewSyncKeyRotation().stamp, isNot(review.stamp));
+
+    final progress = <SyncKeyRotationProgress>[];
+    expect(
+      () => store.rotateSyncMasterKey(
+        reviewStamp: review.stamp,
+        currentMasterKey: 'Fixture-current-123',
+        newMasterKey: 'Fixture-new-123',
+        backupCount: 0,
+        onProgress: progress.add,
+      ),
+      throwsA(
+        predicate(
+          (error) => error.toString().contains('Sync key details changed'),
+        ),
+      ),
+    );
+    expect(progress, isEmpty);
+  });
+
   test('AI provider reads max tokens from extensible config', () {
     final provider = AiProviderEntry.fromJson({
       'name': 'Example',
@@ -137,6 +167,42 @@ void main() {
     expect(store.deleteAiProvider(provider.id!), 1);
     expect(store.listAiProviders(), isEmpty);
     expect(store.deleteAiProvider(provider.id!), 0);
+  });
+
+  test('batch deletion removes only the specified forwarding rules', () {
+    final directory = Directory.systemTemp.createTempSync('nauterm_forward_');
+    final store = NautermDataStore.openPath(
+      '${directory.path}${Platform.pathSeparator}nauterm.sqlite',
+    );
+    addTearDown(() {
+      store.dispose();
+      directory.deleteSync(recursive: true);
+    });
+    final hostId = store.saveHost(
+      const HostEntry(
+        name: 'Example',
+        host: 'example.com',
+        type: NautermHostType.remote,
+      ),
+    );
+    final ids = [
+      for (final port in [8001, 8002, 8003])
+        store.savePortForward(
+          PortForwardEntry(
+            name: 'Rule $port',
+            type: 'local',
+            bindAddress: '127.0.0.1',
+            bindPort: port,
+            destinationHost: '127.0.0.1',
+            destinationPort: 8080,
+            connectionId: hostId,
+          ),
+        ),
+    ];
+
+    expect(store.deletePortForwards([ids[0], ids[2], ids[0]]), 2);
+    expect(store.listPortForwards(connectionId: hostId).single.id, ids[1]);
+    expect(store.deletePortForwards([ids[0], ids[2]]), 0);
   });
 
   test('Rust data store manages host data through FFI', () {
@@ -387,6 +453,62 @@ void main() {
     expect(taskHistory.single.id, isNotNull);
     expect(taskHistory.single.uuid, isNotEmpty);
     expect(taskHistory.single.type, 'edit');
+
+    final transferStart = taskHistoryNow.subtract(const Duration(minutes: 2));
+    const transferUuid = '8cb9b9c3-ad5f-458c-a595-91e72f2c998f';
+    SftpTaskHistoryEntry transfer({
+      required String status,
+      required DateTime finishedAt,
+      required int bytes,
+      String? error,
+    }) => SftpTaskHistoryEntry(
+      uuid: transferUuid,
+      type: 'upload',
+      host: 'example.com',
+      username: 'admin',
+      status: status,
+      displayName: 'notes.txt',
+      sourcePath: '/tmp/notes.txt',
+      targetPath: '/remote/notes.txt',
+      createdAt: transferStart,
+      finishedAt: finishedAt,
+      bytes: bytes,
+      totalBytes: 128,
+      itemKind: 'file',
+      error: error,
+    );
+    final transferId = store.saveSftpTaskHistory(
+      transfer(
+        status: 'failed',
+        finishedAt: taskHistoryNow.subtract(const Duration(minutes: 1)),
+        bytes: 64,
+        error: 'Connection closed',
+      ),
+    );
+    final retryId = store.saveSftpTaskHistory(
+      transfer(status: 'completed', finishedAt: taskHistoryNow, bytes: 128),
+    );
+    expect(retryId, transferId);
+    final updatedHistory = store.listSftpTaskHistory(
+      cutoff: taskHistoryNow.subtract(const Duration(days: 30)),
+    );
+    expect(updatedHistory, hasLength(2));
+    final retried = updatedHistory.singleWhere(
+      (row) => row.uuid == transferUuid,
+    );
+    expect(retried.status, 'completed');
+    expect(retried.bytes, 128);
+    expect(retried.error, isNull);
+    expect(
+      retried.createdAt.millisecondsSinceEpoch,
+      transferStart.millisecondsSinceEpoch,
+    );
+    expect(
+      retried.finishedAt.millisecondsSinceEpoch,
+      taskHistoryNow.millisecondsSinceEpoch,
+    );
+    expect(store.deleteSftpTaskHistory(transferId), 1);
+
     expect(store.clearSftpTaskHistory(), 1);
     expect(
       store.listSftpTaskHistory(

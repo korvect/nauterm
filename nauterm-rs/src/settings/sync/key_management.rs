@@ -146,10 +146,30 @@ impl Panel {
                 cx.emit(Event::MutationRequested(Operation::RotateKey(plan)));
             }
             Ok(_) => {
-                self.validation_error =
-                    Some("Connect a sync provider before changing the Master Key.".into())
+                self.validation_error = Some("settings.sync.masterKey.error.noProvider".into())
             }
-            Err(error) => self.validation_error = Some(format!("{error:#}")),
+            Err(error) => {
+                self.validation_error = Some(match error {
+                    model::ChangeError::Current(error) => {
+                        super::key::master_key_validation_message(
+                            self.language,
+                            "settings.label.currentMasterKey",
+                            error,
+                        )
+                    }
+                    model::ChangeError::New(error) => super::key::master_key_validation_message(
+                        self.language,
+                        "settings.label.newMasterKey",
+                        error,
+                    ),
+                    model::ChangeError::Unchanged => {
+                        "settings.sync.masterKey.error.unchanged".into()
+                    }
+                    model::ChangeError::ConfirmationMismatch => {
+                        "settings.sync.masterKey.error.newKeyMismatch".into()
+                    }
+                })
+            }
         }
         cx.notify();
     }
@@ -160,7 +180,7 @@ impl Panel {
         cx: &mut Context<Self>,
     ) {
         let Some(service) = self.service.clone() else {
-            self.operation_failed("Sync storage is unavailable.".into(), cx);
+            self.operation_failed("settings.sync.error.storageUnavailable".into(), cx);
             return;
         };
         if let Some(management) = &mut self.management {
@@ -212,7 +232,14 @@ impl Panel {
                         self.overview = Some(overview);
                     }
                     Err(error) => {
-                        self.error = Some(format!("Could not refresh sync status: {error}"))
+                        self.error = Some(
+                            crate::localization::format(
+                                cx,
+                                "settings.sync.error.refreshStatus",
+                                &[("error", &error.to_string())],
+                            )
+                            .to_string(),
+                        )
                     }
                 }
                 match attempt.outcome {
@@ -263,22 +290,20 @@ impl Panel {
                                         None
                                     }
                                 };
-                                self.notice =
-                                    Some("Master Key updated for every connected provider.".into());
+                                self.notice = Some("settings.sync.keyRotation.success".into());
                             }
                         }
                         if let Some(error) = reload_error {
                             self.append_key_error(error);
                         }
                         self.backups = None;
-                        cx.emit(Event::DataChanged(
-                            if successful {
-                                "Sync Master Key updated. Saved data was refreshed."
-                            } else {
-                                "Master Key rotation did not complete. Saved data was refreshed."
-                            }
-                            .into(),
-                        ));
+                        let result_key = if successful {
+                            "settings.sync.keyRotation.success"
+                        } else {
+                            "settings.sync.keyRotation.failure"
+                        };
+                        let message = crate::localization::message(cx, result_key).to_string();
+                        cx.emit(Event::DataChanged(message));
                     }
                 }
             }

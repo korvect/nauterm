@@ -125,6 +125,7 @@ class AiConversationController extends ChangeNotifier {
   AiAssistantConfig? _config;
   String? _providerUuid;
   String? _currentModel;
+  bool _providerUnavailable = false;
   final List<AiChatMessage> _messages = [];
   final List<AiTerminalCommand> _terminalCommands = [];
   final Map<String, TerminalController> _terminalCommandControllers = {};
@@ -144,6 +145,7 @@ class AiConversationController extends ChangeNotifier {
   String get title => _title;
   String? get providerUuid => _providerUuid;
   String? get currentModel => _currentModel;
+  bool get providerUnavailable => _providerUnavailable;
   AiAssistantConfig get effectiveConfig => _config ?? aiAssistantConfig;
   AiAssistantConfig get config => effectiveConfig;
 
@@ -155,10 +157,51 @@ class AiConversationController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void updateProvider(String? providerUuid, String? model) {
-    _providerUuid = providerUuid;
+  void applyProviderCatalog(
+    List<AiProviderEntry> providers,
+    AiAssistantConfig preferences,
+  ) {
+    final uuid = _providerUuid;
+    final provider = uuid == null
+        ? providers.where((entry) => entry.active).firstOrNull ??
+              providers.firstOrNull
+        : providers.where((entry) => entry.uuid == uuid).firstOrNull;
+    if (provider == null) {
+      _providerUnavailable = uuid != null;
+      updateConfig(preferences);
+      return;
+    }
+    selectProvider(provider, preferences, preferredModel: _currentModel);
+  }
+
+  void selectProvider(
+    AiProviderEntry provider,
+    AiAssistantConfig preferences, {
+    String? preferredModel,
+  }) {
+    final models = provider.models;
+    final preferred = preferredModel?.trim();
+    final model =
+        preferred != null &&
+            preferred.isNotEmpty &&
+            (models.isEmpty || models.contains(preferred))
+        ? preferred
+        : models.firstOrNull ?? '';
+    _providerUuid = provider.uuid;
     _currentModel = model;
-    notifyListeners();
+    _providerUnavailable = false;
+    updateConfig(
+      AiAssistantConfig(
+        protocol: AiApiProtocol.fromString(provider.protocol),
+        baseUrl: provider.baseUrl,
+        model: model,
+        apiKey: provider.apiKey,
+        maxTokens: provider.maxTokens,
+        temperature: provider.temperature,
+        includeTerminalSelection: preferences.includeTerminalSelection,
+        includeRecentTerminalOutput: preferences.includeRecentTerminalOutput,
+      ),
+    );
   }
 
   List<AiChatMessage> get messages => List.unmodifiable(_messages);
@@ -208,6 +251,7 @@ class AiConversationController extends ChangeNotifier {
     final content = text.trim();
     if ((content.isEmpty && _pendingAttachments.isEmpty) ||
         _sending ||
+        _providerUnavailable ||
         hasUnresolvedTerminalCommands ||
         _disposed) {
       return;
@@ -255,7 +299,11 @@ class AiConversationController extends ChangeNotifier {
       (message) =>
           message.sequence == sequence && message.role == AiChatRole.user,
     );
-    if (index == -1 || _sending || hasUnresolvedTerminalCommands || _disposed) {
+    if (index == -1 ||
+        _sending ||
+        _providerUnavailable ||
+        hasUnresolvedTerminalCommands ||
+        _disposed) {
       return false;
     }
     final original = _messages[index];
@@ -307,6 +355,7 @@ class AiConversationController extends ChangeNotifier {
     if (index == -1 ||
         _disposed ||
         _sending ||
+        _providerUnavailable ||
         _terminalCommands[index].status != AiTerminalCommandStatus.pending) {
       return;
     }
@@ -320,10 +369,10 @@ class AiConversationController extends ChangeNotifier {
       finishedAt: null,
       cancellationRequested: false,
     );
+    _terminalCommandControllers[id] = controller;
     _error = null;
     notifyListeners();
 
-    _terminalCommandControllers[id] = controller;
     try {
       final result = await _terminalRunner.run(
         controller: controller,
@@ -400,6 +449,7 @@ class AiConversationController extends ChangeNotifier {
     if (index == -1 ||
         _disposed ||
         _sending ||
+        _providerUnavailable ||
         _terminalCommands[index].status != AiTerminalCommandStatus.pending) {
       return;
     }
@@ -475,11 +525,16 @@ class AiConversationController extends ChangeNotifier {
     );
   }
 
-  bool cancelTerminalCommand(String id) {
+  bool ownsTerminalCommand(String id, TerminalController? controller) =>
+      controller != null &&
+      identical(_terminalCommandControllers[id], controller);
+
+  bool cancelTerminalCommand(String id, {TerminalController? fromController}) {
     final index = _terminalCommands.indexWhere((command) => command.id == id);
     final controller = _terminalCommandControllers[id];
     if (index == -1 ||
         controller == null ||
+        (fromController != null && !ownsTerminalCommand(id, fromController)) ||
         _disposed ||
         _terminalCommands[index].status != AiTerminalCommandStatus.running ||
         _terminalCommands[index].cancellationRequested ||
@@ -518,7 +573,7 @@ class AiConversationController extends ChangeNotifier {
     String? systemPrompt,
     required bool enableTerminalTool,
   }) async {
-    if (_sending || _disposed) {
+    if (_sending || _disposed || _providerUnavailable) {
       return;
     }
     _error = null;
@@ -700,6 +755,7 @@ class AiConversationController extends ChangeNotifier {
     _persistenceId = conversation.uuid;
     _title = conversation.title;
     _providerUuid = conversation.providerUuid;
+    _providerUnavailable = _providerUuid != null;
     _currentModel = conversation.model.isNotEmpty ? conversation.model : null;
     _messages
       ..clear()

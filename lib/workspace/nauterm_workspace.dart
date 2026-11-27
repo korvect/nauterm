@@ -22,6 +22,7 @@ import 'package:nativeapi_flutter/nativeapi_flutter.dart'
     show MaximizeButtonArea;
 import 'package:nativeapi_flutter/windowing.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:uuid/uuid.dart';
 
 import '../ai/ai_client.dart';
 import '../ai/ai_message_scroll_controller.dart';
@@ -128,17 +129,22 @@ part 'workspace_ai_controls.dart';
 part 'workspace_ai_conversation.dart';
 part 'workspace_restore.dart';
 
-final Set<Future<void> Function()> _workspaceShutdownHooks = {};
+final Set<_SftpPaneState> _workspaceSftpPanes = {};
+final Set<TerminalController> _workspaceKeyExportsInProgress = {};
 
 class NautermWorkspaceController extends ChangeNotifier {
   NautermWorkspaceController({
     WorkspaceStateStore? workspaceStateStore,
     WorkspaceDataLoader? dataLoader,
+    NautermPaths? dataPaths,
   }) : _dataLoader = dataLoader ?? loadNautermWorkspaceData,
+       _dataPaths = dataPaths,
        _workspaceStateStore =
-           workspaceStateStore ?? WorkspaceStateStore(NautermPaths.resolve());
+           workspaceStateStore ??
+           WorkspaceStateStore(dataPaths ?? NautermPaths.resolve());
 
   final WorkspaceDataLoader _dataLoader;
+  final NautermPaths? _dataPaths;
   final WorkspaceStateStore _workspaceStateStore;
   _NautermWorkspaceState? _state;
   StartupUpdateNotice? _updateNotice;
@@ -148,7 +154,11 @@ class NautermWorkspaceController extends ChangeNotifier {
   bool get hasTerminalTabs => _state?._allTerminalTabs.isNotEmpty ?? false;
   bool get hasActiveWorkspace =>
       (_state?._allTerminalTabs.isNotEmpty ?? false) ||
-      (_state?._runningPortForwardIds.isNotEmpty ?? false);
+      (_state?._runningPortForwardIds.isNotEmpty ?? false) ||
+      _workspaceSftpPanes.any(
+        (pane) => pane._hasPendingWork || pane._externalEditSessions.isNotEmpty,
+      ) ||
+      _workspaceKeyExportsInProgress.isNotEmpty;
   Future<void> get initialDataReady => _initialDataReady.future;
   Set<String> get selectedWorkspaceItemIds =>
       _state?._selectedWorkspaceItemIds ?? const <String>{};
@@ -219,6 +229,13 @@ class NautermWorkspaceController extends ChangeNotifier {
   Future<void> saveRestorationStateForClose() async {
     await _state?._saveRestorationStateForClose();
   }
+
+  Future<void> flushSftpForClose() async {
+    await _state?._flushSftpForClose();
+  }
+
+  Future<void> withExitProgress(Future<void> Function() finish) =>
+      _state?._withExitProgress(finish) ?? finish();
 
   void _attach(_NautermWorkspaceState state) {
     _state = state;
@@ -296,6 +313,8 @@ class _NautermWorkspaceModel extends ChangeNotifier {
   List<TerminalLogEntry> terminalLogs = const [];
   bool terminalLogsHasMore = true;
   bool terminalLogsLoading = false;
+  String? terminalLogsLoadError;
+  bool terminalLogsDeleting = false;
   List<ShellHistoryEntry> shellHistory = const [];
   final Map<TerminalController, List<ShellHistoryEntry>>
   shellHistoryByController = {};
@@ -646,6 +665,12 @@ class _NautermWorkspaceState extends ConsumerState<NautermWorkspace>
     _workspaceModel.terminalLogsLoading = value;
   }
 
+  String? get _terminalLogsLoadError => _workspaceModel.terminalLogsLoadError;
+
+  set _terminalLogsLoadError(String? value) {
+    _workspaceModel.terminalLogsLoadError = value;
+  }
+
   List<ShellHistoryEntry> get _shellHistory => _workspaceModel.shellHistory;
 
   set _shellHistory(List<ShellHistoryEntry> value) {
@@ -732,6 +757,10 @@ class _NautermWorkspaceState extends ConsumerState<NautermWorkspace>
       edited = switch (entry.request) {
         _HostEditorRequest(initial: HostEntry(id: final id?)) => (
           'host:$id',
+          _HostItem,
+        ),
+        _LoadHostEditorRequest(host: final host) => (
+          'host:${host.id}',
           _HostItem,
         ),
         _GroupEditorRequest(initial: HostGroup(id: final id?)) => (
@@ -1054,55 +1083,30 @@ class _NautermWorkspaceState extends ConsumerState<NautermWorkspace>
     });
   }
 
+  int _aiConfigLoadGeneration = 0;
+
   void _handleAiConfigChanged() {
     unawaited(_refreshAiConfig());
   }
 
   Future<void> _refreshAiConfig() async {
-    List<AiProviderEntry> providers;
+    final generation = ++_aiConfigLoadGeneration;
+    final List<AiProviderEntry> providers;
     try {
       providers = (await AiProviderStore(
         NautermPaths.resolve(),
       ).loadCatalogAsync(aiAssistantConfig)).providers;
     } on Object {
-      providers = const [];
+      return;
     }
-    if (!mounted) return;
+    if (!mounted || generation != _aiConfigLoadGeneration) return;
     final preferences = aiAssistantConfig;
     final conversations = {
       for (final tab in _allTerminalTabs) tab.aiConversation,
       for (final workspace in _workspaces) workspace.aiConversation,
     };
     for (final conversation in conversations) {
-      final provider =
-          providers
-              .where((entry) => entry.uuid == conversation.providerUuid)
-              .firstOrNull ??
-          providers.where((entry) => entry.active).firstOrNull ??
-          providers.firstOrNull;
-      if (provider == null) {
-        conversation.updateProvider(null, null);
-        conversation.updateConfig(preferences);
-        continue;
-      }
-      final models = provider.models;
-      final previousModel = conversation.currentModel;
-      final model = previousModel != null && models.contains(previousModel)
-          ? previousModel
-          : models.firstOrNull ?? '';
-      conversation.updateConfig(
-        AiAssistantConfig(
-          protocol: AiApiProtocol.fromString(provider.protocol),
-          baseUrl: provider.baseUrl,
-          apiKey: provider.apiKey,
-          model: model,
-          maxTokens: provider.maxTokens,
-          temperature: provider.temperature,
-          includeTerminalSelection: preferences.includeTerminalSelection,
-          includeRecentTerminalOutput: preferences.includeRecentTerminalOutput,
-        ),
-      );
-      conversation.updateProvider(provider.uuid, model);
+      conversation.applyProviderCatalog(providers, preferences);
     }
   }
 
@@ -1165,10 +1169,7 @@ class _NautermWorkspaceState extends ConsumerState<NautermWorkspace>
       restoreOnNextLaunch: _restoreOnShutdown,
     );
 
-    await Future.wait([
-      for (final hook in _workspaceShutdownHooks.toList(growable: false))
-        _runShutdownHook(hook),
-    ]);
+    await _flushSftpForClose();
 
     final conversations = <AiConversationController>{
       for (final tab in _allTerminalTabs) tab.aiConversation,
@@ -1231,6 +1232,33 @@ class _NautermWorkspaceState extends ConsumerState<NautermWorkspace>
     _recordingService.dispose();
     NautermLog.info('application', 'Application shutdown completed.');
     await NautermLog.flush();
+  }
+
+  Future<void> _flushSftpForClose() async {
+    await Future.wait([
+      for (final pane in _workspaceSftpPanes.toList(growable: false))
+        _runShutdownHook(pane._flushAndClose),
+    ]);
+  }
+
+  Future<void> _withExitProgress(Future<void> Function() finish) async {
+    final completed = Completer<void>();
+    final timer = Timer(const Duration(milliseconds: 200), () {
+      if (!mounted) return;
+      unawaited(
+        _showWorkspaceDialog<void>(
+          barrierDismissible: false,
+          dismissWhen: completed.future,
+          builder: (_) => const _WorkspaceExitProgress(),
+        ),
+      );
+    });
+    try {
+      await finish();
+    } finally {
+      timer.cancel();
+      completed.complete();
+    }
   }
 
   Future<void> _runShutdownHook(Future<void> Function() hook) async {

@@ -101,6 +101,8 @@ mod workspace;
 
 use gpui_kit::{AppContext, KeyBinding, TitlebarOptions, WindowOptions, point, px, size};
 
+const APPLICATION_NAME: &str = "Nauterm RS";
+
 fn main() -> anyhow::Result<()> {
     #[cfg(feature = "platform-diagnostics")]
     if std::env::var("NAUTERM_OPEN_WITH_DIAGNOSTICS").as_deref() == Ok("1") {
@@ -157,7 +159,7 @@ fn main() -> anyhow::Result<()> {
     application.on_reopen(app_menu::reopen);
     application.run(move |cx| {
         gpui_kit::init(cx);
-        cx.set_app_identity("com.korvect.nauterm.rs", "Nauterm RS");
+        cx.set_app_identity("com.korvect.nauterm.rs", APPLICATION_NAME);
         if let Err(error) = fonts::install(cx) {
             eprintln!("Could not load bundled terminal symbols: {error}");
         }

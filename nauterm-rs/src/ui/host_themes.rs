@@ -16,7 +16,8 @@ pub(super) struct Draft {
 }
 impl Draft {
     pub fn new(selected: Option<ThemeId>, window: &mut Window, cx: &mut Context<Nauterm>) -> Self {
-        let search = cx.new(|cx| InputState::new(window, cx).placeholder("Search themes"));
+        let search =
+            cx.new(|cx| InputState::new(window, cx).placeholder("common.label.searchThemes"));
         let scroll = UniformListScrollHandle::new();
         let reset = scroll.clone();
         let events = cx.subscribe(&search, move |_, _, event: &InputEvent, cx| {
@@ -107,7 +108,7 @@ impl Nauterm {
         .h(px(ThemePreview::COMPACT_HEIGHT))
         .p_0()
         .rounded(px(8.))
-        .tooltip("Select terminal theme")
+        .tooltip("workspace.action.selectTerminalTheme")
         .child(ThemePreview::new(title, colors).compact().selected(true))
         .on_click(cx.listener(move |this, _, window, cx| {
             this.refresh_theme_catalog(cx);
@@ -200,7 +201,7 @@ impl Nauterm {
                             .small()
                             .ghost()
                             .icon(IconName::ArrowLeft)
-                            .tooltip("Back")
+                            .tooltip("common.action.back")
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.leave_host_theme_gallery(window, cx)
                             })),

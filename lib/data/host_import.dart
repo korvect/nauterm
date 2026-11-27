@@ -5,10 +5,15 @@ enum HostImportSource { csv, openSsh, putty, mobaXterm, secureCrt }
 enum HostImportKeyKind { privateKey, publicKey, keyPair }
 
 class HostImportBundle {
-  const HostImportBundle({this.hosts = const [], this.keys = const []});
+  const HostImportBundle({
+    this.hosts = const [],
+    this.keys = const [],
+    this.skippedFiles = 0,
+  });
 
   final List<HostImportCandidate> hosts;
   final List<HostImportKeyCandidate> keys;
+  final int skippedFiles;
 }
 
 class HostImportKeyCandidate {

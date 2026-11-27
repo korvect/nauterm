@@ -202,12 +202,12 @@ impl Nauterm {
         let mut errors: [Option<SharedString>; 5] = Default::default();
         errors[0] = values[0]
             .is_empty()
-            .then(|| "Rule name is required.".into());
+            .then(|| "workspace.portForward.validation.nameRequired".into());
         errors[2] = (!valid_port(&values[2])).then(|| {
             if forward.kind == Kind::Remote {
-                "Remote port number is required.".into()
+                "workspace.portForward.validation.remotePortRequired".into()
             } else {
-                "Local port number is required.".into()
+                "workspace.portForward.validation.localPortRequired".into()
             }
         });
         let host_error = (!self
@@ -217,17 +217,17 @@ impl Nauterm {
             .any(|host| host.supports_ssh() && Some(host.id) == forward.host))
         .then(|| {
             if forward.kind == Kind::Remote {
-                SharedString::from("Select a remote host.")
+                SharedString::from("workspace.portForward.validation.remoteHostRequired")
             } else {
-                SharedString::from("Select an intermediate host.")
+                SharedString::from("workspace.portForward.validation.intermediateHostRequired")
             }
         });
         if forward.kind != Kind::Dynamic {
             errors[3] = values[3]
                 .is_empty()
-                .then(|| "Destination address is required.".into());
-            errors[4] =
-                (!valid_port(&values[4])).then(|| "Destination port number is required.".into());
+                .then(|| "workspace.portForward.validation.destinationAddressRequired".into());
+            errors[4] = (!valid_port(&values[4]))
+                .then(|| "workspace.portForward.validation.destinationPortRequired".into());
         }
         let invalid = host_error.is_some() || errors.iter().any(Option::is_some);
         let editor = self.editor.as_mut().unwrap();
@@ -487,41 +487,41 @@ impl Nauterm {
         };
         let mut sections = vec![
             self.editor_section(
-                "Rule",
+                "common.label.rule",
                 vec![
-                    field(0, "Rule name *"),
-                    forward.types.required_field("Type", busy),
+                    field(0, "workspace.label.ruleName *"),
+                    forward.types.required_field("common.label.type", busy),
                 ],
             ),
             self.editor_section(
                 if forward.kind == Kind::Remote {
-                    "Remote Port Address"
+                    "workspace.portForward.section.remotePortAddress"
                 } else {
-                    "Local Port Address"
+                    "workspace.portForward.section.localPortAddress"
                 },
                 vec![
-                    field(1, "Bind Address"),
+                    field(1, "workspace.label.bindAddress"),
                     field(
                         2,
                         if forward.kind == Kind::Remote {
-                            "Remote port number *"
+                            "workspace.portForward.field.remotePort *"
                         } else {
-                            "Local port number *"
+                            "workspace.portForward.field.localPort *"
                         },
                     ),
                 ],
             ),
             self.editor_section(
                 if forward.kind == Kind::Remote {
-                    "Remote Host"
+                    "workspace.portForward.section.remoteHost"
                 } else {
-                    "Intermediate Host"
+                    "workspace.portForward.section.intermediateHost"
                 },
                 vec![forward.hosts.field_with_error(
                     if forward.kind == Kind::Remote {
-                        "Remote host *"
+                        "workspace.portForward.field.remoteHost *"
                     } else {
-                        "Intermediate host *"
+                        "workspace.portForward.field.intermediateHost *"
                     },
                     busy,
                     forward.host_error.clone(),
@@ -530,10 +530,10 @@ impl Nauterm {
         ];
         if forward.kind != Kind::Dynamic {
             sections.push(self.editor_section(
-                "Destination",
+                "common.label.destination",
                 vec![
-                    field(3, "Destination address *"),
-                    field(4, "Destination port number *"),
+                    field(3, "workspace.portForward.field.destinationAddress *"),
+                    field(4, "workspace.portForward.field.destinationPort *"),
                 ],
             ));
         }
@@ -542,7 +542,7 @@ impl Nauterm {
                 div()
                     .text_size(px(11.))
                     .text_color(Palette::new(self.data.dark).muted)
-                    .child(crate::localization::text(cx, "rs.ui.copy.stoppingRule"))
+                    .child(crate::localization::text(cx, "common.label.saving"))
                     .into_any_element(),
             );
         }
@@ -566,14 +566,14 @@ impl Nauterm {
             let empty = crate::components::EmptyState::new(
                 IconName::ArrowLeftRight,
                 if query.is_empty() {
-                    "No forwarding rules yet"
+                    "workspace.label.noForwardingRulesYet"
                 } else {
                     "workspace.label.noForwardingRulesFound"
                 },
                 self.data.dark,
             )
             .description(if query.is_empty() {
-                "Add a forwarding rule to route local, remote, or dynamic traffic through SSH."
+                "workspace.empty.forwarding.description"
             } else {
                 "workspace.description.tryAnotherSearch"
             })
@@ -590,7 +590,7 @@ impl Nauterm {
                         Button::new("empty-add-forward")
                             .primary()
                             .icon(crate::assets::icon(IconName::Plus))
-                            .label("Add forwarding")
+                            .label("workspace.label.addForwarding")
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.create_forward(Kind::Local, window, cx)
                             })),
@@ -841,7 +841,7 @@ impl Nauterm {
                                     .font_weight(FontWeights::SEMIBOLD)
                                     .text_color(color)
                                     .child(crate::localization::view(if status.error.is_some() {
-                                        "Error"
+                                        "common.label.error"
                                     } else {
                                         status.state.label()
                                     })),
@@ -860,7 +860,11 @@ impl Nauterm {
                                 Button::new(("toggle-forward", id))
                                     .xsmall()
                                     .when(!active, |button| button.custom(start_palette))
-                                    .label(if active { "Stop" } else { "Start" })
+                                    .label(if active {
+                                        "common.action.stop"
+                                    } else {
+                                        "common.action.start"
+                                    })
                                     .disabled(
                                         (status.state == State::Stopping && status.error.is_none())
                                             || self.forward_mutations.contains(&id),
@@ -873,7 +877,7 @@ impl Nauterm {
                                 Button::new(("edit-forward", id))
                                     .xsmall()
                                     .ghost()
-                                    .label("Edit")
+                                    .label("common.action.edit")
                                     .disabled(self.forward_mutations.contains(&id))
                                     .on_click(cx.listener(move |this, _, window, cx| {
                                         this.open_editor(ItemKind::Forward, Some(id), window, cx)
@@ -923,7 +927,8 @@ impl Nauterm {
                         menu.item(
                             shortcuts
                                 .menu(
-                                    MenuItem::localized("Edit").icon(IconName::Pencil),
+                                    MenuItem::localized("common.action.edit")
+                                        .icon(IconName::Pencil),
                                     crate::shortcuts::Command::Edit,
                                 )
                                 .disabled(edit_disabled)
@@ -937,7 +942,7 @@ impl Nauterm {
                     .item(
                         shortcuts
                             .menu(
-                                MenuItem::localized("Duplicate"),
+                                MenuItem::localized("workspace.action.duplicate"),
                                 crate::shortcuts::Command::Duplicate,
                             )
                             .icon(IconName::Copy)
@@ -949,7 +954,7 @@ impl Nauterm {
                     )
                     .separator()
                     .item(
-                        MenuItem::localized("Delete")
+                        MenuItem::localized("common.action.delete")
                             .icon(IconName::Trash)
                             .destructive(true)
                             .disabled(delete_disabled)

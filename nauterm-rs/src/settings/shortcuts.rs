@@ -164,7 +164,7 @@ impl Settings {
                     "settings.shortcuts.changeShortcut",
                     &[("label", &label)],
                 ))
-                .tooltip("Click to record a shortcut. Escape cancels recording.")
+                .tooltip("settings.shortcuts.recording.hint")
                 .when(recording, |button| {
                     button
                         .track_focus(&self.shortcut_focus)
@@ -181,7 +181,7 @@ impl Settings {
                         ))
                 })
                 .label(if recording {
-                    "Press shortcut…".into()
+                    "settings.shortcuts.recording.prompt".into()
                 } else {
                     self.values.shortcuts.label(command).replace(" + ", " ")
                 })
@@ -250,7 +250,7 @@ impl Settings {
                             .gap(px(4.))
                             .child(
                                 row_action("disable-shortcut", IconName::Ban, !raw.is_empty())
-                                    .tooltip("Disable shortcut")
+                                    .tooltip("settings.label.disableShortcut")
                                     .on_click(cx.listener(move |this, _, window, cx| {
                                         this.shortcut_recording = None;
                                         this.values.shortcuts.set(command, "");
@@ -263,7 +263,7 @@ impl Settings {
                                     IconName::RotateCcw,
                                     raw != command.default_binding(),
                                 )
-                                .tooltip("Restore default")
+                                .tooltip("settings.label.restoreDefault")
                                 .on_click(cx.listener(
                                     move |this, _, window, cx| {
                                         this.shortcut_recording = None;
@@ -288,8 +288,8 @@ impl Settings {
             .text_size(px(11.))
             .line_height(px(16.))
             .text_color(p.muted)
-            .label("Reset all")
-            .tooltip("Restore all default shortcuts")
+            .label("settings.label.resetAll")
+            .tooltip("settings.label.restoreAllDefaultShortcuts")
             .on_click(cx.listener(|this, _, window, cx| {
                 this.shortcut_recording = None;
                 this.values.shortcuts.reset();

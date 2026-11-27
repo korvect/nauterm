@@ -10,7 +10,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use rusqlite::{params, types::Type, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 
 mod catalog;
 pub use catalog::NewCatalogRecord;
@@ -849,6 +849,9 @@ enum DatabaseRequest {
     DeletePortForward {
         id: i64,
     },
+    DeletePortForwards {
+        ids: Vec<i64>,
+    },
     SaveProxy {
         proxy: ProxyEntry,
     },
@@ -1109,6 +1112,13 @@ enum DatabaseRequest {
         backup_count: usize,
     },
     LocalSyncBackupList,
+    ReviewSyncKeyRotation,
+    RotateSyncMasterKey {
+        review_stamp: String,
+        current_master_key: String,
+        new_master_key: String,
+        backup_count: usize,
+    },
     LocalSyncBackupRestore {
         backup_id: String,
         #[serde(default)]
@@ -1781,16 +1791,24 @@ impl NautermDatabase {
     }
 
     pub fn handle_json_request(&mut self, request: &str) -> Result<Value, Box<dyn Error>> {
+        self.handle_json_request_with_sync_key_progress(request, |_| {})
+    }
+    pub(crate) fn handle_json_request_with_sync_key_progress(
+        &mut self,
+        request: &str,
+        progress: impl FnMut(SyncKeyProgress),
+    ) -> Result<Value, Box<dyn Error>> {
         let request: DatabaseRequest = serde_json::from_str(request)?;
         if request.requires_sync_lease() {
-            self.with_sync_operation(|database| database.handle_database_request(request))
+            self.with_sync_operation(|database| database.handle_database_request(request, progress))
         } else {
-            self.handle_database_request(request)
+            self.handle_database_request(request, progress)
         }
     }
     fn handle_database_request(
         &mut self,
         request: DatabaseRequest,
+        progress: impl FnMut(SyncKeyProgress),
     ) -> Result<Value, Box<dyn Error>> {
         let data = match request {
             DatabaseRequest::SaveGroup { group } => json!(self.save_group(&group)?),
@@ -1823,6 +1841,7 @@ impl NautermDatabase {
                 json!(self.list_port_forwards(connection_id)?)
             }
             DatabaseRequest::DeletePortForward { id } => json!(self.delete_port_forward(id)?),
+            DatabaseRequest::DeletePortForwards { ids } => json!(self.delete_port_forwards(&ids)?),
             DatabaseRequest::SaveProxy { proxy } => json!(self.save_proxy(&proxy)?),
             DatabaseRequest::GetProxy { id } => json!(self.get_proxy(id)?),
             DatabaseRequest::ListProxies => json!(self.list_proxies()?),
@@ -2225,6 +2244,40 @@ impl NautermDatabase {
                 self.cloud_provider_restore_version(&provider_id, &version_id)?
             }
             DatabaseRequest::LocalSyncBackupList => self.local_sync_backups()?,
+            DatabaseRequest::ReviewSyncKeyRotation => {
+                let reviewed = self.sync_key_management()?;
+                json!({
+                    "stamp": reviewed.review_stamp(),
+                    "targets": reviewed.targets(),
+                })
+            }
+            DatabaseRequest::RotateSyncMasterKey {
+                review_stamp,
+                current_master_key,
+                new_master_key,
+                backup_count,
+            } => {
+                let current = Zeroizing::new(current_master_key);
+                let new = Zeroizing::new(new_master_key);
+                let reviewed = self.sync_key_management()?;
+                if review_stamp != reviewed.review_stamp() {
+                    return Err(
+                        "Sync key details changed. Reload them before changing the Master Key."
+                            .into(),
+                    );
+                }
+                let result =
+                    self.rotate_sync_master_key(&reviewed, &current, &new, backup_count, progress)?;
+                json!({
+                    "completed": result.completed,
+                    "failed": result.failed.map(|(target, error)| json!({
+                        "scope": target.scope,
+                        "error": error,
+                    })),
+                    "retry_stamp": result.retry.map(|review| review.review_stamp()),
+                    "has_local_sync_key": self.has_cached_sync_key().ok(),
+                })
+            }
             DatabaseRequest::LocalSyncBackupRestore {
                 backup_id,
                 backup_count,

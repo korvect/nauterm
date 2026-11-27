@@ -1,5 +1,8 @@
 part of 'settings_panel.dart';
 
+@visibleForTesting
+CloudOAuthClient Function()? settingsCloudOAuthClientFactoryOverride;
+
 class _CloudVendorDefinition {
   const _CloudVendorDefinition({
     required this.id,
@@ -227,33 +230,6 @@ Future<Map<String, dynamic>> _runCloudProviderSyncInBackground(
   });
 }
 
-Future<List<Map<String, dynamic>>> _loadCloudProviderHistoryInBackground(
-  String databasePath,
-  String providerId,
-) {
-  return Isolate.run(() {
-    final store = NautermDataStore.openPath(databasePath);
-    try {
-      return store.cloudListHistory(providerId: providerId);
-    } finally {
-      store.dispose();
-    }
-  });
-}
-
-Future<List<Map<String, dynamic>>> _loadS3HistoryInBackground(
-  String databasePath,
-) {
-  return Isolate.run(() {
-    final store = NautermDataStore.openPath(databasePath);
-    try {
-      return store.s3ListHistory();
-    } finally {
-      store.dispose();
-    }
-  });
-}
-
 Future<Map<String, dynamic>> _restoreCloudVersionInBackground(
   String databasePath, {
   required String? providerId,
@@ -272,26 +248,6 @@ Future<Map<String, dynamic>> _restoreCloudVersionInBackground(
           backupCount: backupCount,
         );
       }
-    } finally {
-      store.dispose();
-    }
-  });
-}
-
-Future<Map<String, dynamic>> _changeCloudProviderMasterKeyInBackground(
-  String databasePath, {
-  required String providerId,
-  required String currentMasterKey,
-  required String newMasterKey,
-}) {
-  return Isolate.run(() {
-    final store = NautermDataStore.openPath(databasePath);
-    try {
-      return store.cloudChangeMasterKey(
-        providerId: providerId,
-        currentMasterKey: currentMasterKey,
-        newMasterKey: newMasterKey,
-      );
     } finally {
       store.dispose();
     }
@@ -386,17 +342,16 @@ extension _CloudSyncActions on _SettingsPanelState {
         provider.id,
       );
       if (!mounted) return;
+      final wasActive = _activeSyncProviderId == 'cloud:${provider.id}';
       _mutate(() {
         _cloudProviders = _cloudProviders
             .where((item) => item.id != provider.id)
             .toList(growable: false);
         _githubSyncStatus = '${provider.name} was removed.';
         _githubSyncStatusIsError = false;
-        if (_activeSyncProviderId == 'cloud:${provider.id}') {
-          _activeSyncProviderId = null;
-        }
+        if (wasActive) _activeSyncProviderId = null;
       });
-      await _persistSyncPreferences();
+      if (wasActive) await _persistSyncPreferences();
       _cacheGithubSyncSetting(
         _githubSyncDatabasePath,
         'cloudProviders',
@@ -421,7 +376,12 @@ extension _CloudSyncActions on _SettingsPanelState {
     final confirmation = _syncMasterKeyConfirmController.text;
     final enteringMasterKey = masterKey.isNotEmpty;
     if (!enteringMasterKey && !_hasLocalSyncKey) {
-      _setGithubSyncError('Enter the Master Key.');
+      _setGithubSyncError(
+        tr(
+          'settings.sync.masterKey.error.required',
+          fallback: 'Enter the Master Key.',
+        ),
+      );
       return;
     }
     final validationError = enteringMasterKey
@@ -432,7 +392,12 @@ extension _CloudSyncActions on _SettingsPanelState {
       return;
     }
     if (enteringMasterKey && masterKey != confirmation) {
-      _setGithubSyncError('Master Key confirmation does not match.');
+      _setGithubSyncError(
+        tr(
+          'settings.sync.masterKey.error.mismatch',
+          fallback: 'Master Key confirmation does not match.',
+        ),
+      );
       return;
     }
     _mutate(() {
@@ -457,8 +422,12 @@ extension _CloudSyncActions on _SettingsPanelState {
           result['snapshot_id'] as String?,
         );
         if (enteringMasterKey) _hasLocalSyncKey = true;
-        _githubSyncStatus =
-            '${provider.name} sync complete · ETag $shortEtag · imported ${result['imported_records']} · revision ${result['revision']}.';
+        _githubSyncStatus = _syncCompletionMessage(
+          result,
+          remoteDetail: shortEtag.isEmpty
+              ? null
+              : tr('settings.sync.result.etag', args: {'etag': shortEtag}),
+        );
         _githubSyncStatusIsError = false;
       });
       if (enteringMasterKey) {
@@ -476,46 +445,48 @@ extension _CloudSyncActions on _SettingsPanelState {
     }
   }
 
-  Future<void> _showCloudProviderHistory(
-    _CloudProviderInstance provider,
-  ) async {
-    await showNautermDialog<void>(
-      context: context,
-      builder: (_) => _CloudProviderHistoryDialog(
-        databasePath: _githubSyncDatabasePath,
-        provider: provider,
-        backupCount: _syncBackupCount,
-        onRestored: (result) {
-          _mutate(() {
-            _rememberSyncSnapshot(
-              result['revision'] as int?,
-              result['snapshot_id'] as String?,
-            );
-            _githubSyncStatus = '${provider.name} history restored.';
-            _githubSyncStatusIsError = false;
-          });
-          notifyNautermDatabaseBulkChange();
-        },
-      ),
-    );
-  }
+  Future<void> _showCloudProviderHistory(_CloudProviderInstance provider) =>
+      _showObjectHistory(provider: provider);
 
-  Future<void> _showS3History() async {
-    await showNautermDialog<void>(
+  Future<void> _showS3History() => _showObjectHistory();
+
+  Future<void> _showObjectHistory({_CloudProviderInstance? provider}) {
+    final databasePath = _githubSyncDatabasePath;
+    final backupCount = _syncBackupCount;
+    return showNautermDialog<void>(
       context: context,
-      builder: (_) => _CloudProviderHistoryDialog.s3(
-        databasePath: _githubSyncDatabasePath,
-        backupCount: _syncBackupCount,
-        onRestored: (result) {
+      builder: (context) => _SyncHistoryDialog(
+        databasePath: databasePath,
+        providerName:
+            provider?.name ?? context.tr('settings.label.s3Compatible'),
+        scope: provider == null ? 's3' : 'cloud:${provider.id}',
+        backupCount: backupCount,
+        emptyHint: switch (provider?.scheme) {
+          'gdrive' ||
+          'onedrive' ||
+          'dropbox' => 'settings.sync.history.objectVersionsHint',
+          _ => 'settings.sync.history.bucketVersioningHint',
+        },
+        onRestore: (version) async {
+          final result = await _restoreCloudVersionInBackground(
+            databasePath,
+            providerId: provider?.id,
+            versionId: version,
+            backupCount: backupCount,
+          );
+          notifyNautermDatabaseBulkChange();
+          if (!mounted) return;
           _mutate(() {
             _rememberSyncSnapshot(
               result['revision'] as int?,
               result['snapshot_id'] as String?,
             );
-            _githubSyncStatus = 'S3 history restored.';
+            _githubSyncStatus = _syncCompletionMessage(
+              result,
+              statusKey: 'settings.sync.result.cloudRestored',
+            );
             _githubSyncStatusIsError = false;
           });
-          notifyNautermDatabaseBulkChange();
         },
       ),
     );
@@ -562,8 +533,21 @@ class _CloudProviderEditorDialogState
   late final TextEditingController _prefixController;
   late final TextEditingController _filenameController;
   String _oauthClientSecret = '';
-  bool _oauthAuthorizing = false;
+  CloudOAuthClient? _oauthClient;
+  CloudOAuthPhase _oauthPhase = CloudOAuthPhase.starting;
+  bool _oauthCredentialsChanged = false;
+  bool _confirmingDelete = false;
   String? _error;
+
+  void _delete(_CloudProviderInstance provider) {
+    Navigator.of(context).pop(
+      _CloudProviderEditResult(
+        provider: provider.toProviderJson(),
+        credentials: null,
+        delete: true,
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -613,6 +597,7 @@ class _CloudProviderEditorDialogState
 
   @override
   void dispose() {
+    _oauthClient?.cancel();
     _nameController.dispose();
     _endpointController.dispose();
     _regionController.dispose();
@@ -731,7 +716,12 @@ class _CloudProviderEditorDialogState
     final refreshToken = _secretKeyController.text.trim();
     final clientId = _accessKeyController.text.trim();
     if (refreshToken.isEmpty || clientId.isEmpty) {
-      setState(() => _error = 'Authorize this provider before saving.');
+      setState(() {
+        _error = context.tr(
+          'settings.sync.authorization.validation.required',
+          fallback: 'This provider needs authorization.',
+        );
+      });
       return;
     }
     _finish(
@@ -751,7 +741,12 @@ class _CloudProviderEditorDialogState
     final clientId = _accessKeyController.text.trim();
     if ((refreshToken.isEmpty || clientId.isEmpty) &&
         widget.provider?.hasCredentials != true) {
-      setState(() => _error = 'Authorize this provider before saving.');
+      setState(() {
+        _error = context.tr(
+          'settings.sync.authorization.validation.required',
+          fallback: 'This provider needs authorization.',
+        );
+      });
       return;
     }
     final root = _oauthDriveRoot();
@@ -880,7 +875,7 @@ class _CloudProviderEditorDialogState
 
   List<Widget> get _pathFields => <Widget>[
     _field(
-      title: 'Folder',
+      title: 'common.label.folder',
       subtitle: 'Optional folder path for the encrypted backup.',
       controller: _prefixController,
       hint: 'nauterm',
@@ -890,7 +885,7 @@ class _CloudProviderEditorDialogState
 
   List<Widget> get _filenameFields => <Widget>[
     _field(
-      title: 'Filename',
+      title: 'common.label.filename',
       subtitle: 'Encrypted backup filename inside the prefix.',
       controller: _filenameController,
       hint: 'nauterm-sync.enc',
@@ -898,44 +893,109 @@ class _CloudProviderEditorDialogState
   ];
 
   Widget _oauthAuthorizationField() {
+    final client = _oauthClient;
     final authorized =
         _accessKeyController.text.trim().isNotEmpty &&
         _secretKeyController.text.trim().isNotEmpty;
     return Padding(
       padding: const EdgeInsets.only(top: 18),
-      child: _SettingsRow(
-        title: 'Authorization',
-        subtitle: '',
-        showSubtitle: false,
-        trailing: Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            if (authorized) ...[
-              Icon(LucideIcons.circleCheck, size: 14, color: _secondary),
-              SizedBox(width: 6),
-              Text(
-                tr('common.label.connected', fallback: 'Connected'),
-                style: TextStyle(color: _secondary, fontSize: 11),
-              ),
-              Spacer(),
-            ],
-            _SettingsOutlineButton(
-              label: _oauthAuthorizing
-                  ? 'Opening Browser…'
-                  : authorized
-                  ? 'Reconnect'
-                  : 'Connect',
-              onTap: _oauthAuthorizing
-                  ? null
-                  : () => unawaited(_authorizeOAuth()),
+      child: Column(
+        children: [
+          _SettingsRow(
+            title: 'settings.label.authorization',
+            subtitle: switch ((
+              client != null,
+              _oauthCredentialsChanged,
+              authorized,
+            )) {
+              (true, _, _) => 'settings.sync.authorization.browser.description',
+              (false, true, _) =>
+                'settings.sync.authorization.pending.description',
+              (false, false, true) =>
+                'settings.sync.authorization.saved.description',
+              _ => 'settings.sync.authorization.required.description',
+            },
+            trailing: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                if (authorized) ...[
+                  Icon(LucideIcons.circleCheck, size: 14, color: _secondary),
+                  const SizedBox(width: 6),
+                  Text(
+                    tr('common.label.connected', fallback: 'Connected'),
+                    style: TextStyle(color: _secondary, fontSize: 11),
+                  ),
+                  const Spacer(),
+                ],
+                _SettingsOutlineButton(
+                  label: client != null
+                      ? 'settings.sync.authorization.action.cancel'
+                      : authorized
+                      ? 'common.label.reconnect'
+                      : 'common.action.connect',
+                  onTap: client == null
+                      ? () => unawaited(_authorizeOAuth())
+                      : client.isCancelled
+                      ? null
+                      : () => setState(client.cancel),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+          if (client != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Row(
+                children: [
+                  SizedBox.square(
+                    dimension: 13,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: _mutedText,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      context.tr(switch (_oauthPhase) {
+                        CloudOAuthPhase.starting =>
+                          'settings.sync.authorization.status.starting',
+                        CloudOAuthPhase.waitingForBrowser => 'settings.sync.authorization.status.waitingForBrowser',
+                        CloudOAuthPhase.exchanging =>
+                          'settings.sync.authorization.status.exchanging',
+                      }),
+                      style: TextStyle(color: _mutedText, fontSize: 11),
+                    ),
+                  ),
+                  if (_oauthPhase == CloudOAuthPhase.waitingForBrowser) ...[
+                    const SizedBox(width: 8),
+                    _SettingsOutlineButton(
+                      label: 'settings.sync.authorization.action.openBrowser',
+                      onTap: client.isCancelled
+                          ? null
+                          : () => unawaited(_reopenOAuthBrowser(client)),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }
 
+  Future<void> _reopenOAuthBrowser(CloudOAuthClient client) async {
+    try {
+      await client.reopenBrowser();
+    } on Object catch (error) {
+      if (mounted && identical(_oauthClient, client) && !client.isCancelled) {
+        setState(() => _error = error.toString());
+      }
+    }
+  }
+
   Future<void> _authorizeOAuth() async {
+    if (_oauthClient != null) return;
     final vendor = switch (widget.definition.id) {
       'google-cloud-storage' => CloudOAuthVendor.googleCloudStorage,
       'google-drive' => CloudOAuthVendor.googleDrive,
@@ -944,25 +1004,37 @@ class _CloudProviderEditorDialogState
       _ => null,
     };
     if (vendor == null) return;
+    final client =
+        settingsCloudOAuthClientFactoryOverride?.call() ?? CloudOAuthClient();
     setState(() {
-      _oauthAuthorizing = true;
+      _oauthClient = client;
+      _oauthPhase = CloudOAuthPhase.starting;
       _error = null;
     });
-    final client = CloudOAuthClient();
     try {
-      final credentials = await client.authorize(vendor);
-      if (!mounted) return;
+      final credentials = await client.authorize(
+        vendor,
+        onPhase: (phase) {
+          if (mounted && !client.isCancelled) {
+            setState(() => _oauthPhase = phase);
+          }
+        },
+      );
+      if (!mounted || credentials == null || client.isCancelled) return;
       setState(() {
         _accessKeyController.text = credentials.clientId;
         _secretKeyController.text = credentials.refreshToken;
         _oauthClientSecret = credentials.clientSecret ?? '';
+        _oauthCredentialsChanged = true;
         _error = null;
       });
     } on Object catch (error) {
-      if (mounted) setState(() => _error = error.toString());
+      if (mounted && !client.isCancelled) {
+        setState(() => _error = error.toString());
+      }
     } finally {
       client.close();
-      if (mounted) setState(() => _oauthAuthorizing = false);
+      if (mounted) setState(() => _oauthClient = null);
     }
   }
 
@@ -970,28 +1042,28 @@ class _CloudProviderEditorDialogState
     if (widget.definition.id == 'webdav') {
       return <Widget>[
         _field(
-          title: 'Endpoint',
+          title: 'common.label.endpoint',
           subtitle: 'WebDAV server URL.',
           controller: _endpointController,
           hint: 'https://dav.example.com',
         ),
         _field(
-          title: 'Root Folder',
+          title: 'settings.label.rootFolder',
           subtitle: 'Folder containing the encrypted backup.',
           controller: _rootController,
           hint: '/nauterm',
         ),
         _field(
-          title: 'Username',
+          title: 'common.label.username',
           subtitle: 'Stored in the encrypted local database.',
           controller: _accessKeyController,
-          hint: 'Username',
+          hint: 'common.label.username',
         ),
         _field(
-          title: 'Password',
+          title: 'common.label.password',
           subtitle: 'Stored in the encrypted local database.',
           controller: _secretKeyController,
-          hint: 'Password',
+          hint: 'common.label.password',
           secret: true,
         ),
         ..._filenameFields,
@@ -1002,7 +1074,7 @@ class _CloudProviderEditorDialogState
         widget.definition.id == 'dropbox') {
       return <Widget>[
         _field(
-          title: 'Root Folder',
+          title: 'settings.label.rootFolder',
           subtitle: 'Folder containing the encrypted backup.',
           controller: _rootController,
           hint: widget.definition.id == 'dropbox' ? 'Backups' : '/Nauterm',
@@ -1017,7 +1089,7 @@ class _CloudProviderEditorDialogState
     if (widget.definition.id == 'google-cloud-storage') {
       return <Widget>[
         _field(
-          title: 'Bucket',
+          title: 'settings.label.bucket',
           subtitle: 'GCS bucket containing the encrypted backup.',
           controller: _bucketController,
           hint: 'nauterm-sync',
@@ -1029,13 +1101,13 @@ class _CloudProviderEditorDialogState
     if (widget.definition.id == 'azure-blob') {
       return <Widget>[
         _field(
-          title: 'Endpoint',
+          title: 'common.label.endpoint',
           subtitle: 'Azure Blob service endpoint.',
           controller: _endpointController,
           hint: 'https://account.blob.core.windows.net',
         ),
         _field(
-          title: 'Container',
+          title: 'common.label.container',
           subtitle: 'Blob container containing the encrypted backup.',
           controller: _bucketController,
           hint: 'nauterm-sync',
@@ -1044,10 +1116,10 @@ class _CloudProviderEditorDialogState
           title: 'Account Name',
           subtitle: 'Azure Storage account name.',
           controller: _accessKeyController,
-          hint: 'Account name',
+          hint: 'settings.label.accountName',
         ),
         _field(
-          title: 'Account Key',
+          title: 'settings.label.accountKey',
           subtitle: 'Stored in the encrypted local database.',
           controller: _secretKeyController,
           hint: 'Account key',
@@ -1058,35 +1130,35 @@ class _CloudProviderEditorDialogState
     }
     return <Widget>[
       _field(
-        title: 'Endpoint',
+        title: 'common.label.endpoint',
         subtitle: 'HTTP or HTTPS S3 API endpoint.',
         controller: _endpointController,
         hint: 'https://s3.example.com',
       ),
       _field(
-        title: 'Region',
+        title: 'common.label.region',
         subtitle: 'Storage region. Use auto when the service discovers it.',
         controller: _regionController,
         hint: 'auto',
       ),
       _field(
-        title: 'Bucket',
+        title: 'settings.label.bucket',
         subtitle: 'Bucket containing the encrypted sync object.',
         controller: _bucketController,
         hint: 'nauterm-sync',
       ),
       _field(
-        title: 'Access Key ID',
+        title: 'settings.label.accessKeyId',
         subtitle: 'Stored in the encrypted local database.',
         controller: _accessKeyController,
-        hint: 'Access key',
+        hint: 'settings.label.accessKey',
         secret: true,
       ),
       _field(
-        title: 'Secret Access Key',
+        title: 'settings.label.secretAccessKey',
         subtitle: 'Stored in the encrypted local database.',
         controller: _secretKeyController,
-        hint: 'Secret key',
+        hint: 'settings.label.secretKey',
         secret: true,
       ),
       ..._pathFields,
@@ -1095,6 +1167,16 @@ class _CloudProviderEditorDialogState
 
   @override
   Widget build(BuildContext context) {
+    final provider = widget.provider;
+    if (_confirmingDelete && provider != null) {
+      return _buildSyncProviderRemovalConfirmation(
+        context,
+        name: provider.name,
+        disconnect: false,
+        onCancel: () => setState(() => _confirmingDelete = false),
+        onConfirm: () => _delete(provider),
+      );
+    }
     return _SyncDialogFrame(
       icon: widget.definition.icon,
       title: widget.provider == null
@@ -1104,8 +1186,8 @@ class _CloudProviderEditorDialogState
       child: Column(
         children: [
           _SettingsRow(
-            title: 'Display Name',
-            subtitle: 'Name shown on the Sync & Backup page.',
+            title: 'settings.label.displayName',
+            subtitle: 'settings.sync.provider.displayName.description',
             showSubtitle: false,
             trailing: _SettingsTextField(
               controller: _nameController,
@@ -1129,19 +1211,17 @@ class _CloudProviderEditorDialogState
             children: [
               if (widget.provider != null)
                 _SettingsOutlineButton(
-                  label: 'Remove from Nauterm',
-                  onTap: () => Navigator.of(context).pop(
-                    _CloudProviderEditResult(
-                      provider: widget.provider!.toProviderJson(),
-                      credentials: null,
-                      delete: true,
-                    ),
-                  ),
+                  label: 'settings.label.removeFromApplication',
+                  onTap: _oauthClient == null
+                      ? () => setState(() => _confirmingDelete = true)
+                      : null,
                 ),
               Spacer(),
               _SettingsOutlineButton(
-                label: widget.provider == null ? 'Add Provider' : 'Save',
-                onTap: _save,
+                label: widget.provider == null
+                    ? 'Add Provider'
+                    : 'settings.sync.action.saveSettings',
+                onTap: _oauthClient == null ? _save : null,
               ),
             ],
           ),
@@ -1158,8 +1238,8 @@ class _AddSyncProviderDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     return _SyncDialogFrame(
       icon: LucideIcons.cloud,
-      title: 'Add Sync Provider',
-      subtitle: 'Choose where Nauterm stores the encrypted sync vault.',
+      title: 'settings.label.addSyncProvider',
+      subtitle: 'settings.sync.provider.description',
       child: Column(
         children: [
           for (
@@ -1245,171 +1325,17 @@ class _ProviderCatalogRow extends StatelessWidget {
   }
 }
 
-class _CloudProviderHistoryDialog extends StatefulWidget {
-  const _CloudProviderHistoryDialog({
-    required this.databasePath,
-    required this.provider,
-    required this.onRestored,
-    required this.backupCount,
-  });
-
-  const _CloudProviderHistoryDialog.s3({
-    required this.databasePath,
-    required this.onRestored,
-    required this.backupCount,
-  }) : provider = null;
-
-  final String databasePath;
-  final _CloudProviderInstance? provider;
-  final ValueChanged<Map<String, dynamic>> onRestored;
-  final int backupCount;
-
-  @override
-  State<_CloudProviderHistoryDialog> createState() =>
-      _CloudProviderHistoryDialogState();
-}
-
-class _CloudProviderHistoryDialogState
-    extends State<_CloudProviderHistoryDialog> {
-  List<Map<String, dynamic>> _versions = const [];
-  String? _error;
-  bool _loading = true;
-  String? _restoringVersion;
-
-  @override
-  void initState() {
-    super.initState();
-    unawaited(_load());
-  }
-
-  Future<void> _load() async {
-    try {
-      final versions = widget.provider == null
-          ? await _loadS3HistoryInBackground(widget.databasePath)
-          : await _loadCloudProviderHistoryInBackground(
-              widget.databasePath,
-              widget.provider!.id,
-            );
-      if (!mounted) return;
-      setState(() {
-        _versions = versions;
-        _error = null;
-      });
-    } on Object catch (error) {
-      if (!mounted) return;
-      setState(() => _error = error.toString());
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  Future<void> _restore(String versionId) async {
-    setState(() {
-      _restoringVersion = versionId;
-      _error = null;
-    });
-    try {
-      final result = await _restoreCloudVersionInBackground(
-        widget.databasePath,
-        providerId: widget.provider?.id,
-        versionId: versionId,
-        backupCount: widget.backupCount,
-      );
-      if (!mounted) return;
-      widget.onRestored(result);
-      await _load();
-    } on Object catch (error) {
-      if (mounted) setState(() => _error = error.toString());
-    } finally {
-      if (mounted) setState(() => _restoringVersion = null);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return _SyncDialogFrame(
-      icon: LucideIcons.history,
-      title: '${widget.provider?.name ?? 'S3 Compatible'} History',
-      subtitle: 'Encrypted object versions retained by the storage provider.',
-      width: 560,
-      child: _loading
-          ? const Padding(
-              padding: EdgeInsets.symmetric(vertical: 30),
-              child: Center(
-                child: SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              ),
-            )
-          : _error != null
-          ? Padding(
-              padding: const EdgeInsets.symmetric(vertical: 18),
-              child: Text(
-                _error!,
-                style: const TextStyle(color: Color(0xffdc2626), fontSize: 11),
-              ),
-            )
-          : _versions.isEmpty
-          ? Padding(
-              padding: const EdgeInsets.symmetric(vertical: 26),
-              child: Column(
-                children: [
-                  Icon(LucideIcons.history, size: 24, color: _faintText),
-                  SizedBox(height: 9),
-                  Text(
-                    tr(
-                      'settings.sync.objectHistory.empty',
-                      fallback: 'No object versions found.',
-                    ),
-                    style: TextStyle(color: _mutedText, fontSize: 12),
-                  ),
-                  SizedBox(height: 4),
-                  Text(
-                    switch (widget.provider?.scheme) {
-                      'gdrive' => 'Google Drive revisions appear after the sync file has been updated.',
-                      'onedrive' => 'OneDrive versions appear after the sync file has been updated.',
-                      'dropbox' => 'Dropbox revisions appear after the sync file has been updated.',
-                      _ => 'Enable Bucket Versioning in the storage provider to retain history.',
-                    },
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: _faintText, fontSize: 10),
-                  ),
-                ],
-              ),
-            )
-          : Column(
-              children: [
-                for (var index = 0; index < _versions.length; index++) ...[
-                  _CloudObjectVersionCard(
-                    version: _versions[index],
-                    restoring:
-                        _restoringVersion == _versions[index]['version_id'],
-                    onRestore:
-                        (_versions[index]['is_current'] as bool? ?? false)
-                        ? null
-                        : () => _restore(
-                            _versions[index]['version_id'] as String? ?? '',
-                          ),
-                  ),
-                  if (index != _versions.length - 1) SizedBox(height: 7),
-                ],
-              ],
-            ),
-    );
-  }
-}
-
 class _CloudObjectVersionCard extends StatelessWidget {
   const _CloudObjectVersionCard({
     required this.version,
     required this.restoring,
+    required this.disabled,
     required this.onRestore,
   });
 
   final Map<String, dynamic> version;
   final bool restoring;
+  final bool disabled;
   final VoidCallback? onRestore;
 
   @override
@@ -1439,7 +1365,7 @@ class _CloudObjectVersionCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  isCurrent ? 'Current' : modified,
+                  isCurrent ? tr('settings.sync.history.current') : modified,
                   style: TextStyle(
                     color: _text,
                     fontSize: 12,
@@ -1478,7 +1404,7 @@ class _CloudObjectVersionCard extends StatelessWidget {
               label: restoring
                   ? tr('common.label.restoring', fallback: 'Restoring…')
                   : tr('common.action.restore', fallback: 'Restore'),
-              onTap: restoring ? null : onRestore,
+              onTap: disabled || versionId.isEmpty ? null : onRestore,
             ),
           ],
         ],

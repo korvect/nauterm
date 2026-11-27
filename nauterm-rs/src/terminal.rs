@@ -161,9 +161,9 @@ impl Terminal {
         }
         let selection = self.effective_selection().map(|_| {
             if self.selection.is_none() && self.command_block.is_some() {
-                "Command block"
+                "terminal.label.commandBlock"
             } else {
-                "Selection"
+                "ai.label.selection"
             }
         });
         (selection, true)
@@ -320,7 +320,7 @@ impl Terminal {
         });
         let composer = cx.new(|cx| {
             TextareaState::new(window, cx)
-                .placeholder("Command")
+                .placeholder("common.label.command")
                 .auto_grow(1, 3)
                 .submit_on_enter(true)
         });
@@ -345,7 +345,7 @@ impl Terminal {
         );
         let secret_composer = cx.new(|cx| {
             InputState::new(window, cx)
-                .placeholder("Password")
+                .placeholder("common.label.password")
                 .masked(true)
         });
         let secret_composer_events = cx.subscribe_in(

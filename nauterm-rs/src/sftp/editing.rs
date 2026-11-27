@@ -149,7 +149,7 @@ impl FilePane {
         let choose = open.choose;
         let mut opening = Opening(Some(connection.clone()));
         self.edits.opening = true;
-        self.notice = Some(Message::info("Downloading a private copy for editing…"));
+        self.notice = Some(Message::info("sftp.edit.downloading.description"));
         self.action_work = Some(cx.spawn_in(window, async move |this, cx| {
             let result = async {
                 #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
@@ -236,9 +236,7 @@ impl FilePane {
                 pane.action_work = None;
                 pane.edits.opening = false;
                 pane.notice = match result {
-                    Ok(true) => Some(Message::info(
-                        "External edit request started; saves are checked before upload.",
-                    )),
+                    Ok(true) => Some(Message::info("sftp.edit.opened.description")),
                     Ok(false) => None,
                     Err(error) => Some(Message::error(format!(
                         "Unable to open remote file: {error}"
@@ -328,7 +326,7 @@ impl FilePane {
         if self.edits.opening {
             self.action_work = None;
             self.edits.opening = false;
-            self.notice = Some(Message::info("Remote file opening cancelled."));
+            self.notice = Some(Message::info("sftp.edit.openCancelled.description"));
             cx.notify();
         }
     }
@@ -466,10 +464,11 @@ impl FilePane {
                                 .flex_col()
                                 .gap(px(3.))
                                 .child(div().text_size(px(12.)).truncate().child(
-                                    crate::localization::view(format!(
-                                        "Save paused · {}",
-                                        edit.host
-                                    )),
+                                    crate::localization::format(
+                                        cx,
+                                        "sftp.edit.status.savePaused",
+                                        &[("host", &edit.host)],
+                                    ),
                                 ))
                                 .child(
                                     div()
@@ -479,18 +478,24 @@ impl FilePane {
                                         .child(auth.path.clone()),
                                 )
                                 .child(div().text_size(px(11.)).text_color(p.muted).child(
-                                    crate::localization::text(cx, "rs.ui.copy.localChangesKept"),
+                                    crate::localization::text(
+                                        cx,
+                                        "sftp.edit.status.localChangesKept",
+                                    ),
                                 )),
                         )
                         .child(
                             Button::new(("sftp-edit-reauthenticate", id))
                                 .xsmall()
                                 .secondary()
-                                .label("Authenticate")
-                                .tooltip(format!(
-                                    "{}\nLocal copy: {}",
-                                    auth.error,
-                                    auth.local_path.display()
+                                .label("common.action.authenticate")
+                                .tooltip(crate::localization::format(
+                                    cx,
+                                    "sftp.edit.notice.localCopy",
+                                    &[
+                                        ("error", &auth.error),
+                                        ("path", &auth.local_path.to_string_lossy()),
+                                    ],
                                 ))
                                 .disabled(
                                     !self.active

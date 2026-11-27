@@ -17,6 +17,23 @@ type EmptyAction = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 pub const COLLECTION_SECTION_GAP: f32 = 28.;
 pub const COLLECTION_TITLE_GAP: f32 = 12.;
 
+pub fn editor_section(surface: Rgba, title: &str, fields: Vec<AnyElement>) -> AnyElement {
+    div()
+        .rounded(px(10.))
+        .bg(surface)
+        .p(px(16.))
+        .flex()
+        .flex_col()
+        .gap(px(12.))
+        .child(
+            div()
+                .font_weight(FontWeights::MEDIUM)
+                .child(crate::localization::view(title.to_owned())),
+        )
+        .children(fields)
+        .into_any_element()
+}
+
 pub fn view_mode_button(id: &'static str, list: bool) -> Button {
     Button::new(id)
         .toolbar()
@@ -303,7 +320,7 @@ pub fn toolbar_search(
                             .with_size(px(16.))
                             .text_color(p.text),
                     )
-                    .aria_label(crate::localization::text(cx, "Search"))
+                    .aria_label(crate::localization::text(cx, "common.action.search"))
                     .suffix(
                         Button::new((ElementId::from(id), "clear"))
                             .ghost()
@@ -318,7 +335,7 @@ pub fn toolbar_search(
                                 super::ButtonCustomVariant::for_surface(search_palette)
                                     .foreground(p.muted.into()),
                             )
-                            .tooltip("Close search")
+                            .tooltip("common.action.closeSearch")
                             .on_click(move |_, window, cx| {
                                 clear.update(cx, |field, cx| field.set_value("", window, cx));
                                 toggle(false, window, cx);
@@ -331,7 +348,7 @@ pub fn toolbar_search(
             .toolbar()
             .ghost()
             .icon(IconName::Search)
-            .tooltip("Search")
+            .tooltip("common.action.search")
             .on_click(move |_, window, cx| toggle(true, window, cx))
             .into_any_element()
     }
@@ -477,7 +494,7 @@ impl DrawerFrame {
     }
 }
 impl RenderOnce for DrawerFrame {
-    fn render(self, window: &mut Window, _: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let p = Palette::new(self.dark);
         div()
             .w(px(crate::layout::DRAWER_WIDTH))
@@ -490,7 +507,7 @@ impl RenderOnce for DrawerFrame {
             .border_l_1()
             .border_color(p.border)
             .child(drawer_header(
-                self.title,
+                crate::localization::label(cx, &self.title),
                 self.dark,
                 self.status,
                 self.leading,

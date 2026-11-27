@@ -9,8 +9,8 @@ pub(super) struct Draft {
 }
 fn options() -> Vec<SelectOption<bool>> {
     vec![
-        SelectOption::localized(false, "Disabled"),
-        SelectOption::localized(true, "Enabled"),
+        SelectOption::localized(false, "common.label.disabled"),
+        SelectOption::localized(true, "common.label.enabled"),
     ]
 }
 impl Draft {
@@ -73,7 +73,7 @@ impl Draft {
         let mut fields = vec![self.select.field("Mosh", busy)];
         if self.enabled {
             fields.push(
-                Field::input(&self.command, "Mosh server command")
+                Field::input(&self.command, "workspace.label.moshServerCommand")
                     .disabled(busy)
                     .into_any_element(),
             );

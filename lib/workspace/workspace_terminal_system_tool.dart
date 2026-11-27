@@ -1,26 +1,48 @@
 part of 'nauterm_workspace.dart';
 
+@visibleForTesting
+Widget buildTerminalSystemInfoPanelForTesting(
+  Future<FfiHostSystemInfoResult> Function() load,
+) => Column(
+  children: [
+    _TerminalSystemInfoPanel(
+      colors: _AiAssistantColors.fromTerminalTheme(defaultTerminalTheme),
+      load: load,
+      target: 'example.test',
+      source: 'example.test',
+      sessionConnected: true,
+    ),
+  ],
+);
+
 class _TerminalSystemInfoPanel extends StatefulWidget {
   const _TerminalSystemInfoPanel({
     required this.colors,
     required this.load,
     required this.target,
+    required this.source,
+    required this.sessionConnected,
   });
 
   final _AiAssistantColors colors;
   final Future<FfiHostSystemInfoResult> Function()? load;
   final String? target;
+  final Object? source;
+  final bool sessionConnected;
 
   @override
   State<_TerminalSystemInfoPanel> createState() =>
       _TerminalSystemInfoPanelState();
 }
 
-class _TerminalSystemInfoPanelState extends State<_TerminalSystemInfoPanel> {
+class _TerminalSystemInfoPanelState extends State<_TerminalSystemInfoPanel>
+    with WidgetsBindingObserver {
   FfiHostSystemInfoResult? _info;
   bool _loading = false;
   int _requestId = 0;
   Timer? _pollTimer;
+  bool _polling = false;
+  AppLifecycleState? _lifecycle;
   DateTime? _sampledAt;
   String? _selectedNetworkInterface;
   double _downloadRate = 0;
@@ -32,7 +54,35 @@ class _TerminalSystemInfoPanelState extends State<_TerminalSystemInfoPanel> {
   @override
   void initState() {
     super.initState();
-    if (widget.load != null) {
+    final binding = WidgetsBinding.instance;
+    _lifecycle = binding.lifecycleState;
+    binding.addObserver(this);
+    _syncPolling();
+  }
+
+  bool get _hasSession => widget.load != null && widget.sessionConnected;
+
+  void _syncPolling({bool reset = false}) {
+    final active =
+        _hasSession &&
+        (_lifecycle == null || _lifecycle == AppLifecycleState.resumed);
+    if (!reset && _polling == active) return;
+    _polling = active;
+    _requestId += 1;
+    _pollTimer?.cancel();
+    _pollTimer = null;
+    _loading = false;
+    _sampledAt = null;
+    _downloadRate = 0;
+    _uploadRate = 0;
+    if (reset) {
+      _info = null;
+      _selectedNetworkInterface = null;
+      _downloadHistory.clear();
+      _uploadHistory.clear();
+      _latencyHistory.clear();
+    }
+    if (active) {
       unawaited(_refresh());
       _pollTimer = Timer.periodic(
         const Duration(seconds: 5),
@@ -42,14 +92,31 @@ class _TerminalSystemInfoPanelState extends State<_TerminalSystemInfoPanel> {
   }
 
   @override
+  void didUpdateWidget(covariant _TerminalSystemInfoPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncPolling(
+      reset:
+          oldWidget.source != widget.source ||
+          oldWidget.target != widget.target,
+    );
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    setState(() => _lifecycle = state);
+    _syncPolling();
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _pollTimer?.cancel();
     super.dispose();
   }
 
   Future<void> _refresh() async {
     final load = widget.load;
-    if (load == null || _loading) {
+    if (load == null || _loading || !_polling) {
       return;
     }
     final requestId = ++_requestId;
@@ -144,7 +211,7 @@ class _TerminalSystemInfoPanelState extends State<_TerminalSystemInfoPanel> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _TerminalToolSectionHeader(
-            title: 'System information',
+            title: 'workspace.label.systemInformation',
             subtitle: [
               ?hostname,
               if (target != null && target != hostname) target,
@@ -176,7 +243,7 @@ class _TerminalSystemInfoPanelState extends State<_TerminalSystemInfoPanel> {
                     'workspace.label.refreshSystemInformation',
                     fallback: 'Refresh system information',
                   ),
-                  onPressed: widget.load == null || _loading ? null : _refresh,
+                  onPressed: !_polling || _loading ? null : _refresh,
                   icon: _loading
                       ? SizedBox.square(
                           dimension: 14,
@@ -202,6 +269,22 @@ class _TerminalSystemInfoPanelState extends State<_TerminalSystemInfoPanel> {
             ),
           ),
           Divider(height: 1, color: colors.border),
+          if (info != null && !_polling)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: Text(
+                _hasSession
+                    ? context.tr(
+                        'workspace.systemInfo.updatesPaused',
+                        fallback: 'Updates paused',
+                      )
+                    : context.tr(
+                        'workspace.label.noSshSession',
+                        fallback: 'No SSH session',
+                      ),
+                style: TextStyle(color: colors.muted, fontSize: 11),
+              ),
+            ),
           Expanded(child: _buildBody(info)),
         ],
       ),
@@ -210,16 +293,26 @@ class _TerminalSystemInfoPanelState extends State<_TerminalSystemInfoPanel> {
 
   Widget _buildBody(FfiHostSystemInfoResult? info) {
     final colors = widget.colors;
-    if (widget.load == null) {
+    if (!_hasSession && info == null) {
       return _TerminalToolEmptyState(
         icon: LucideIcons.activity,
-        title: 'No SSH session',
-        description:
-            'System information is available after connecting with SSH.',
+        title: 'workspace.label.noSshSession',
+        description: context.tr('workspace.systemInfo.connectFirst'),
         colors: colors,
       );
     }
     if (info == null) {
+      if (!_polling) {
+        return Center(
+          child: Text(
+            context.tr(
+              'workspace.systemInfo.updatesPaused',
+              fallback: 'Updates paused',
+            ),
+            style: TextStyle(color: colors.muted, fontSize: 11),
+          ),
+        );
+      }
       return Center(
         child: CircularProgressIndicator(
           strokeWidth: 1.8,
@@ -230,11 +323,11 @@ class _TerminalSystemInfoPanelState extends State<_TerminalSystemInfoPanel> {
     if (!info.hasData) {
       return _TerminalToolEmptyState(
         icon: LucideIcons.circleAlert,
-        title: 'Unable to load system information',
-        description: info.error ?? 'The host returned no system information.',
+        title: 'workspace.label.unableToLoadSystemInformation',
+        description: info.error ?? context.tr('workspace.systemInfo.noData'),
         colors: colors,
-        actionLabel: 'Retry',
-        onAction: _refresh,
+        actionLabel: _polling ? context.tr('common.action.retry') : null,
+        onAction: _polling ? _refresh : null,
       );
     }
 
@@ -248,14 +341,21 @@ class _TerminalSystemInfoPanelState extends State<_TerminalSystemInfoPanel> {
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 18),
         children: [
           _TerminalSystemMetric(
-            label: 'CPU',
+            label: 'workspace.label.cpu',
             value: info.cpuUsagePercent == null
                 ? '—'
                 : '${info.cpuUsagePercent!.toStringAsFixed(1)}%',
             detail: [
-              if (info.cpuCount != null) '${info.cpuCount} cores',
-              if (info.loadAverage != null)
-                'load ${info.loadAverage!.toStringAsFixed(2)}',
+              if (info.cpuCount case final count?)
+                context.tr(
+                  'terminal.systemInfo.cpu.cores',
+                  args: {'count': count},
+                ),
+              if (info.loadAverage case final load?)
+                context.tr(
+                  'terminal.systemInfo.cpu.load',
+                  args: {'load': load.toStringAsFixed(2)},
+                ),
             ].join(' · '),
             progress: info.cpuUsagePercent == null
                 ? null
@@ -264,7 +364,7 @@ class _TerminalSystemInfoPanelState extends State<_TerminalSystemInfoPanel> {
           ),
           const SizedBox(height: 8),
           _TerminalSystemMetric(
-            label: 'Memory',
+            label: 'common.label.memory',
             value: memoryPercent == null
                 ? '—'
                 : '${(memoryPercent * 100).toStringAsFixed(0)}%',
@@ -274,7 +374,7 @@ class _TerminalSystemInfoPanelState extends State<_TerminalSystemInfoPanel> {
           ),
           const SizedBox(height: 8),
           _TerminalSystemMetric(
-            label: 'Swap',
+            label: 'workspace.label.swap',
             value: swapPercent == null
                 ? '—'
                 : '${(swapPercent * 100).toStringAsFixed(0)}%',
@@ -286,15 +386,20 @@ class _TerminalSystemInfoPanelState extends State<_TerminalSystemInfoPanel> {
           _TerminalSystemDetails(
             colors: colors,
             rows: [
-              if (info.osName != null) ('Operating system', info.osName!),
-              if (info.kernel != null) ('Kernel', info.kernel!),
+              if (info.osName != null)
+                ('workspace.systemInfo.operatingSystem', info.osName!),
+              if (info.kernel != null)
+                ('workspace.systemInfo.kernel', info.kernel!),
               if (info.architecture != null)
-                ('Architecture', info.architecture!),
+                ('workspace.systemInfo.architecture', info.architecture!),
               if (info.uptimeSeconds != null)
-                ('Uptime', _formatUptime(info.uptimeSeconds!)),
+                (
+                  'workspace.systemInfo.uptime',
+                  _formatUptime(info.uptimeSeconds!),
+                ),
               if (info.loadAverage != null)
                 (
-                  'Load average',
+                  'workspace.systemInfo.loadAverage',
                   [info.loadAverage, info.loadAverage5, info.loadAverage15]
                       .whereType<double>()
                       .map((v) => v.toStringAsFixed(2))
@@ -417,7 +522,7 @@ class _TerminalSystemProcessesState extends State<_TerminalSystemProcesses> {
   @override
   Widget build(BuildContext context) {
     return _TerminalSystemSection(
-      title: 'Top processes',
+      title: 'workspace.label.topProcesses',
       colors: widget.colors,
       child: Column(
         children: [
@@ -463,7 +568,7 @@ class _TerminalSystemProcessHeader extends StatelessWidget {
       child: Row(
         children: [
           _TerminalSystemProcessHeaderCell(
-            label: 'Memory',
+            label: 'common.label.memory',
             sort: _TerminalSystemProcessSort.memory,
             flex: 3,
             active: sort == _TerminalSystemProcessSort.memory,
@@ -483,7 +588,7 @@ class _TerminalSystemProcessHeader extends StatelessWidget {
             contentPadding: const EdgeInsets.symmetric(horizontal: 4),
           ),
           _TerminalSystemProcessHeaderCell(
-            label: 'Command',
+            label: 'common.label.command',
             sort: _TerminalSystemProcessSort.command,
             flex: 5,
             active: sort == _TerminalSystemProcessSort.command,
@@ -599,7 +704,7 @@ class _TerminalSystemNetwork extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _TerminalSystemSection(
-      title: 'Network',
+      title: 'common.label.network',
       colors: colors,
       trailing: SizedBox(
         width: 104,
@@ -713,7 +818,7 @@ class _TerminalSystemFilesystems extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _TerminalSystemSection(
-      title: 'Filesystems',
+      title: 'workspace.label.filesystems',
       colors: colors,
       child: Column(
         children: [
@@ -740,6 +845,7 @@ class _TerminalSystemFilesystems extends StatelessWidget {
                       const SizedBox(width: 8),
                       Text(
                         _availableOfTotal(
+                          context,
                           filesystem.usedBytes,
                           filesystem.totalBytes,
                         ),
@@ -1163,50 +1269,57 @@ class _TerminalSystemDetails extends StatelessWidget {
     if (rows.isEmpty) {
       return const SizedBox.shrink();
     }
-    return Container(
-      decoration: BoxDecoration(
-        border: Border.all(color: colors.border),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        children: [
-          for (var index = 0; index < rows.length; index++) ...[
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    width: 92,
-                    child: Text(
-                      rows[index].$1,
-                      style: TextStyle(
-                        color: colors.muted,
-                        fontSize: 10.5,
-                        letterSpacing: 0,
+    return Semantics(
+      container: true,
+      label: context.tr('workspace.systemInfo.details.title'),
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border.all(color: colors.border),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          children: [
+            for (var index = 0; index < rows.length; index++) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: 92,
+                      child: Text(
+                        context.tr(rows[index].$1),
+                        style: TextStyle(
+                          color: colors.muted,
+                          fontSize: 10.5,
+                          letterSpacing: 0,
+                        ),
                       ),
                     ),
-                  ),
-                  Expanded(
-                    child: Text(
-                      rows[index].$2,
-                      textAlign: TextAlign.right,
-                      style: TextStyle(
-                        color: colors.foreground,
-                        fontSize: 10.5,
-                        fontWeight: NautermFontWeights.medium,
-                        height: 1.35,
-                        letterSpacing: 0,
+                    Expanded(
+                      child: Text(
+                        rows[index].$2,
+                        textAlign: TextAlign.right,
+                        style: TextStyle(
+                          color: colors.foreground,
+                          fontSize: 10.5,
+                          fontWeight: NautermFontWeights.medium,
+                          height: 1.35,
+                          letterSpacing: 0,
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            if (index + 1 < rows.length)
-              Divider(height: 1, color: colors.border),
+              if (index + 1 < rows.length)
+                Divider(height: 1, color: colors.border),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -1299,9 +1412,12 @@ String _usedOfTotal(int? used, int? total) {
   return '${_formatBytes(used)} / ${_formatBytes(total)}';
 }
 
-String _availableOfTotal(int used, int total) {
+String _availableOfTotal(BuildContext context, int used, int total) {
   final available = math.max(0, total - used);
-  return '${_formatBytes(available)} / ${_formatBytes(total)}';
+  return context.tr(
+    'terminal.systemInfo.disk.free',
+    args: {'free': _formatBytes(available), 'total': _formatBytes(total)},
+  );
 }
 
 String _formatBytes(int bytes) {

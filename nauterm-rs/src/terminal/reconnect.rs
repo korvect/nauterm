@@ -427,7 +427,7 @@ impl Terminal {
                                         .size(px(30.))
                                         .icon(crate::assets::icon(IconName::X))
                                         .icon_size(px(17.))
-                                        .tooltip("Dismiss reconnect status")
+                                        .tooltip("workspace.label.dismissReconnectStatus")
                                         .on_click(cx.listener(|this, _, _, cx| {
                                             this.reconnect.model.dismissed = true;
                                             cx.notify();
@@ -449,7 +449,7 @@ impl Terminal {
                                         .font_weight(FontWeights::SEMIBOLD)
                                         .border_1()
                                         .border_color(p.accent)
-                                        .label("Reconnect")
+                                        .label("common.label.reconnect")
                                         .custom(
                                             ButtonCustomVariant::for_surface(p)
                                                 .color(p.accent.into())
@@ -471,7 +471,7 @@ impl Terminal {
                                         .font_weight(FontWeights::SEMIBOLD)
                                         .border_1()
                                         .border_color(danger.alpha(0.36))
-                                        .label("Close terminal")
+                                        .label("workspace.label.closeTerminal")
                                         .custom(
                                             ButtonCustomVariant::for_surface(p)
                                                 .color(danger.alpha(0.08).into())

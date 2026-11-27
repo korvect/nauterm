@@ -431,7 +431,9 @@ impl Keychain {
         if key.public_key.is_none() {
             crate::components::message::show(
                 window,
-                crate::components::message::Message::error("A valid public key is required."),
+                crate::components::message::Message::error(
+                    "workspace.keys.export.publicKeyRequired",
+                ),
                 cx,
             );
             return;
@@ -464,7 +466,7 @@ impl Keychain {
             cx.notify();
         }
     }
-    fn retry(&mut self, cx: &mut Context<Self>) {
+    pub(crate) fn retry(&mut self, cx: &mut Context<Self>) {
         match Core::discover().and_then(|core| Vault::open(core, self.database_path.clone())) {
             Ok(vault) => {
                 self.vault = Some(vault);
@@ -920,13 +922,16 @@ impl Keychain {
         let username = editor.username.read(cx).value().trim().to_owned();
         if editor.kind == Kind::Identity && username.is_empty() {
             let editor = self.editor.as_mut().unwrap();
-            editor.username_error = Some("Username is required.".into());
+            editor.username_error = Some("workspace.validation.usernameRequired".into());
             editor.error = None;
             cx.notify();
             return;
         }
         if name.is_empty() {
-            self.editor.as_mut().unwrap().name_error = Some("Name is required.".into());
+            self.editor.as_mut().unwrap().name_error = Some(crate::localization::text(
+                cx,
+                "common.validation.nameRequired",
+            ));
             cx.notify();
             return;
         }
@@ -1015,7 +1020,10 @@ impl Keychain {
         let parameters = editor.generation;
         let name = editor.name.read(cx).value().trim().to_owned();
         if name.is_empty() {
-            editor.name_error = Some("Name is required.".into());
+            editor.name_error = Some(crate::localization::text(
+                cx,
+                "common.validation.nameRequired",
+            ));
             editor.error = None;
             cx.notify();
             return;
@@ -1382,7 +1390,7 @@ impl Keychain {
             menu.card_menu()
                 .when(item.key && single, |menu| {
                     menu.item(
-                        MenuItem::localized("Export to Host")
+                        MenuItem::localized("workspace.label.exportToHost")
                             .icon(IconName::Upload)
                             .disabled(busy)
                             .on_click(move |_, window, cx| {
@@ -1415,9 +1423,9 @@ impl Keychain {
                         shortcuts
                             .menu(
                                 MenuItem::localized(if item.key {
-                                    "Edit Key"
+                                    "workspace.label.editKey"
                                 } else {
-                                    "Edit Identity"
+                                    "workspace.label.editIdentity"
                                 }),
                                 crate::shortcuts::Command::Edit,
                             )
@@ -1432,7 +1440,7 @@ impl Keychain {
                 .item(
                     shortcuts
                         .menu(
-                            MenuItem::localized("Duplicate"),
+                            MenuItem::localized("workspace.action.duplicate"),
                             crate::shortcuts::Command::Duplicate,
                         )
                         .icon(IconName::Copy)
@@ -1521,9 +1529,9 @@ impl Keychain {
                         .font_weight(FontWeights::MEDIUM)
                         .child(crate::localization::view(
                             if parameters.kind == KeyType::Ecdsa {
-                                "Elliptic curve size (bits)"
+                                "workspace.keys.field.curveSize"
                             } else {
-                                "Key size (bits)"
+                                "workspace.keys.field.size"
                             },
                         )),
                 )
@@ -1584,10 +1592,8 @@ impl Keychain {
         let consolidated = self.related && editor.id.is_none() && editor.kind != Kind::Identity;
         let import_method = consolidated && editor.method == Method::Import;
         let kind_label = match editor.kind {
-            Kind::Key => "Key",
-            Kind::Generate => "Key",
-            Kind::Certificate => "Key",
-            Kind::Identity => "Identity",
+            Kind::Key | Kind::Generate | Kind::Certificate => "common.label.key",
+            Kind::Identity => "common.label.identity",
         };
         let detected_passphrase = self.detected_passphrase_field(editor, window, cx);
         let section = div()
@@ -1597,7 +1603,11 @@ impl Keychain {
             .flex()
             .flex_col()
             .gap(px(CREDENTIAL_FIELD_GAP))
-            .child(div().font_weight(FontWeights::MEDIUM).child(kind_label))
+            .child(
+                div()
+                    .font_weight(FontWeights::MEDIUM)
+                    .child(crate::localization::view(kind_label)),
+            )
             .child(
                 div()
                     .flex()
@@ -1622,7 +1632,7 @@ impl Keychain {
                             })
                             .child(
                                 div().flex_1().min_w_0().child(
-                                    Field::input(&editor.name, "Name")
+                                    Field::input(&editor.name, "common.label.name")
                                         .disabled(self.saving)
                                         .error(editor.name_error.clone()),
                                 ),
@@ -1632,11 +1642,11 @@ impl Keychain {
             )
             .when(editor.kind == Kind::Identity, |view| {
                 view.child(
-                    Field::input(&editor.username, "Username *")
+                    Field::input(&editor.username, "common.label.username *")
                         .disabled(self.saving)
                         .error(editor.username_error.clone()),
                 )
-                .child(self.field("Password", &editor.password, true))
+                .child(self.field("common.label.password", &editor.password, true))
                 .child(
                     editor
                         .key_select
@@ -1660,7 +1670,11 @@ impl Keychain {
                         || editor.id.is_some()
                         || !editor.certificate.read(cx).value().trim().is_empty();
                     let view = view.when(import_method && show_certificate, |view| {
-                        view.child(self.text_field("Certificate", &editor.certificate, None))
+                        view.child(self.text_field(
+                            "workspace.label.certificate",
+                            &editor.certificate,
+                            None,
+                        ))
                     });
                     let view = if import_method && editor.private.read(cx).value().trim().is_empty()
                     {
@@ -1668,9 +1682,9 @@ impl Keychain {
                     } else {
                         view.child(self.text_field(
                             if editor.id.is_some() {
-                                "Private key"
+                                "common.label.privateKey"
                             } else {
-                                "Private key *"
+                                "common.label.privateKey *"
                             },
                             &editor.private,
                             editor.private_error.clone(),
@@ -1681,23 +1695,32 @@ impl Keychain {
                             || import_method
                                 && editor.kind == Kind::Certificate
                                 && !editor.private.read(cx).value().trim().is_empty(),
-                        |view| view.child(self.text_field("Public key", &editor.public, None)),
+                        |view| {
+                            view.child(self.text_field(
+                                "common.label.publicKey",
+                                &editor.public,
+                                None,
+                            ))
+                        },
                     )
                     .when(!import_method && show_certificate, |view| {
-                        view.child(self.text_field("Certificate", &editor.certificate, None))
+                        view.child(self.text_field(
+                            "workspace.label.certificate",
+                            &editor.certificate,
+                            None,
+                        ))
                     })
                 },
             )
             .when(editor.is_generating(), |view| {
                 view.child(self.generation_controls(editor, cx))
             });
-        let title = if editor.kind == Kind::Generate {
-            "Generate Key".into()
-        } else {
-            format!(
-                "{} {kind_label}",
-                if editor.id.is_some() { "Edit" } else { "New" }
-            )
+        let title = match (editor.kind, editor.id.is_some()) {
+            (Kind::Generate, _) => "workspace.label.generateKey",
+            (Kind::Identity, false) => "workspace.label.newIdentity",
+            (Kind::Identity, true) => "workspace.label.editIdentity",
+            (Kind::Key | Kind::Certificate, false) => "workspace.label.newKey",
+            (Kind::Key | Kind::Certificate, true) => "workspace.label.editKey",
         };
         let mut sections = vec![];
         if consolidated {
@@ -1770,7 +1793,7 @@ impl Keychain {
                         .toolbar()
                         .ghost()
                         .icon(IconName::ArrowLeft)
-                        .tooltip("Back")
+                        .tooltip("common.action.back")
                         .disabled(self.saving)
                         .on_click(cx.listener(|this, _, window, cx| this.close_editor(window, cx))),
                 )
@@ -1781,7 +1804,7 @@ impl Keychain {
                         .toolbar()
                         .ghost()
                         .icon(IconName::ArrowRightToLine)
-                        .tooltip("Close editor")
+                        .tooltip("common.action.close")
                         .disabled(self.saving)
                         .on_click(cx.listener(|this, _, window, cx| this.close_editor(window, cx))),
                 )
@@ -1797,10 +1820,10 @@ impl Keychain {
                         self.saving || self.exporting_file || editor.importing || editor.picking,
                     )
                     .label(match (editor.is_generating(), self.saving) {
-                        (true, true) => "Generating…",
-                        (true, false) => "Generate & save",
-                        (false, true) => "Saving…",
-                        (false, false) => "Save",
+                        (true, true) => "workspace.keys.generating",
+                        (true, false) => "workspace.keys.generateAndSave",
+                        (false, true) => "common.label.saving",
+                        (false, false) => "common.action.save",
                     })
                     .on_click(cx.listener(|this, _, window, cx| this.save(window, cx))),
             )
@@ -1873,44 +1896,279 @@ impl Render for Keychain {
         let owner = cx.entity().downgrade();
         let sort_owner = owner.clone();
         let sort = self.sort;
-        div().size_full().min_h_0().relative().track_focus(&self.focus).key_context("Nauterm")
+        div()
+            .size_full()
+            .min_h_0()
+            .relative()
+            .track_focus(&self.focus)
+            .key_context("Nauterm")
             .on_key_down(cx.listener(Self::navigate_cards))
-            .on_action(cx.listener(|this, _: &NewItem, window, cx| { if !crate::components::overlay::is_modal_open(window, cx) { this.create(Kind::Key, window, cx); } cx.stop_propagation(); }))
-            .on_action(cx.listener(|this, _: &CloseEditor, window, cx| { this.back_editor(window, cx); cx.stop_propagation(); }))
-            .on_action(cx.listener(|this, _: &SelectCards, window, cx| { if !crate::components::overlay::is_modal_open(window, cx) { this.select_all(cx); } cx.stop_propagation(); }))
-            .on_action(cx.listener(|this, _: &DeleteCards, window, cx| { if !crate::components::overlay::is_modal_open(window, cx) && !this.selection.is_empty() { this.delete_pending = true; cx.notify(); } cx.stop_propagation(); }))
+            .on_action(cx.listener(|this, _: &NewItem, window, cx| {
+                if !crate::components::overlay::is_modal_open(window, cx) {
+                    this.create(Kind::Key, window, cx);
+                }
+                cx.stop_propagation();
+            }))
+            .on_action(cx.listener(|this, _: &CloseEditor, window, cx| {
+                this.back_editor(window, cx);
+                cx.stop_propagation();
+            }))
+            .on_action(cx.listener(|this, _: &SelectCards, window, cx| {
+                if !crate::components::overlay::is_modal_open(window, cx) {
+                    this.select_all(cx);
+                }
+                cx.stop_propagation();
+            }))
+            .on_action(cx.listener(|this, _: &DeleteCards, window, cx| {
+                if !crate::components::overlay::is_modal_open(window, cx)
+                    && !this.selection.is_empty()
+                {
+                    this.delete_pending = true;
+                    cx.notify();
+                }
+                cx.stop_propagation();
+            }))
             .flex()
-            .child(div().flex_1().min_w_0().flex().flex_col()
-                .child(crate::components::management::toolbar(self.dark)
-                    .child(crate::components::ButtonGroup::new()
-                    .button(Button::new("new-key").toolbar().label("New key").icon(crate::assets::icon(IconName::Plus)).disabled(self.vault.is_none() || self.busy(cx)).on_click(cx.listener(|this, _, window, cx| this.create(Kind::Key, window, cx))))
-                    .dropdown(Button::new("new-key-menu").toolbar().icon(IconName::ChevronDown).tooltip("New key actions").disabled(self.vault.is_none() || self.busy(cx)), move |menu, _, _| {
-                        let generate_owner = owner.clone();
-                        let identity_owner = owner.clone();
-                        menu.width(180.).item(MenuItem::localized("Generate key").icon(IconName::WandSparkles).on_click(move |_, window, cx| { let _ = generate_owner.update(cx, |this, cx| this.create(Kind::Generate, window, cx)); }))
-                            .item(MenuItem::localized("New identity").icon(IconName::Contact).on_click(move |_, window, cx| { let _ = identity_owner.update(cx, |this, cx| this.create(Kind::Identity, window, cx)); }))
-                    }))
-                    .child(Button::new("new-certificate").toolbar().ghost().label("Certificate").icon(IconName::BadgeCheck).label_collapsed(collapse_labels).disabled(self.vault.is_none() || self.busy(cx)).on_click(cx.listener(|this, _, window, cx| this.create(Kind::Certificate, window, cx))))
-                    .child(Button::new("new-fido2").toolbar().ghost().label("FIDO2").icon(IconName::Usb).label_collapsed(collapse_labels).disabled(self.vault.is_none() || self.busy(cx)).on_click(cx.listener(|this, _, window, cx| this.create_fido2(window, cx))))
-                    .child(div().flex_1())
-                    .when(self.error.is_some(), |view| view.child(Button::new("reload-keychain").toolbar().ghost().icon(IconName::RefreshCw).tooltip("Reload keychain").disabled(self.loading || self.busy(cx)).on_click(cx.listener(|this, _, _, cx| this.retry(cx)))))
-                    .child(Button::new("keychain-sort").toolbar().ghost().icon(sort.icon()).tooltip(sort.label()).dropdown_menu(move |menu, _, _| {
-                        let owner = sort_owner.clone();
-                        crate::management::sort_menu(menu, sort, move |order, _, cx| {
-                            let _ = owner.update(cx, |this, cx| { this.sort = order; cx.notify(); });
-                        })
-                    }))
-                    .child({ let owner = cx.weak_entity(); crate::components::management::toolbar_search("keychain-search", &self.search, self.search_open, move |open, window, cx| { let _ = owner.update(cx, |this, cx| { this.search_open = open; if open { this.search.update(cx, |input, cx| input.focus(window, cx)); } else { this.focus.focus(window, cx); } cx.notify(); }); }, cx) })
-                    .child(crate::components::management::view_mode_button("keychain-view", self.list).on_click(cx.listener(|this, _, _, cx| { this.list = !this.list; cx.notify(); }))))
-                .child(div().id("keychain-scroll").flex_1().min_h_0().overflow_y_scroll().scrollbars().map(crate::components::management::collection_padding).flex().flex_col().gap(px(crate::components::management::COLLECTION_SECTION_GAP))
-                    .on_click(cx.listener(|this, _: &ClickEvent, window, cx| this.close_editor(window, cx)))
-                    .when(self.loading, |view| view.child(Spinner::new()))
-                    .when(show_keys, |view| view.child(crate::components::management::collection_section("Keys", cx).child(keys)))
-                    .when(show_identities, |view| view.child(crate::components::management::collection_section("Identities", cx).child(identities)))
-                    .when(!self.loading && !show_keys && !show_identities && self.error.is_none(), |view| view.child({
-                        let empty = crate::components::EmptyState::new(IconName::KeyRound, if query.is_empty() { "No keychain items yet" } else { "workspace.label.noKeychainItemsFound" }, self.dark).description("Add keys and identities once, then reuse them across your saved hosts.");
-                        if query.is_empty() { empty.action(Button::new("empty-add-key").primary().icon(crate::assets::icon(IconName::Plus)).label("Add key").on_click(cx.listener(|this, _, window, cx| this.create(Kind::Key, window, cx)))) } else { empty }
-                    }))))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .flex()
+                    .flex_col()
+                    .child(
+                        crate::components::management::toolbar(self.dark)
+                            .child(
+                                crate::components::ButtonGroup::new()
+                                    .button(
+                                        Button::new("new-key")
+                                            .toolbar()
+                                            .label("workspace.label.newKey")
+                                            .icon(crate::assets::icon(IconName::Plus))
+                                            .disabled(self.vault.is_none() || self.busy(cx))
+                                            .on_click(cx.listener(|this, _, window, cx| {
+                                                this.create(Kind::Key, window, cx)
+                                            })),
+                                    )
+                                    .dropdown(
+                                        Button::new("new-key-menu")
+                                            .toolbar()
+                                            .icon(IconName::ChevronDown)
+                                            .raw_tooltip(crate::localization::format(
+                                                cx,
+                                                "workspace.action.creationOptions",
+                                                &[(
+                                                    "action",
+                                                    &crate::localization::text(
+                                                        cx,
+                                                        "workspace.label.newKey",
+                                                    ),
+                                                )],
+                                            ))
+                                            .disabled(self.vault.is_none() || self.busy(cx)),
+                                        move |menu, _, _| {
+                                            let generate_owner = owner.clone();
+                                            let identity_owner = owner.clone();
+                                            menu.width(180.)
+                                                .item(
+                                                    MenuItem::localized(
+                                                        "workspace.label.generateKey",
+                                                    )
+                                                    .icon(IconName::WandSparkles)
+                                                    .on_click(move |_, window, cx| {
+                                                        let _ = generate_owner.update(
+                                                            cx,
+                                                            |this, cx| {
+                                                                this.create(
+                                                                    Kind::Generate,
+                                                                    window,
+                                                                    cx,
+                                                                )
+                                                            },
+                                                        );
+                                                    }),
+                                                )
+                                                .item(
+                                                    MenuItem::localized(
+                                                        "workspace.label.newIdentity",
+                                                    )
+                                                    .icon(IconName::Contact)
+                                                    .on_click(move |_, window, cx| {
+                                                        let _ = identity_owner.update(
+                                                            cx,
+                                                            |this, cx| {
+                                                                this.create(
+                                                                    Kind::Identity,
+                                                                    window,
+                                                                    cx,
+                                                                )
+                                                            },
+                                                        );
+                                                    }),
+                                                )
+                                        },
+                                    ),
+                            )
+                            .child(
+                                Button::new("new-certificate")
+                                    .toolbar()
+                                    .ghost()
+                                    .label("workspace.label.certificate")
+                                    .icon(IconName::BadgeCheck)
+                                    .label_collapsed(collapse_labels)
+                                    .disabled(self.vault.is_none() || self.busy(cx))
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.create(Kind::Certificate, window, cx)
+                                    })),
+                            )
+                            .child(
+                                Button::new("new-fido2")
+                                    .toolbar()
+                                    .ghost()
+                                    .label("FIDO2")
+                                    .icon(IconName::Usb)
+                                    .label_collapsed(collapse_labels)
+                                    .disabled(self.vault.is_none() || self.busy(cx))
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.create_fido2(window, cx)
+                                    })),
+                            )
+                            .child(div().flex_1())
+                            .when(self.error.is_some(), |view| {
+                                view.child(
+                                    Button::new("reload-keychain")
+                                        .toolbar()
+                                        .ghost()
+                                        .icon(IconName::RefreshCw)
+                                        .tooltip("common.action.retry")
+                                        .disabled(self.loading || self.busy(cx))
+                                        .on_click(cx.listener(|this, _, _, cx| this.retry(cx))),
+                                )
+                            })
+                            .child(
+                                Button::new("keychain-sort")
+                                    .toolbar()
+                                    .ghost()
+                                    .icon(sort.icon())
+                                    .tooltip(sort.label_key())
+                                    .dropdown_menu(move |menu, _, _| {
+                                        let owner = sort_owner.clone();
+                                        crate::management::sort_menu(
+                                            menu,
+                                            sort,
+                                            move |order, _, cx| {
+                                                let _ = owner.update(cx, |this, cx| {
+                                                    this.sort = order;
+                                                    cx.notify();
+                                                });
+                                            },
+                                        )
+                                    }),
+                            )
+                            .child({
+                                let owner = cx.weak_entity();
+                                crate::components::management::toolbar_search(
+                                    "keychain-search",
+                                    &self.search,
+                                    self.search_open,
+                                    move |open, window, cx| {
+                                        let _ = owner.update(cx, |this, cx| {
+                                            this.search_open = open;
+                                            if open {
+                                                this.search.update(cx, |input, cx| {
+                                                    input.focus(window, cx)
+                                                });
+                                            } else {
+                                                this.focus.focus(window, cx);
+                                            }
+                                            cx.notify();
+                                        });
+                                    },
+                                    cx,
+                                )
+                            })
+                            .child(
+                                crate::components::management::view_mode_button(
+                                    "keychain-view",
+                                    self.list,
+                                )
+                                .on_click(cx.listener(
+                                    |this, _, _, cx| {
+                                        this.list = !this.list;
+                                        cx.notify();
+                                    },
+                                )),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .id("keychain-scroll")
+                            .flex_1()
+                            .min_h_0()
+                            .overflow_y_scroll()
+                            .scrollbars()
+                            .map(crate::components::management::collection_padding)
+                            .flex()
+                            .flex_col()
+                            .gap(px(crate::components::management::COLLECTION_SECTION_GAP))
+                            .on_click(cx.listener(|this, _: &ClickEvent, window, cx| {
+                                this.close_editor(window, cx)
+                            }))
+                            .when(self.loading, |view| view.child(Spinner::new()))
+                            .when(show_keys, |view| {
+                                view.child(
+                                    crate::components::management::collection_section(
+                                        "common.label.keys",
+                                        cx,
+                                    )
+                                    .child(keys),
+                                )
+                            })
+                            .when(show_identities, |view| {
+                                view.child(
+                                    crate::components::management::collection_section(
+                                        "common.label.identities",
+                                        cx,
+                                    )
+                                    .child(identities),
+                                )
+                            })
+                            .when(
+                                !self.loading
+                                    && !show_keys
+                                    && !show_identities
+                                    && self.error.is_none(),
+                                |view| {
+                                    view.child({
+                                        let empty = crate::components::EmptyState::new(
+                                            IconName::KeyRound,
+                                            if query.is_empty() {
+                                                "workspace.label.noKeychainItemsYet"
+                                            } else {
+                                                "workspace.label.noKeychainItemsFound"
+                                            },
+                                            self.dark,
+                                        )
+                                        .description("workspace.empty.keychain.description");
+                                        if query.is_empty() {
+                                            empty.action(
+                                                Button::new("empty-add-key")
+                                                    .primary()
+                                                    .icon(crate::assets::icon(IconName::Plus))
+                                                    .label("workspace.label.addKey")
+                                                    .on_click(cx.listener(
+                                                        |this, _, window, cx| {
+                                                            this.create(Kind::Key, window, cx)
+                                                        },
+                                                    )),
+                                            )
+                                        } else {
+                                            empty
+                                        }
+                                    })
+                                },
+                            ),
+                    ),
+            )
             .children(drawer)
             .when_some(self.delete_overlay(cx), |view, overlay| view.child(overlay))
             .into_any_element()
@@ -1967,7 +2225,7 @@ impl Keychain {
                         .action(
                             Button::new("cancel-credential-delete")
                                 .ghost()
-                                .label("Cancel")
+                                .label("common.action.cancel")
                                 .disabled(self.saving)
                                 .on_click(|_, window, cx| {
                                     crate::components::Modal::dismiss(window, cx)
@@ -1976,7 +2234,7 @@ impl Keychain {
                         .action(
                             Button::new("confirm-credential-delete")
                                 .danger()
-                                .label("Delete")
+                                .label("common.action.delete")
                                 .disabled(self.saving)
                                 .on_click(cx.listener(|this, _, _, cx| this.delete(cx))),
                         ),

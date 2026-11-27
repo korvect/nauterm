@@ -140,6 +140,12 @@ BoxDecoration _settingsFieldDecoration({
 
 enum _SettingsPage { general, terminal, sftp, ai, sync, shortcuts, about }
 
+String _aboutTitle([String appName = nautermApplicationName]) => tr(
+  'settings.pages.about.title',
+  fallback: 'About {appName}',
+  args: {'appName': appName},
+);
+
 _SettingsPage? _takeRequestedSettingsPage() =>
     switch (takeRequestedSettingsPage()) {
       NautermSettingsPage.terminal => _SettingsPage.terminal,
@@ -154,6 +160,8 @@ class _SettingsSearchEntry {
     required this.section,
     required this.title,
     required this.subtitle,
+    this.titleKey,
+    this.subtitleKey,
     this.keywords = '',
     this.indexSubtitle = true,
   });
@@ -162,13 +170,22 @@ class _SettingsSearchEntry {
   final String? section;
   final String title;
   final String subtitle;
+  final String? titleKey;
+  final String? subtitleKey;
   final String keywords;
   final bool indexSubtitle;
 
+  String get localizedTitle => page == _SettingsPage.about
+      ? _aboutTitle()
+      : tr(titleKey ?? title, fallback: title);
+
   bool matches(String query) {
-    final searchableSubtitle = indexSubtitle ? subtitle : '';
-    final haystack = '${page.name} $title $searchableSubtitle $keywords'
-        .toLowerCase();
+    final searchableSubtitle = indexSubtitle
+        ? '$subtitle ${subtitleKey == null ? '' : tr(subtitleKey!)}'
+        : '';
+    final haystack =
+        '${page.name} $title $localizedTitle $searchableSubtitle $keywords'
+            .toLowerCase();
     return query
         .toLowerCase()
         .split(RegExp(r'\s+'))
@@ -182,8 +199,10 @@ const _settingsSearchEntries = <_SettingsSearchEntry>[
     page: _SettingsPage.general,
     section: 'general-default-url-handler',
     title: 'Default URL Handler',
+    titleKey: 'settings.general.defaultUrlHandler.title',
     subtitle:
-        'Use Nauterm as the default handler for SSH, SFTP, and Telnet links.',
+        'Use {appName} as the default handler for SSH, SFTP, and Telnet links.',
+    subtitleKey: 'settings.general.defaultUrlHandler.description',
     keywords:
         'ssh sftp telnet uri url scheme default application connection links',
   ),
@@ -191,55 +210,70 @@ const _settingsSearchEntries = <_SettingsSearchEntry>[
     page: _SettingsPage.general,
     section: 'general-appearance',
     title: 'Application Theme',
+    titleKey: 'settings.general.applicationTheme.title',
     subtitle: 'Light, dark, or system application appearance.',
+    subtitleKey: 'settings.general.applicationTheme.summary',
     keywords: 'color appearance',
   ),
   _SettingsSearchEntry(
     page: _SettingsPage.general,
     section: 'general-appearance',
     title: 'Host Icon',
+    titleKey: 'settings.general.hostIcon.label',
     subtitle: 'Default host icon, OS badge, or OS icon.',
+    subtitleKey: 'settings.general.hostIcon.summary',
     keywords: 'workspace operating system badge',
   ),
   _SettingsSearchEntry(
     page: _SettingsPage.general,
     section: 'general-window',
     title: 'Window Size',
+    titleKey: 'settings.label.windowSize',
     subtitle: 'Default window width and height.',
+    subtitleKey: 'settings.general.window.summary',
     keywords: 'dimensions pixels',
   ),
   _SettingsSearchEntry(
     page: _SettingsPage.general,
     section: 'general-behavior',
     title: 'Workspace Page',
+    titleKey: 'settings.general.workspacePage.label',
     subtitle: 'Show the workspace overview page.',
+    subtitleKey: 'settings.general.workspacePage.summary',
     keywords: 'sessions',
   ),
   _SettingsSearchEntry(
     page: _SettingsPage.general,
     section: 'general-behavior',
     title: 'Restore Workspace on Startup',
+    titleKey: 'settings.general.workspaceRestore.label',
     subtitle: 'Tabs, split panes, connections, and active port forwards.',
+    subtitleKey: 'settings.general.workspaceRestore.description',
     keywords: 'workspace restore reopen restart launch ask always never',
   ),
   _SettingsSearchEntry(
     page: _SettingsPage.general,
     section: 'general-behavior',
     title: 'Confirm on Close',
+    titleKey: 'settings.general.confirmOnClose.label',
     subtitle: 'Ask before closing a connected terminal tab.',
+    subtitleKey: 'settings.general.confirmOnClose.summary',
     keywords: 'tabs confirmation',
   ),
   _SettingsSearchEntry(
     page: _SettingsPage.terminal,
     section: 'terminal-theme',
     title: 'Terminal Theme',
+    titleKey: 'settings.label.terminalTheme',
     subtitle: 'Terminal colors and custom theme.',
+    subtitleKey: 'settings.terminal.theme.summary',
     keywords: 'background foreground ansi',
   ),
   _SettingsSearchEntry(
     page: _SettingsPage.terminal,
     section: 'terminal-font',
     title: 'Terminal Font',
+    titleKey: 'settings.label.terminalFont',
     subtitle:
         'Font families, size, weight, line height, spacing, and ligatures.',
     keywords: 'text typography primary family families size weight cjk chinese japanese korean line height spacing 字体 字号 字重 行高 间距',
@@ -249,70 +283,91 @@ const _settingsSearchEntries = <_SettingsSearchEntry>[
     page: _SettingsPage.terminal,
     section: 'terminal-font',
     title: 'Ligatures',
+    titleKey: 'settings.terminal.ligatures.label',
     subtitle: 'Enable font ligatures (e.g. -> => !=).',
+    subtitleKey: 'settings.terminal.ligatures.description',
     keywords: 'font 连字',
   ),
   _SettingsSearchEntry(
     page: _SettingsPage.terminal,
     section: 'terminal-cursor',
     title: 'Cursor',
+    titleKey: 'common.label.cursor',
     subtitle: 'Cursor shape and blinking behavior.',
+    subtitleKey: 'settings.terminal.cursor.summary',
     keywords: 'block beam underline blink',
   ),
   _SettingsSearchEntry(
     page: _SettingsPage.terminal,
     section: 'terminal-layout',
     title: 'Terminal Padding',
+    titleKey: 'settings.label.terminalPadding',
     subtitle: 'Inner spacing around terminal content.',
+    subtitleKey: 'settings.terminal.padding.summary',
     keywords: 'layout scrollbar',
   ),
   _SettingsSearchEntry(
     page: _SettingsPage.terminal,
     section: 'terminal-layout',
     title: 'Composer',
+    titleKey: 'settings.terminal.composer.label',
     subtitle: 'Show the command input bar by default in new terminal panes.',
+    subtitleKey: 'settings.terminal.composer.description',
     keywords: 'input suggestions autocomplete multiline editor 命令 输入 编辑器',
   ),
   _SettingsSearchEntry(
     page: _SettingsPage.terminal,
     section: 'terminal-session',
     title: 'Shell Path',
+    titleKey: 'settings.label.shellPath',
     subtitle: 'Shell executable used for local sessions.',
+    subtitleKey: 'settings.terminal.shellExecutable.description',
     keywords: 'bash zsh fish command',
   ),
   _SettingsSearchEntry(
     page: _SettingsPage.terminal,
     section: 'terminal-session',
     title: 'Terminal Emulation',
+    titleKey: 'settings.label.terminalEmulation',
     subtitle: 'Emulation engine and TERM type for new sessions.',
+    subtitleKey: 'settings.terminal.emulator.summary',
     keywords: 'xterm scrollback ssh keepalive',
   ),
   _SettingsSearchEntry(
     page: _SettingsPage.terminal,
     section: 'terminal-session',
     title: 'Multiple Tabs',
+    titleKey: 'settings.terminal.multipleTabs.label',
     subtitle: 'Allow multiple terminal sessions in the same pane.',
+    subtitleKey: 'settings.terminal.multipleTabs.description',
     keywords: 'multi tab sessions split pane 标签 多标签 分屏',
   ),
   _SettingsSearchEntry(
     page: _SettingsPage.terminal,
     section: 'terminal-input',
     title: 'Report Mouse Events',
+    titleKey: 'settings.terminal.input.reportMouseEvents.label',
     subtitle: 'Send mouse input to terminal applications that request it.',
+    subtitleKey: 'settings.terminal.input.reportMouseEvents.description',
     keywords: 'input pointer click drag move scroll wheel application vim',
   ),
   _SettingsSearchEntry(
     page: _SettingsPage.terminal,
     section: 'terminal-input',
     title: 'Scroll with Navigation Keys',
+    titleKey: 'settings.terminal.input.navigationKeysScroll.label',
     subtitle: 'Use Page Up/Down and Home/End to scroll terminal history.',
+    subtitleKey: 'settings.terminal.input.navigationKeysScroll.description',
     keywords: 'input paging page up down home end scroll vim less emacs',
   ),
   _SettingsSearchEntry(
     page: _SettingsPage.terminal,
     section: 'terminal-input',
     title: 'Open Links and Files',
+    titleKey: 'settings.terminal.pointer.openTarget.title',
     subtitle: 'Open the recognized link or file in the default application.',
+    subtitleKey:
+        'settings.terminal.pointer.commandClickOpensTarget.description',
     keywords:
         'pointer mouse command cmd control click url filename link 文件 链接 路径',
   ),
@@ -320,98 +375,134 @@ const _settingsSearchEntries = <_SettingsSearchEntry>[
     page: _SettingsPage.terminal,
     section: 'terminal-input',
     title: 'Click to Move Cursor',
+    titleKey: 'settings.terminal.pointer.clickMovesCursor.title',
     subtitle:
         'Move the input cursor to the clicked position in the shell prompt.',
+    subtitleKey: 'settings.terminal.pointer.optionClickMovesCursor.description',
     keywords: 'pointer mouse option alt caret 光标 点击',
   ),
   _SettingsSearchEntry(
     page: _SettingsPage.terminal,
     section: 'terminal-selection',
     title: 'Copy on Select',
+    titleKey: 'settings.terminal.copyOnSelect.label',
     subtitle: 'Automatically copy selected terminal text.',
+    subtitleKey: 'settings.terminal.copyOnSelect.summary',
     keywords: 'clipboard',
   ),
   _SettingsSearchEntry(
     page: _SettingsPage.terminal,
     section: 'terminal-selection',
     title: 'Select Command Block on Click',
+    titleKey: 'settings.terminal.selectCommandBlockOnClick.label',
     subtitle: 'Click a command or its output to select the block.',
+    subtitleKey: 'settings.terminal.selectCommandBlockOnClick.description',
     keywords: 'selection click command block highlight 命令块 选择 高亮',
   ),
   _SettingsSearchEntry(
     page: _SettingsPage.terminal,
     section: 'terminal-selection',
     title: 'Word Selection Boundaries',
+    titleKey: 'settings.terminal.wordBoundaries.label',
     subtitle: r'Characters that separate words on double-click. Use \t for Tab and \\ for a backslash.',
+    subtitleKey: 'settings.terminal.wordBoundaries.description',
     keywords: 'word selection boundaries separators double click 选词 边界 分隔符 双击',
   ),
   _SettingsSearchEntry(
     page: _SettingsPage.terminal,
     section: 'terminal-bell',
     title: 'Bell',
+    titleKey: 'settings.terminal.bell.title',
     subtitle: 'Sound, visual feedback, and background tab indicators.',
+    subtitleKey: 'settings.terminal.bell.summary',
     keywords: 'alert beep flash notification tab',
   ),
   _SettingsSearchEntry(
     page: _SettingsPage.terminal,
     section: 'terminal-recording',
     title: 'History & Storage',
+    titleKey: 'settings.terminal.recording.title',
     subtitle: 'Manage terminal history and session recordings.',
+    subtitleKey: 'settings.terminal.recording.summary',
     keywords: 'capture logs retention encryption storage privacy',
+  ),
+  _SettingsSearchEntry(
+    page: _SettingsPage.terminal,
+    section: 'terminal-recording',
+    title: 'Recording Storage',
+    subtitle: 'Retention period, per-session limit, and total storage.',
+    titleKey: 'settings.terminal.recording.storage.title',
+    subtitleKey: 'settings.terminal.recording.storage.description',
+    keywords: 'location folder directory days quota cleanup 存储 目录 保留 清理',
   ),
   _SettingsSearchEntry(
     page: _SettingsPage.sftp,
     section: 'sftp-workspace',
     title: 'SFTP Tab',
+    titleKey: 'settings.sftp.workspaceTab.label',
     subtitle: 'Show the SFTP tab in the workspace.',
+    subtitleKey: 'settings.sftp.workspaceTab.summary',
     keywords: 'file transfer',
   ),
   _SettingsSearchEntry(
     page: _SettingsPage.sftp,
     section: 'sftp-editors',
     title: 'Editors',
+    titleKey: 'common.label.editors',
     subtitle: 'SSH editor, external editor, and text extensions.',
+    subtitleKey: 'settings.sftp.editors.summary',
     keywords: 'vim nano vscode file types',
   ),
   _SettingsSearchEntry(
     page: _SettingsPage.sftp,
     section: 'sftp-transfers',
     title: 'Transfers',
+    titleKey: 'settings.sftp.transfers.label',
     subtitle: 'Concurrent tasks and parallel requests per transfer.',
+    subtitleKey: 'settings.sftp.transfers.summary',
     keywords: 'parallel concurrency upload performance',
   ),
   _SettingsSearchEntry(
     page: _SettingsPage.sftp,
     section: 'sftp-files',
     title: 'SFTP Files',
+    titleKey: 'settings.label.sftpFiles',
     subtitle: 'Default directory and hidden files.',
+    subtitleKey: 'settings.sftp.files.summary',
     keywords: 'download dotfiles folder',
   ),
   _SettingsSearchEntry(
     page: _SettingsPage.ai,
     section: 'ai-providers',
     title: 'AI Providers',
+    titleKey: 'settings.label.aiProviders',
     subtitle: 'Protocol, endpoint, models, API key, and generation settings.',
+    subtitleKey: 'settings.ai.providers.summary',
     keywords: 'openai anthropic base url',
   ),
   _SettingsSearchEntry(
     page: _SettingsPage.ai,
     section: 'ai-context',
     title: 'Terminal Context',
+    titleKey: 'settings.label.terminalContext',
     subtitle: 'Include selection and recent terminal output.',
+    subtitleKey: 'settings.ai.terminalContext.summary',
     keywords: 'ai assistant context',
   ),
   _SettingsSearchEntry(
     page: _SettingsPage.shortcuts,
     section: 'shortcuts-keyboard',
     title: 'Use Option as Meta Key',
+    titleKey: 'settings.shortcuts.optionAsMeta.label',
     subtitle: 'Send Option/Alt key combinations with an Escape prefix.',
+    subtitleKey: 'settings.shortcuts.optionAsMeta.description',
     keywords: 'alt escape keyboard',
   ),
   _SettingsSearchEntry(
     page: _SettingsPage.shortcuts,
     section: 'shortcuts-keyboard',
     title: 'Terminal Shortcuts',
+    titleKey: 'settings.label.terminalShortcuts',
     subtitle: 'Platform and Control Shift shortcuts.',
     keywords: 'cmd ctrl copy paste',
   ),
@@ -419,22 +510,28 @@ const _settingsSearchEntries = <_SettingsSearchEntry>[
     page: _SettingsPage.shortcuts,
     section: 'shortcuts-bindings',
     title: 'Key Bindings',
+    titleKey: 'settings.label.keyBindings',
     subtitle: 'Configure application keyboard shortcuts.',
+    subtitleKey: 'settings.pages.shortcuts.summary',
     keywords: 'hotkeys commands',
   ),
   _SettingsSearchEntry(
     page: _SettingsPage.sync,
     section: null,
     title: 'Sync & Backup',
+    titleKey: 'settings.pages.sync.title',
     subtitle:
         'Configure encrypted backups, automatic sync, and conflict handling.',
+    subtitleKey: 'settings.pages.sync.description',
     keywords: 'github gist webdav s3 google drive onedrive backup',
   ),
   _SettingsSearchEntry(
     page: _SettingsPage.about,
     section: null,
-    title: 'About Nauterm',
+    title: 'About {appName}',
+    titleKey: 'settings.pages.about.title',
     subtitle: 'Version, build, platform, licenses, and updates.',
+    subtitleKey: 'settings.pages.about.description',
     keywords: 'build platform license download upgrade',
   ),
 ];
@@ -470,10 +567,13 @@ class SettingsPanel extends StatefulWidget {
     super.key,
     this.detectExternalEditors = true,
     this.aiProviderStore,
+    this.syncDatabasePath,
   });
 
   final bool detectExternalEditors;
   final AiProviderStore? aiProviderStore;
+  @visibleForTesting
+  final String? syncDatabasePath;
 
   @override
   State<SettingsPanel> createState() => _SettingsPanelState();
@@ -614,7 +714,11 @@ class _SettingsPanelState extends State<SettingsPanel> {
   AiProviderStore get _providerStore =>
       widget.aiProviderStore ?? AiProviderStore(NautermPaths.resolve());
   String? _aiProvidersError;
+  late bool _aiProvidersLoading = widget.aiProviderStore == null;
   List<_EditorEntry> _externalEditors = const [];
+  late _EditorCatalogState _editorCatalogState = widget.detectExternalEditors
+      ? _EditorCatalogState.loading
+      : _EditorCatalogState.ready;
   SftpExternalEditorCommand? _externalEditor;
   Map<String, AiProviderPreset> _aiPresets = {};
   bool _aiPresetsRefreshing = false;
@@ -628,10 +732,6 @@ class _SettingsPanelState extends State<SettingsPanel> {
   bool _githubSyncRunning = false;
   String? _githubSyncStatus;
   bool _githubSyncStatusIsError = false;
-  List<Map<String, dynamic>> _githubSyncHistory = const [];
-  bool _githubSyncHistoryLoading = false;
-  List<Map<String, dynamic>> _githubGistSyncHistory = const [];
-  bool _githubGistSyncHistoryLoading = false;
   bool _syncManagementUnlocked = false;
   String? _activeSyncProviderId;
   _SyncStrategy _syncStrategy = _SyncStrategy.smartMerge;
@@ -790,6 +890,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
       if (!mounted) return;
       setState(() {
         _aiProviders = allProviders;
+        _aiProvidersLoading = false;
         _copyOnSelect = settings.copyOnSelect;
         _selectCommandBlockOnClick = settings.selectCommandBlockOnClick;
         _applicationLanguage = settings.appLanguage;
@@ -863,6 +964,9 @@ class _SettingsPanelState extends State<SettingsPanel> {
       });
     } on Object {
       // Settings still work in-memory if the config file is unavailable.
+      if (mounted && _aiProvidersLoading) {
+        setState(() => _aiProvidersLoading = false);
+      }
     }
     _loadThemeCatalog();
   }
@@ -917,7 +1021,10 @@ class _SettingsPanelState extends State<SettingsPanel> {
       if (!mounted) return;
       setState(() {
         _aiPresets = presets;
-        _aiPresetsStatus = 'Presets loaded (${presets.length}).';
+        _aiPresetsStatus = tr(
+          'settings.ai.providerPreset.updated',
+          args: {'count': presets.length},
+        );
       });
     } on Object {
       if (!mounted) return;
@@ -1088,9 +1195,22 @@ class _SettingsPanelState extends State<SettingsPanel> {
     final seen = <String>{};
 
     if (Platform.isMacOS) {
-      for (final application in await loadSystemFileApplications(
-        sftpTextFileExtensions,
-      )) {
+      final List<SystemFileApplication> applications;
+      try {
+        applications = await loadSystemFileApplications(sftpTextFileExtensions);
+      } on Object catch (error, stackTrace) {
+        NautermLog.warning(
+          'settings',
+          'Unable to load applications',
+          error: error,
+          stackTrace: stackTrace,
+        );
+        if (mounted) {
+          setState(() => _editorCatalogState = _EditorCatalogState.failed);
+        }
+        return;
+      }
+      for (final application in applications) {
         final normalizedName = application.name.toLowerCase();
         if (seen.add(normalizedName)) {
           candidates.add(
@@ -1139,6 +1259,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
 
     if (!mounted) return;
     setState(() {
+      _editorCatalogState = _EditorCatalogState.ready;
       final current = _externalEditor;
       final resolvedCurrent = current == null
           ? null
@@ -1778,6 +1899,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
   Future<void> _deleteAiProvider(int index) async {
     if (index < 0 || index >= _aiProviders.length) return;
     final entry = _aiProviders[index];
+    final onlyProvider = _aiProviders.length == 1;
     final confirmed = await showNautermDialog<bool>(
       context: context,
       builder: (context) => _AiProviderDialogFrame(
@@ -1804,13 +1926,34 @@ class _SettingsPanelState extends State<SettingsPanel> {
             child: Text(tr('common.action.delete', fallback: 'Delete')),
           ),
         ],
-        child: Text(
-          tr(
-            'settings.ai.provider.deleteConfirmation',
-            fallback: 'Delete {name}?',
-            args: {'name': entry.name},
-          ),
-          style: TextStyle(color: _text, fontSize: 13),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              context.tr(
+                'settings.ai.provider.deleteConfirmation',
+                fallback: 'Delete "{name}" and any saved API key?',
+                args: {'name': entry.name},
+              ),
+              style: TextStyle(color: _text, fontSize: 13),
+            ),
+            if (onlyProvider || entry.active) ...[
+              const SizedBox(height: 8),
+              Text(
+                onlyProvider
+                    ? context.tr(
+                        'settings.ai.provider.deletion.lastProvider',
+                        fallback: 'This is your only provider. The assistant will be unavailable until you add another.',
+                      )
+                    : context.tr(
+                        'settings.ai.provider.deletion.activeProvider',
+                        fallback: 'Another provider will become active.',
+                      ),
+                style: TextStyle(color: _mutedText, fontSize: 12),
+              ),
+            ],
+          ],
         ),
       ),
     );

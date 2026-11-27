@@ -7,12 +7,12 @@ impl Settings {
         }
         let p = Palette::settings(self.values.dark);
         Some(
-            Dialog::new("settings-exit-pending", "Finishing settings")
+            Dialog::new("settings-exit-pending", "settings.exit.finishing")
                 .focus_scope(&self.exit_focus)
                 .return_focus(&self.focus)
                 .dismissible(false)
                 .content(
-                    DialogFrame::new("settings-exit-pending-frame", "Finishing settings")
+                    DialogFrame::new("settings-exit-pending-frame", "settings.exit.finishing")
                         .colors(DialogColors {
                             surface: p.surface,
                             header: p.sidebar,
@@ -28,7 +28,7 @@ impl Settings {
                                 .child(Spinner::new())
                                 .child(crate::localization::text(
                                     cx,
-                                    "rs.ui.copy.continueMainWindow",
+                                    "settings.exit.continueMainWindow",
                                 )),
                         ),
                 )

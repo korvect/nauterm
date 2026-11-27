@@ -95,6 +95,7 @@ impl DatabaseRequest {
                 | Self::CloudRestoreVersion { .. }
                 | Self::CloudChangeMasterKey { .. }
                 | Self::CloudListHistory { .. }
+                | Self::RotateSyncMasterKey { .. }
                 | Self::LocalSyncBackupRestore { .. }
         )
     }

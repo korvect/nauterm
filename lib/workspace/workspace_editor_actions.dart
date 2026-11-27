@@ -82,12 +82,16 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
     onSaved?.call(saved);
   }
 
-  void _createGroupForEditor(String initialName, ValueChanged<int> onCreated) {
+  void _createGroupForEditor(
+    String initialName,
+    ValueChanged<HostGroup> onCreated, {
+    required bool rootOnly,
+  }) {
     _pushEditor(
-      _GroupEditorRequest(initialName: initialName),
+      _GroupEditorRequest(initialName: initialName, rootOnly: rootOnly),
       onSaved: (saved) {
-        if (saved case HostGroup(id: final id?)) {
-          onCreated(id);
+        if (saved is HostGroup && saved.id != null) {
+          onCreated(saved);
         }
       },
     );
@@ -243,6 +247,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
     var importedHosts = 0;
     var importedKeys = 0;
     var reusedKeys = 0;
+    var hostsWithoutKeys = 0;
     var skipped = 0;
     final existingSignatures = <String>{
       for (final host in _hostEntries)
@@ -324,6 +329,9 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
           ),
         );
         importedHosts++;
+        if (protocol != 'telnet' && identityPath != null && keyId == null) {
+          hostsWithoutKeys++;
+        }
       } catch (_) {
         skipped++;
       }
@@ -341,6 +349,11 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
           tr('workspace.import.result.skipped', args: {'count': skipped}),
         if (reusedKeys > 0)
           tr('workspace.import.result.reusedKeys', args: {'count': reusedKeys}),
+        if (hostsWithoutKeys > 0)
+          tr(
+            'workspace.import.result.unconfiguredHostKeys',
+            args: {'count': hostsWithoutKeys},
+          ),
       ].join(' '),
     );
   }
@@ -461,13 +474,17 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
           host,
     ];
     final keyFiles = <OpenSshImportFile>[];
+    var skippedFiles = 0;
     await for (final entity in directory.list(followLinks: false)) {
       if (entity is! io.File) continue;
       final name = entity.path.split(io.Platform.pathSeparator).last;
       if (_ignoredOpenSshImportFile(name)) continue;
       try {
         final stat = await entity.stat();
-        if (stat.size > 1024 * 1024) continue;
+        if (stat.size > 1024 * 1024) {
+          skippedFiles++;
+          continue;
+        }
         final contents = await _readImportText(entity);
         if (isOpenSshPrivateKey(contents) || isOpenSshPublicKey(contents)) {
           keyFiles.add(
@@ -475,12 +492,13 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
           );
         }
       } catch (_) {
-        // A single unreadable file should not block the rest of ~/.ssh.
+        skippedFiles++;
       }
     }
     return HostImportBundle(
       hosts: _deduplicateImportCandidates(hosts),
       keys: collectOpenSshKeys(keyFiles),
+      skippedFiles: skippedFiles,
     );
   }
 
@@ -688,12 +706,21 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
   }
 
   void _editHost(_HostItem item) {
-    final existing = _dataStore?.getHost(item.id);
-    if (existing == null) {
-      _showWorkspaceMessage('Host is not available.');
+    if (_dataStore == null) {
+      _showWorkspaceMessage(
+        tr(
+          'workspace.host.error.unavailable',
+          fallback: 'Host is not available.',
+        ),
+      );
       return;
     }
-    _openEditor(_HostEditorRequest(initial: existing));
+    _openEditor(
+      _LoadHostEditorRequest(
+        host: item,
+        databasePath: NautermPaths.resolve().databasePath,
+      ),
+    );
   }
 
   Future<void> _saveHost(HostEntry host) async {
@@ -894,7 +921,23 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       throw StateError('Database is not ready.');
     }
     final id = store.saveKey(key);
-    final saved = store.getKey(id) ?? KeyEntry(id: id, name: key.name);
+    // Saving the key already committed. A failed read must not cause the
+    // wizard to retry the insert and create a second copy.
+    KeyEntry? savedEntry;
+    try {
+      savedEntry = store.getKey(id);
+    } on NautermDataException {
+      // The submitted key can populate the editor until the next DB refresh.
+    }
+    final saved =
+        savedEntry ??
+        KeyEntry(
+          id: id,
+          name: key.name,
+          privateKey: key.privateKey,
+          publicKey: key.publicKey,
+          passphrase: key.passphrase,
+        );
     if (!mounted || _editorStack.isEmpty) {
       return;
     }
@@ -1540,36 +1583,65 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
   }
 
   void _deletePortForward(PortForwardEntry portForward) {
-    unawaited(_confirmAndDeletePortForward(portForward));
+    unawaited(_confirmAndDeletePortForwards([portForward]));
   }
 
-  Future<void> _confirmAndDeletePortForward(
-    PortForwardEntry portForward,
-  ) async {
-    final id = portForward.id;
-    if (id == null) {
-      return;
-    }
-    final confirmed = await _confirmDelete(
-      title: 'Delete Forward?',
-      message: 'Delete "${portForward.name}"? This cannot be undone.',
-    );
-    if (!confirmed) {
-      return;
-    }
-    final store = _dataStore;
-    if (store == null) {
-      return;
-    }
-    FfiPortForwarding.stop(id);
-    _runningPortForwardIds.remove(id);
-    _portForwardStatuses.remove(id);
-    store.deletePortForward(id);
-    _setWorkspaceState(() {
-      _portForwardEntries = [
+  void _deleteSelectedPortForwards(List<_PortForwardItem> selected) {
+    final ids = selected.map((forward) => forward.id).toSet();
+    unawaited(
+      _confirmAndDeletePortForwards([
         for (final entry in _portForwardEntries)
-          if (entry.id != id) entry,
-      ];
+          if (ids.contains(entry.id)) entry,
+      ]),
+    );
+  }
+
+  Future<void> _confirmAndDeletePortForwards(
+    List<PortForwardEntry> forwards,
+  ) async {
+    final targets = {for (final forward in forwards) ?forward.id: forward};
+    final store = _dataStore;
+    if (targets.isEmpty || store == null) return;
+    final single = targets.length == 1;
+    final confirmed = await _confirmDelete(
+      title: single
+          ? 'workspace.dialog.deleteForward'
+          : 'workspace.dialog.deleteForwards',
+      message: single
+          ? 'workspace.dialog.deleteForward.description'
+          : 'workspace.dialog.deleteForwards.description',
+      details: single ? targets.values.single.name : null,
+      messageArgs: {'count': targets.length},
+    );
+    if (!confirmed || !mounted || !identical(_dataStore, store)) return;
+
+    final stoppedIds = <int>{};
+    var deleted = false;
+    try {
+      for (final id in targets.keys) {
+        FfiPortForwarding.stop(id);
+        stoppedIds.add(id);
+      }
+      store.deletePortForwards(targets.keys.toList(growable: false));
+      deleted = true;
+    } on Object catch (error) {
+      _showWorkspaceMessage(error.toString());
+    }
+    _setWorkspaceState(() {
+      _runningPortForwardIds.removeAll(stoppedIds);
+      for (final id in stoppedIds) {
+        _portForwardStatuses.remove(id);
+      }
+      if (deleted) {
+        _portForwardEntries = [
+          for (final entry in _portForwardEntries)
+            if (!targets.containsKey(entry.id)) entry,
+        ];
+        if (_editorRequest case _PortForwardEditorRequest(initial: final entry?)
+            when targets.containsKey(entry.id)) {
+          _editorRequest = null;
+        }
+      }
       _portForwards = _portForwardEntries
           .map(
             (portForward) => _mapPortForward(
@@ -1580,8 +1652,10 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
             ),
           )
           .toList(growable: false);
-      _editorRequest = null;
     });
+    if (deleted) {
+      _itemSelectionControllers[_SidebarSection.portForwarding]!.clear();
+    }
   }
 
   void _togglePortForward(_PortForwardItem item, bool enabled) {
@@ -2036,10 +2110,9 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
     _SnippetPackageItem package,
   ) async {
     final confirmed = await _confirmDelete(
-      title: 'Delete snippet package?',
-      message:
-          'Delete "${package.name}"? Its snippets will be kept without a '
-          'package.',
+      title: 'workspace.dialog.deleteSnippetPackage',
+      message: 'workspace.dialog.deleteSnippetPackage.description',
+      details: package.name,
     );
     if (!confirmed || !mounted) {
       return;
@@ -2135,8 +2208,9 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
 
   Future<void> _confirmAndDeleteSnippet(_SnippetItem item) async {
     final confirmed = await _confirmDelete(
-      title: 'Delete Snippet?',
-      message: 'Delete "${item.description}"? This cannot be undone.',
+      title: 'workspace.dialog.deleteSnippet',
+      message: 'workspace.dialog.deleteSnippet.description',
+      details: item.description,
     );
     if (!confirmed) {
       return;
@@ -2288,6 +2362,15 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
     });
   }
 
+  Future<void> _reloadShellHistory() async {
+    final history = await ShellHistoryFileStore(
+      NautermPaths.resolve().shellHistoryFile,
+    ).read();
+    if (mounted) {
+      _setWorkspaceState(() => _shellHistory = history);
+    }
+  }
+
   void _createSnippetFromShellHistory(String command) {
     final script = command.trim();
     if (script.isEmpty) {
@@ -2306,7 +2389,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
     final confirmed = await _confirmDelete(
       title: 'workspace.dialog.clearShellHistory',
       message: 'workspace.history.clearShell.description',
-      confirmLabel: 'Clear all',
+      confirmLabel: 'workspace.label.clearAll',
     );
     if (!confirmed || !mounted) {
       return;
@@ -2344,131 +2427,91 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
     });
   }
 
-  Future<void> _deleteTerminalLog(TerminalLogEntry log) async {
-    final confirmed = await _confirmDelete(
-      title: 'workspace.dialog.deleteTerminalHistory',
-      message: 'workspace.dialog.deleteFinishedLogs.description',
-      messageArgs: const {'count': 1},
-    );
-    if (!confirmed) return;
+  Future<void> _deleteTerminalLog(TerminalLogEntry log) =>
+      _deleteFinishedTerminalLogs(only: log);
 
+  Future<void> _clearTerminalLogs() => _deleteFinishedTerminalLogs();
+
+  Future<void> _deleteFinishedTerminalLogs({TerminalLogEntry? only}) async {
     final store = _terminalLogCaptureStore;
     final dataStore = _dataStore;
-    if (store == null || dataStore == null) return;
-    final owned = _recordingService.leaseFor(log.id);
-    TerminalRecordingLease? acquired;
-    try {
-      acquired = owned == null
-          ? store.tryAcquireLease(log.id, existingOnly: log.endedAt == null)
-          : null;
-      if (owned == null && acquired == null) {
-        throw StateError('This recording is in use in another window.');
-      }
-      _recordingService.ignore(log.id);
-      await _recordingService.enqueueSave(() async {
-        await _recordingService.closeCapture(log.id);
-        final current = dataStore.getTerminalLog(log.id);
-        if (current != null) {
-          if (current.captureFile != log.captureFile ||
-              current.captureSha256 != log.captureSha256) {
-            throw StateError('The recording changed. Refresh and try again.');
-          }
-          dataStore.deleteTerminalLog(log.id);
-          if (current.captureFile.isNotEmpty) {
-            await store.deleteCapture(current.captureFile);
-          }
-        }
-        _recordingService.removeRecording(log.id);
-      });
-      final usage = await store.diskUsage();
-      if (!mounted) return;
-      _setWorkspaceState(() {
-        _terminalLogs = [
-          for (final entry in _terminalLogs)
-            if (entry.id != log.id) entry,
-        ];
-        _terminalCaptureDiskUsage = usage;
-        if (_selectedLogId == log.id) _selectedLogId = null;
-      });
-    } on Object catch (error) {
-      if (mounted) {
-        _showWorkspaceMessage('Failed to delete terminal log: $error');
-      }
-    } finally {
-      acquired?.close();
-      if (owned != null && _recordingService.isIgnored(log.id)) {
-        _recordingService.releaseLease(log.id);
-      }
+    if (store == null ||
+        dataStore == null ||
+        _workspaceModel.terminalLogsDeleting) {
+      return;
     }
-  }
-
-  Future<void> _clearTerminalLogs() async {
-    final confirmed = await _confirmDelete(
-      title: 'Clear all terminal history?',
-      message: 'This permanently deletes session metadata and encrypted captures. Active sessions in this window will stop being recorded; recordings in use in other windows are preserved.',
-      confirmLabel: 'Clear all',
-    );
-    if (!confirmed) return;
-    final store = _terminalLogCaptureStore;
-    final dataStore = _dataStore;
-    if (store == null || dataStore == null) return;
-    _recordingService.stopAllRecordings();
-    final acquired = <TerminalRecordingLease>[];
+    _workspaceModel.terminalLogsDeleting = true;
+    Set<String> deleted = const {};
     try {
-      await _recordingService.enqueueSave(() async {
-        await _recordingService.closeAllCaptures();
-        final logs = <TerminalLogEntry>[];
-        var offset = 0;
-        while (true) {
-          final page = dataStore.listTerminalLogs(limit: 500, offset: offset);
-          logs.addAll(page);
-          if (page.length < 500) break;
-          offset += page.length;
-        }
-        final selected = <TerminalLogEntry>[];
-        for (final log in logs) {
-          if (_recordingService.leaseFor(log.id) == null) {
-            final lease = store.tryAcquireLease(
-              log.id,
-              existingOnly: log.endedAt == null,
-            );
-            if (lease == null) continue;
-            acquired.add(lease);
-          }
-          final current = dataStore.getTerminalLog(log.id);
-          if (current != null) selected.add(current);
-        }
-        dataStore.deleteTerminalLogs(selected.map((entry) => entry.id));
-        for (final log in selected) {
-          if (log.captureFile.isNotEmpty) {
-            await store.deleteCapture(log.captureFile);
-          }
-        }
-        _recordingService.clearRecordings();
-      });
-      final remaining = dataStore.listTerminalLogs(
-        limit: _NautermWorkspaceSessionActions._terminalLogPageSize,
+      final review = _recordingService.prepareLogDeletion(
+        dataStore,
+        store,
+        only: only,
       );
-      final usage = await store.diskUsage();
-      if (!mounted) return;
-      _setWorkspaceState(() {
-        _terminalLogs = remaining;
-        _selectedLogId = null;
-        _terminalLogsHasMore =
-            remaining.length ==
-            _NautermWorkspaceSessionActions._terminalLogPageSize;
-        _terminalCaptureDiskUsage = usage;
-      });
+      final finished = review.finished;
+      if (finished.isEmpty) {
+        if (mounted) {
+          _showWorkspaceMessage(
+            tr(
+              review.hasActive
+                  ? 'workspace.logs.delete.closeSessionsFirst'
+                  : 'workspace.logs.delete.noneFinished',
+            ),
+          );
+        }
+        return;
+      }
+      final confirmed = await _confirmDelete(
+        title: only == null
+            ? 'workspace.dialog.deleteFinishedLogs'
+            : 'workspace.dialog.deleteTerminalHistory',
+        message: 'workspace.dialog.deleteFinishedLogs.description',
+        messageArgs: {'count': finished.length},
+        confirmLabel: 'common.action.delete',
+      );
+      if (!confirmed || !mounted || !identical(_dataStore, dataStore)) return;
+
+      final result = await _recordingService.deleteFinishedLogs(
+        dataStore,
+        store,
+        finished,
+        isCurrent: () => mounted && identical(_dataStore, dataStore),
+      );
+      deleted = result.deleted;
+      if (result.cleanupError case final error?) throw error;
     } on Object catch (error) {
       if (mounted) {
-        _showWorkspaceMessage('Failed to clear terminal logs: $error');
+        _showWorkspaceMessage(
+          error.toString(),
+          type: _WorkspaceNotificationType.error,
+        );
       }
     } finally {
-      for (final lease in acquired) {
-        lease.close();
+      _workspaceModel.terminalLogsDeleting = false;
+      if (mounted && deleted.isNotEmpty) {
+        _setWorkspaceState(() {
+          _terminalLogs = [
+            for (final log in _terminalLogs)
+              if (!deleted.contains(log.id)) log,
+          ];
+          if (deleted.contains(_selectedLogId)) _selectedLogId = null;
+          if (only == null) _terminalLogsHasMore = true;
+        });
+        if (only == null) _loadMoreTerminalLogs(retry: true);
+        try {
+          final usage = await store.diskUsage();
+          if (mounted && identical(_terminalLogCaptureStore, store)) {
+            _setWorkspaceState(() => _terminalCaptureDiskUsage = usage);
+          }
+        } on Object catch (error) {
+          if (mounted) {
+            _showWorkspaceMessage(
+              error.toString(),
+              type: _WorkspaceNotificationType.error,
+            );
+          }
+        }
       }
-      // Logging was stopped and its sinks closed even if publication failed.
-      _recordingService.releaseAllLeases();
     }
   }
 
@@ -2543,8 +2586,14 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       if (mounted) {
         _showWorkspaceMessage(
           format == _TerminalLogExportFormat.readableText
-              ? 'Readable terminal transcript exported.'
-              : 'Raw terminal stream exported.',
+              ? tr(
+                  'workspace.logs.export.readable.success',
+                  fallback: 'Readable terminal transcript exported.',
+                )
+              : tr(
+                  'workspace.logs.export.raw.success',
+                  fallback: 'Raw terminal stream exported.',
+                ),
         );
       }
     } on Object catch (error) {
@@ -2704,7 +2753,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
     } on Object catch (error) {
       if (!controller.isDisposed) {
         controller.write(
-          '\r\nUnable to replay this terminal session: $error\r\n',
+          '\r\n$error\r\n${tr('workspace.logs.replay.retryFromLogs')}\r\n',
         );
       }
       rethrow;
@@ -3066,8 +3115,9 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
 
   Future<void> _deleteGroup(_GroupItem item) async {
     final confirmed = await _confirmDelete(
-      title: 'Delete Group?',
-      message: 'Delete "${item.name}"? Hosts in this group will be ungrouped.',
+      title: 'workspace.dialog.deleteGroup',
+      message: 'workspace.dialog.deleteGroup.description',
+      details: item.name,
     );
     if (!confirmed) {
       return;
@@ -3167,8 +3217,9 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
 
   Future<void> _deleteHost(_HostItem item) async {
     final confirmed = await _confirmDelete(
-      title: 'Delete Host?',
-      message: 'Delete "${item.name}"? This cannot be undone.',
+      title: 'workspace.dialog.deleteHost',
+      message: 'workspace.dialog.deleteItem.description',
+      details: item.name,
     );
     if (!confirmed) {
       return;
@@ -3314,9 +3365,19 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
     if (file == null || !mounted) return;
 
     try {
-      if (await io.FileSystemEntity.type(file.path) !=
-          io.FileSystemEntityType.file) {
-        throw const FormatException('Choose a regular known_hosts file.');
+      final type = await io.FileSystemEntity.type(file.path);
+      if (!mounted) return;
+      if (type != io.FileSystemEntityType.file) {
+        _showWorkspaceMessage(
+          context.tr(
+            'workspace.knownHosts.import.failure',
+            args: {
+              'error': context.tr('workspace.knownHosts.import.fileRequired'),
+            },
+          ),
+          type: _WorkspaceNotificationType.error,
+        );
+        return;
       }
       final importedText = await file.readAsString();
       if (!mounted) return;
@@ -3347,11 +3408,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
         _showWorkspaceMessage(
           context.tr(
             'workspace.knownHosts.import.failure',
-            args: {
-              'error': error is FormatException
-                  ? context.tr(error.message)
-                  : error,
-            },
+            args: {'error': error},
           ),
           type: _WorkspaceNotificationType.error,
         );
@@ -3410,8 +3467,9 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
 
   Future<void> _deleteKnownHost(_KnownHostItem item) async {
     final confirmed = await _confirmDelete(
-      title: 'Delete Known Host?',
-      message: 'Delete "${item.name}" from known hosts?',
+      title: 'workspace.dialog.deleteKnownHost',
+      message: 'workspace.dialog.deleteKnownHost.description',
+      details: item.name,
     );
     if (!confirmed) {
       return;
@@ -3465,7 +3523,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
     _setWorkspaceState(() {
       _knownHostsText = updatedText;
     });
-    _showWorkspaceMessage('Known hosts deleted.');
+    _showWorkspaceMessage('workspace.knownHosts.delete.success');
   }
 
   void _handleKeyContextActions(
@@ -3582,8 +3640,9 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
 
   Future<void> _deleteKey(_KeyItem item) async {
     final confirmed = await _confirmDelete(
-      title: 'Delete Key?',
-      message: 'Delete "${item.name}"? This cannot be undone.',
+      title: 'workspace.dialog.deleteKey',
+      message: 'workspace.dialog.deleteCredential.description',
+      details: item.name,
     );
     if (!confirmed) {
       return;
@@ -3734,8 +3793,9 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
 
   Future<void> _deleteIdentity(_IdentityItem item) async {
     final confirmed = await _confirmDelete(
-      title: 'Delete Identity?',
-      message: 'Delete "${item.name}"? This cannot be undone.',
+      title: 'workspace.dialog.deleteIdentity',
+      message: 'workspace.dialog.deleteCredential.description',
+      details: item.name,
     );
     if (!confirmed) {
       return;
@@ -3943,8 +4003,9 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       return;
     }
     final confirmed = await _confirmDelete(
-      title: 'Delete Proxy?',
-      message: 'Delete "$name"? This cannot be undone.',
+      title: 'workspace.dialog.deleteProxy',
+      message: 'workspace.dialog.deleteProxy.description',
+      details: name,
     );
     if (!confirmed) {
       return;

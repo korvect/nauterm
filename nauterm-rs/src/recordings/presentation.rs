@@ -109,7 +109,7 @@ pub(super) fn date_range(
 ) -> (String, String) {
     let Some(start) = DateTime::from_timestamp_millis(entry.started_at) else {
         return (
-            crate::localization::text_for(language, "Unknown date").to_string(),
+            crate::localization::text_for(language, "common.label.unknownDate").to_string(),
             String::new(),
         );
     };

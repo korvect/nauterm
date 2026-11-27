@@ -181,7 +181,7 @@ impl Nauterm {
             .w_full()
             .disabled(draft.busy)
             .icon(crate::assets::icon(IconName::Plus))
-            .label("Add protocol")
+            .label("workspace.host.protocol.add")
             .dropdown_menu(move |mut menu, _, _| {
                 if ssh {
                     let owner = owner.clone();
@@ -209,7 +209,12 @@ impl Nauterm {
         let p = Palette::new(self.data.dark);
         let mut fields = self.protocol_authentication_fields(editor, Target::Telnet, cx);
         if draft.telnet.more {
-            fields.push(draft.telnet.encoding.field("Encoding", draft.busy));
+            fields.push(
+                draft
+                    .telnet
+                    .encoding
+                    .field("common.label.encoding", draft.busy),
+            );
         }
         fields.push(
             div()

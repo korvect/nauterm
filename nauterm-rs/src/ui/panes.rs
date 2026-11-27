@@ -698,7 +698,7 @@ impl Nauterm {
                                                     .custom(chrome)
                                                     .icon(crate::assets::icon(IconName::X))
                                                     .icon_size(px(13.))
-                                                    .tooltip("Close terminal")
+                                                    .tooltip("workspace.label.closeTerminal")
                                                     .on_click(cx.listener(
                                                         move |this, _, window, cx| {
                                                             cx.stop_propagation();
@@ -738,9 +738,9 @@ impl Nauterm {
                                         .icon(IconName::Keyboard)
                                         .text_color(if composer { p.accent } else { p.muted })
                                         .tooltip(if composer {
-                                            "Hide Composer"
+                                            "terminal.action.hideComposer"
                                         } else {
-                                            "Show Composer"
+                                            "terminal.action.showComposer"
                                         })
                                         .on_click(cx.listener(move |this, _, window, cx| {
                                             cx.stop_propagation();
@@ -772,7 +772,7 @@ impl Nauterm {
                                             .custom(chrome)
                                             .icon(IconName::Folder)
                                             .disabled(session.ssh.is_none())
-                                            .tooltip("Open SFTP")
+                                            .tooltip("terminal.label.openSftp")
                                             .on_click(cx.listener(move |this, _, window, cx| {
                                                 cx.stop_propagation();
                                                 this.activate_pane(tab_id, pane_id, cx);
@@ -787,7 +787,7 @@ impl Nauterm {
                                             .ghost()
                                             .custom(chrome)
                                             .icon(IconName::SquarePlus)
-                                            .tooltip("New Tab")
+                                            .tooltip("terminal.label.newTab")
                                             .on_click(cx.listener(move |this, _, window, cx| {
                                                 cx.stop_propagation();
                                                 this.duplicate_pane(
@@ -802,7 +802,7 @@ impl Nauterm {
                                         .ghost()
                                         .custom(chrome)
                                         .icon(IconName::SquareSplitHorizontal)
-                                        .tooltip("Split right")
+                                        .tooltip("common.label.splitRight")
                                         .on_click(cx.listener(move |this, _, window, cx| {
                                             cx.stop_propagation();
                                             this.duplicate_pane(
@@ -820,7 +820,7 @@ impl Nauterm {
                                         .ghost()
                                         .custom(chrome)
                                         .icon(IconName::SquareSplitVertical)
-                                        .tooltip("Split down")
+                                        .tooltip("common.label.splitDown")
                                         .on_click(cx.listener(move |this, _, window, cx| {
                                             cx.stop_propagation();
                                             this.duplicate_pane(

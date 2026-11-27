@@ -60,7 +60,8 @@ impl HostPicker {
                 }
             },
         );
-        let search = cx.new(|cx| InputState::new(window, cx).placeholder("Search hosts or tags"));
+        let search = cx
+            .new(|cx| InputState::new(window, cx).placeholder("workspace.label.searchHostsOrTags"));
         let subscription = cx.subscribe(&search, |this, _, event: &InputEvent, cx| {
             if matches!(event, InputEvent::PressEnter { .. })
                 && let Some(host) = this.hosts(cx).first()
@@ -153,8 +154,10 @@ impl HostPicker {
             current = group.parent;
         }
         names.reverse();
-        names.insert(0, "Vaults");
-        names.join(" / ")
+        std::iter::once("Vaults")
+            .chain(names)
+            .collect::<Vec<_>>()
+            .join(" / ")
     }
     fn row(&self, id: String, name: String, detail: String, leading: AnyElement) -> Button {
         Button::new(SharedString::from(id))
@@ -264,7 +267,7 @@ impl Render for HostPicker {
                             .toolbar()
                             .ghost()
                             .icon(IconName::ArrowLeft)
-                            .tooltip("Back")
+                            .tooltip("common.action.back")
                             .on_click(cx.listener(|this, _, _, cx| this.back(cx))),
                     )
                     .child(
@@ -296,7 +299,7 @@ impl Render for HostPicker {
                             Button::new("picker-use-local")
                                 .toolbar()
                                 .accent()
-                                .label("Local")
+                                .label("common.label.local")
                                 .icon(IconName::Folder)
                                 .on_click(
                                     cx.listener(|_, _, _, cx| cx.emit(PickerEvent::UseLocal)),
@@ -320,7 +323,10 @@ impl Render for HostPicker {
                                 .appearance(false)
                                 .text_size(px(12.))
                                 .prefix(Icon::new(IconName::Search).with_size(px(16.)))
-                                .aria_label(crate::localization::text(cx, "Search hosts or tags"))
+                                .aria_label(crate::localization::text(
+                                    cx,
+                                    "workspace.label.searchHostsOrTags",
+                                ))
                                 .cleanable(true),
                         ),
                     )
@@ -330,7 +336,7 @@ impl Render for HostPicker {
                             .toolbar()
                             .ghost()
                             .icon(self.order.icon())
-                            .tooltip(self.order.label())
+                            .tooltip(self.order.label_key())
                             .dropdown_menu(move |menu, _, cx| {
                                 let order = sort_owner
                                     .upgrade()

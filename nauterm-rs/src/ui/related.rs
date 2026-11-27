@@ -198,7 +198,7 @@ impl Nauterm {
             vec![]
         };
         editor.selects.as_ref().unwrap().groups.field_with_actions(
-            "Parent group",
+            "workspace.label.parentGroup",
             editor.host.as_ref().is_some_and(|draft| draft.busy),
             actions,
         )

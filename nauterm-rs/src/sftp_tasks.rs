@@ -402,7 +402,7 @@ impl Render for TaskQueue {
                             .h(px(24.))
                             .px(px(4.))
                             .text_size(px(11.))
-                            .label("Clear Tasks")
+                            .label("sftp.label.clearTasks")
                             .disabled(!self.rows.has_finished())
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.clear_finished(cx);
@@ -531,7 +531,7 @@ impl TaskQueue {
                                     .hover(p.control.into())
                                     .active(p.accent.alpha(0.12).into()),
                             )
-                            .label("Clear Tasks")
+                            .label("sftp.label.clearTasks")
                             .disabled(!self.rows.has_finished())
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.clear_finished(cx);

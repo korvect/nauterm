@@ -51,9 +51,9 @@ impl PageState {
     }
     pub fn header_label(self, show_logs: bool) -> &'static str {
         match self.header {
-            HeaderAction::CopyLogs => "Copy logs",
-            HeaderAction::ToggleLogs if show_logs => "Hide logs",
-            HeaderAction::ToggleLogs => "Show logs",
+            HeaderAction::CopyLogs => "connection.action.copyLogs",
+            HeaderAction::ToggleLogs if show_logs => "connection.action.hideLogs",
+            HeaderAction::ToggleLogs => "connection.action.showLogs",
             HeaderAction::None => "",
         }
     }
@@ -70,12 +70,12 @@ mod tests {
         assert!(page.scroll_body);
         assert!(!page.shows_diagnostics());
         assert_eq!(page.header, HeaderAction::ToggleLogs);
-        assert_eq!(page.header_label(false), "Show logs");
+        assert_eq!(page.header_label(false), "connection.action.showLogs");
         let logs = PageState::new(Phase::Exited, false, true);
         assert_eq!(logs.body, Body::Logs);
         assert!(logs.shows_diagnostics());
         assert!(!logs.scroll_body);
-        assert_eq!(logs.header_label(true), "Hide logs");
+        assert_eq!(logs.header_label(true), "connection.action.hideLogs");
     }
     #[test]
     fn failure_always_keeps_its_diagnostics_and_copy_action() {
@@ -84,7 +84,7 @@ mod tests {
             assert_eq!(page.body, Body::Failure);
             assert!(page.shows_diagnostics());
             assert!(!page.scroll_body);
-            assert_eq!(page.header_label(show_logs), "Copy logs");
+            assert_eq!(page.header_label(show_logs), "connection.action.copyLogs");
         }
     }
     #[test]

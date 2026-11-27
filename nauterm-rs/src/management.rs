@@ -19,12 +19,12 @@ impl SortOrder {
         Self::NewestFirst,
         Self::OldestFirst,
     ];
-    pub fn label(self) -> &'static str {
+    pub fn label_key(self) -> &'static str {
         match self {
-            Self::NameAscending => "Name A–Z",
-            Self::NameDescending => "Name Z–A",
-            Self::NewestFirst => "Newest to oldest",
-            Self::OldestFirst => "Oldest to newest",
+            Self::NameAscending => "workspace.sort.nameAscending",
+            Self::NameDescending => "workspace.sort.nameDescending",
+            Self::NewestFirst => "workspace.sort.newestFirst",
+            Self::OldestFirst => "workspace.sort.oldestFirst",
         }
     }
     pub fn icon(self) -> IconName {
@@ -69,7 +69,7 @@ pub fn sort_menu(
     for order in SortOrder::ALL {
         let changed = changed.clone();
         menu = menu.item(
-            MenuItem::localized(order.label())
+            MenuItem::localized(order.label_key())
                 .icon(order.icon())
                 .checked(order == selected)
                 .on_click(move |_, window, cx| changed(order, window, cx)),

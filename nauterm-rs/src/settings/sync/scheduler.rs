@@ -21,7 +21,7 @@ impl Panel {
         self.background_running = true;
         self.error = None;
         self.validation_error = None;
-        self.notice = Some("Automatic sync is running…".into());
+        self.notice = Some("settings.sync.status.syncing".into());
         cx.notify();
     }
     pub fn automatic_sync_finished(
@@ -42,21 +42,49 @@ impl Panel {
                         self.overview = Some(overview.clone());
                     }
                     Err(error) => {
-                        self.error = Some(format!("Could not refresh sync status: {error}"))
+                        self.error = Some(
+                            crate::localization::format(
+                                cx,
+                                "settings.sync.error.refreshStatus",
+                                &[("error", &error.to_string())],
+                            )
+                            .to_string(),
+                        )
                     }
                 }
                 match &attempt.outcome {
                     Ok(Some(summary)) => {
-                        self.notice = Some(summary.message_for("Automatic sync complete"))
+                        self.notice = Some(summary.message(
+                            crate::localization::language(cx),
+                            "settings.sync.result.automaticComplete",
+                        ))
                     }
                     Ok(None) => {}
-                    Err(error) => self.error = Some(format!("Automatic sync failed: {error}")),
+                    Err(error) => {
+                        self.error = Some(
+                            crate::localization::format(
+                                cx,
+                                "settings.sync.error.automatic",
+                                &[("error", &error.to_string())],
+                            )
+                            .to_string(),
+                        )
+                    }
                 }
                 if attempt.needs_refresh() {
                     self.backups = None;
                 }
             }
-            Err(error) => self.error = Some(format!("Automatic sync failed: {error}")),
+            Err(error) => {
+                self.error = Some(
+                    crate::localization::format(
+                        cx,
+                        "settings.sync.error.automatic",
+                        &[("error", &error.to_string())],
+                    )
+                    .to_string(),
+                )
+            }
         }
         // Closing waited for storage to settle, not for a successful network.
         cx.emit(Event::Settled(true));

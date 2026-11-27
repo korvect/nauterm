@@ -155,38 +155,44 @@ class _NautermRootState extends State<NautermRoot>
     }
 
     _isClosingMainWindow = true;
-    final shouldClose = _shouldHideMainWindowOnClose
-        ? !_workspaceController.hasActiveWorkspace ||
-              await _workspaceController.confirmCloseWindowIfNeeded()
-        : await _workspaceController.confirmQuitIfNeeded();
-    _isClosingMainWindow = false;
-    if (!mounted || !shouldClose) {
-      return;
-    }
+    try {
+      final shouldClose = _shouldHideMainWindowOnClose
+          ? !_workspaceController.hasActiveWorkspace ||
+                await _workspaceController.confirmCloseWindowIfNeeded()
+          : await _workspaceController.confirmQuitIfNeeded();
+      if (!mounted || !shouldClose) {
+        return;
+      }
 
-    if (_shouldHideMainWindowOnClose) {
-      await _workspaceController.saveRestorationStateForClose();
-      final visibilityRevision = ++_mainWindowVisibilityRevision;
-      markSettingsWindowRequested(false);
-      hideMainWindow();
-      hideSettingsNativeWindow();
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || visibilityRevision != _mainWindowVisibilityRevision) {
-          return;
-        }
-        setState(() {
-          _isMainWindowContentMounted = false;
-          _isSettingsWindowMounted = false;
-          _isSettingsWindowContentMounted = false;
+      if (_shouldHideMainWindowOnClose) {
+        await _workspaceController.withExitProgress(() async {
+          await _workspaceController.saveRestorationStateForClose();
+          await _workspaceController.flushSftpForClose();
         });
-      });
-      WidgetsBinding.instance.scheduleFrame();
-      return;
-    }
+        if (!mounted) return;
+        final visibilityRevision = ++_mainWindowVisibilityRevision;
+        markSettingsWindowRequested(false);
+        hideMainWindow();
+        hideSettingsNativeWindow();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || visibilityRevision != _mainWindowVisibilityRevision) {
+            return;
+          }
+          setState(() {
+            _isMainWindowContentMounted = false;
+            _isSettingsWindowMounted = false;
+            _isSettingsWindowContentMounted = false;
+          });
+        });
+        WidgetsBinding.instance.scheduleFrame();
+        return;
+      }
 
-    await _syncService.close();
-    await _workspaceController.flushAndClose();
-    await quitNautermApplication();
+      await _finishQuitting();
+      await quitNautermApplication();
+    } finally {
+      _isClosingMainWindow = false;
+    }
   }
 
   void _handleMainWindowDestroyed() {
@@ -307,14 +313,22 @@ class _NautermRootState extends State<NautermRoot>
 
   @override
   Future<bool> requestQuit() async {
-    final shouldQuit = await _workspaceController.confirmQuitIfNeeded();
-    if (!shouldQuit) {
-      return false;
+    if (_isClosingMainWindow) return false;
+    _isClosingMainWindow = true;
+    try {
+      if (!await _workspaceController.confirmQuitIfNeeded()) return false;
+      await _finishQuitting();
+      return true;
+    } finally {
+      _isClosingMainWindow = false;
     }
-    await _syncService.close();
-    await _workspaceController.flushAndClose();
-    return true;
   }
+
+  Future<void> _finishQuitting() =>
+      _workspaceController.withExitProgress(() async {
+        await _syncService.close();
+        await _workspaceController.flushAndClose();
+      });
 
   @override
   Widget build(BuildContext context) {

@@ -89,17 +89,17 @@ impl Page {
         Self::Logs,
     ];
 
-    pub fn label(self) -> &'static str {
+    pub fn label_key(self) -> &'static str {
         match self {
-            Self::Hosts => "Hosts",
-            Self::Keychain => "Keychain",
-            Self::Proxies => "Proxies",
-            Self::PortForwards => "Port Forwarding",
-            Self::Snippets => "Snippets",
-            Self::KnownHosts => "Known Hosts",
-            Self::Logs => "Logs",
-            Self::Sftp => "SFTP",
-            Self::Sessions => "Sessions",
+            Self::Hosts => "workspace.sidebar.hosts.label",
+            Self::Keychain => "workspace.sidebar.keychain.label",
+            Self::Proxies => "workspace.sidebar.proxies.label",
+            Self::PortForwards => "workspace.sidebar.portForwarding.label",
+            Self::Snippets => "workspace.sidebar.snippets.label",
+            Self::KnownHosts => "workspace.sidebar.knownHosts.label",
+            Self::Logs => "workspace.sidebar.logs.label",
+            Self::Sftp => "workspace.terminalTools.mode.sftp",
+            Self::Sessions => "common.label.sessions",
         }
     }
 }
@@ -115,14 +115,14 @@ pub enum ItemKind {
 }
 
 impl ItemKind {
-    pub fn label(self) -> &'static str {
+    pub fn new_label_key(self) -> &'static str {
         match self {
-            Self::Host => "Host",
-            Self::Group => "Group",
-            Self::Snippet => "Snippet",
-            Self::SnippetPackage => "Snippet Package",
-            Self::Forward => "Port Forward",
-            Self::Proxy => "Proxy",
+            Self::Host => "workspace.label.newHost",
+            Self::Group => "workspace.label.newGroup",
+            Self::Snippet => "workspace.label.newSnippet",
+            Self::SnippetPackage => "workspace.label.newSnippetPackage",
+            Self::Forward => "workspace.label.newForwarding",
+            Self::Proxy => "workspace.label.newProxy",
         }
     }
 }

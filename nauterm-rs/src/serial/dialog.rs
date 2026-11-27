@@ -102,9 +102,9 @@ impl Connection {
         );
         let parity = SelectModel::new(
             vec![
-                SelectOption::localized(Parity::None, "None"),
-                SelectOption::localized(Parity::Even, "Even"),
-                SelectOption::localized(Parity::Odd, "Odd"),
+                SelectOption::localized(Parity::None, "common.label.none"),
+                SelectOption::localized(Parity::Even, "common.label.even"),
+                SelectOption::localized(Parity::Odd, "common.label.odd"),
             ],
             Some(config.map_or(Parity::None, |config| config.parity)),
             window,
@@ -112,9 +112,9 @@ impl Connection {
         );
         let flow = SelectModel::new(
             vec![
-                SelectOption::localized(Flow::None, "None"),
-                SelectOption::localized(Flow::Software, "Software"),
-                SelectOption::localized(Flow::Hardware, "Hardware"),
+                SelectOption::localized(Flow::None, "common.label.none"),
+                SelectOption::localized(Flow::Software, "workspace.label.software"),
+                SelectOption::localized(Flow::Hardware, "common.label.hardware"),
             ],
             Some(config.map_or(Flow::None, |config| config.flow)),
             window,
@@ -279,7 +279,7 @@ impl Connection {
                 div()
                     .flex_1()
                     .min_w_0()
-                    .child(self.devices.field("Serial port", false)),
+                    .child(self.devices.field("workspace.label.serialPort", false)),
             )
             .child(
                 Button::new("refresh-serial-devices")
@@ -287,7 +287,7 @@ impl Connection {
                     .large()
                     .disabled(self.scanning)
                     .loading(self.scanning)
-                    .tooltip("Refresh serial devices")
+                    .tooltip("workspace.label.refreshSerialDevices")
                     .on_click(cx.listener(|this, _, window, cx| this.scan(window, cx))),
             )
             .into_any_element()
@@ -305,9 +305,9 @@ impl Render for Connection {
             .when(!self.embedded, |view| {
                 let path = self.path.read(cx).value();
                 let status = if self.scanning {
-                    "Scanning serial devices…".into()
+                    "workspace.serial.scanning".into()
                 } else if self.ports.is_empty() {
-                    "No serial devices found. Enter a path manually.".into()
+                    "workspace.serial.empty.description".into()
                 } else {
                     self.ports
                         .iter()
@@ -325,22 +325,22 @@ impl Render for Connection {
                         )
                     })
             })
-            .child(self.rates.digits_field("Baud rate", false))
+            .child(self.rates.digits_field("workspace.label.baudRate", false))
             .child(
                 div()
                     .flex()
                     .gap(px(10.))
                     .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .child(self.data_bits.required_field("Data bits", false)),
+                        div().flex_1().min_w_0().child(
+                            self.data_bits
+                                .required_field("workspace.label.dataBits", false),
+                        ),
                     )
                     .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .child(self.stop_bits.required_field("Stop bits", false)),
+                        div().flex_1().min_w_0().child(
+                            self.stop_bits
+                                .required_field("workspace.label.stopBits", false),
+                        ),
                     ),
             )
             .child(
@@ -351,13 +351,13 @@ impl Render for Connection {
                         div()
                             .flex_1()
                             .min_w_0()
-                            .child(self.parity.required_field("Parity", false)),
+                            .child(self.parity.required_field("common.label.parity", false)),
                     )
                     .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .child(self.flow.required_field("Flow control", false)),
+                        div().flex_1().min_w_0().child(
+                            self.flow
+                                .required_field("workspace.label.flowControl", false),
+                        ),
                     ),
             )
             .when_some(
@@ -367,14 +367,14 @@ impl Render for Connection {
         if self.embedded {
             return fields.into_any_element();
         }
-        DialogFrame::new("serial-connection-dialog", "Serial connection")
+        DialogFrame::new("serial-connection-dialog", "workspace.serial.dialog.title")
             .width(460.)
             .colors(DialogColors::workspace(dark))
             .content(fields)
             .action(
                 Button::new("serial-cancel")
                     .ghost()
-                    .label("Cancel")
+                    .label("common.action.cancel")
                     .on_click(|_, window, cx| crate::components::Modal::dismiss(window, cx)),
             )
             .when(self.allow_save, |dialog| {
@@ -388,7 +388,7 @@ impl Render for Connection {
             .action(
                 Button::new("serial-connect")
                     .primary()
-                    .label("Connect")
+                    .label("common.action.connect")
                     .on_click(cx.listener(|this, _, _, cx| this.submit(false, cx))),
             )
             .into_any_element()

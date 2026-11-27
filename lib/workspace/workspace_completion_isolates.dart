@@ -96,6 +96,8 @@ FfiSshDirectoryEntryListingResult _runSftpDirectoryEntryListing(
       arguments['hostKeyTrustMode'],
     ),
     sshCompatibilityMode: arguments['sshCompatibilityMode'] == true,
+    sudoSessionId: arguments['sudoSessionId'] as String?,
+    sudoPassword: arguments['sudoPassword'] as String?,
   );
 }
 

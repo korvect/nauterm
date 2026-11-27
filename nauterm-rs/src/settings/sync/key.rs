@@ -2,6 +2,7 @@
 //! until the first encrypted sync. It is never a database encryption password.
 use super::*;
 use crate::localization::{self, Language};
+use crate::sync::MasterKeyValidationError;
 use zeroize::Zeroizing;
 
 pub(super) struct Key {
@@ -84,7 +85,11 @@ impl Panel {
         let confirmation = Zeroizing::new(self.key.confirm.read(cx).value().to_string());
         self.key.confirmation_checked = true;
         if let Err(error) = crate::sync::validate_master_key(&value) {
-            self.validation_error = Some(error.to_string());
+            self.validation_error = Some(master_key_validation_message(
+                self.language,
+                "common.label.masterKey",
+                error,
+            ));
             cx.notify();
             return;
         }
@@ -135,7 +140,9 @@ impl Panel {
                             div()
                                 .id("sync-master-key-confirmation")
                                 .role(Role::Status)
-                                .aria_label(text(error.unwrap_or("Master Keys match.")))
+                                .aria_label(text(
+                                    error.unwrap_or("settings.sync.masterKey.confirmation.matches"),
+                                ))
                                 .flex()
                                 .items_center()
                                 .child(
@@ -176,7 +183,7 @@ impl Panel {
                 div().flex().justify_end().child(
                     Button::new("unlock-sync-management")
                         .outline()
-                        .label("Continue")
+                        .label("common.action.continue")
                         .disabled(self.busy())
                         .on_click(cx.listener(|this, _, window, cx| this.unlock_sync(window, cx))),
                 ),
@@ -198,12 +205,28 @@ impl Panel {
 
 fn confirmation_error(value: &str, confirmation: &str) -> Option<&'static str> {
     if confirmation.is_empty() {
-        Some("Confirm your Master Key.")
+        Some("settings.sync.masterKey.error.confirmationRequired")
     } else if value != confirmation {
-        Some("Master Key confirmation does not match.")
+        Some("settings.sync.masterKey.error.mismatch")
     } else {
         None
     }
+}
+
+pub(super) fn master_key_validation_message(
+    language: Language,
+    subject_key: &str,
+    error: MasterKeyValidationError,
+) -> String {
+    let key = match error {
+        MasterKeyValidationError::Length => "settings.sync.masterKey.error.length",
+        MasterKeyValidationError::Characters => "settings.sync.masterKey.error.characters",
+        MasterKeyValidationError::CharacterClasses => {
+            "settings.sync.masterKey.error.characterClasses"
+        }
+    };
+    let subject = localization::text_for(language, subject_key);
+    localization::format_for(language, key, &[("subject", &subject)]).to_string()
 }
 
 /// Both initial setup and rotation use the same policy and strength feedback.
@@ -303,4 +326,21 @@ pub(super) fn strength(value: &str, p: Palette, language: Language) -> AnyElemen
                 })),
         )
         .into_any_element()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Language, MasterKeyValidationError, master_key_validation_message};
+
+    #[test]
+    fn master_key_validation_localizes_the_subject_and_reason() {
+        assert_eq!(
+            master_key_validation_message(
+                Language::Chinese,
+                "settings.label.currentMasterKey",
+                MasterKeyValidationError::Length,
+            ),
+            "当前主密钥必须至少包含 12 个字符。"
+        );
+    }
 }

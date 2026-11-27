@@ -13,7 +13,7 @@ impl Settings {
         let input = cx.new(|cx| {
             InputState::new(window, cx)
                 .default_value(self.values.terminal.padding.format())
-                .placeholder("all · vertical, horizontal · top, right, bottom, left")
+                .placeholder("settings.terminal.padding.hint")
         });
         let events = cx.subscribe_in(&input, window, |this, _, event: &InputEvent, window, cx| {
             if matches!(event, InputEvent::Blur | InputEvent::PressEnter { .. })
@@ -66,7 +66,10 @@ impl Settings {
                     .expect("padding control initialized")
                     .input,
             )
-            .aria_label(crate::localization::text(cx, "Terminal Padding")),
+            .aria_label(crate::localization::text(
+                cx,
+                "settings.label.terminalPadding",
+            )),
         )
     }
 }

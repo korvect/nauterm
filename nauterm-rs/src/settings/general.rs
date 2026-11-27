@@ -64,7 +64,7 @@ impl Settings {
         self.host_icons.reconcile(
             crate::avatar::Mode::ALL
                 .into_iter()
-                .map(|mode| SelectOption::localized(mode, mode.label()))
+                .map(|mode| SelectOption::localized(mode, mode.label_key()))
                 .collect(),
             Some(self.values.host_icons),
             window,
@@ -72,16 +72,30 @@ impl Settings {
         );
         self.search.input.update(cx, |input, cx| {
             input.set_placeholder(
-                crate::localization::text_for(language, "Search settings"),
+                crate::localization::text_for(language, "settings.label.searchSettings"),
                 window,
                 cx,
             )
         });
         self.search.relocalize(language);
-        window.set_window_title(&format!("Nauterm RS {}", self.text("Settings")));
+        self.sync_recording_labels(window, cx);
+        window.set_window_title(&format!(
+            "{} {}",
+            crate::APPLICATION_NAME,
+            self.text("common.label.settings")
+        ));
     }
     pub(super) fn text(&self, source: &str) -> SharedString {
-        crate::localization::text_for(self.values.general.language, source)
+        let language = self.values.general.language;
+        if source == "settings.pages.about.title" {
+            crate::localization::format_for(
+                language,
+                source,
+                &[("appName", crate::APPLICATION_NAME)],
+            )
+        } else {
+            crate::localization::text_for(language, source)
+        }
     }
     pub(super) fn reset_window_controls(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.window_controls.pending = None;
@@ -243,11 +257,10 @@ impl Settings {
                             ),
                     )
                     .child(
-                        div().min_w_0().when(!above, |view| view.flex_1()).child(
-                            Input::new(input)
-                                .digits_only()
-                                .aria_label(format!("Window {title}")),
-                        ),
+                        div()
+                            .min_w_0()
+                            .when(!above, |view| view.flex_1())
+                            .child(Input::new(input).digits_only().aria_label(self.text(title))),
                     )
             };
         let owner = cx.weak_entity();
@@ -278,13 +291,13 @@ impl Settings {
                     });
                 })
                 .child(dimension(
-                    "Width",
-                    "Default window width in pixels.",
+                    "settings.general.window.width.label",
+                    "settings.general.window.width.description",
                     &self.window_controls.width,
                 ))
                 .child(dimension(
-                    "Height",
-                    "Default window height in pixels.",
+                    "settings.general.window.height.label",
+                    "settings.general.window.height.description",
                     &self.window_controls.height,
                 )),
         )

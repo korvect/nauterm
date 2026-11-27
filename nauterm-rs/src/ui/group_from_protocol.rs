@@ -86,7 +86,7 @@ impl Nauterm {
             .tooltip(if target == Target::Ssh {
                 "SSH actions"
             } else {
-                "Telnet actions"
+                "workspace.host.protocol.telnetActions"
             })
             .disabled(draft.busy)
             .dropdown_menu(move |menu, _, _| {
@@ -111,7 +111,7 @@ impl Nauterm {
                         .separator()
                     })
                     .item(
-                        MenuItem::localized("Remove protocol")
+                        MenuItem::localized("workspace.host.protocol.remove")
                             .icon(IconName::Trash)
                             .destructive(true)
                             .on_click(move |_, _, cx| {

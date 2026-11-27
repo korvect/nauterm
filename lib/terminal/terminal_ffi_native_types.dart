@@ -1080,6 +1080,41 @@ typedef _SftpListDirectoryEntriesDart = Pointer<Utf8> Function(
   bool sshCompatibilityMode,
 );
 
+typedef _SftpListDirectoryEntriesWithSudoNative = Pointer<Utf8> Function(
+  Uint64 requestId,
+  Pointer<Utf8> host,
+  Uint16 port,
+  Pointer<Utf8> username,
+  Pointer<Utf8> password,
+  Pointer<Utf8> privateKey,
+  Pointer<Utf8> certificate,
+  Pointer<Utf8> passphrase,
+  Pointer<Utf8> knownHostsPath,
+  Pointer<Utf8> directory,
+  Uint32 hostKeyTrustMode,
+  Pointer<Utf8> proxyJson,
+  Bool sshCompatibilityMode,
+  Pointer<Utf8> sudoSessionId,
+  Pointer<Utf8> sudoPassword,
+);
+typedef _SftpListDirectoryEntriesWithSudoDart = Pointer<Utf8> Function(
+  int requestId,
+  Pointer<Utf8> host,
+  int port,
+  Pointer<Utf8> username,
+  Pointer<Utf8> password,
+  Pointer<Utf8> privateKey,
+  Pointer<Utf8> certificate,
+  Pointer<Utf8> passphrase,
+  Pointer<Utf8> knownHostsPath,
+  Pointer<Utf8> directory,
+  int hostKeyTrustMode,
+  Pointer<Utf8> proxyJson,
+  bool sshCompatibilityMode,
+  Pointer<Utf8> sudoSessionId,
+  Pointer<Utf8> sudoPassword,
+);
+
 typedef _SftpExecuteTaskNative = Pointer<Utf8> Function(
   Uint64 taskId,
   Pointer<Utf8> host,

@@ -271,6 +271,7 @@ Future<T?> showNautermDialog<T>({
   required BuildContext context,
   required WidgetBuilder builder,
   bool barrierDismissible = true,
+  Future<void>? dismissWhen,
 }) {
   final overlay = Overlay.of(context);
   if (_activeNautermDialogTokens[overlay] != null) {
@@ -318,6 +319,14 @@ Future<T?> showNautermDialog<T>({
     rethrow;
   }
 
+  if (dismissWhen != null) {
+    unawaited(
+      dismissWhen.then<void>(
+        (_) => complete(null),
+        onError: (Object _, StackTrace _) => complete(null),
+      ),
+    );
+  }
   return completer.future;
 }
 

@@ -4,13 +4,14 @@ part of 'nauterm_workspace.dart';
 /// operations belong to the mounted editor and are released when it closes.
 class _WorkspaceEditorDraft extends ChangeNotifier {
   Map<String, Object?>? values;
+  _Fido2KeyDraft? fido2Key;
   final Map<Object, _WorkspaceEditorDraft> children = {};
   Map<String, Object?>? Function()? capture;
   bool Function()? readHasChanges;
   bool _hasChanges = false;
   bool _discarded = false;
 
-  bool get hasChanges => _hasChanges;
+  bool get hasChanges => _hasChanges || fido2Key?.pending != null;
 
   void refreshChanges({bool notify = true}) {
     if (_discarded || readHasChanges == null) return;
@@ -30,6 +31,7 @@ class _WorkspaceEditorDraft extends ChangeNotifier {
   void discard() {
     _discarded = true;
     values = null;
+    fido2Key = null;
     capture = null;
     readHasChanges = null;
     for (final child in children.values) {

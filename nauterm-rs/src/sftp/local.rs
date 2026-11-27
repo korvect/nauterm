@@ -84,9 +84,7 @@ impl FilePane {
         if entry.directory {
             let target = if let Some(path) = &entry.native_path {
                 let Some(path) = path.to_str() else {
-                    self.notice = Some(Message::error(
-                        "This directory's name cannot be represented in the path editor.",
-                    ));
+                    self.notice = Some(Message::error("sftp.error.unrepresentableLocalName"));
                     cx.notify();
                     return;
                 };

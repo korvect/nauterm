@@ -154,6 +154,14 @@ impl SelectAction {
         self.from_query = true;
         self
     }
+    fn display_label(&self, query: &str, language: crate::localization::Language) -> SharedString {
+        let action = crate::localization::text_for(language, &self.label);
+        if self.from_query {
+            format!("{action} {}", query.trim()).into()
+        } else {
+            action
+        }
+    }
     fn available<V: Clone + PartialEq>(
         &self,
         query: &str,
@@ -978,11 +986,10 @@ impl<V: Clone + PartialEq + 'static> SelectState<V> {
                 };
                 let pick = state.downgrade();
                 let hover = state.downgrade();
-                let label = if action.from_query {
-                    format!("{} {}", action.label, self.input.read(cx).value().trim()).into()
-                } else {
-                    action.label.clone()
-                };
+                let label = action.display_label(
+                    &self.input.read(cx).value(),
+                    crate::localization::language(cx),
+                );
                 let button = super::Button::new(("select-create", index))
                     .ghost()
                     .content_start()
@@ -1134,7 +1141,7 @@ impl<V: Clone + PartialEq + 'static> SelectState<V> {
         div()
             .id("select-options")
             .role(Role::ListBox)
-            .aria_label(self.presentation.label.clone())
+            .aria_label(crate::localization::text(cx, &self.presentation.label))
             .w(self
                 .width
                 .max(self.terminal_menu_width.unwrap_or(px(0.)))
@@ -1167,7 +1174,7 @@ impl<V: Clone + PartialEq + 'static> SelectState<V> {
                         .p(px(12.))
                         .text_size(px(12.))
                         .text_color(p.muted)
-                        .child(crate::localization::text(cx, "rs.ui.copy.noMatchingItems")),
+                        .child(crate::localization::text(cx, "workspace.label.noMatches")),
                 )
             })
             .when(!self.visible.is_empty(), |v| {
@@ -1258,7 +1265,7 @@ impl<V: Clone + PartialEq + 'static> SelectState<V> {
                     .disabled(self.presentation.disabled || clear_visible)
                     .focusable(false)
                     .tab_stop(false)
-                    .localized_accessibility_label("Show options")
+                    .localized_accessibility_label("common.action.showOptions")
                     .on_click(move |_, w, cx| {
                         let _ = toggle.update(cx, |this, cx| this.set_open(!this.open, w, cx));
                     }),
@@ -1277,9 +1284,9 @@ impl<V: Clone + PartialEq + 'static> SelectState<V> {
                     .opacity(amount)
                     .disabled(self.presentation.disabled || !clear_visible)
                     .tooltip(if self.retain_selection_on_search {
-                        "Clear search"
+                        "workspace.label.clearSearch"
                     } else {
-                        "Clear selection"
+                        "workspace.label.clearSelection"
                     })
                     .on_click(move |_, w, cx| {
                         let _ = clear.update(cx, |this, cx| this.clear(w, cx));
@@ -1301,7 +1308,7 @@ impl<V: Clone + PartialEq + 'static> SelectState<V> {
                 self.presentation.digits_only && self.is_editable(),
                 |input| input.digits_only(),
             )
-            .aria_label(self.presentation.label.clone())
+            .aria_label(crate::localization::text(cx, &self.presentation.label))
             .readonly(!self.is_editable())
             .editor_cursor(if self.is_editable() {
                 CursorStyle::IBeam
@@ -1543,7 +1550,7 @@ impl<V: Clone + PartialEq + 'static> Render for SelectState<V> {
             .open(self.open)
             .disabled(self.presentation.disabled)
             .content_focus_handle(&focus)
-            .accessibility_label(self.presentation.label.clone())
+            .accessibility_label(crate::localization::text(cx, &self.presentation.label))
             .accessibility_value(self.title())
             .on_open_change(move |open, w, cx| {
                 let _ = opened.update(cx, |this, cx| {
@@ -1855,7 +1862,7 @@ mod tests {
     #[test]
     fn localization_changes_product_choices_without_touching_ids_or_user_names() {
         use crate::localization::Language;
-        let mut product = SelectOption::localized("system", "System Default");
+        let mut product = SelectOption::localized("system", "settings.general.language.system");
         product.translate(Language::Chinese);
         assert_eq!(product.title, "跟随系统");
         assert!(product.matches("跟随"));
@@ -1884,6 +1891,20 @@ mod tests {
         assert_eq!(fit_dropdown(150., 120., 200.), (Placement::Top, 138.));
         assert_eq!(fit_dropdown(120., 150., 200.), (Placement::Bottom, 138.));
         assert_eq!(fit_dropdown(5., 5., 200.), (Placement::Bottom, 0.));
+    }
+    #[test]
+    fn create_action_translates_the_caption_and_preserves_the_query() {
+        use crate::localization::Language;
+        let action = SelectAction::new("group", "workspace.action.createGroup", IconName::Plus);
+        let query = " Production {east} ";
+        assert_eq!(
+            action.display_label(query, Language::Chinese),
+            "创建分组 Production {east}"
+        );
+        assert_eq!(
+            action.display_label(query, Language::English),
+            "Create group Production {east}"
+        );
     }
     #[test]
     fn named_creation_requires_a_new_nonempty_unmasked_query() {

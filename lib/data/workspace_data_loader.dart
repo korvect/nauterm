@@ -15,6 +15,32 @@ typedef WorkspaceDataLoader = Future<NautermWorkspaceData> Function(
   NautermRecordingConfig recording,
 );
 
+Future<HostEntry?> loadNautermHostDetails(String databasePath, int id) {
+  return Isolate.run(() {
+    final store = NautermDataStore.openPath(databasePath);
+    try {
+      return store.getHost(id);
+    } finally {
+      store.dispose();
+    }
+  });
+}
+
+Future<List<SftpFavoritePathEntry>> loadNautermRemoteSftpFavorites(
+  String databasePath,
+  int hostId,
+) => Isolate.run(() {
+  final store = NautermDataStore.openPath(databasePath);
+  try {
+    return store.listSftpFavoritePaths(
+      scope: SftpFavoriteScope.remote,
+      hostId: hostId,
+    );
+  } finally {
+    store.dispose();
+  }
+});
+
 /// Initial workspace data; database and capture handles remain in the worker.
 class NautermWorkspaceData {
   const NautermWorkspaceData({
@@ -112,6 +138,17 @@ Future<NautermWorkspaceData> loadNautermWorkspaceData(
         captureStore: captures,
         config: recording,
       );
+      var shellHistory = const <ShellHistoryEntry>[];
+      try {
+        shellHistory = await ShellHistoryFileStore(File(historyPath)).read();
+      } on Object catch (error, stackTrace) {
+        NautermLog.warning(
+          'workspace',
+          'Unable to read shell history.',
+          error: error,
+          stackTrace: stackTrace,
+        );
+      }
       return NautermWorkspaceData(
         groups: store.listGroups(),
         hosts: store.listHosts(),
@@ -126,7 +163,7 @@ Future<NautermWorkspaceData> loadNautermWorkspaceData(
         terminalLogs: store.listTerminalLogs(
           limit: NautermWorkspaceData.logPageSize,
         ),
-        shellHistory: await ShellHistoryFileStore(File(historyPath)).read(),
+        shellHistory: shellHistory,
         knownHostsText: await KnownHostsStore(File(knownHostsPath)).readText(),
         captureDiskUsage: await captures.diskUsage(),
         deletedLogIds: retention.deletedLogIds,

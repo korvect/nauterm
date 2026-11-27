@@ -306,7 +306,10 @@ class _PendingHostConnectionPageState
                     if (_invalidPort) ...[
                       const SizedBox(height: 8),
                       Text(
-                        'Port must be between 1 and 65535.',
+                        tr(
+                          'connection.validation.portRange',
+                          fallback: 'Port must be between 1 and 65535.',
+                        ),
                         style: TextStyle(
                           color: const Color(0xffef4444),
                           fontSize: NautermFontSizes.labelMedium,
@@ -779,15 +782,15 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
       _ConnectionPageMode.passphrase => _buildPassphraseBody(),
       _ConnectionPageMode.failed => _ConnectionFailureBody(
         key: const ValueKey('failed'),
-        message: status.message ?? 'Connection failed.',
+        message: status.message ?? tr('workspace.description.connectionFailed'),
       ),
       _ConnectionPageMode.exited => _ConnectionFailureBody(
         key: const ValueKey('exited'),
         message:
             status.message ??
             (serialProfile == null
-                ? 'SSH session exited.'
-                : 'Serial session closed.'),
+                ? tr('common.description.sshSessionExited')
+                : tr('common.description.serialSessionClosed')),
         icon: Icons.logout_rounded,
         iconColor: _mutedText,
       ),
@@ -908,7 +911,7 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
           Align(
             alignment: Alignment.centerLeft,
             child: Text(
-              tr('Public Key'),
+              tr('workspace.label.publicKey', fallback: 'Public Key'),
               style: _connectionBodyStyle.copyWith(fontWeight: FontWeight.w500),
             ),
           ),
@@ -920,7 +923,7 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
             child: _effectiveAuthTab == _ConnectionAuthTab.password
                 ? _WorkspaceInput(
                     controller: _passwordController,
-                    label: 'Password',
+                    label: tr('common.label.password', fallback: 'Password'),
                     size: _WorkspaceControlSize.large,
                     obscureText: _obscurePassword,
                     trailing: _WorkspaceButton(
@@ -2518,7 +2521,8 @@ class _HostKeyPrompt extends StatelessWidget {
         SizedBox(height: 28),
         Text(
           tr(
-            'The authenticity of $host is not in Nauterm known_hosts yet. Trust it for this connection only, or save the fingerprint and reconnect.',
+            'workspace.knownHosts.authenticity.description',
+            args: {'host': host},
           ),
           style: _connectionBodyStyle,
         ),

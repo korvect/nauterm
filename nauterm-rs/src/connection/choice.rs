@@ -196,7 +196,7 @@ impl Connection {
             .find(|(protocol, _)| *protocol == choice.selected)
             .and_then(|(_, input)| parse_port(&input.read(cx).value()));
         let Some(port) = port else {
-            choice.error = Some("Port must be between 1 and 65535.".into());
+            choice.error = Some("connection.validation.portRange".into());
             cx.notify();
             return;
         };
@@ -299,7 +299,11 @@ impl Connection {
                         .border_0()
                         .when(selected, |card| card.selection_outline(color, px(2.)))
                         .disabled(choice.starting)
-                        .localized_accessibility_label(format!("Select {}", protocol.label()))
+                        .accessibility_label(crate::localization::format(
+                            cx,
+                            "connection.protocol.select",
+                            &[("protocol", protocol.label())],
+                        ))
                         .on_click(cx.listener(move |this, _, window, cx| {
                             if let Target::Choice(choice) = &mut this.target
                                 && !choice.starting
@@ -352,7 +356,7 @@ impl Connection {
                                                         .text_color(p.muted)
                                                         .child(crate::localization::text(
                                                             cx,
-                                                            "rs.ui.copy.portLabel",
+                                                            "common.label.port",
                                                         )),
                                                 )
                                                 .child(
@@ -385,7 +389,11 @@ impl Connection {
                                                     v.child(
                                                         protocol_input(
                                                             choice.command.as_ref().unwrap(),
-                                                            "Mosh server command".into(),
+                                                            crate::localization::text(
+                                                                cx,
+                                                                "workspace.label.moshServerCommand",
+                                                            )
+                                                            .to_string(),
                                                             color,
                                                             choice.starting,
                                                             false,

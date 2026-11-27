@@ -72,19 +72,24 @@ impl Nauterm {
         if kind == ItemKind::Host {
             menu = menu.item(item(
                 CardAction::Open,
-                "Open".into(),
+                "common.action.open".into(),
                 IconName::ExternalLink,
             ));
             if self.data.general.workspace_enabled {
                 menu = menu
                     .item(item(
                         CardAction::CurrentWorkspace,
-                        format!("Open in {} Workspace", self.data.workspace().name),
+                        crate::localization::format(
+                            cx,
+                            "workspace.contextMenu.host.openInWorkspace",
+                            &[("workspace", &self.data.workspace().name)],
+                        )
+                        .to_string(),
                         IconName::LayoutGrid,
                     ))
                     .item(item(
                         CardAction::NewWorkspace,
-                        "Open in New Workspace".into(),
+                        "workspace.label.openInNewWorkspace".into(),
                         IconName::Plus,
                     ));
             }
@@ -95,25 +100,25 @@ impl Nauterm {
                     (
                         hosts.iter().all(|host| host.supports_ssh()),
                         CardAction::Ssh,
-                        "With SSH",
+                        "workspace.label.withSsh",
                         IconName::Terminal,
                     ),
                     (
                         hosts.iter().all(|host| host.connections.mosh),
                         CardAction::Mosh,
-                        "With Mosh",
+                        "workspace.label.withMosh",
                         IconName::RadioTower,
                     ),
                     (
                         hosts.iter().all(|host| host.supports_ssh()),
                         CardAction::Sftp,
-                        "With SFTP",
+                        "workspace.label.withSftp",
                         IconName::Folder,
                     ),
                     (
                         hosts.iter().all(|host| host.connections.telnet.is_some()),
                         CardAction::Telnet,
-                        "With Telnet",
+                        "workspace.label.withTelnet",
                         IconName::Network,
                     ),
                 ] {
@@ -124,7 +129,7 @@ impl Nauterm {
                 }
                 if count > 0 {
                     menu = menu.item(
-                        MenuItem::localized("Host")
+                        MenuItem::localized("common.label.host")
                             .icon(IconName::Server)
                             .submenu(protocols),
                     );
@@ -135,15 +140,23 @@ impl Nauterm {
                 ItemKind::Group => {
                     menu = menu.item(item(
                         CardAction::Open,
-                        "Open Group".into(),
+                        "workspace.label.openGroup".into(),
                         crate::assets::GROUP_ICON,
                     ))
                 }
                 ItemKind::SnippetPackage => {
-                    menu = menu.item(item(CardAction::Open, "Open".into(), IconName::FolderOpen))
+                    menu = menu.item(item(
+                        CardAction::Open,
+                        "common.action.open".into(),
+                        IconName::FolderOpen,
+                    ))
                 }
                 ItemKind::Snippet => {
-                    menu = menu.item(item(CardAction::Open, "Run".into(), IconName::Play))
+                    menu = menu.item(item(
+                        CardAction::Open,
+                        "common.action.run".into(),
+                        IconName::Play,
+                    ))
                 }
                 _ => {}
             }
@@ -152,11 +165,11 @@ impl Nauterm {
             menu = menu.item(item(
                 CardAction::Edit,
                 match kind {
-                    ItemKind::Host => "Edit Host",
-                    ItemKind::Group => "Edit Group",
-                    ItemKind::Proxy => "Edit Proxy",
-                    ItemKind::SnippetPackage => "Rename",
-                    _ => "Edit",
+                    ItemKind::Host => "workspace.label.editHost",
+                    ItemKind::Group => "workspace.label.editGroup",
+                    ItemKind::Proxy => "workspace.label.editProxy",
+                    ItemKind::SnippetPackage => "common.action.rename",
+                    _ => "common.action.edit",
                 }
                 .into(),
                 IconName::Pencil,
@@ -167,9 +180,9 @@ impl Nauterm {
             menu = menu.item(item(
                 CardAction::Duplicate,
                 if kind == ItemKind::Group {
-                    "Duplicate Group"
+                    "workspace.label.duplicateGroup"
                 } else {
-                    "Duplicate"
+                    "workspace.action.duplicate"
                 }
                 .into(),
                 IconName::Copy,
@@ -178,7 +191,7 @@ impl Nauterm {
         if kind == ItemKind::Group && single {
             menu = menu.item(item(
                 CardAction::NewHost,
-                "New Host in Group".into(),
+                "workspace.label.newHostInGroup".into(),
                 IconName::CirclePlus,
             ));
         }
@@ -186,7 +199,7 @@ impl Nauterm {
             menu = menu.item(
                 item(
                     CardAction::CopySsh,
-                    "Copy SSH Command".into(),
+                    "workspace.label.copySshCommand".into(),
                     IconName::KeyRound,
                 )
                 .disabled(!hosts.iter().all(|host| host.supports_ssh())),
@@ -196,10 +209,10 @@ impl Nauterm {
             item(
                 CardAction::Delete,
                 match kind {
-                    ItemKind::Host => "Delete Host",
-                    ItemKind::Group => "Delete Group",
-                    ItemKind::Proxy => "Delete Proxy",
-                    _ => "Delete",
+                    ItemKind::Host => "workspace.label.deleteHost",
+                    ItemKind::Group => "workspace.label.deleteGroup",
+                    ItemKind::Proxy => "workspace.label.deleteProxy",
+                    _ => "common.action.delete",
                 }
                 .into(),
                 IconName::Trash,

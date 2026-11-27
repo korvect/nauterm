@@ -53,12 +53,12 @@ impl SnippetDraft {
     }
     fn package_field(&self, busy: bool) -> AnyElement {
         self.packages.field_with_actions(
-            "Package",
+            "common.label.package",
             busy,
             vec![
                 crate::components::SelectAction::new(
                     "package",
-                    "Create package",
+                    "workspace.action.createSnippetPackage",
                     IconName::Package,
                 )
                 .create_from_query(),
@@ -492,13 +492,17 @@ impl Nauterm {
                             .ghost()
                             .custom(ButtonCustomVariant::for_surface(p))
                             .icon(IconName::ArrowLeft)
-                            .tooltip("Back to snippets")
+                            .tooltip("workspace.label.backToSnippets")
                             .disabled(busy)
                             .on_click(cx.listener(move |this, _, window, cx| {
                                 this.cancel_inline_snippet(id, window, cx)
                             })),
                     )
-                    .child(div().font_weight(FontWeights::MEDIUM).child(crate::localization::text(cx, "workspace.label.newSnippet"))),
+                    .child(
+                        div()
+                            .font_weight(FontWeights::MEDIUM)
+                            .child(crate::localization::text(cx, "workspace.label.newSnippet")),
+                    ),
             )
             .child(
                 div()
@@ -524,14 +528,14 @@ impl Nauterm {
                                     p,
                                     vec![crate::components::SelectAction::new(
                                         "package",
-                                        "Create package",
+                                        "workspace.action.createSnippetPackage",
                                         IconName::Package,
                                     )],
                                 ),
                             ))
                             .child(
                                 div().w_full().flex_shrink_0().child(
-                                    Field::input(&editor.description, "Description")
+                                    Field::input(&editor.description, "common.label.description")
                                         .with_size(gpui_kit::component::Size::Medium)
                                         .with_palette(Some(p))
                                         .disabled(busy),
@@ -539,24 +543,32 @@ impl Nauterm {
                             )
                             .child(
                                 div().w_full().flex_shrink_0().child(
-                                    Field::multiline(&editor.fields.script, "Script *", 230.)
-                                        .with_size(gpui_kit::component::Size::Medium)
-                                        .with_palette(Some(p))
-                                        .disabled(busy)
-                                        .error(script_error.map(Into::into)),
+                                    Field::multiline(
+                                        &editor.fields.script,
+                                        "common.label.script *",
+                                        230.,
+                                    )
+                                    .with_size(gpui_kit::component::Size::Medium)
+                                    .with_palette(Some(p))
+                                    .disabled(busy)
+                                    .error(script_error.map(Into::into)),
                                 ),
                             )
                             .when(editor.origin.host.is_some(), |view| {
-                                view.child(
-                                    div()
-                                        .text_size(px(11.5))
-                                        .text_color(p.muted)
-                                        .child(crate::localization::view(format!("Available on {}", editor.label))),
-                                )
+                                view.child(div().text_size(px(11.5)).text_color(p.muted).child(
+                                    crate::localization::format(
+                                        cx,
+                                        "workspace.snippets.targets.availableOn",
+                                        &[("target", &editor.label)],
+                                    ),
+                                ))
                             })
                             .when(!same, |view| {
                                 view.child(div().text_color(p.muted).child(
-                                    crate::localization::text(cx, "Select the original terminal pane before saving this snippet."),
+                                    crate::localization::text(
+                                        cx,
+                                        "workspace.snippets.targets.selectOriginalPane",
+                                    ),
                                 ))
                             }),
                     ),
@@ -580,7 +592,7 @@ impl Nauterm {
                             .outline()
                             .custom(ButtonCustomVariant::for_surface(p))
                             .border_color(p.border)
-                            .label("Cancel")
+                            .label("common.action.cancel")
                             .disabled(busy)
                             .on_click(cx.listener(move |this, _, window, cx| {
                                 this.cancel_inline_snippet(id, window, cx)
@@ -598,7 +610,11 @@ impl Nauterm {
                                     .hover(p.accent.blend(rgb(0xffffff).alpha(0.08)).into())
                                     .active(p.accent.blend(rgb(0x000000).alpha(0.08)).into()),
                             )
-                            .label(if busy { "Saving…" } else { "Save" })
+                            .label(if busy {
+                                "common.label.saving"
+                            } else {
+                                "common.action.save"
+                            })
                             .disabled(busy || !same)
                             .on_click(cx.listener(move |this, _, window, cx| {
                                 this.save_inline_snippet(id, window, cx)
@@ -656,7 +672,10 @@ impl Nauterm {
             .flex_col()
             .gap(px(12.))
             .when(self.snippet_state.busy, |view| {
-                view.child(crate::localization::text(cx, "rs.ui.copy.loadingSnippets"))
+                view.child(crate::localization::text(
+                    cx,
+                    "workspace.snippets.load.loading",
+                ))
             })
             .when(
                 self.page != Page::Snippets && self.snippet_state.error.is_some(),
@@ -667,7 +686,7 @@ impl Nauterm {
                                 .toolbar()
                                 .ghost()
                                 .icon(IconName::RefreshCw)
-                                .tooltip("Reload snippets")
+                                .tooltip("common.action.retry")
                                 .disabled(self.snippet_state.busy)
                                 .on_click(cx.listener(|this, _, _, cx| this.load_snippets(cx))),
                         ),
@@ -850,7 +869,8 @@ impl Nauterm {
         let field = editor.fields[0].1.entity_id();
         let name = editor.fields[0].1.read(cx).value().to_string();
         if name.trim().is_empty() {
-            self.editor.as_mut().unwrap().validation_error = Some("Name is required.".into());
+            self.editor.as_mut().unwrap().validation_error =
+                Some("common.validation.nameRequired".into());
             cx.notify();
             return;
         }
@@ -960,9 +980,9 @@ impl Nauterm {
                         .text_size(px(13.))
                         .font_weight(FontWeights::MEDIUM)
                         .child(crate::localization::view(if groups {
-                            "Groups"
+                            "common.label.groups"
                         } else {
-                            "Hosts"
+                            "common.label.hosts"
                         })),
                 )
                 .child(
@@ -974,9 +994,9 @@ impl Nauterm {
                         .when(items.is_empty(), |view| {
                             view.child(div().p(px(12.)).text_color(palette.muted).child(
                                 crate::localization::view(if groups {
-                                    "No groups"
+                                    "workspace.label.noGroups"
                                 } else {
-                                    "No hosts"
+                                    "workspace.label.noHosts"
                                 }),
                             ))
                         })
@@ -1034,11 +1054,11 @@ impl Nauterm {
         };
         vec![
             self.editor_section(
-                "Snippet",
+                "common.label.snippet",
                 vec![
                     draft.package_field(self.snippet_state.busy),
-                    self.editor_field(editor, 0, "Description"),
-                    Field::multiline_auto(&draft.script, "Script *")
+                    self.editor_field(editor, 0, "common.label.description"),
+                    Field::multiline_auto(&draft.script, "common.label.script *")
                         .disabled(self.snippet_state.busy)
                         .error(
                             editor
@@ -1051,7 +1071,7 @@ impl Nauterm {
                 ],
             ),
             self.editor_section(
-                "Targets",
+                "common.label.targets",
                 vec![target_list(true, cx), target_list(false, cx)],
             ),
         ]
@@ -1177,7 +1197,7 @@ impl Nauterm {
                                     .custom(
                                         ButtonCustomVariant::for_surface(p).color(p.control.into()),
                                     )
-                                    .label("New snippet")
+                                    .label("workspace.label.newSnippet")
                                     .icon(crate::assets::icon(IconName::Plus))
                                     .disabled(self.snippet_state.busy)
                                     .on_click(cx.listener(move |this, _, window, cx| {
@@ -1194,7 +1214,14 @@ impl Nauterm {
                                             .foreground(p.muted.into()),
                                     )
                                     .icon(sort.icon())
-                                    .tooltip(format!("Sort: {}", sort.label()))
+                                    .tooltip(crate::localization::format(
+                                        cx,
+                                        "workspace.tooltip.sort",
+                                        &[(
+                                            "order",
+                                            &crate::localization::text(cx, sort.label_key()),
+                                        )],
+                                    ))
                                     .dropdown_menu(move |menu, _, _| {
                                         let owner = sort_owner.clone();
                                         crate::management::sort_menu(
@@ -1225,7 +1252,10 @@ impl Nauterm {
                                 .palette(p)
                                 .h(px(34.))
                                 .text_size(px(12.))
-                                .aria_label(crate::localization::text(cx, "Search snippets"))
+                                .aria_label(crate::localization::text(
+                                    cx,
+                                    "workspace.terminalTools.snippets.search",
+                                ))
                                 .prefix(icon(IconName::Search).size(px(16.))),
                         )
                     }),
@@ -1256,9 +1286,9 @@ impl Nauterm {
                                 .font_weight(FontWeights::MEDIUM)
                                 .text_color(p.muted)
                                 .child(crate::localization::view(if query.trim().is_empty() {
-                                    "No snippets available."
+                                    "workspace.terminalTools.snippets.empty"
                                 } else {
-                                    "No matching results."
+                                    "workspace.terminalTools.empty.noMatches"
                                 })),
                         )
                     })
@@ -1338,7 +1368,7 @@ impl Nauterm {
                                             .foreground(p.muted.into()),
                                     )
                                     .icon(IconName::Copy)
-                                    .tooltip("Copy to terminal prompt")
+                                    .tooltip("workspace.terminalTools.action.copyToPrompt")
                                     .disabled(!ready)
                                     .on_click(cx.listener(move |this, _, window, cx| {
                                         this.apply_library_snippet(
@@ -1356,7 +1386,7 @@ impl Nauterm {
                                             .foreground(p.accent.into()),
                                     )
                                     .icon(IconName::Play)
-                                    .tooltip("Run snippet")
+                                    .tooltip("workspace.terminalTools.snippets.run")
                                     .disabled(!ready)
                                     .on_click(cx.listener(move |this, _, window, cx| {
                                         this.apply_library_snippet(
@@ -1406,14 +1436,14 @@ impl Nauterm {
             let empty = crate::components::EmptyState::new(
                 IconName::Code,
                 if query.is_empty() {
-                    "No snippets yet"
+                    "workspace.label.noSnippetsYet"
                 } else {
-                    "No snippets found."
+                    "workspace.label.noSnippetsFound"
                 },
                 self.data.dark,
             )
             .description(if query.is_empty() {
-                "Save frequently used commands as snippets so they are ready in every terminal."
+                "workspace.empty.snippets.description"
             } else {
                 "workspace.description.tryAnotherSearch"
             })
@@ -1430,7 +1460,7 @@ impl Nauterm {
                         Button::new("empty-add-snippet")
                             .primary()
                             .icon(crate::assets::icon(IconName::Plus))
-                            .label("Add snippet")
+                            .label("workspace.label.addSnippet")
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.open_editor(ItemKind::Snippet, None, window, cx)
                             })),
@@ -1467,7 +1497,7 @@ impl Nauterm {
                     Breadcrumb::new(
                         "snippet-breadcrumb",
                         [
-                            (None, crate::localization::text(cx, "Snippets")),
+                            (None, crate::localization::text(cx, "common.label.snippets")),
                             (
                                 Some(id),
                                 self.snippet_state
@@ -1497,9 +1527,13 @@ impl Nauterm {
                     .gap(px(crate::components::management::COLLECTION_SECTION_GAP))
                     .when(!packages.is_empty(), |view| {
                         view.child(
-                            crate::components::management::collection_section("Packages", cx)
-                                .child(crate::components::card_grid(grid).children(
-                                    packages.iter().map(|package| {
+                            crate::components::management::collection_section(
+                                "common.label.packages",
+                                cx,
+                            )
+                            .child(
+                                crate::components::card_grid(grid).children(packages.iter().map(
+                                    |package| {
                                         self.card(
                                             ItemKind::SnippetPackage,
                                             package.id,
@@ -1514,15 +1548,20 @@ impl Nauterm {
                                             ),
                                             cx,
                                         )
-                                    }),
+                                    },
                                 )),
+                            ),
                         )
                     })
                     .when(!snippets.is_empty(), |view| {
                         view.child(
-                            crate::components::management::collection_section("Snippets", cx)
-                                .child(crate::components::card_grid(grid).children(
-                                    snippets.iter().map(|s| {
+                            crate::components::management::collection_section(
+                                "common.label.snippets",
+                                cx,
+                            )
+                            .child(
+                                crate::components::card_grid(grid).children(snippets.iter().map(
+                                    |s| {
                                         self.card(
                                             ItemKind::Snippet,
                                             s.id,
@@ -1530,18 +1569,34 @@ impl Nauterm {
                                             s.command.clone(),
                                             cx,
                                         )
-                                    }),
+                                    },
                                 )),
+                            ),
                         )
                     })
                     .when(packages.is_empty() && snippets.is_empty(), |view| {
-                        view.child(div().text_color(p.muted).child(crate::localization::view(
-                            if query.is_empty() {
-                                "No snippets yet. Save frequently used commands for your terminals."
-                            } else {
-                                "No snippets found."
-                            },
-                        )))
+                        view.child(
+                            div()
+                                .flex()
+                                .flex_col()
+                                .gap(px(4.))
+                                .text_color(p.muted)
+                                .when(query.is_empty(), |body| {
+                                    body.child(crate::localization::view(
+                                        "workspace.label.noSnippetsYet",
+                                    ))
+                                    .child(
+                                        crate::localization::view(
+                                            "workspace.empty.snippets.description",
+                                        ),
+                                    )
+                                })
+                                .when(!query.is_empty(), |body| {
+                                    body.child(crate::localization::view(
+                                        "workspace.label.noSnippetsFound",
+                                    ))
+                                }),
+                        )
                     }),
             )
             .into_any_element()

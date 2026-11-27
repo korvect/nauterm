@@ -38,24 +38,21 @@ pub(super) fn subtitle(
                 .to_string()
         })
         .unwrap_or_default();
-    let status = match job.status {
-        Status::Queued => {
-            position.map_or_else(|| "queued".into(), |index| format!("queued #{index}"))
-        }
-        Status::Running => "running".into(),
-        Status::Pausing => "pausing".into(),
-        Status::Cancelling => "cancelling".into(),
-        Status::Paused => "paused".into(),
-        Status::Completed => "completed".into(),
-        Status::Failed => "failed".into(),
-        Status::Cancelled => "cancelled".into(),
+    use crate::localization::{format_for, message_for};
+    let status = if let (Status::Queued, Some(index)) = (job.status, position) {
+        format_for(
+            language,
+            "sftp.transfer.status.queuePosition",
+            &[("position", &index.to_string())],
+        )
+    } else {
+        message_for(language, job.status.label_key())
     };
-    let status = crate::localization::text_for(language, &status);
     let details = if job.status == Status::Failed {
         job.error
             .as_deref()
             .filter(|error| !error.trim().is_empty())
-            .map(|error| format!(": {}", crate::localization::message_for(language, error)))
+            .map(|error| format!(": {error}"))
             .unwrap_or_default()
     } else if job.progress.total > 0 {
         format!(
@@ -126,7 +123,7 @@ mod tests {
         failed.error = Some("Failed to export key: /tmp/{2}".into());
         assert!(
             subtitle(&failed, None, crate::localization::Language::Chinese)
-                .ends_with("失败: 导出密钥失败：/tmp/{2}")
+                .ends_with("失败: Failed to export key: /tmp/{2}")
         );
     }
     #[test]
@@ -175,7 +172,7 @@ mod tests {
         assert_eq!(primary_path(&task), "/local/file");
         assert!(
             subtitle(&task, None, crate::localization::Language::English)
-                .ends_with("completed  1.0 KB / 2.0 KB")
+                .ends_with("Completed  1.0 KB / 2.0 KB")
         );
         for kind in [Kind::Download, Kind::Edit, Kind::Move, Kind::Copy] {
             task.kind = kind;
@@ -183,13 +180,13 @@ mod tests {
         }
         task.status = Status::Queued;
         assert!(
-            subtitle(&task, Some(2), crate::localization::Language::English).contains("queued #2")
+            subtitle(&task, Some(2), crate::localization::Language::English).contains("Queued #2")
         );
         task.status = Status::Failed;
         task.error = Some("permission denied".into());
         assert!(
             subtitle(&task, None, crate::localization::Language::English)
-                .ends_with("failed: permission denied")
+                .ends_with("Failed: permission denied")
         );
         assert!(
             subtitle(&task, None, crate::localization::Language::English).starts_with(

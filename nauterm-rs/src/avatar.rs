@@ -18,11 +18,11 @@ pub enum Mode {
 impl Global for Mode {}
 impl Mode {
     pub const ALL: [Self; 3] = [Self::Initial, Self::OsBadge, Self::OsIcon];
-    pub fn label(self) -> &'static str {
+    pub fn label_key(self) -> &'static str {
         match self {
-            Self::Initial => "Default",
-            Self::OsBadge => "With OS Badge",
-            Self::OsIcon => "OS Icon",
+            Self::Initial => "common.label.default",
+            Self::OsBadge => "settings.general.hostIcon.mode.osBadge",
+            Self::OsIcon => "settings.general.hostIcon.mode.osIcon",
         }
     }
 }

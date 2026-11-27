@@ -75,6 +75,7 @@ impl Fixture {
             HostKeyTrustMode::Strict,
             Arc::new(Mutex::new(vec![])),
             4,
+            false,
         )
         .await
         .unwrap()
@@ -351,9 +352,17 @@ async fn sftp_round_trips_windows_local_paths_and_unicode_remote_directory_tree(
         std::fs::write(source.join("子目录").join("nested.txt"), b"nested").unwrap();
         let (handle, sftp) = fixture.session().await;
         let mut upload = progress();
-        let result = upload_sftp_path(&sftp, &source, "/远程 & folder", false, 4, &mut upload)
-            .await
-            .unwrap();
+        let result = upload_sftp_path(
+            &sftp,
+            &source,
+            "/远程 & folder",
+            false,
+            4,
+            None,
+            &mut upload,
+        )
+        .await
+        .unwrap();
         assert_eq!(result, (payload.len() as u64 + 6, "folder".into()));
         assert_eq!(
             std::fs::read(fixture.root.path().join("远程 & folder/报告 & O'Brien.txt")).unwrap(),
@@ -373,6 +382,7 @@ async fn sftp_round_trips_windows_local_paths_and_unicode_remote_directory_tree(
             "/远程 & folder",
             HostKeyTrustMode::Strict,
             Arc::new(AtomicBool::new(false)),
+            false,
         )
         .await;
         assert!(listing.error.is_none(), "{:?}", listing.error);
@@ -412,6 +422,55 @@ async fn sftp_round_trips_windows_local_paths_and_unicode_remote_directory_tree(
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn verified_sftp_upload_keeps_a_destination_changed_during_transfer() {
+    tokio::time::timeout(Duration::from_secs(20), async {
+        let fixture = Fixture::new().await;
+        let local = tempfile::tempdir().unwrap();
+        let source = local.path().join("local.txt");
+        let destination = fixture.root.path().join("target.txt");
+        std::fs::write(&source, b"local edits").unwrap();
+        std::fs::write(&destination, b"original").unwrap();
+
+        let (_handle, sftp) = fixture.session().await;
+        let metadata = sftp.metadata("/target.txt").await.unwrap();
+        let expected = super::super::SftpRemoteFileVersion {
+            modified: metadata.mtime.unwrap(),
+            size: metadata.size.unwrap(),
+        };
+        let mut upload = progress();
+        let changed_path = destination.clone();
+        upload.callback = Some(ProgressDelivery::Rust(Arc::new(move |bytes, _, _| {
+            if bytes > 0 {
+                std::fs::write(&changed_path, b"updated from another client").unwrap();
+            }
+        })));
+
+        let error = upload_sftp_path(
+            &sftp,
+            &source,
+            "/target.txt",
+            true,
+            1,
+            Some(&expected),
+            &mut upload,
+        )
+        .await
+        .unwrap_err();
+        assert!(error.contains("Remote file changed"), "{error}");
+        assert_eq!(
+            std::fs::read(&destination).unwrap(),
+            b"updated from another client"
+        );
+        assert!(sftp
+            .metadata(remote_upload_staging_path("/target.txt"))
+            .await
+            .is_err());
+    })
+    .await
+    .expect("SFTP fixture timed out");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn cancelled_sftp_upload_preserves_destination_and_resumes_owned_staging() {
     tokio::time::timeout(Duration::from_secs(20), async {
         let fixture = Fixture::new().await;
@@ -428,7 +487,7 @@ async fn cancelled_sftp_upload_preserves_destination_and_resumes_owned_staging()
                 flag.store(true, Ordering::SeqCst);
             }
         })));
-        let error = upload_sftp_path(&sftp, &source, "/target.txt", true, 4, &mut cancelled)
+        let error = upload_sftp_path(&sftp, &source, "/target.txt", true, 4, None, &mut cancelled)
             .await
             .unwrap_err();
         assert!(error.contains("cancelled"), "{error}");
@@ -441,7 +500,7 @@ async fn cancelled_sftp_upload_preserves_destination_and_resumes_owned_staging()
             .await
             .is_ok());
         let mut resumed = progress();
-        upload_sftp_path(&sftp, &source, "/target.txt", true, 4, &mut resumed)
+        upload_sftp_path(&sftp, &source, "/target.txt", true, 4, None, &mut resumed)
             .await
             .unwrap();
         assert_eq!(

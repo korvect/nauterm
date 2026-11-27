@@ -1046,7 +1046,7 @@ impl Runtime {
         }
     }
     fn finish(&mut self, id: &str) {
-        if self.finalize_log(id, "Session ended")
+        if self.finalize_log(id, "Session ended.")
             && let Err(error) = self.retain()
         {
             self.warn(format!("Recording retention: {error}"));

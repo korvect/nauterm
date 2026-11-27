@@ -226,7 +226,7 @@ impl RenderOnce for Tab {
                             )
                             .icon(crate::assets::icon(IconName::X))
                             .icon_size(px(12.))
-                            .tooltip("Close tab")
+                            .tooltip("settings.shortcuts.action.closeTab")
                             .on_click(move |event, window, cx| {
                                 cx.stop_propagation();
                                 close(event, window, cx);

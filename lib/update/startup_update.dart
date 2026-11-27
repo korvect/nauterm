@@ -64,6 +64,7 @@ class StartupUpdateCoordinator {
   final Future<PackageInfo> Function() _loadPackageInfo;
   DesktopUpdateService? _service;
   DesktopUpdateRelease? _release;
+  DesktopUpdateCancellation? _downloadCancellation;
   DesktopUpdateInstallDisposition? _installDisposition;
   bool _checked = false;
   bool _busy = false;
@@ -76,7 +77,9 @@ class StartupUpdateCoordinator {
       final service = _service ??= DesktopUpdateService();
       final result = await service.check(info.version);
       final release = result.release;
-      if (release == null) return;
+      if (release == null || (!Platform.isMacOS && !release.canDownloadInApp)) {
+        return;
+      }
       final skippedVersion = await _loadSkippedVersion();
       if (skippedVersion != null &&
           compareVersions(release.version, skippedVersion) == 0) {
@@ -102,6 +105,8 @@ class StartupUpdateCoordinator {
       return;
     }
     _busy = true;
+    VerifiedDesktopUpdate? download;
+    var handedOff = false;
     try {
       if (Platform.isMacOS) {
         await _sparkle.checkForUpdates();
@@ -109,9 +114,12 @@ class StartupUpdateCoordinator {
         return;
       }
       final service = _service!;
+      final cancellation = DesktopUpdateCancellation();
+      _downloadCancellation = cancellation;
       _emit(StartupUpdatePhase.downloading, progress: 0);
-      final file = await service.download(
+      download = await service.download(
         release,
+        cancellation: cancellation,
         onProgress: (received, total) {
           _emit(
             StartupUpdatePhase.downloading,
@@ -119,17 +127,22 @@ class StartupUpdateCoordinator {
           );
         },
       );
+      if (cancellation.isCancelled) return;
       _emit(StartupUpdatePhase.installing);
-      final disposition = await service.launchInstaller(
-        file,
+      final disposition = await service.installVerified(
+        download,
         release.asset.kind,
       );
+      handedOff =
+          disposition != DesktopUpdateInstallDisposition.restartRequired;
       if (disposition == DesktopUpdateInstallDisposition.installerLaunched) {
         _emit(StartupUpdatePhase.installerLaunched);
         return;
       }
       _installDisposition = disposition;
       _emit(StartupUpdatePhase.restartRequired);
+    } on DesktopUpdateDownloadCancelled {
+      return;
     } on Object catch (error, stackTrace) {
       NautermLog.warning(
         'update',
@@ -139,7 +152,20 @@ class StartupUpdateCoordinator {
       );
       _emit(StartupUpdatePhase.error, error: error.toString());
     } finally {
+      _downloadCancellation = null;
       _busy = false;
+      if (download != null && !handedOff) {
+        try {
+          await download.discard();
+        } on Object catch (error, stackTrace) {
+          NautermLog.warning(
+            'update',
+            'Unable to remove a staged update package.',
+            error: error,
+            stackTrace: stackTrace,
+          );
+        }
+      }
     }
   }
 
@@ -179,6 +205,7 @@ class StartupUpdateCoordinator {
   }
 
   void close() {
+    _downloadCancellation?.cancel();
     _service?.close();
     _service = null;
   }

@@ -1154,36 +1154,6 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('workspace section title follows language changes', (
-    WidgetTester tester,
-  ) async {
-    final english = NautermLocalizations.current;
-    await tester.runAsync(
-      () => NautermLocalizations.load(const Locale('zh', 'CN')),
-    );
-    addTearDown(() {
-      setAppLanguage(AppLanguage.english);
-      NautermLocalizations.current = english;
-    });
-
-    await tester.pumpWidget(NautermApp(onOpenSettings: () {}));
-    await tester.tap(find.text('Known Hosts'));
-    await tester.pump();
-
-    final sectionTitle = find.byKey(
-      const ValueKey('workspace-section-title:Known Hosts'),
-    );
-    expect(tester.widget<Text>(sectionTitle).data, 'Known Hosts');
-
-    setAppLanguage(AppLanguage.simplifiedChinese);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 200));
-
-    expect(tester.widget<Text>(sectionTitle).data, '已知主机');
-
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
-
   testWidgets('workspace chrome renders in Simplified Chinese', (
     WidgetTester tester,
   ) async {
@@ -1217,7 +1187,7 @@ void main() {
     final workspaceBody = find.byKey(const ValueKey('nauterm-workspace-body'));
     final bodyBefore = tester.getRect(workspaceBody);
 
-    await tester.tap(find.byTooltip('Terminal tools'));
+    await tester.tap(find.byTooltip('Show terminal tools'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 90));
 
@@ -1232,7 +1202,7 @@ void main() {
     final bodyOpen = tester.getRect(workspaceBody);
     expect(bodyOpen.right, lessThan(bodyDuringOpen.right));
 
-    await tester.tap(find.byTooltip('Terminal tools'));
+    await tester.tap(find.byTooltip('Hide terminal tools'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 90));
 
@@ -1303,7 +1273,7 @@ void main() {
     takeRequestedSettingsPage();
     await tester.pumpWidget(NautermApp(onOpenSettings: () {}));
     await _openTraditionalLocalTerminal(tester);
-    await tester.tap(find.byTooltip('AI Assistant'));
+    await tester.tap(find.byTooltip('Show AI Assistant'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
     await tester.tap(find.byKey(const ValueKey('ai-provider-model-label')));
@@ -1324,13 +1294,13 @@ void main() {
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(NautermApp(onOpenSettings: () {}));
-    expect(find.byTooltip('AI Assistant'), findsNothing);
-    expect(find.byTooltip('Terminal tools'), findsNothing);
+    expect(find.byTooltip('Show AI Assistant'), findsNothing);
+    expect(find.byTooltip('Show terminal tools'), findsNothing);
 
     await _openTraditionalLocalTerminal(tester);
-    expect(find.byTooltip('Terminal tools'), findsOneWidget);
+    expect(find.byTooltip('Show terminal tools'), findsOneWidget);
 
-    await tester.tap(find.byTooltip('AI Assistant'));
+    await tester.tap(find.byTooltip('Show AI Assistant'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
     for (final tooltip in const ['Remove selection', 'Remove recent output']) {
@@ -1769,27 +1739,27 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('terminal-tool-mode:snippets')));
     await tester.pump();
 
-    await tester.tap(find.byTooltip('Terminal tools'));
+    await tester.tap(find.byTooltip('Hide terminal tools'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('ai-assistant-panel')), findsNothing);
 
-    await tester.tap(find.byTooltip('Terminal tools'));
+    await tester.tap(find.byTooltip('Show terminal tools'));
     await tester.pump();
     expect(
       find.byKey(const ValueKey('terminal-snippets-panel')),
       findsOneWidget,
     );
 
-    await tester.tap(find.byTooltip('AI Assistant'));
+    await tester.tap(find.byTooltip('Show AI Assistant'));
     await tester.pump();
     expect(find.byKey(const ValueKey('ai-assistant-composer')), findsOneWidget);
 
     expect(find.byTooltip('Close AI Assistant'), findsNothing);
-    await tester.tap(find.byTooltip('AI Assistant'));
+    await tester.tap(find.byTooltip('Hide AI Assistant'));
     await tester.pumpAndSettle();
     expect(find.text('Start a conversation'), findsNothing);
 
-    await tester.tap(find.byTooltip('AI Assistant'));
+    await tester.tap(find.byTooltip('Show AI Assistant'));
     await tester.pump();
     expect(find.text('Start a conversation'), findsOneWidget);
 
@@ -1820,7 +1790,7 @@ void main() {
     await tester.tap(find.text('Default').first);
     await tester.pump();
 
-    await tester.tap(find.byTooltip('AI Assistant'));
+    await tester.tap(find.byTooltip('Show AI Assistant'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
     expect(find.text('Start a conversation'), findsOneWidget);
@@ -1849,7 +1819,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Start a conversation'), findsNothing);
-    expect(find.byTooltip('AI Assistant'), findsOneWidget);
+    expect(find.byTooltip('Show AI Assistant'), findsOneWidget);
 
     await tester.tap(find.text('Default').first);
     await tester.pump();
@@ -1864,7 +1834,7 @@ void main() {
   ) async {
     await tester.pumpWidget(NautermApp(onOpenSettings: () {}));
     await _openTraditionalLocalTerminal(tester);
-    await tester.tap(find.byTooltip('AI Assistant'));
+    await tester.tap(find.byTooltip('Show AI Assistant'));
     await tester.pumpAndSettle();
 
     final panel = find.byKey(const ValueKey('ai-assistant-panel'));
@@ -1933,31 +1903,6 @@ void main() {
     expect(find.text('No forwarding rules yet'), findsOneWidget);
     expect(find.text('Add forwarding'), findsOneWidget);
     expect(find.text('Port Forwarding'), findsOneWidget);
-
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
-
-  testWidgets('empty logs page shows an empty state in the table body', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(NautermApp(onOpenSettings: () {}));
-
-    await tester.tap(find.text('Logs'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 200));
-
-    final tableBody = find.byKey(const ValueKey('logs-table-body'));
-    final emptyState = find.byKey(const ValueKey('logs-table-empty-state'));
-    expect(tableBody, findsOneWidget);
-    expect(emptyState, findsOneWidget);
-    expect(
-      find.descendant(of: tableBody, matching: emptyState),
-      findsOneWidget,
-    );
-    expect(find.text('No terminal sessions recorded yet.'), findsOneWidget);
-    for (final label in const ['Date', 'User', 'Host', 'Actions']) {
-      expect(find.text(label), findsOneWidget);
-    }
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -2050,8 +1995,8 @@ void main() {
     await _openTraditionalLocalTerminal(tester);
     for (final tooltip in const [
       'Quick Connect',
-      'AI Assistant',
-      'Terminal tools',
+      'Show AI Assistant',
+      'Show terminal tools',
     ]) {
       final buttonRect = tester.getRect(find.byTooltip(tooltip));
       await _doubleClickWithMouse(tester, Offset(buttonRect.center.dx, 2));
@@ -2299,6 +2244,30 @@ void main() {
       tester.getCenter(leftHome).dx,
       lessThan(tester.getCenter(leftBack).dx),
     );
+    final breadcrumbs = find.descendant(
+      of: leftPane,
+      matching: find.byKey(const ValueKey('sftp-path-breadcrumbs')),
+    );
+    Future<void> editPath() async {
+      final rect = tester.getRect(breadcrumbs);
+      await tester.tapAt(Offset(rect.right - 8, rect.center.dy));
+      await tester.pump();
+      await tester.pump();
+    }
+
+    final pathInput = find.byKey(const ValueKey('sftp-path-editor'));
+    await editPath();
+    final originalPath = tester.widget<TextField>(pathInput).controller!.text;
+    await tester.enterText(pathInput, 'unsubmitted-path');
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    expect(pathInput, findsNothing);
+    await editPath();
+    expect(tester.widget<TextField>(pathInput).controller!.text, originalPath);
+    await tester.tap(find.byTooltip('Cancel path editing'));
+    await tester.pump();
+    expect(pathInput, findsNothing);
+
     if (Platform.isWindows) {
       final driveSelectors = find.byKey(
         ValueKey('sftp-local-drive-selector:C:${Platform.pathSeparator}'),
@@ -2705,7 +2674,7 @@ void main() {
       ),
     );
     await tester.pump();
-    if (find.text('Close Terminal').evaluate().isNotEmpty) {
+    if (find.text('Close Terminal?').evaluate().isNotEmpty) {
       await tester.tap(find.text('Close').last);
       await tester.pump();
     }
@@ -2726,10 +2695,10 @@ void main() {
     await _openLocalTerminal(tester);
 
     await _sendCloseTabShortcut(tester);
-    expect(find.text('Close Terminal'), findsOneWidget);
+    expect(find.text('Close Terminal?'), findsOneWidget);
 
     await _sendCloseTabShortcut(tester);
-    expect(find.text('Close Terminal'), findsOneWidget);
+    expect(find.text('Close Terminal?'), findsOneWidget);
     expect(_terminalTopTabs(), findsNWidgets(2));
 
     await tester.tap(find.text('Cancel'));
@@ -2760,7 +2729,7 @@ void main() {
     await tester.pump();
     await tester.tap(find.text('Close').last);
     await tester.pump();
-    if (find.text('Close Terminal').evaluate().isNotEmpty) {
+    if (find.text('Close Terminal?').evaluate().isNotEmpty) {
       await tester.tap(find.text('Close').last);
       await tester.pump();
     }

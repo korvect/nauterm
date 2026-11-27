@@ -80,7 +80,7 @@ impl Panel {
         cx: &mut Context<Self>,
     ) {
         let Some(service) = self.service.clone() else {
-            self.operation_failed("Sync storage is unavailable.".into(), cx);
+            self.operation_failed("settings.sync.error.storageUnavailable".into(), cx);
             return;
         };
         self.mutating = true;
@@ -112,14 +112,20 @@ impl Panel {
     pub(super) fn history_modal(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let history = self.history.as_ref()?;
         let p = Palette::settings(self.dark);
-        let title = format!("{} History", history.target.name);
-        let mut body = div()
-            .flex()
-            .flex_col()
-            .gap(px(12.))
-            .child(div().text_size(px(12.)).text_color(p.muted).child(
-            crate::localization::text(cx, "Encrypted versions retained by this provider. Up to 100 recent versions are shown."),
-        ));
+        let title = crate::localization::format(
+            cx,
+            "settings.sync.history.providerTitle",
+            &[("provider", &history.target.name)],
+        );
+        let mut body = div().flex().flex_col().gap(px(12.)).child(
+            div()
+                .text_size(px(12.))
+                .text_color(p.muted)
+                .child(crate::localization::text(
+                    cx,
+                    "settings.sync.history.description",
+                )),
+        );
         if self.loading {
             body = body.child(
                 div()
@@ -127,13 +133,16 @@ impl Panel {
                     .items_center()
                     .gap(px(8.))
                     .child(Spinner::new())
-                    .child(crate::localization::text(cx, "rs.ui.copy.loadingHistory")),
+                    .child(crate::localization::text(
+                        cx,
+                        "settings.sync.history.loading",
+                    )),
             );
         }
         if let Some(snapshot) = &history.snapshot {
             if !snapshot.can_restore {
                 body = body.child(div().text_size(px(12.)).text_color(p.muted).child(
-                    crate::localization::text(cx, "rs.ui.copy.completeSyncBeforeRestore"),
+                    crate::localization::text(cx, "settings.sync.history.syncRequired"),
                 ));
             }
             let mut list = div()
@@ -158,10 +167,7 @@ impl Panel {
                         .gap(px(8.))
                         .text_color(p.muted)
                         .child(Icon::new(IconName::Clock))
-                        .child(crate::localization::text(
-                            cx,
-                            "rs.ui.copy.noEncryptedVersions",
-                        )),
+                        .child(crate::localization::text(cx, "settings.sync.history.empty")),
                 );
             }
             for (index, version) in snapshot.versions.iter().enumerate() {
@@ -194,9 +200,9 @@ impl Panel {
                                 .gap(px(2.))
                                 .child(div().font_weight(FontWeights::MEDIUM).child(
                                     crate::localization::view(if version.current {
-                                        "Current"
+                                        "settings.sync.history.current"
                                     } else {
-                                        "Version"
+                                        "common.label.version"
                                     }),
                                 ))
                                 .child(
@@ -226,7 +232,7 @@ impl Panel {
                             row.child(
                                 Button::new(("restore-cloud-version", index))
                                     .outline()
-                                    .label("Restore")
+                                    .label("common.action.restore")
                                     .disabled(self.busy() || !snapshot.can_restore)
                                     .on_click(cx.listener(move |this, _, _, cx| {
                                         if this.busy() {
@@ -283,7 +289,7 @@ impl Panel {
                         .action(
                             Button::new("refresh-cloud-history")
                                 .outline()
-                                .label("Refresh")
+                                .label("common.action.refresh")
                                 .disabled(self.busy())
                                 .on_click(
                                     cx.listener(|this, _, window, cx| {
@@ -293,7 +299,7 @@ impl Panel {
                         )
                         .action(
                             Button::new("close-cloud-history")
-                                .label("Done")
+                                .label("common.action.done")
                                 .disabled(self.busy())
                                 .on_click(|_, window, cx| Modal::dismiss(window, cx)),
                         ),
@@ -304,64 +310,85 @@ impl Panel {
     pub(super) fn version_restore_dialog(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let history = self.history.as_ref()?;
         let plan = history.confirm.as_ref()?;
-        let body = div().flex().flex_col().gap(px(12.))
-            .child(crate::localization::message(cx, &format!("Restore version {} from {}? This makes it current in the cloud and replaces local synced data.", model::short_id(&plan.version), history.target.name)))
-            .child(crate::localization::message(cx, if plan.backup_count == 0 { "Local backups are disabled in settings." } else { "A local backup will be created before restoring." }));
+        let body = div()
+            .flex()
+            .flex_col()
+            .gap(px(12.))
+            .child(crate::localization::format(
+                cx,
+                "settings.sync.cloudHistory.restore.description",
+                &[
+                    ("version", &model::short_id(&plan.version)),
+                    ("provider", &history.target.name),
+                ],
+            ))
+            .child(crate::localization::message(
+                cx,
+                if plan.backup_count == 0 {
+                    "settings.sync.cloudHistory.restore.backupDisabled"
+                } else {
+                    "settings.sync.cloudHistory.restore.backupNotice"
+                },
+            ));
         Some(
-            Dialog::new("restore-cloud-version-confirm", "Restore Cloud Version")
-                .focus_scope(&history.confirm_focus)
-                .return_focus(&history.focus)
-                .dismissible(!self.busy())
-                .on_dismiss(cx.listener(|this, _, _, cx| {
-                    if let Some(history) = &mut this.history {
-                        history.confirm = None;
-                    }
-                    this.error = None;
-                    this.validation_error = None;
-                    cx.notify();
-                }))
-                .content(
-                    DialogFrame::new("restore-cloud-version-frame", "Restore Cloud Version")
-                        .colors(self.colors())
-                        .content(body)
-                        .action(
-                            Button::new("cancel-cloud-version-restore")
-                                .outline()
-                                .label("Cancel")
-                                .disabled(self.busy())
-                                .on_click(|_, window, cx| Modal::dismiss(window, cx)),
-                        )
-                        .action(
-                            Button::new("confirm-cloud-version-restore")
-                                .primary()
-                                .label(if self.mutating {
-                                    "Restoring…"
-                                } else {
-                                    "Restore"
-                                })
-                                .disabled(self.busy())
-                                .on_click(cx.listener(|this, _, _, cx| {
-                                    if this.busy() {
-                                        return;
-                                    }
-                                    if let Some(plan) = this
-                                        .history
-                                        .as_ref()
-                                        .and_then(|history| history.confirm.clone())
-                                    {
-                                        this.mutating = true;
-                                        this.error = None;
-                                        this.validation_error = None;
-                                        this.notice = None;
-                                        cx.emit(Event::MutationRequested(
-                                            Operation::RestoreVersion(plan),
-                                        ));
-                                        cx.notify();
-                                    }
-                                })),
-                        ),
+            Dialog::new(
+                "restore-cloud-version-confirm",
+                "settings.sync.cloudHistory.restore.title",
+            )
+            .focus_scope(&history.confirm_focus)
+            .return_focus(&history.focus)
+            .dismissible(!self.busy())
+            .on_dismiss(cx.listener(|this, _, _, cx| {
+                if let Some(history) = &mut this.history {
+                    history.confirm = None;
+                }
+                this.error = None;
+                this.validation_error = None;
+                cx.notify();
+            }))
+            .content(
+                DialogFrame::new(
+                    "restore-cloud-version-frame",
+                    "settings.sync.cloudHistory.restore.title",
                 )
-                .into_any_element(),
+                .colors(self.colors())
+                .content(body)
+                .action(
+                    Button::new("cancel-cloud-version-restore")
+                        .outline()
+                        .label("common.action.cancel")
+                        .disabled(self.busy())
+                        .on_click(|_, window, cx| Modal::dismiss(window, cx)),
+                )
+                .action(
+                    Button::new("confirm-cloud-version-restore")
+                        .primary()
+                        .label(if self.mutating {
+                            "common.label.restoring"
+                        } else {
+                            "common.action.restore"
+                        })
+                        .disabled(self.busy())
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            if this.busy() {
+                                return;
+                            }
+                            if let Some(plan) = this
+                                .history
+                                .as_ref()
+                                .and_then(|history| history.confirm.clone())
+                            {
+                                this.mutating = true;
+                                this.error = None;
+                                this.validation_error = None;
+                                this.notice = None;
+                                cx.emit(Event::MutationRequested(Operation::RestoreVersion(plan)));
+                                cx.notify();
+                            }
+                        })),
+                ),
+            )
+            .into_any_element(),
         )
     }
 }

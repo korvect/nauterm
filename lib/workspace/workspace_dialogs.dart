@@ -96,24 +96,29 @@ class _WorkspaceDialogFrame extends StatelessWidget {
                     child: content,
                   ),
                 ),
-                Container(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
-                  decoration: BoxDecoration(
-                    border: Border(top: BorderSide(color: border)),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      for (var index = 0; index < actions.length; index++) ...[
-                        if (index > 0) SizedBox(width: 8),
-                        KeyedSubtree(
-                          key: ValueKey('workspace-dialog-action:$index'),
-                          child: actions[index],
-                        ),
+                if (actions.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+                    decoration: BoxDecoration(
+                      border: Border(top: BorderSide(color: border)),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        for (
+                          var index = 0;
+                          index < actions.length;
+                          index++
+                        ) ...[
+                          if (index > 0) SizedBox(width: 8),
+                          KeyedSubtree(
+                            key: ValueKey('workspace-dialog-action:$index'),
+                            child: actions[index],
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
-                ),
               ],
             ),
           ),
@@ -128,33 +133,48 @@ class _WorkspaceConfirmDialog extends StatelessWidget {
     required this.title,
     required this.message,
     required this.confirmLabel,
+    this.details,
     this.messageArgs = const {},
   });
 
   final Widget title;
   final String message;
   final String confirmLabel;
+  final String? details;
   final Map<String, Object?> messageArgs;
 
   @override
   Widget build(BuildContext context) {
     final terminalColors = _WorkspaceDialogThemeScope.maybeOf(context);
+    final messageStyle = TextStyle(
+      color: terminalColors?.foreground ?? _text,
+      fontSize: NautermFontSizes.labelLarge,
+      fontWeight: NautermFontWeights.regular,
+      height: 1.35,
+      letterSpacing: 0,
+    );
     return _WorkspaceDialogFrame(
       width: 380,
       title: title,
-      content: Text(
-        context.tr(message, args: messageArgs),
-        style: TextStyle(
-          color: terminalColors?.foreground ?? _text,
-          fontSize: NautermFontSizes.labelLarge,
-          fontWeight: NautermFontWeights.regular,
-          height: 1.35,
-          letterSpacing: 0,
-        ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (details case final text?) ...[
+            Text(
+              text,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: messageStyle,
+            ),
+            const SizedBox(height: 10),
+          ],
+          Text(context.tr(message, args: messageArgs), style: messageStyle),
+        ],
       ),
       actions: [
         _WorkspaceButton(
-          label: 'Cancel',
+          label: 'common.action.cancel',
           variant: _WorkspaceButtonVariant.text,
           onPressed: () => Navigator.of(context).pop(false),
         ),
@@ -177,6 +197,31 @@ class _WorkspaceRecoveryDecision {
 
   final bool restore;
   final bool alwaysRestore;
+}
+
+class _WorkspaceExitProgress extends StatelessWidget {
+  const _WorkspaceExitProgress();
+
+  @override
+  Widget build(BuildContext context) => _WorkspaceDialogFrame(
+    width: 360,
+    title: Text(
+      context.tr(
+        'workspace.exit.waitingForBackgroundWork',
+        fallback: 'Waiting for background work to finish…',
+      ),
+    ),
+    content: const Padding(
+      padding: EdgeInsets.all(12),
+      child: Center(
+        child: SizedBox.square(
+          dimension: 18,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      ),
+    ),
+    actions: const [],
+  );
 }
 
 class _WorkspaceRecoveryDialog extends StatefulWidget {
@@ -206,7 +251,7 @@ class _WorkspaceRecoveryDialogState extends State<_WorkspaceRecoveryDialog> {
         widget.unexpectedExit
             ? context.tr(
                 'workspace.restore.unexpectedExit.title',
-                fallback: 'Nauterm closed unexpectedly',
+                fallback: '{appName} closed unexpectedly',
               )
             : context.tr(
                 'workspace.restore.startup.title',

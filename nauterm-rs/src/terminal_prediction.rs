@@ -18,11 +18,11 @@ pub enum Mode {
 }
 impl Mode {
     pub const ALL: [Self; 3] = [Self::Adaptive, Self::Always, Self::Never];
-    pub fn label(self) -> &'static str {
+    pub fn label_key(self) -> &'static str {
         match self {
-            Self::Adaptive => "Adaptive",
-            Self::Always => "Always",
-            Self::Never => "Off",
+            Self::Adaptive => "settings.terminal.sshPrediction.adaptive",
+            Self::Always => "settings.terminal.sshPrediction.always",
+            Self::Never => "settings.terminal.sshPrediction.never",
         }
     }
     pub fn enabled(self, adaptive: bool) -> bool {

@@ -192,7 +192,7 @@ impl Nauterm {
     pub(super) fn serial_modal(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let dialog = self.serial_connect.as_ref()?;
         Some(
-            Modal::new("serial-connection-modal", "Serial connection")
+            Modal::new("serial-connection-modal", "workspace.serial.dialog.title")
                 .initial_focus(&dialog.view.read(cx).focus_handle(cx))
                 .return_focus(&self.focus)
                 .on_dismiss(cx.listener(|this, _, window, cx| {

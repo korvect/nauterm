@@ -193,7 +193,7 @@ impl Nauterm {
             && editor
                 .error
                 .as_ref()
-                .is_some_and(|error| error.starts_with("Name is required"))
+                .is_some_and(|error| error == "common.validation.nameRequired")
         {
             editor.error = None;
         }

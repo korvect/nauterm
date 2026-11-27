@@ -7,7 +7,7 @@ impl Render for ReferenceWindow {
         div()
             .size_full()
             .bg(rgb(0xf4f6f8))
-            .child(crate::localization::text(cx, "Settings"))
+            .child(crate::localization::text(cx, "common.label.settings"))
     }
 }
 

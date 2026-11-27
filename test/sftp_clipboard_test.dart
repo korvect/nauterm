@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/gestures.dart';
@@ -63,6 +64,60 @@ void main() {
       'C:\\Users\\tester\\report.txt\n\\\\server\\share\\folder name',
     ]);
   });
+
+  testWidgets('local SFTP keeps a valid replacement character in file names', (
+    tester,
+  ) async {
+    await _openLocalFixture(
+      tester,
+      arrange: (directory) {
+        Directory('${directory.path}${Platform.pathSeparator}valid-\uFFFD')
+            .createSync();
+        if (!Platform.isWindows) {
+          Link('${directory.path}/broken-\uFFFD').createSync('missing-target');
+        }
+      },
+    );
+    expect(_leftText('valid-\uFFFD'), findsOneWidget);
+    if (!Platform.isWindows) {
+      expect(_leftText('broken-\uFFFD'), findsOneWidget);
+    }
+    expect(
+      find.text(
+        'A file or folder name cannot be represented in the path editor.',
+      ),
+      findsNothing,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('local SFTP excludes malformed path aliases on Linux', (
+    tester,
+  ) async {
+    await _openLocalFixture(
+      tester,
+      arrange: (directory) {
+        Directory('${directory.path}/same-\uFFFD').createSync();
+        for (final prefix in ['unrepresentable-', 'same-']) {
+          Directory.fromRawPath(
+            Uint8List.fromList([
+              ...utf8.encode('${directory.path}/$prefix'),
+              0xff,
+            ]),
+          ).createSync();
+        }
+      },
+    );
+    expect(_leftText('unrepresentable-\uFFFD'), findsNothing);
+    expect(_leftText('same-\uFFFD'), findsOneWidget);
+    expect(
+      find.text(
+        'A file or folder name cannot be represented in the path editor.',
+      ),
+      findsOneWidget,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+  }, skip: !Platform.isLinux);
 
   test('keeps duplicate names when they refer to different files', () async {
     await copySftpEntryText([
@@ -172,11 +227,15 @@ Finder _leftText(String text) => find.descendant(
   matching: find.text(text),
 );
 
-Future<Directory> _openLocalFixture(WidgetTester tester) async {
+Future<Directory> _openLocalFixture(
+  WidgetTester tester, {
+  void Function(Directory)? arrange,
+}) async {
   final directory = Directory.systemTemp.createTempSync('nauterm-sftp-copy-');
   Directory('${directory.path}${Platform.pathSeparator}a folder').createSync();
   Directory('${directory.path}${Platform.pathSeparator}z folder').createSync();
   addTearDown(() => directory.deleteSync(recursive: true));
+  arrange?.call(directory);
   final previousDirectory = sftpDefaultDownloadDir;
   final previousTab = sftpTabEnabled;
   sftpDefaultDownloadDir = directory.path;

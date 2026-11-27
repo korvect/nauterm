@@ -423,9 +423,8 @@ impl FilePane {
                                 if let Some(path) = this.follow.directory().map(str::to_owned) {
                                     this.navigate(path, Navigation::Visit, window, cx);
                                 } else {
-                                    this.notice = Some(Message::info(
-                                        "SSH current directory is not available yet.",
-                                    ));
+                                    this.notice =
+                                        Some(Message::info("sftp.message.sshDirectoryUnavailable"));
                                     cx.notify();
                                 }
                             }
@@ -441,9 +440,9 @@ impl FilePane {
                         .custom(crate::components::ButtonCustomVariant::for_surface(p))
                         .icon(IconName::Link)
                         .tooltip(if self.follow.enabled {
-                            "Stop following SSH current directory"
+                            "sftp.action.stopFollowingSshDirectory"
                         } else {
-                            "Follow SSH current directory"
+                            "sftp.action.followSshDirectory"
                         })
                         .text_color(if self.follow.enabled {
                             p.accent

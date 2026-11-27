@@ -39,10 +39,10 @@ impl RenderOnce for FileConflictDialog {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let mut actions = vec![];
         for (label, resolution) in [
-            ("Cancel", Resolution::Cancel),
-            ("Keep Remote", Resolution::KeepRemote),
-            ("Save a Copy", Resolution::SaveCopy),
-            ("Overwrite Remote", Resolution::OverwriteRemote),
+            ("common.action.cancel", Resolution::Cancel),
+            ("sftp.label.keepRemote", Resolution::KeepRemote),
+            ("sftp.label.saveACopy", Resolution::SaveCopy),
+            ("sftp.label.overwriteRemote", Resolution::OverwriteRemote),
         ] {
             if self.missing && resolution == Resolution::KeepRemote {
                 continue;
@@ -60,12 +60,12 @@ impl RenderOnce for FileConflictDialog {
             );
         }
         let cancel = self.resolve;
-        Modal::new((self.id.clone(), "modal"), "Remote file changed")
+        Modal::new((self.id.clone(), "modal"), "sftp.label.remoteFileChanged")
             .return_focus(&self.focus)
             .dismissible(false)
             .on_dismiss(move |_, window, cx| cancel(Resolution::Cancel, window, cx))
             .content(
-                DialogFrame::new((self.id, "frame"), "Remote file changed")
+                DialogFrame::new((self.id, "frame"), "sftp.label.remoteFileChanged")
                     .width(540.)
                     .colors(DialogColors::workspace(self.dark))
                     .content(
@@ -76,9 +76,9 @@ impl RenderOnce for FileConflictDialog {
                             .flex_col()
                             .gap(px(10.))
                             .child(crate::localization::view(if self.missing {
-                                "The file was removed from the server after editing began."
+                                "sftp.edit.conflict.removed.description"
                             } else {
-                                "The file was changed on the server after editing began."
+                                "sftp.edit.conflict.changed.description"
                             }))
                             .child(self.host)
                             .child(
@@ -91,7 +91,7 @@ impl RenderOnce for FileConflictDialog {
                             )
                             .child(crate::localization::text(
                                 cx,
-                                "rs.ui.copy.localEditsRetained",
+                                "sftp.edit.conflict.localCopy.description",
                             )),
                     )
                     .actions(actions),

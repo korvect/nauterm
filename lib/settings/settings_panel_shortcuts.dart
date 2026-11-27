@@ -516,60 +516,67 @@ class _ShortcutBindingRowWidgetState extends State<_ShortcutBindingRowWidget> {
               flex: 3,
               child: TapRegion(
                 onTapOutside: (_) => _stopRecording(),
-                child: GestureDetector(
-                  key: ValueKey('shortcut-recorder:${widget.row.action}'),
-                  onTap: _recording ? _stopRecording : _startRecording,
-                  child: Center(
-                    child: SizedBox(
-                      width: double.infinity,
-                      height: 28,
-                      child: _recording
-                          ? Container(
-                              key: ValueKey(
-                                'shortcut-recorder-surface:${widget.row.action}',
-                              ),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 9,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: _primary.withValues(alpha: 0.14),
-                                border: Border.all(
-                                  color: _primary.withValues(alpha: 0.40),
+                child: Tooltip(
+                  message: context.tr(
+                    'settings.shortcuts.recording.hint',
+                    fallback:
+                        'Click to record a shortcut. Escape cancels recording.',
+                  ),
+                  child: GestureDetector(
+                    key: ValueKey('shortcut-recorder:${widget.row.action}'),
+                    onTap: _recording ? _stopRecording : _startRecording,
+                    child: Center(
+                      child: SizedBox(
+                        width: double.infinity,
+                        height: 28,
+                        child: _recording
+                            ? Container(
+                                key: ValueKey(
+                                  'shortcut-recorder-surface:${widget.row.action}',
                                 ),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                tr(
-                                  'settings.shortcuts.recording.prompt',
-                                  fallback: 'Press shortcut…',
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 9,
+                                  vertical: 4,
                                 ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: _primary,
-                                  fontSize: 11,
-                                  fontFamily: 'monospace',
-                                  fontWeight: NautermFontWeights.medium,
-                                  letterSpacing: 0,
+                                decoration: BoxDecoration(
+                                  color: _primary.withValues(alpha: 0.14),
+                                  border: Border.all(
+                                    color: _primary.withValues(alpha: 0.40),
+                                  ),
+                                  borderRadius: BorderRadius.circular(6),
                                 ),
+                                child: Text(
+                                  tr(
+                                    'settings.shortcuts.recording.prompt',
+                                    fallback: 'Press shortcut…',
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: _primary,
+                                    fontSize: 11,
+                                    fontFamily: 'monospace',
+                                    fontWeight: NautermFontWeights.medium,
+                                    letterSpacing: 0,
+                                  ),
+                                ),
+                              )
+                            : _ShortcutBadge(
+                                key: ValueKey(
+                                  'shortcut-recorder-surface:${widget.row.action}',
+                                ),
+                                label: widget.row.terminalEditing
+                                    ? formatTerminalEditingShortcutForPlatform(
+                                            widget.row.shortcut,
+                                            compact: false,
+                                          ) ??
+                                          tr(
+                                            'common.label.disabled',
+                                            fallback: 'Disabled',
+                                          )
+                                    : _formatShortcut(widget.row.shortcut),
                               ),
-                            )
-                          : _ShortcutBadge(
-                              key: ValueKey(
-                                'shortcut-recorder-surface:${widget.row.action}',
-                              ),
-                              label: widget.row.terminalEditing
-                                  ? formatTerminalEditingShortcutForPlatform(
-                                          widget.row.shortcut,
-                                          compact: false,
-                                        ) ??
-                                        tr(
-                                          'common.label.disabled',
-                                          fallback: 'Disabled',
-                                        )
-                                  : _formatShortcut(widget.row.shortcut),
-                            ),
+                      ),
                     ),
                   ),
                 ),

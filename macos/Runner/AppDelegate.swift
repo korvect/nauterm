@@ -211,7 +211,9 @@ class AppDelegate: FlutterAppDelegate {
 
     let feedURL = Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") as? String
     let publicKey = Bundle.main.object(forInfoDictionaryKey: "SUPublicEDKey") as? String
-    if feedURL?.isEmpty == false && publicKey?.isEmpty == false {
+    if feedURL?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+      && publicKey?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    {
       sparkleUpdaterController = SPUStandardUpdaterController(
         startingUpdater: true,
         updaterDelegate: nil,
@@ -220,6 +222,10 @@ class AppDelegate: FlutterAppDelegate {
     }
 
     sparkleChannel?.setMethodCallHandler { [weak self] call, result in
+      if call.method == "isConfigured" {
+        result(self?.sparkleUpdaterController != nil)
+        return
+      }
       guard call.method == "checkForUpdates" else {
         result(FlutterMethodNotImplemented)
         return
@@ -413,11 +419,7 @@ class AppDelegate: FlutterAppDelegate {
 
   @IBAction func checkForUpdates(_ sender: Any?) {
     guard let updaterController = sparkleUpdaterController else {
-      let alert = NSAlert()
-      alert.alertStyle = .warning
-      alert.messageText = "Updates are not configured"
-      alert.informativeText = "This build does not include a Sparkle update feed and public key."
-      alert.runModal()
+      showAbout(sender)
       return
     }
     updaterController.checkForUpdates(sender)

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 
@@ -226,6 +227,7 @@ Future<T?> showNautermContextMenu<T>({
   required BuildContext context,
   required Offset position,
   required List<NautermContextMenuEntry<T>> entries,
+  ValueListenable<List<NautermContextMenuEntry<T>>>? updatedEntries,
   double width = 220,
   NautermContextMenuStyle? style,
   bool animate = true,
@@ -251,16 +253,27 @@ Future<T?> showNautermContextMenu<T>({
     token: Object(),
     dismissExisting: true,
     onDismissed: () => complete(null, dismiss: false),
-    builder: (context) => _NautermContextMenuOverlay<T>(
-      position: position,
-      entries: entries,
-      width: width,
-      style: style,
-      animate: animate,
-      scaleAnimation: scaleAnimation,
-      onSelected: complete,
-      onDismissed: () => complete(null),
-    ),
+    builder: (context) {
+      Widget menu(List<NautermContextMenuEntry<T>> items) {
+        return _NautermContextMenuOverlay<T>(
+          position: position,
+          entries: items,
+          width: width,
+          style: style,
+          animate: animate,
+          scaleAnimation: scaleAnimation,
+          onSelected: complete,
+          onDismissed: () => complete(null),
+        );
+      }
+
+      return updatedEntries == null
+          ? menu(entries)
+          : ValueListenableBuilder(
+              valueListenable: updatedEntries,
+              builder: (_, items, _) => menu(items),
+            );
+    },
   );
 
   return completer.future;
@@ -473,6 +486,35 @@ class _NautermContextMenuOverlayState<T>
     setState(() {
       _openSubmenus.removeLast();
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant _NautermContextMenuOverlay<T> oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (identical(widget.entries, oldWidget.entries)) return;
+    _cancelSubmenuIntent();
+    var entries = widget.entries;
+    for (var depth = 0; depth < _openSubmenus.length; depth += 1) {
+      final previous = _openSubmenus[depth];
+      final action = entries
+          .whereType<NautermContextMenuAction<T>>()
+          .where(
+            (item) =>
+                item.value == previous.action.value &&
+                item.enabled &&
+                item.hasSubmenu,
+          )
+          .firstOrNull;
+      if (action == null) {
+        _openSubmenus.removeRange(depth, _openSubmenus.length);
+        break;
+      }
+      _openSubmenus[depth] = _NautermOpenSubmenu(
+        action: action,
+        anchor: previous.anchor,
+      );
+      entries = action.children;
+    }
   }
 
   @override

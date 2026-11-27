@@ -515,7 +515,10 @@ class _TerminalComposer extends StatelessWidget {
                         height: buttonSize,
                         child: IconButton(
                           key: const ValueKey('terminal-composer-send'),
-                          tooltip: tr('common.action.send', fallback: 'Send'),
+                          tooltip: context.tr(
+                            'terminal.composer.send.hint',
+                            fallback: 'Send · Shift+Enter for a new line',
+                          ),
                           padding: EdgeInsets.zero,
                           icon: Icon(
                             Icons.keyboard_return_rounded,
@@ -790,32 +793,38 @@ class _TerminalComposerSuggestionListState
         color: background,
         border: Border(top: BorderSide(color: borderColor)),
       ),
-      child: ListView.builder(
-        controller: _scrollController,
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        itemExtent: rowHeight,
-        itemCount: widget.candidates.length,
-        itemBuilder: (context, index) {
-          final selected = index == widget.selectedIndex;
-          final candidate = widget.candidates[index];
-          return MouseRegion(
-            onEnter: (_) => widget.onHighlighted(index),
-            child: InkWell(
-              onTap: () => widget.onSelected(candidate),
-              child: Container(
-                alignment: Alignment.centerLeft,
-                padding: const EdgeInsets.symmetric(horizontal: 28),
-                color: selected ? selectedColor : Colors.transparent,
-                child: Text(
-                  candidate,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: widget.textStyle.copyWith(color: foreground),
+      child: Semantics(
+        label: context.tr(
+          'terminal.composer.suggestions.label',
+          fallback: 'Command suggestions',
+        ),
+        child: ListView.builder(
+          controller: _scrollController,
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          itemExtent: rowHeight,
+          itemCount: widget.candidates.length,
+          itemBuilder: (context, index) {
+            final selected = index == widget.selectedIndex;
+            final candidate = widget.candidates[index];
+            return MouseRegion(
+              onEnter: (_) => widget.onHighlighted(index),
+              child: InkWell(
+                onTap: () => widget.onSelected(candidate),
+                child: Container(
+                  alignment: Alignment.centerLeft,
+                  padding: const EdgeInsets.symmetric(horizontal: 28),
+                  color: selected ? selectedColor : Colors.transparent,
+                  child: Text(
+                    candidate,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: widget.textStyle.copyWith(color: foreground),
+                  ),
                 ),
               ),
-            ),
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }

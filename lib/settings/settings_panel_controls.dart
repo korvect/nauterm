@@ -434,9 +434,10 @@ class _ResetSettingsButtonState extends State<_ResetSettingsButton> {
               selectedValue: '',
               highlightedIndex: -1,
               format: (value) => switch (value) {
-                'page' => 'Reset Current Page',
-                _ => 'Reset All Settings',
+                'page' => tr('settings.reset.page.action'),
+                _ => tr('settings.label.resetAllSettings'),
               },
+              localizeOptions: false,
               leadingBuilder: (value) => Icon(
                 value == 'all' ? LucideIcons.refreshCcw : LucideIcons.rotateCcw,
                 size: 14,
@@ -581,7 +582,7 @@ Widget _buildSettingsSearchResults(_SettingsPanelState state) {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            tr(entry.title),
+                            entry.localizedTitle,
                             style: TextStyle(
                               color: _text,
                               fontSize: 13,
@@ -1229,6 +1230,7 @@ class _SettingsSelectState extends State<_SettingsSelect> {
   @override
   Widget build(BuildContext context) {
     final displayValue = widget.value;
+    final label = context.tr(widget.label);
     final focused = _open || _fieldFocusNode.hasFocus;
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1236,7 +1238,7 @@ class _SettingsSelectState extends State<_SettingsSelect> {
       children: [
         if (widget.showLabel) ...[
           Text(
-            tr(widget.label),
+            label,
             style: TextStyle(
               color: _text,
               fontSize: 12,
@@ -1250,7 +1252,9 @@ class _SettingsSelectState extends State<_SettingsSelect> {
           onEnter: (_) => _setHovered(true),
           onExit: (_) => _setHovered(false),
           child: Semantics(
-            label: tr(widget.semanticsLabel ?? '${widget.label} select'),
+            label: widget.semanticsLabel == null
+                ? label
+                : context.tr(widget.semanticsLabel!),
             button: true,
             container: true,
             explicitChildNodes: false,
@@ -1658,6 +1662,8 @@ class _SettingsOverflowTooltipTextState
   }
 }
 
+enum _EditorCatalogState { loading, ready, failed }
+
 class _EditorEntry {
   const _EditorEntry({
     required this.name,
@@ -1676,6 +1682,7 @@ class _SettingsTextField extends StatefulWidget {
     required this.controller,
     required this.onChanged,
     this.obscureText = false,
+    this.readOnly = false,
     this.revealable = false,
     this.onSubmitted,
     this.onFocusLost,
@@ -1689,6 +1696,7 @@ class _SettingsTextField extends StatefulWidget {
   final TextEditingController controller;
   final ValueChanged<String> onChanged;
   final bool obscureText;
+  final bool readOnly;
   final bool revealable;
   final ValueChanged<String>? onSubmitted;
   final ValueChanged<String>? onFocusLost;
@@ -1815,6 +1823,7 @@ class _SettingsTextFieldState extends State<_SettingsTextField> {
                         cursorWidth: 1.4,
                         maxLines: 1,
                         obscureText: _obscured,
+                        readOnly: widget.readOnly,
                         enableSuggestions: !_obscured,
                         autocorrect: false,
                         keyboardType: widget.keyboardType,

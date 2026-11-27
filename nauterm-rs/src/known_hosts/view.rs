@@ -218,7 +218,7 @@ impl KnownHosts {
                         view.document = document;
                         view.selection.clear();
                         view.deletion = None;
-                        view.notice = Some("Known hosts deleted.".into());
+                        view.notice = Some("workspace.knownHosts.delete.success".into());
                         view.error = None;
                     }
                     Err(error) => view.error = Some(error.to_string()),
@@ -376,7 +376,7 @@ impl KnownHosts {
             menu.card_menu()
                 .when(single, |menu| {
                     menu.item(
-                        MenuItem::localized("Convert to Host")
+                        MenuItem::localized("workspace.label.convertToHost")
                             .icon(IconName::Server)
                             .disabled(!single || endpoint.is_none())
                             .on_click(move |_, _, cx| {
@@ -390,7 +390,7 @@ impl KnownHosts {
                 })
                 .separator()
                 .item(
-                    MenuItem::localized("Delete")
+                    MenuItem::localized("common.action.delete")
                         .destructive(true)
                         .icon(IconName::Trash)
                         .on_click(move |_, _, cx| {
@@ -467,7 +467,7 @@ impl Render for KnownHosts {
                             .toolbar()
                             .ghost()
                             .icon(sort.icon())
-                            .tooltip(sort.label())
+                            .tooltip(sort.label_key())
                             .dropdown_menu(move |menu, _, _| {
                                 let owner = owner.clone();
                                 sort_menu(menu, sort, move |sort, _, cx| {
@@ -515,10 +515,11 @@ impl Render for KnownHosts {
                         .px(px(26.))
                         .text_size(px(12.))
                         .text_color(p.muted)
-                        .child(crate::localization::view(format!(
-                            "{} unrecognized line(s) are preserved in the file.",
-                            self.document.invalid_lines
-                        ))),
+                        .child(crate::localization::format(
+                            cx,
+                            "workspace.knownHosts.invalidLines.description",
+                            &[("count", &self.document.invalid_lines.to_string())],
+                        )),
                 )
             })
             .child(
@@ -538,8 +539,11 @@ impl Render for KnownHosts {
                     }))
                     .when(!entries.is_empty(), |view| {
                         view.child(
-                            crate::components::management::section_title("Known Hosts", cx)
-                                .mb(px(crate::components::management::COLLECTION_TITLE_GAP)),
+                            crate::components::management::section_title(
+                                "common.label.knownHosts",
+                                cx,
+                            )
+                            .mb(px(crate::components::management::COLLECTION_TITLE_GAP)),
                         )
                     })
                     .child(
@@ -551,7 +555,7 @@ impl Render for KnownHosts {
                             let empty = crate::components::EmptyState::new(
                                 IconName::FingerprintPattern,
                                 if self.loading {
-                                    "Loading known hosts…"
+                                    "workspace.knownHosts.load.loading"
                                 } else if self.search.read(cx).value().is_empty() {
                                     "workspace.label.noKnownHostsYet"
                                 } else {
@@ -612,14 +616,14 @@ impl Render for KnownHosts {
                                 .action(
                                     Button::new("cancel-delete-known-hosts")
                                         .ghost()
-                                        .label("Cancel")
+                                        .label("common.action.cancel")
                                         .disabled(self.busy)
                                         .on_click(|_, window, cx| Modal::dismiss(window, cx)),
                                 )
                                 .action(
                                     Button::new("confirm-delete-known-hosts")
                                         .danger()
-                                        .label("Delete")
+                                        .label("common.action.delete")
                                         .disabled(self.busy)
                                         .on_click(cx.listener(|view, _, _, cx| view.delete(cx))),
                                 ),

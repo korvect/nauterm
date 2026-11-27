@@ -168,13 +168,16 @@ impl SftpPreferences {
         self.row(
             "settings.sftp.workspaceTab.label",
             "settings.sftp.workspaceTab.description",
-            Switch::new("show-sftp-tab", "SFTP Tab", self.config.show_tab).on_change(cx.listener(
-                |this, value, _, cx| {
-                    let mut next = this.config.clone();
-                    next.show_tab = *value;
-                    this.commit(next, cx);
-                },
-            )),
+            Switch::new(
+                "show-sftp-tab",
+                "settings.sftp.workspaceTab.label",
+                self.config.show_tab,
+            )
+            .on_change(cx.listener(|this, value, _, cx| {
+                let mut next = this.config.clone();
+                next.show_tab = *value;
+                this.commit(next, cx);
+            })),
             cx,
         )
     }
@@ -184,18 +187,24 @@ impl SftpPreferences {
             .flex()
             .flex_col()
             .gap(px(18.))
-            .child(self.row(
-                "settings.sftp.concurrentTasks.label",
-                "settings.sftp.concurrentTasks.description",
-                self.tasks.control("Concurrent Tasks", cx),
-                cx,
-            ))
-            .child(self.row(
-                "settings.sftp.transferConcurrency.label",
-                "settings.sftp.transferConcurrency.description",
-                self.threads.control("Transfer Concurrency", cx),
-                cx,
-            ))
+            .child(
+                self.row(
+                    "settings.sftp.concurrentTasks.label",
+                    "settings.sftp.concurrentTasks.description",
+                    self.tasks
+                        .control("settings.sftp.concurrentTasks.label", cx),
+                    cx,
+                ),
+            )
+            .child(
+                self.row(
+                    "settings.sftp.transferConcurrency.label",
+                    "settings.sftp.transferConcurrency.description",
+                    self.threads
+                        .control("settings.sftp.transferConcurrency.label", cx),
+                    cx,
+                ),
+            )
             .into_any_element()
     }
     pub fn files(&self, cx: &mut Context<Self>) -> AnyElement {
@@ -204,15 +213,15 @@ impl SftpPreferences {
             .flex()
             .flex_col()
             .gap(px(18.))
-            .child(
-                self.row(
-                    "settings.sftp.defaultDirectory.label",
-                    "settings.sftp.defaultDirectory.description",
-                    Input::new(&self.directory)
-                        .aria_label(crate::localization::text(cx, "Initial Local Directory")),
+            .child(self.row(
+                "settings.sftp.defaultDirectory.label",
+                "settings.sftp.defaultDirectory.description",
+                Input::new(&self.directory).aria_label(crate::localization::text(
                     cx,
-                ),
-            )
+                    "settings.sftp.defaultDirectory.label",
+                )),
+                cx,
+            ))
             .children(crate::components::validation_message(
                 self.error.as_deref(),
                 cx,
@@ -223,7 +232,7 @@ impl SftpPreferences {
                     "settings.sftp.showHiddenFiles.description",
                     Switch::new(
                         "sftp-hidden-default",
-                        "Show Hidden Files",
+                        "settings.sftp.showHiddenFiles.label",
                         self.config.show_hidden_files,
                     )
                     .on_change(cx.listener(|this, value, _, cx| {

@@ -838,7 +838,7 @@ impl Connection {
                             .icon(IconName::Copy)
                             .icon_size(px(if compact { 16. } else { 18. }))
                             .text_color(p.accent)
-                            .tooltip("Copy diagnostics")
+                            .tooltip("workspace.label.copyDiagnostics")
                             .on_click(cx.listener(|this, _, _, cx| this.copy_logs(cx))),
                     ),
             )
@@ -980,7 +980,7 @@ impl Connection {
                         .child(crate::localization::message(cx, &error)),
                 )
                 .child(
-                    self.action("reload-authentication", "Reload options", false)
+                    self.action("reload-authentication", "common.action.retry", false)
                         .disabled(self.auth.busy || self.auth.loading)
                         .on_click(cx.listener(|this, _, _, cx| {
                             this.auth.invalidate();
@@ -1008,8 +1008,8 @@ impl Connection {
                 "authentication-method",
                 self.mode,
                 [
-                    (AuthMode::Password, "Password".into()),
-                    (AuthMode::PublicKey, "Public Key".into()),
+                    (AuthMode::Password, "common.label.password".into()),
+                    (AuthMode::PublicKey, "workspace.label.publicKey".into()),
                 ],
             )
             .sliding()
@@ -1110,33 +1110,89 @@ impl Render for Connection {
         let body = match page.body {
             Body::Protocol => self.protocol_body(window, cx),
             Body::Logs => self.log_panel(cx),
-            Body::Failure => div().flex_1().min_h_0().flex().flex_col().gap(px(16.))
-                .child(div().flex_shrink_0().line_height(px(18.)).when(metrics.short, |view| view.truncate()).text_color(rgb(0xef4444)).font_weight(FontWeight::BOLD).child(crate::localization::text(cx, "workspace.label.connectionFailedWithConnectionLog")))
-                .child(self.log_panel(cx)).into_any_element(),
+            Body::Failure => div()
+                .flex_1()
+                .min_h_0()
+                .flex()
+                .flex_col()
+                .gap(px(16.))
+                .child(
+                    div()
+                        .flex_shrink_0()
+                        .line_height(px(18.))
+                        .when(metrics.short, |view| view.truncate())
+                        .text_color(rgb(0xef4444))
+                        .font_weight(FontWeight::BOLD)
+                        .child(crate::localization::text(
+                            cx,
+                            "workspace.label.connectionFailedWithConnectionLog",
+                        )),
+                )
+                .child(self.log_panel(cx))
+                .into_any_element(),
             Body::Mode => match self.state.phase {
-                Phase::HostKey => div().flex().flex_col().text_size(px(14.)).line_height(px(21.))
-                    .child(div().font_weight(FontWeight::BOLD).text_size(px(18.)).mb(px(28.)).child(crate::localization::text(cx, "common.label.checkingHostAuthenticity")))
-                    .child(crate::localization::message(cx, &format!("The authenticity of {} is not in Nauterm known_hosts yet. Trust it for this connection only, or save the fingerprint and reconnect.",self.target.endpoint())))
+                Phase::HostKey => div()
+                    .flex()
+                    .flex_col()
+                    .text_size(px(14.))
+                    .line_height(px(21.))
+                    .child(
+                        div()
+                            .font_weight(FontWeight::BOLD)
+                            .text_size(px(18.))
+                            .mb(px(28.))
+                            .child(crate::localization::text(
+                                cx,
+                                "common.label.checkingHostAuthenticity",
+                            )),
+                    )
+                    .child(crate::localization::format(
+                        cx,
+                        "workspace.knownHosts.authenticity.description",
+                        &[("host", &self.target.endpoint())],
+                    ))
                     .when_some(self.state.fingerprint.clone(), |view, fingerprint| {
-                        view.child(div().mt(px(18.)).child(crate::localization::text(cx, "workspace.label.serverFingerprint")))
-                            .child(div().mt(px(18.)).child(fingerprint))
-                    }).into_any_element(),
+                        view.child(div().mt(px(18.)).child(crate::localization::text(
+                            cx,
+                            "workspace.label.serverFingerprint",
+                        )))
+                        .child(div().mt(px(18.)).child(fingerprint))
+                    })
+                    .into_any_element(),
                 Phase::Authentication => self.authentication(cx),
                 Phase::Exited => {
                     use gpui_kit::component::Icon;
                     let message = if self.state.message.is_empty() {
-                        crate::localization::message(cx, match self.target {
-                            Target::Serial(_) => "Serial session closed.",
-                            Target::Telnet(_) => "Telnet session exited.",
-                            _ => "SSH session exited.",
-                        })
+                        crate::localization::message(
+                            cx,
+                            match self.target {
+                                Target::Serial(_) => "common.description.serialSessionClosed",
+                                Target::Telnet(_) => "terminal.description.telnetSessionClosed",
+                                _ => "common.description.sshSessionExited",
+                            },
+                        )
                     } else {
                         crate::localization::message(cx, &self.state.message)
                     };
-                    div().flex().items_start().gap(px(10.))
-                        .child(Icon::new(IconName::LogOut).with_size(px(18.)).text_color(p.muted))
-                        .child(div().flex_1().min_w_0().text_size(px(14.)).line_height(relative(1.4))
-                            .font_weight(FontWeights::MEDIUM).child(message)).into_any_element()
+                    div()
+                        .flex()
+                        .items_start()
+                        .gap(px(10.))
+                        .child(
+                            Icon::new(IconName::LogOut)
+                                .with_size(px(18.))
+                                .text_color(p.muted),
+                        )
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .text_size(px(14.))
+                                .line_height(relative(1.4))
+                                .font_weight(FontWeights::MEDIUM)
+                                .child(message),
+                        )
+                        .into_any_element()
                 }
                 _ => div().h(px(1.)).into_any_element(),
             },
@@ -1228,26 +1284,29 @@ impl Render for Connection {
                                             } else {
                                                 format!(
                                                     "{} {}",
-                                                    if self.sftp_directory.is_some() {
-                                                        "SFTP"
-                                                    } else if matches!(
-                                                        self.target,
-                                                        Target::Mosh(..)
-                                                    ) {
-                                                        "Mosh"
-                                                    } else if matches!(
-                                                        self.target,
-                                                        Target::Serial(_)
-                                                    ) {
-                                                        "Serial"
-                                                    } else if matches!(
-                                                        self.target,
-                                                        Target::Telnet(_)
-                                                    ) {
-                                                        "Telnet"
-                                                    } else {
-                                                        "SSH"
-                                                    },
+                                                    crate::localization::text(
+                                                        cx,
+                                                        if self.sftp_directory.is_some() {
+                                                            "SFTP"
+                                                        } else if matches!(
+                                                            self.target,
+                                                            Target::Mosh(..)
+                                                        ) {
+                                                            "Mosh"
+                                                        } else if matches!(
+                                                            self.target,
+                                                            Target::Serial(_)
+                                                        ) {
+                                                            "common.label.serial"
+                                                        } else if matches!(
+                                                            self.target,
+                                                            Target::Telnet(_)
+                                                        ) {
+                                                            "Telnet"
+                                                        } else {
+                                                            "SSH"
+                                                        }
+                                                    ),
                                                     self.target.endpoint()
                                                 )
                                             }),

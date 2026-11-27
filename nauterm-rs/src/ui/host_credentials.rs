@@ -503,27 +503,33 @@ impl Nauterm {
         let selected_identity = identity(editor.auth_credential(target)).is_some();
         let mut fields = vec![auth.username.field_with_actions(
             if selected_identity {
-                "Identity"
+                "common.label.identity"
             } else {
-                "Username"
+                "common.label.username"
             },
             busy,
             vec![SelectAction::new(
                 "identity",
-                "Create identity",
+                "workspace.label.createIdentity",
                 IconName::Contact,
             )],
         )];
         if selected_identity {
             return fields;
         }
-        fields.push(auth.password_select.field("Password", busy || auth.loading));
+        fields.push(
+            auth.password_select
+                .field("common.label.password", busy || auth.loading),
+        );
         if auth.loading {
             fields.push(
                 div()
                     .text_size(px(12.))
                     .text_color(Palette::new(self.data.dark).muted)
-                    .child(crate::localization::text(cx, "rs.ui.copy.loadingPassword"))
+                    .child(crate::localization::text(
+                        cx,
+                        "workspace.host.credentials.loading",
+                    ))
                     .into_any_element(),
             );
         }
@@ -545,7 +551,7 @@ impl Nauterm {
                                 )))
                                 .small()
                                 .ghost()
-                                .label("Retry")
+                                .label("common.action.retry")
                                 .on_click(cx.listener(
                                     move |this, _, window, cx| {
                                         if let Some(auth) = this
@@ -566,7 +572,7 @@ impl Nauterm {
                                 )))
                                 .small()
                                 .ghost()
-                                .label("Clear saved password")
+                                .label("workspace.host.credentials.clearSavedPassword")
                                 .on_click(cx.listener(
                                     move |this, _, window, cx| {
                                         this.select_host_credential(

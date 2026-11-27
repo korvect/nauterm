@@ -662,9 +662,9 @@ impl Connection {
             );
         if unlock || self.auth.binding.is_none() || self.auth.save.is_some() {
             let label = if !unlock && self.auth.save == Some(true) && self.can_save_connection() {
-                "Continue & Save"
+                "workspace.label.continueSave"
             } else {
-                "Continue"
+                "common.action.continue"
             };
             return self
                 .action("authenticate", label, true)
@@ -682,7 +682,7 @@ impl Connection {
         ButtonGroup::new()
             .controls()
             .button(
-                self.action("authenticate", "Continue", true)
+                self.action("authenticate", "common.action.continue", true)
                     .disabled(!can_continue)
                     .loading(self.auth.busy)
                     .on_click(cx.listener(|this, _, window, cx| {
@@ -698,7 +698,7 @@ impl Connection {
                 move |menu, _, _| {
                     let owner = owner.clone();
                     menu.item(
-                        MenuItem::localized("Continue & Save")
+                        MenuItem::localized("workspace.label.continueSave")
                             .disabled(!can_save)
                             .on_click(move |_, window, cx| {
                                 let _ = owner.update(cx, |this, cx| {

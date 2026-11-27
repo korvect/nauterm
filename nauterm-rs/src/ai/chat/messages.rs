@@ -208,7 +208,7 @@ impl Chat {
             .child(
                 Input::multiline(&editor.input)
                     .palette(palette)
-                    .aria_label(crate::localization::text(cx, "Edit message"))
+                    .aria_label(crate::localization::text(cx, "ai.label.editMessage"))
                     .readonly(busy),
             )
             .child(
@@ -223,7 +223,7 @@ impl Chat {
                             .small()
                             .ghost()
                             .custom(ButtonCustomVariant::for_surface(palette))
-                            .label("Cancel")
+                            .label("common.action.cancel")
                             .disabled(busy)
                             .on_click(
                                 cx.listener(|this, _, window, cx| this.cancel_edit(window, cx)),
@@ -233,7 +233,7 @@ impl Chat {
                         Button::new("ai-submit-edit")
                             .small()
                             .primary()
-                            .label("Save and Resend")
+                            .label("ai.label.saveAndResend")
                             .disabled(
                                 busy || (editor.input.read(cx).value().trim().is_empty()
                                     && !editor.has_attachments),
@@ -563,7 +563,7 @@ impl Chat {
                                 IconName::Copy
                             })
                             .tooltip(if copied {
-                                "Copied"
+                                "common.status.copied"
                             } else {
                                 "ai.action.copyMessage"
                             })
@@ -589,7 +589,7 @@ impl Chat {
                             .icon_size(px(13.))
                             .text_color(palette.muted)
                             .icon(IconName::Pencil)
-                            .tooltip("Edit message")
+                            .tooltip("ai.label.editMessage")
                             .focusable(visible)
                             .disabled(!editable || !visible)
                             .on_click(cx.listener(move |this, _, window, cx| {
@@ -650,7 +650,7 @@ impl Chat {
                                                 .children(message.attachments.iter().map(
                                                     |attachment| {
                                                         super::attachments::badge(
-                                                            attachment, palette,
+                                                            attachment, palette, cx,
                                                         )
                                                     },
                                                 )),
@@ -707,7 +707,7 @@ impl Chat {
             let text = TextSelection::selected_text(window, cx);
             menu.palette(palette)
                 .item(
-                    MenuItem::localized("Copy")
+                    MenuItem::localized("common.action.copy")
                         .icon(IconName::Copy)
                         .disabled(text.is_empty())
                         .on_click(move |_, _, cx| {
@@ -715,12 +715,12 @@ impl Chat {
                         }),
                 )
                 .separator()
-                .item(
-                    MenuItem::localized("Select all").on_click(move |_, window, cx| {
+                .item(MenuItem::localized("common.label.selectAll").on_click(
+                    move |_, window, cx| {
                         let _ = selection_owner
                             .update(cx, |this, cx| this.select_all_messages(window, cx));
-                    }),
-                )
+                    },
+                ))
         });
         div()
             .flex_1()
@@ -745,7 +745,7 @@ impl Chat {
                                 .border_1()
                                 .border_color(palette.border)
                                 .bg(palette.surface)
-                                .tooltip("Scroll to bottom")
+                                .tooltip("ai.label.scrollToBottom")
                                 .when(generating, |button| {
                                     button.child(typing_dots(palette, cx.reduce_motion()))
                                 })

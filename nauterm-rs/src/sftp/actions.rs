@@ -24,16 +24,16 @@ pub(super) enum Action {
 impl Action {
     fn label(self) -> &'static str {
         match self {
-            Self::Open => "Open",
-            Self::Close => "Close",
-            Self::SelectAll => "Select All",
-            Self::NewFolder => "New Folder",
-            Self::Upload => "Upload",
-            Self::Rename => "Rename",
-            Self::Move => "Move to",
-            Self::Copy => "Copy to",
-            Self::Download => "Download",
-            Self::Delete => "Delete",
+            Self::Open => "common.action.open",
+            Self::Close => "common.action.close",
+            Self::SelectAll => "common.label.selectAll",
+            Self::NewFolder => "sftp.action.newFolder",
+            Self::Upload => "sftp.task.upload",
+            Self::Rename => "common.action.rename",
+            Self::Move => "sftp.label.moveTo",
+            Self::Copy => "sftp.label.copyTo",
+            Self::Download => "sftp.action.download",
+            Self::Delete => "common.action.delete",
         }
     }
 }
@@ -148,12 +148,12 @@ pub(super) fn browser_menu(menu: Menu, owner: WeakEntity<FilePane>, cx: &App) ->
     let menu = menu
         .max_visible_rows(None)
         .item(
-            MenuItem::localized("Refresh").on_click(move |_, window, cx| {
+            MenuItem::localized("common.action.refresh").on_click(move |_, window, cx| {
                 let _ = refresh.update(cx, |pane, cx| pane.refresh(window, cx));
             }),
         )
         .item(
-            MenuItem::localized("Show hidden files")
+            MenuItem::localized("settings.sftp.showHiddenFiles.label")
                 .checked(hidden)
                 .on_click(move |_, _, cx| {
                     let _ = toggle.update(cx, |pane, cx| {
@@ -172,11 +172,13 @@ pub(super) fn browser_menu(menu: Menu, owner: WeakEntity<FilePane>, cx: &App) ->
             }),
         )
         .when(close_allowed, |menu| {
-            menu.item(MenuItem::localized("Close").destructive(true).on_click(
-                move |_, window, cx| {
-                    let _ = close.update(cx, |pane, cx| pane.disconnect(window, cx));
-                },
-            ))
+            menu.item(
+                MenuItem::localized("common.action.close")
+                    .destructive(true)
+                    .on_click(move |_, window, cx| {
+                        let _ = close.update(cx, |pane, cx| pane.disconnect(window, cx));
+                    }),
+            )
         });
     self::menu(menu, owner, selected, remote, cx)
 }
@@ -661,9 +663,7 @@ impl FilePane {
                 };
                 if !current {
                     pane.dialog = None;
-                    pane.notice = Some(Message::info(
-                        "Sudo action cancelled because the pane changed.",
-                    ));
+                    pane.notice = Some(Message::info("sftp.sudo.error.paneChanged"));
                     cx.notify();
                     return;
                 }
@@ -745,9 +745,8 @@ impl FilePane {
                                     cx,
                                 );
                             } else {
-                                pane.notice = Some(Message::info(
-                                    "Open cancelled because the selected file changed.",
-                                ));
+                                pane.notice =
+                                    Some(Message::info("sftp.edit.selectionChanged.description"));
                                 cx.notify();
                             }
                         });
@@ -805,17 +804,75 @@ impl FilePane {
         let edit = dialog.edit_authorization.is_some();
         let permission = dialog.task_permission.is_some() || dialog.preflight_input.is_some();
         let title = if permission {
-            "Permission denied"
+            "sftp.sudo.permissionDenied.dialog.title"
         } else {
-            "Authenticate with sudo"
+            "sftp.sudo.explicit.dialog.title"
         };
-        let body = div().w_full().flex().flex_col().gap(px(16.))
-            .child(crate::localization::view(if permission { "The server denied this operation. Enter the sudo password to retry this task once. Some parts may already have completed; this retries the original task." } else if edit { "Enter the sudo password to save the pending edits. The remote version will be checked again before uploading. Cancelling keeps your local changes." } else { "Enter the sudo password to authorize this and future With sudo actions for 15 minutes." }))
-            .child(format!("{} · {}@{}", crate::localization::text(cx, if permission { "Retry task" } else if edit { "Save changes" } else { dialog.action.label() }), dialog.options.username, dialog.options.host))
-            .when_some(dialog.permission_details.clone(), |view, (label, source, target)| view.child(div().text_size(px(12.)).child(crate::localization::view(label)).child(div().child(crate::localization::view(format!("From: {source}")))).child(div().child(crate::localization::view(format!("To: {target}"))))))
-            .child(Field::input(&dialog.input, "Password").secret(true).disabled(dialog.busy).error(dialog.validation_error.clone()))
-            .when(dialog.busy, |view| view.child(div().flex().gap(px(8.)).child(Spinner::new()).child(crate::localization::text(cx, "rs.ui.copy.authenticating"))))
-            .when_some(dialog.error.clone(), |view, error| view.child(div().text_color(rgb(0xc94740)).child(crate::localization::message(cx, &error))));
+        let body = div()
+            .w_full()
+            .flex()
+            .flex_col()
+            .gap(px(16.))
+            .child(crate::localization::view(if permission {
+                "sftp.sudo.permissionDenied.dialog.description"
+            } else if edit {
+                "sftp.sudo.edit.dialog.description"
+            } else {
+                "sftp.sudo.explicit.dialog.description"
+            }))
+            .child(format!(
+                "{} · {}@{}",
+                crate::localization::text(
+                    cx,
+                    if permission {
+                        "sftp.sudo.permissionDenied.action.retry"
+                    } else if edit {
+                        "common.action.save"
+                    } else {
+                        dialog.action.label()
+                    }
+                ),
+                dialog.options.username,
+                dialog.options.host
+            ))
+            .when_some(
+                dialog.permission_details.clone(),
+                |view, (label, source, target)| {
+                    view.child(
+                        div()
+                            .text_size(px(12.))
+                            .child(crate::localization::view(label))
+                            .child(div().child(crate::localization::format(
+                                cx,
+                                "sftp.label.sourcePath",
+                                &[("path", &source)],
+                            )))
+                            .child(div().child(crate::localization::format(
+                                cx,
+                                "sftp.label.destinationPath",
+                                &[("path", &target)],
+                            ))),
+                    )
+                },
+            )
+            .child(
+                Field::input(&dialog.input, "common.label.password")
+                    .secret(true)
+                    .disabled(dialog.busy)
+                    .error(dialog.validation_error.clone()),
+            )
+            .when(dialog.busy, |view| {
+                view.child(div().flex().gap(px(8.)).child(Spinner::new()).child(
+                    crate::localization::text(cx, "common.status.authenticating"),
+                ))
+            })
+            .when_some(dialog.error.clone(), |view, error| {
+                view.child(
+                    div()
+                        .text_color(rgb(0xc94740))
+                        .child(crate::localization::message(cx, &error)),
+                )
+            });
         crate::components::Modal::new(SharedString::from(format!("sftp-action-modal-{id}")), title)
             .initial_focus(&dialog.input.read(cx).focus_handle(cx))
             .return_focus(&self.focus)
@@ -835,17 +892,17 @@ impl FilePane {
                 .actions([
                     Button::new("sftp-sudo-cancel")
                         .ghost()
-                        .label("Cancel")
+                        .label("common.action.cancel")
                         .on_click(|_, window, cx| crate::components::Modal::dismiss(window, cx))
                         .into_any_element(),
                     Button::new("sftp-sudo-authenticate")
                         .primary()
                         .label(if permission {
-                            "Retry with sudo"
+                            "sftp.sudo.permissionDenied.action.retry"
                         } else if edit {
-                            "Authenticate and save"
+                            "sftp.sudo.edit.action.authenticateAndSave"
                         } else {
-                            "Authenticate"
+                            "common.action.authenticate"
                         })
                         .disabled(dialog.busy)
                         .on_click(cx.listener(move |pane, _, window, cx| {
@@ -1009,7 +1066,7 @@ impl FilePane {
     ) {
         if !scope.matches(self, cx) || crate::transfer_queue::is_shutting_down() {
             self.notice = Some(Message::info(
-                "Upload cancelled because the destination changed.",
+                "sftp.transfer.destinationChanged.description",
             ));
         } else if let Some(batch) = uploads.next() {
             self.dialog_inner(
@@ -1195,10 +1252,19 @@ impl FilePane {
             let _ = this.update(cx, |this, cx| {
                 this.action_work = None;
                 if !scope.matches(this, cx) || crate::transfer_queue::is_shutting_down() {
-                    this.notice = Some(Message::info("Download cancelled because the source changed."));
+                    this.notice = Some(Message::info("sftp.transfer.sourceChanged.description"));
                 } else {
                     match result {
-                        Err(error) => this.notice = Some(Message::error(format!("Unable to download: {error}"))),
+                        Err(error) => {
+                            this.notice = Some(Message::error(
+                                crate::localization::format(
+                                    cx,
+                                    "sftp.error.download",
+                                    &[("error", &error.to_string())],
+                                )
+                                .to_string(),
+                            ));
+                        }
                         Ok(plan) => match this.tasks.update(cx, |queue, cx| {
                             if sudo.is_none() { queue.enqueue_downloads(&plan, cx) }
                             else { queue.enqueue_downloads_authorized(&plan, sudo.as_ref(), cx) }
@@ -1227,7 +1293,7 @@ impl FilePane {
             files: true,
             directories: false,
             multiple: true,
-            prompt: Some(crate::localization::text(cx, "Upload")),
+            prompt: Some(crate::localization::text(cx, "sftp.task.upload")),
         });
         self.action_work = Some(cx.spawn_in(window, async move |this, cx| {
             let response = receiver.await;
@@ -1242,14 +1308,24 @@ impl FilePane {
                     }
                     Ok(Ok(None)) => {}
                     Ok(Err(error)) => {
-                        this.notice =
-                            Some(Message::error(format!("Unable to choose files: {error}")));
-                        cx.notify();
+                        this.notice = Some(Message::error(
+                            crate::localization::format(
+                                cx,
+                                "sftp.error.chooseFiles",
+                                &[("error", &error.to_string())],
+                            )
+                            .to_string(),
+                        ));
                     }
                     Err(error) => {
-                        this.notice =
-                            Some(Message::error(format!("Unable to choose files: {error}")));
-                        cx.notify();
+                        this.notice = Some(Message::error(
+                            crate::localization::format(
+                                cx,
+                                "sftp.error.chooseFiles",
+                                &[("error", &error.to_string())],
+                            )
+                            .to_string(),
+                        ));
                     }
                 }
                 this.try_follow(window, cx);
@@ -1309,9 +1385,7 @@ impl FilePane {
             .is_some_and(|(scope, _)| !scope.matches(self, cx))
         {
             self.dialog = None;
-            self.notice = Some(Message::info(
-                "Transfer cancelled because a pane or selection changed.",
-            ));
+            self.notice = Some(Message::info("sftp.transfer.scopeChanged.description"));
             cx.notify();
             return;
         }
@@ -1436,9 +1510,7 @@ impl FilePane {
                     .is_some_and(|(scope, _)| !scope.matches(this, cx))
                 {
                     this.dialog = None;
-                    this.notice = Some(Message::info(
-                        "Transfer cancelled because a pane or selection changed.",
-                    ));
+                    this.notice = Some(Message::info("sftp.transfer.scopeChanged.description"));
                     cx.notify();
                     return;
                 }
@@ -1522,9 +1594,7 @@ impl FilePane {
             .as_ref()
             .is_some_and(|(scope, _)| !scope.matches(self, cx))
         {
-            self.notice = Some(Message::info(
-                "Transfer cancelled because a pane or selection changed.",
-            ));
+            self.notice = Some(Message::info("sftp.transfer.scopeChanged.description"));
             cx.notify();
             return;
         }
@@ -1600,11 +1670,20 @@ impl FilePane {
             .is_some_and(|prepared| !prepared.alternatives.is_empty());
         let destructive = dialog.action == Action::Delete;
         let title = if conflict {
-            "Destination already exists".to_owned()
+            "sftp.conflict.destinationExists.title".into()
         } else if dialog.sudo.is_some() {
-            format!("{} with sudo", dialog.action.label())
+            crate::localization::format(
+                cx,
+                "sftp.sudo.action.title",
+                &[(
+                    "action",
+                    &crate::localization::text(cx, dialog.action.label()),
+                )],
+            )
+        } else if destructive {
+            "sftp.delete.dialog.title".into()
         } else {
-            dialog.action.label().to_owned()
+            dialog.action.label().into()
         };
         let details = dialog
             .prepared
@@ -1614,7 +1693,7 @@ impl FilePane {
         let mut actions = vec![
             Button::new("sftp-cancel-action")
                 .ghost()
-                .label("Cancel")
+                .label("common.action.cancel")
                 .on_click(|_, window, cx| {
                     cx.stop_propagation();
                     crate::components::Modal::dismiss(window, cx);
@@ -1625,7 +1704,7 @@ impl FilePane {
             actions.push(
                 Button::new("sftp-keep-both")
                     .secondary()
-                    .label("Keep Both")
+                    .label("sftp.label.keepBoth")
                     .on_click(cx.listener(move |this, _, window, cx| {
                         if this.dialog.as_ref().is_some_and(|dialog| dialog.id == id) {
                             this.commit_action(false, true, window, cx)
@@ -1637,7 +1716,7 @@ impl FilePane {
         actions.push(
             Button::new("sftp-confirm-action")
                 .label(if conflict {
-                    "Replace"
+                    "sftp.label.replace"
                 } else {
                     dialog.action.label()
                 })
@@ -1662,10 +1741,14 @@ impl FilePane {
             .flex_col()
             .gap(px(16.))
             .when(dialog.sudo.is_some(), |view| {
-                view.child(crate::localization::view(format!(
-                    "This operation runs with sudo on {}@{}.",
-                    dialog.options.username, dialog.options.host
-                )))
+                view.child(crate::localization::format(
+                    cx,
+                    "sftp.sudo.explicit.dialog.target",
+                    &[
+                        ("user", &dialog.options.username),
+                        ("host", &dialog.options.host),
+                    ],
+                ))
             })
             .when(
                 matches!(dialog.action, Action::Rename | Action::Copy | Action::Move) && !conflict,
@@ -1674,9 +1757,9 @@ impl FilePane {
                         Field::input(
                             &dialog.input,
                             if dialog.action == Action::Rename {
-                                "Name"
+                                "common.label.name"
                             } else {
-                                "Destination path"
+                                "sftp.field.destinationPath"
                             },
                         )
                         .disabled(dialog.busy)
@@ -1709,13 +1792,16 @@ impl FilePane {
                             .unwrap_or_else(|| operation.source());
                         div()
                             .mb(px(8.))
-                            .child(
-                                div().child(crate::localization::view(format!("From: {source}"))),
-                            )
-                            .child(div().child(crate::localization::view(format!(
-                                "To: {}",
-                                operation.target()
-                            ))))
+                            .child(div().child(crate::localization::format(
+                                cx,
+                                "sftp.label.sourcePath",
+                                &[("path", source)],
+                            )))
+                            .child(div().child(crate::localization::format(
+                                cx,
+                                "sftp.label.destinationPath",
+                                &[("path", operation.target())],
+                            )))
                     }))
                     .children(
                         dialog
@@ -1723,25 +1809,36 @@ impl FilePane {
                             .iter()
                             .flat_map(|prepared| prepared.alternatives.values())
                             .map(|path| {
-                                div().child(crate::localization::view(format!("Keep both: {path}")))
+                                div().child(crate::localization::format(
+                                    cx,
+                                    "sftp.conflict.keepBoth.path",
+                                    &[("path", path)],
+                                ))
                             }),
                     ),
             )
             .when(destructive, |view| {
-                view.child(crate::localization::text(
+                view.when(dialog.entries.len() > 1, |view| {
+                    view.child(crate::localization::format(
+                        cx,
+                        "sftp.delete.selectedCount",
+                        &[("count", &dialog.entries.len().to_string())],
+                    ))
+                })
+                .child(crate::localization::text(
                     cx,
-                    "rs.ui.copy.deleteRemoteItemsWarning",
+                    "sftp.delete.confirmation.description",
                 ))
             })
             .when(conflict, |view| {
                 view.child(crate::localization::text(
                     cx,
-                    "rs.ui.copy.keepOrReplaceItems",
+                    "sftp.conflict.replacement.description",
                 ))
             })
             .when(dialog.busy, |view| {
                 view.child(div().flex().gap(px(8.)).child(Spinner::new()).child(
-                    crate::localization::text(cx, "rs.ui.copy.checkingDestination"),
+                    crate::localization::text(cx, "sftp.transfer.checkingDestination.description"),
                 ))
             })
             .when_some(dialog.error.clone(), |view, error| {

@@ -770,7 +770,7 @@ impl FilePane {
                         .min_w_0()
                         .h(px(34.))
                         .px(px(4.))
-                        .localized_accessibility_label("Select host")
+                        .localized_accessibility_label("common.label.selectHost")
                         .child(
                             div()
                                 .flex()
@@ -836,7 +836,7 @@ impl FilePane {
                         .ghost()
                         .custom(crate::components::ButtonCustomVariant::for_surface(p))
                         .icon(IconName::Terminal)
-                        .tooltip("Show terminal")
+                        .tooltip("sftp.action.showTerminal")
                         .on_click(cx.listener(|_, _, _, cx| cx.emit(ShowTerminal))),
                 )
             })
@@ -849,7 +849,10 @@ impl FilePane {
                                 .palette(p)
                                 .small()
                                 .appearance(false)
-                                .aria_label(crate::localization::text(cx, "Filter files"))
+                                .aria_label(crate::localization::text(
+                                    cx,
+                                    "workspace.label.filterFiles",
+                                ))
                                 .cleanable(true),
                         ),
                     )
@@ -865,9 +868,9 @@ impl FilePane {
                             .custom(crate::components::ButtonCustomVariant::for_surface(p))
                             .icon(IconName::Search)
                             .when(!self.compact && !self.narrow, |button| {
-                                button.label("Filter")
+                                button.label("common.label.filter")
                             })
-                            .tooltip("Filter files")
+                            .tooltip("workspace.label.filterFiles")
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.filter_open = true;
                                 this.filter
@@ -883,13 +886,15 @@ impl FilePane {
                     .ghost()
                     .custom(crate::components::ButtonCustomVariant::for_surface(p))
                     .when(!self.compact && !self.narrow, |button| {
-                        button.label("Actions").trailing_icon(IconName::ChevronDown)
+                        button
+                            .label("common.label.actions")
+                            .trailing_icon(IconName::ChevronDown)
                     })
                     .when(self.compact, |button| button.icon(IconName::Ellipsis))
                     .when(!self.compact && self.narrow, |button| {
                         button.icon(IconName::ChevronDown)
                     })
-                    .tooltip("Actions")
+                    .tooltip("common.label.actions")
                     .dropdown_menu(move |menu, _, cx| {
                         actions::browser_menu(menu, operations.clone(), cx)
                     }),
@@ -912,7 +917,7 @@ impl FilePane {
                         Input::new(&self.path)
                             .palette(p)
                             .small()
-                            .aria_label(crate::localization::text(cx, "Edit path")),
+                            .aria_label(crate::localization::text(cx, "sftp.action.editPath")),
                     ),
                 )
                 .child(
@@ -921,7 +926,7 @@ impl FilePane {
                         .ghost()
                         .custom(crate::components::ButtonCustomVariant::for_surface(p))
                         .icon(crate::assets::icon(IconName::X))
-                        .tooltip("Cancel path editing")
+                        .tooltip("sftp.action.cancelPathEditing")
                         .on_click(cx.listener(|this, _, window, cx| {
                             this.editing_path = false;
                             this.focus.focus(window, cx);
@@ -953,7 +958,7 @@ impl FilePane {
                     .ghost()
                     .custom(crate::components::ButtonCustomVariant::for_surface(p))
                     .icon(IconName::House)
-                    .tooltip("Home")
+                    .tooltip("common.label.home")
                     .on_click(cx.listener(|this, _, window, cx| {
                         this.navigate(this.home(), Navigation::Visit, window, cx)
                     })),
@@ -970,7 +975,7 @@ impl FilePane {
                     .ghost()
                     .custom(crate::components::ButtonCustomVariant::for_surface(p))
                     .icon(IconName::ChevronLeft)
-                    .tooltip("Back")
+                    .tooltip("common.action.back")
                     .disabled(self.history.back.is_empty())
                     .on_click(cx.listener(|this, _, window, cx| {
                         if let Some(path) = this.history.back.last().cloned() {
@@ -987,7 +992,7 @@ impl FilePane {
                     .ghost()
                     .custom(crate::components::ButtonCustomVariant::for_surface(p))
                     .icon(IconName::ChevronRight)
-                    .tooltip("Forward")
+                    .tooltip("common.label.forward")
                     .disabled(self.history.forward.is_empty())
                     .on_click(cx.listener(|this, _, window, cx| {
                         if let Some(path) = this.history.forward.last().cloned() {
@@ -1004,7 +1009,7 @@ impl FilePane {
                             Input::new(&self.path)
                                 .palette(p)
                                 .small()
-                                .aria_label(crate::localization::text(cx, "Edit path")),
+                                .aria_label(crate::localization::text(cx, "sftp.action.editPath")),
                         )
                     })
                     .when(!self.editing_path, |view| view.child(self.breadcrumbs(cx))),
@@ -1031,7 +1036,7 @@ impl FilePane {
                                 .ghost()
                                 .custom(crate::components::ButtonCustomVariant::for_surface(p))
                                 .icon(IconName::List)
-                                .tooltip("Tasks")
+                                .tooltip("common.label.tasks")
                                 .when(self.tasks.read(cx).active() > 0, |button| {
                                     button.child(
                                         div()
@@ -1052,7 +1057,7 @@ impl FilePane {
                                             ),
                                     )
                                 })
-                                .localized_accessibility_label("Tasks"),
+                                .localized_accessibility_label("common.label.tasks"),
                         )
                         .content({
                             let tasks = self.tasks.clone();
@@ -1420,7 +1425,11 @@ impl Render for FilePane {
                         .when_some(self.error.clone(), |view, error| {
                             view.child(crate::localization::message(cx, &error)).child(
                                 Button::new("file-connect-back")
-                                    .label(if self.compact { "Retry" } else { "Back" })
+                                    .label(if self.compact {
+                                        "common.action.retry"
+                                    } else {
+                                        "common.action.back"
+                                    })
                                     .on_click(cx.listener(|this, _, window, cx| {
                                         if this.compact {
                                             this.reconnect_bound(window, cx);
@@ -1468,7 +1477,7 @@ impl Render for FilePane {
                     Button::new("file-select-host")
                         .mt(px(22.))
                         .secondary()
-                        .label("Select host")
+                        .label("common.label.selectHost")
                         .on_click(cx.listener(|this, _, _, cx| this.show_picker(cx))),
                 )
                 .when(self.terminal.is_none(), |view| {
@@ -1502,14 +1511,14 @@ impl Render for FilePane {
                             .bg(p.surface)
                             .child(div().flex_1().min_w_0().child(crate::localization::text(
                                 cx,
-                                "rs.ui.copy.openingRemoteFile",
+                                "sftp.edit.opening.description",
                             )))
                             .child(
                                 Button::new("cancel-remote-edit-open")
                                     .xsmall()
                                     .ghost()
                                     .custom(crate::components::ButtonCustomVariant::for_surface(p))
-                                    .label("Cancel")
+                                    .label("common.action.cancel")
                                     .on_click(
                                         cx.listener(|this, _, _, cx| this.cancel_edit_opening(cx)),
                                     ),
@@ -1600,9 +1609,14 @@ impl Render for FilePane {
                                     cx,
                                     self.error.as_deref().unwrap(),
                                 ))
-                                .child(Button::new("file-retry").small().label("Retry").on_click(
-                                    cx.listener(|this, _, window, cx| this.retry(window, cx)),
-                                ))
+                                .child(
+                                    Button::new("file-retry")
+                                        .small()
+                                        .label("common.action.retry")
+                                        .on_click(cx.listener(|this, _, window, cx| {
+                                            this.retry(window, cx)
+                                        })),
+                                )
                         })
                         .when(
                             !self.loading && self.error.is_none() && self.visible.is_empty(),
@@ -1611,7 +1625,7 @@ impl Render for FilePane {
                                     .items_center()
                                     .justify_center()
                                     .text_color(p.muted)
-                                    .child(crate::localization::text(cx, "rs.ui.copy.noFilesFound"))
+                                    .child(crate::localization::text(cx, "sftp.label.noFiles"))
                             },
                         )
                         .when(

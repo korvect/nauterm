@@ -330,7 +330,7 @@ impl Render for Host {
                             .icon_size(px(14.))
                             .custom(ButtonCustomVariant::for_surface(p))
                             .icon(crate::assets::icon(IconName::X))
-                            .tooltip("Dismiss")
+                            .tooltip("common.action.dismiss")
                             .on_click(cx.listener(|host, _, _, cx| host.dismiss(cx))),
                     ),
             )

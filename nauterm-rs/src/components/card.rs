@@ -119,7 +119,7 @@ pub fn card_edit_button(id: impl Into<ElementId>, dark: bool) -> Button {
         )
         .icon(IconName::Pencil)
         .icon_size(px(15.))
-        .tooltip("Edit")
+        .tooltip("common.action.edit")
 }
 
 pub fn card_text(

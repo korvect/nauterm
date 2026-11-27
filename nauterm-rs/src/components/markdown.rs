@@ -151,7 +151,7 @@ impl MarkdownDocument {
                             .icon_size(px(13.))
                             .text_color(palette.muted)
                             .icon(IconName::Copy)
-                            .tooltip("Copy code")
+                            .tooltip("common.action.copyCode")
                             .on_click(move |_, _, cx| {
                                 cx.write_to_clipboard(ClipboardItem::new_string(code.to_string()))
                             }),

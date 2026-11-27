@@ -284,7 +284,7 @@ impl Settings {
         let host_icons = SelectModel::new(
             crate::avatar::Mode::ALL
                 .into_iter()
-                .map(|mode| SelectOption::localized(mode, mode.label()))
+                .map(|mode| SelectOption::localized(mode, mode.label_key()))
                 .collect(),
             Some(values.host_icons),
             window,
@@ -322,7 +322,8 @@ impl Settings {
                 })
                 .unwrap_or(true)
         });
-        let theme_search = cx.new(|cx| InputState::new(window, cx).placeholder("Search themes..."));
+        let theme_search =
+            cx.new(|cx| InputState::new(window, cx).placeholder("settings.search.themes.hint"));
         let word_boundaries = cx.new(|cx| {
             InputState::new(window, cx).default_value(
                 crate::terminal_appearance::format_word_boundaries(
@@ -1005,16 +1006,27 @@ impl Settings {
                                 .child(self.text("settings.general.applicationTheme.description")),
                         )
                         .child(div().mt(px(14.)).child(self.theme_choices(cx)))
-                        .child(div().mt(px(18.)).child(self.row(
-                            "settings.general.language.label",
-                            "settings.general.language.description",
-                            self.language.select.control("Language", cx),
-                        )))
-                        .child(div().mt(px(18.)).child(self.row(
-                            "settings.general.hostIcon.label",
-                            "settings.general.hostIcon.description",
-                            self.host_icons.control("Host Icon", cx),
-                        ))),
+                        .child(
+                            div().mt(px(18.)).child(
+                                self.row(
+                                    "settings.general.language.label",
+                                    "settings.general.language.description",
+                                    self.language
+                                        .select
+                                        .control("settings.general.language.label", cx),
+                                ),
+                            ),
+                        )
+                        .child(
+                            div().mt(px(18.)).child(
+                                self.row(
+                                    "settings.general.hostIcon.label",
+                                    "settings.general.hostIcon.description",
+                                    self.host_icons
+                                        .control("settings.general.hostIcon.label", cx),
+                                ),
+                            ),
+                        ),
                 ),
             )
             .child(self.window_settings(window, cx))
@@ -1033,7 +1045,7 @@ impl Settings {
                                 "settings.general.confirmOnClose.description",
                                 Switch::new(
                                     "confirm-on-close",
-                                    "Confirm on Close",
+                                    "settings.general.confirmOnClose.label",
                                     self.values.general.confirm_on_close,
                                 )
                                 .on_change(cx.listener(
@@ -1050,7 +1062,7 @@ impl Settings {
                                 "settings.general.workspacePage.description",
                                 Switch::new(
                                     "workspace-page",
-                                    "Workspace Page",
+                                    "settings.general.workspacePage.label",
                                     self.values.general.workspace_enabled,
                                 )
                                 .on_change(cx.listener(
@@ -1106,29 +1118,39 @@ impl Settings {
                                 })
                                 .child(
                                     div().flex_1().min_w_0().child(
-                                        self.control(Field::Family).settings_field("Font", cx),
+                                        self.control(Field::Family)
+                                            .settings_field("common.label.font", cx),
                                     ),
                                 )
-                                .child(div().flex_1().min_w_0().child(
-                                    self.control(Field::Size).settings_field("Font Size", cx),
-                                )),
+                                .child(
+                                    div().flex_1().min_w_0().child(
+                                        self.control(Field::Size)
+                                            .settings_field("settings.label.fontSize", cx),
+                                    ),
+                                ),
                         )
-                        .child(self.row(
-                            "settings.terminal.cjkFont.label",
-                            "rs.settings.terminal.cjkFont.description",
-                            self.control(Field::CjkFamily).control("CJK Font", cx),
-                        ))
-                        .child(self.row(
-                            "settings.terminal.lineHeight.label",
-                            "settings.terminal.lineHeight.description",
-                            self.control(Field::LineHeight).control("Line Height", cx),
-                        ))
+                        .child(
+                            self.row(
+                                "settings.terminal.cjkFont.label",
+                                "settings.terminal.cjkFont.description",
+                                self.control(Field::CjkFamily)
+                                    .control("settings.terminal.cjkFont.label", cx),
+                            ),
+                        )
+                        .child(
+                            self.row(
+                                "settings.terminal.lineHeight.label",
+                                "settings.terminal.lineHeight.description",
+                                self.control(Field::LineHeight)
+                                    .control("settings.terminal.lineHeight.label", cx),
+                            ),
+                        )
                         .child(
                             self.row(
                                 "settings.terminal.letterSpacing.label",
                                 "settings.terminal.letterSpacing.description",
                                 self.control(Field::LetterSpacing)
-                                    .control("Letter Spacing", cx),
+                                    .control("settings.terminal.letterSpacing.label", cx),
                             ),
                         )
                         .child(self.row(
@@ -1147,7 +1169,7 @@ impl Settings {
                                 "settings.terminal.ligatures.description",
                                 Switch::new(
                                     "font-ligatures",
-                                    "Ligatures",
+                                    "settings.terminal.ligatures.label",
                                     appearance.enable_ligatures,
                                 )
                                 .on_change(cx.listener(
@@ -1168,20 +1190,29 @@ impl Settings {
                         .flex()
                         .flex_col()
                         .gap(px(18.))
-                        .child(self.row(
-                            "settings.terminal.cursorShape.label",
-                            "settings.terminal.cursorShape.description",
-                            self.cursor_shape.control("Cursor Shape", cx),
-                        ))
+                        .child(
+                            self.row(
+                                "settings.terminal.cursorShape.label",
+                                "settings.terminal.cursorShape.description",
+                                self.cursor_shape
+                                    .control("settings.terminal.cursorShape.label", cx),
+                            ),
+                        )
                         .child(
                             self.row(
                                 "settings.terminal.cursorBlink.label",
                                 "settings.terminal.cursorBlink.description",
-                                Switch::new("cursor-blink", "Blink", appearance.cursor_blink)
-                                    .on_change(cx.listener(|this, value, window, cx| {
+                                Switch::new(
+                                    "cursor-blink",
+                                    "settings.terminal.cursorBlink.label",
+                                    appearance.cursor_blink,
+                                )
+                                .on_change(cx.listener(
+                                    |this, value, window, cx| {
                                         this.values.terminal.cursor_blink = *value;
                                         this.changed(window, cx);
-                                    })),
+                                    },
+                                )),
                             ),
                         ),
                 ),
@@ -1201,7 +1232,7 @@ impl Settings {
                                 "settings.terminal.scrollbar.description",
                                 Switch::new(
                                     "terminal-scrollbar",
-                                    "Scrollbar",
+                                    "settings.terminal.scrollbar.label",
                                     appearance.scrollbar,
                                 )
                                 .on_change(cx.listener(
@@ -1218,7 +1249,7 @@ impl Settings {
                                 "settings.terminal.composer.description",
                                 Switch::new(
                                     "composer-enabled",
-                                    "Composer",
+                                    "settings.terminal.composer.label",
                                     appearance.composer_enabled,
                                 )
                                 .on_change(cx.listener(
@@ -1246,7 +1277,7 @@ impl Settings {
                                 "settings.terminal.input.reportMouseEvents.description",
                                 Switch::new(
                                     "report-mouse-events",
-                                    "Report Mouse Events",
+                                    "settings.terminal.input.reportMouseEvents.label",
                                     appearance.report_mouse_events,
                                 )
                                 .on_change(cx.listener(
@@ -1263,7 +1294,7 @@ impl Settings {
                                 "settings.terminal.input.navigationKeysScroll.description",
                                 Switch::new(
                                     "navigation-keys-scroll",
-                                    "Scroll with Navigation Keys",
+                                    "settings.terminal.input.navigationKeysScroll.label",
                                     appearance.navigation_keys_scroll,
                                 )
                                 .on_change(cx.listener(
@@ -1284,7 +1315,11 @@ impl Settings {
                                 "settings.terminal.pointer.commandClickOpensTarget.description",
                                 Switch::new(
                                     "command-click-opens-filename-or-url",
-                                    "Open Filename/URL",
+                                    if cfg!(target_os = "macos") {
+                                        "settings.terminal.pointer.commandClickOpensTarget.label"
+                                    } else {
+                                        "settings.terminal.pointer.controlClickOpensTarget.label"
+                                    },
                                     appearance.command_click_opens_filename_or_url,
                                 )
                                 .on_change(cx.listener(
@@ -1306,7 +1341,11 @@ impl Settings {
                                 "settings.terminal.pointer.optionClickMovesCursor.description",
                                 Switch::new(
                                     "option-click-moves-cursor",
-                                    "Click Moves Cursor",
+                                    if cfg!(target_os = "macos") {
+                                        "settings.terminal.pointer.optionClickMovesCursor.label"
+                                    } else {
+                                        "settings.terminal.pointer.altClickMovesCursor.label"
+                                    },
                                     appearance.option_click_moves_cursor,
                                 )
                                 .on_change(cx.listener(
@@ -1333,7 +1372,7 @@ impl Settings {
                                 "settings.terminal.copyOnSelect.description",
                                 Switch::new(
                                     "copy-on-select",
-                                    "Copy on Select",
+                                    "settings.terminal.copyOnSelect.label",
                                     appearance.copy_on_select,
                                 )
                                 .on_change(cx.listener(
@@ -1350,7 +1389,7 @@ impl Settings {
                                 "settings.terminal.selectCommandBlockOnClick.description",
                                 Switch::new(
                                     "select-command-block-on-click",
-                                    "Select Command Block on Click",
+                                    "settings.terminal.selectCommandBlockOnClick.label",
                                     appearance.select_command_block_on_click,
                                 )
                                 .on_change(cx.listener(
@@ -1365,7 +1404,10 @@ impl Settings {
                             "settings.terminal.wordBoundaries.label",
                             "settings.terminal.wordBoundaries.description",
                             Input::new(&self.word_boundaries).w_full().aria_label(
-                                crate::localization::text(cx, "Word Selection Boundaries"),
+                                crate::localization::text(
+                                    cx,
+                                    "settings.terminal.wordBoundaries.label",
+                                ),
                             ),
                         )),
                 ),
@@ -1404,12 +1446,15 @@ impl Render for Settings {
                 "settings.pages.shortcuts.description",
             ),
             Page::About => (
-                "rs.settings.pages.about.title",
+                "settings.pages.about.title",
                 "settings.pages.about.description",
             ),
             Page::Sync => {
                 if self.sync.read(cx).requires_master_key() {
-                    ("Master Key", "settings.sync.masterKey.description")
+                    (
+                        "common.label.masterKey",
+                        "settings.sync.masterKey.description",
+                    )
                 } else {
                     (
                         "settings.pages.sync.title",
@@ -1483,21 +1528,22 @@ impl Render for Settings {
                             .child(
                                 div()
                                     .font_weight(FontWeights::SEMIBOLD)
-                                    .child(crate::localization::text(cx, "Nauterm RS")),
+                                    .child(crate::APPLICATION_NAME),
                             ),
                     )
                     .children(
                         [
-                            (Page::General, "General", IconName::SlidersHorizontal),
-                            (Page::Terminal, "Terminal", IconName::Terminal),
-                            (Page::Sftp, "SFTP", IconName::Folder),
-                            (Page::Ai, "AI Assistant", IconName::Sparkles),
-                            (Page::Sync, "Sync & Backup", IconName::Cloud),
-                            (Page::Shortcuts, "Shortcuts", IconName::Keyboard),
-                            (Page::About, "About", IconName::Info),
+                            (Page::General, IconName::SlidersHorizontal),
+                            (Page::Terminal, IconName::Terminal),
+                            (Page::Sftp, IconName::Folder),
+                            (Page::Ai, IconName::Sparkles),
+                            (Page::Sync, IconName::Cloud),
+                            (Page::Shortcuts, IconName::Keyboard),
+                            (Page::About, IconName::Info),
                         ]
                         .into_iter()
-                        .map(|(page, label, icon)| {
+                        .map(|(page, icon)| {
+                            let label = page.label();
                             Button::new(label)
                                 .w_full()
                                 .h(px(32.))
@@ -1535,7 +1581,7 @@ impl Render for Settings {
                             .child(
                                 SettingsText::Header
                                     .apply(div())
-                                    .child(self.text("Settings")),
+                                    .child(self.text("common.label.settings")),
                             )
                             .child(div().flex_1())
                             .child(
@@ -1554,13 +1600,16 @@ impl Render for Settings {
                                             .size(px(16.))
                                             .text_color(p.muted),
                                     )
-                                    .aria_label(crate::localization::text(cx, "Search settings")),
+                                    .aria_label(crate::localization::text(
+                                        cx,
+                                        "settings.label.searchSettings",
+                                    )),
                             )
                             .child(self.reset_button(cx))
                             .child(
                                 Button::new("settings-done")
                                     .accent()
-                                    .label(self.text("Done"))
+                                    .label(self.text("common.action.done"))
                                     .on_click(
                                         cx.listener(|this, _, window, cx| this.dismiss(window, cx)),
                                     ),

@@ -466,8 +466,15 @@ impl Providers {
                 this.presets_task = None;
                 match result {
                     Ok(presets) => {
+                        this.preset_status = Some(
+                            crate::localization::format(
+                                cx,
+                                "settings.ai.providerPreset.updated",
+                                &[("count", &presets.len().to_string())],
+                            )
+                            .into(),
+                        );
                         this.presets = presets;
-                        this.preset_status = Some("Presets updated.".into());
                     }
                     Err(error) => this.error = Some(error.to_string()),
                 }
@@ -570,9 +577,9 @@ impl Providers {
             .as_ref()
             .is_some_and(|editor| editor.record.is_none())
         {
-            "Add AI Provider"
+            "settings.label.addAiProvider"
         } else {
-            "Edit Provider"
+            "settings.ai.provider.editTitle"
         };
         let body = if self.editor.is_none() {
             div()
@@ -589,51 +596,46 @@ impl Providers {
                 .gap(px(12.))
                 .child(pair(
                     self.field(
-                        "Name",
+                        "common.label.name",
                         "",
-                        Input::new(&self.fields[0])
-                            .disabled(self.busy)
-                            .aria_label(crate::localization::text(cx, "Provider name")),
+                        Input::new(&self.fields[0]).disabled(self.busy).aria_label(
+                            crate::localization::text(cx, "settings.ai.provider.name.label"),
+                        ),
                     ),
                     self.field(
-                        "Protocol",
+                        "common.label.protocol",
                         "",
-                        self.protocol.control_disabled("Protocol", self.busy),
+                        self.protocol
+                            .control_disabled("settings.ai.provider.protocol.label", self.busy),
                     ),
                 ))
-                .child(
-                    self.field(
-                        "Base URL",
-                        "",
-                        Input::new(&self.fields[1])
-                            .disabled(self.busy)
-                            .aria_label(crate::localization::text(cx, "Base URL")),
+                .child(self.field(
+                    "settings.ai.provider.baseUrl.label",
+                    "",
+                    Input::new(&self.fields[1]).disabled(self.busy).aria_label(
+                        crate::localization::text(cx, "settings.ai.provider.baseUrl.label"),
                     ),
-                )
-                .child(
-                    self.field(
-                        "API Key",
-                        "",
-                        Input::new(&self.fields[3])
-                            .disabled(self.busy)
-                            .aria_label(crate::localization::text(cx, "API Key")),
+                ))
+                .child(self.field(
+                    "settings.ai.provider.apiKey.label",
+                    "",
+                    Input::new(&self.fields[3]).disabled(self.busy).aria_label(
+                        crate::localization::text(cx, "settings.ai.provider.apiKey.label"),
                     ),
-                )
-                .child(
-                    self.field(
-                        "Models",
-                        "Comma-separated. The first model is the default.",
-                        Input::new(&self.fields[2])
-                            .disabled(self.busy)
-                            .aria_label(crate::localization::text(cx, "Models")),
+                ))
+                .child(self.field(
+                    "settings.ai.provider.models.label",
+                    "settings.ai.provider.models.hint",
+                    Input::new(&self.fields[2]).disabled(self.busy).aria_label(
+                        crate::localization::text(cx, "settings.ai.provider.models.label"),
                     ),
-                )
+                ))
                 .child(
                     Button::new("ai-advanced")
                         .small()
                         .ghost()
                         .content_start()
-                        .label("Advanced")
+                        .label("workspace.label.advanced")
                         .icon(if self.advanced {
                             IconName::ChevronDown
                         } else {
@@ -647,19 +649,25 @@ impl Providers {
                 .when(self.advanced, |view| {
                     view.child(pair(
                         self.field(
-                            "Max Tokens",
-                            "Blank uses the provider default.",
+                            "settings.ai.provider.maxTokens.label",
+                            "settings.ai.provider.maxTokens.hint",
                             Input::new(&self.fields[4])
                                 .disabled(self.busy)
                                 .digits_only()
-                                .aria_label(crate::localization::text(cx, "Max Tokens")),
+                                .aria_label(crate::localization::text(
+                                    cx,
+                                    "settings.ai.provider.maxTokens.label",
+                                )),
                         ),
                         self.field(
-                            "Temperature",
-                            "Between 0 and 1.",
-                            Input::new(&self.fields[5])
-                                .disabled(self.busy)
-                                .aria_label(crate::localization::text(cx, "Temperature")),
+                            "settings.ai.provider.temperature.label",
+                            "settings.ai.provider.temperature.hint",
+                            Input::new(&self.fields[5]).disabled(self.busy).aria_label(
+                                crate::localization::text(
+                                    cx,
+                                    "settings.ai.provider.temperature.label",
+                                ),
+                            ),
                         ),
                     ))
                 })
@@ -669,11 +677,11 @@ impl Providers {
                 ))
         };
         let status = if self.saving {
-            "Saving…"
+            "common.label.saving"
         } else if self.busy {
-            "Loading…"
+            "common.status.loading"
         } else if self.editor.as_ref().is_some_and(|editor| editor.dirty) {
-            "Unsaved changes"
+            "settings.ai.provider.unsaved"
         } else {
             ""
         };
@@ -699,7 +707,7 @@ impl Providers {
                                     .icon_size(px(14.))
                                     .text_color(p.muted)
                                     .icon(crate::assets::icon(IconName::X))
-                                    .tooltip("Close")
+                                    .tooltip("common.action.close")
                                     .disabled(self.saving)
                                     .on_click(|_, window, cx| Modal::dismiss(window, cx)),
                             ),
@@ -727,7 +735,7 @@ impl Providers {
                             .icon_size(px(14.))
                             .text_color(rgb(0xef4444))
                             .icon(IconName::Trash)
-                            .tooltip("Delete provider")
+                            .tooltip("settings.ai.provider.delete")
                             .when(id.is_none(), |button| button.invisible())
                             .disabled(self.busy || id.is_none())
                             .on_click(cx.listener(move |this, _, _, cx| {
@@ -745,14 +753,14 @@ impl Providers {
                     .action(
                         Button::new("ai-editor-cancel")
                             .ghost()
-                            .label("Cancel")
+                            .label("common.action.cancel")
                             .disabled(self.saving)
                             .on_click(|_, window, cx| Modal::dismiss(window, cx)),
                     )
                     .action(
                         Button::new("ai-editor-save")
                             .primary()
-                            .label("Save")
+                            .label("common.action.save")
                             .disabled(self.busy || self.editor.is_none())
                             .on_click(
                                 cx.listener(|this, _, window, cx| this.save_editor(window, cx)),
@@ -772,52 +780,61 @@ impl Providers {
             .flex_col()
             .gap(px(8.))
             .text_size(px(13.))
-            .child(crate::localization::view(format!("Delete \"{}\" and its saved API key?", row.name)))
+            .child(crate::localization::format(
+                cx,
+                "settings.ai.provider.deleteConfirmation",
+                &[("name", &row.name)],
+            ))
             .when(row.active || last, |view| {
-                view.child(div().text_size(px(12.)).text_color(p.muted).child(crate::localization::view(if last {
-                    "This is your only provider. The assistant stays unavailable until you add another."
-                } else {
-                    "This provider is active. The next provider in the list becomes active."
-                })))
+                view.child(div().text_size(px(12.)).text_color(p.muted).child(
+                    crate::localization::view(if last {
+                        "settings.ai.provider.deletion.lastProvider"
+                    } else {
+                        "settings.ai.provider.deletion.activeProvider"
+                    }),
+                ))
             });
         Some(
-            Modal::new("delete-ai-provider", "Delete Provider")
+            Modal::new("delete-ai-provider", "settings.ai.provider.deleteTitle")
                 .return_focus(&self.focus)
                 .on_dismiss(cx.listener(|this, _, _, cx| {
                     this.deleting = None;
                     cx.notify();
                 }))
                 .content(
-                    DialogFrame::new("delete-ai-provider-frame", "Delete Provider")
-                        .colors(DialogColors {
-                            surface: p.surface,
-                            header: p.sidebar,
-                            border: p.border,
-                            foreground: p.text,
-                            dark: self.dark,
-                        })
-                        .width(400.)
-                        .content(body)
-                        .action(
-                            Button::new("ai-delete-cancel")
-                                .outline()
-                                .label("Cancel")
-                                .on_click(cx.listener(|this, _, _, cx| {
-                                    this.deleting = None;
-                                    cx.notify();
-                                })),
-                        )
-                        .action(
-                            Button::new("ai-delete-confirm")
-                                .danger()
-                                .label("Delete")
-                                .disabled(self.busy)
-                                .on_click(cx.listener(move |this, _, window, cx| {
-                                    this.deleting = None;
-                                    this.close_editor(window, cx);
-                                    this.request(Intent::Delete(id), window, cx);
-                                })),
-                        ),
+                    DialogFrame::new(
+                        "delete-ai-provider-frame",
+                        "settings.ai.provider.deleteTitle",
+                    )
+                    .colors(DialogColors {
+                        surface: p.surface,
+                        header: p.sidebar,
+                        border: p.border,
+                        foreground: p.text,
+                        dark: self.dark,
+                    })
+                    .width(400.)
+                    .content(body)
+                    .action(
+                        Button::new("ai-delete-cancel")
+                            .outline()
+                            .label("common.action.cancel")
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.deleting = None;
+                                cx.notify();
+                            })),
+                    )
+                    .action(
+                        Button::new("ai-delete-confirm")
+                            .danger()
+                            .label("common.action.delete")
+                            .disabled(self.busy)
+                            .on_click(cx.listener(move |this, _, window, cx| {
+                                this.deleting = None;
+                                this.close_editor(window, cx);
+                                this.request(Intent::Delete(id), window, cx);
+                            })),
+                    ),
                 )
                 .into_any_element(),
         )
@@ -829,7 +846,7 @@ impl Providers {
         let p = Palette::settings(self.dark);
         let query = self.preset_search.read(cx).value().to_lowercase();
         Some(
-            Modal::new("add-ai-provider", "Add AI Provider")
+            Modal::new("add-ai-provider", "settings.label.addAiProvider")
                 .return_focus(&self.focus)
                 .initial_focus(&self.preset_search.read(cx).focus_handle(cx))
                 .dismiss_on_backdrop(false)
@@ -881,7 +898,7 @@ impl Providers {
                                             .text_color(p.muted)
                                             .child(crate::localization::text(
                                                 cx,
-                                                "Select a provider preset or create a blank one.",
+                                                "settings.ai.providerPreset.description",
                                             )),
                                     ),
                             )
@@ -889,7 +906,7 @@ impl Providers {
                                 Button::new("ai-provider-picker-close")
                                     .ghost()
                                     .icon(crate::assets::icon(IconName::X))
-                                    .tooltip("Close")
+                                    .tooltip("common.action.close")
                                     .on_click(cx.listener(|this, _, _, cx| {
                                         this.adding = false;
                                         cx.notify();
@@ -966,14 +983,14 @@ impl Providers {
                     .action(
                         Button::new("ai-provider-blank")
                             .ghost()
-                            .label("Create Blank Provider")
+                            .label("settings.label.createBlankProvider")
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.create(ai::presets::blank(), window, cx);
                             })),
                     )
                     .action(
                         Button::new("ai-provider-cancel")
-                            .label("Cancel")
+                            .label("common.action.cancel")
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.adding = false;
                                 cx.notify();
@@ -994,7 +1011,7 @@ impl Render for Providers {
                 .child(Spinner::new())
                 .child(crate::localization::text(
                     cx,
-                    "rs.ui.copy.automaticSyncRunning",
+                    "settings.sync.status.syncing",
                 ))
                 .into_any_element();
         }
@@ -1074,13 +1091,16 @@ impl Render for Providers {
                             .border_color(p.accent)
                             .text_size(px(10.))
                             .text_color(p.accent)
-                            .child(crate::localization::text(cx, "rs.ui.copy.active"))
+                            .child(
+                                crate::localization::text(cx, "settings.ai.provider.active")
+                                    .to_uppercase(),
+                            )
                             .into_any_element()
                     } else {
                         Button::new(("ai-active", id as u64))
                             .small()
                             .ghost()
-                            .label("Use")
+                            .label("settings.ai.provider.use")
                             .disabled(self.busy)
                             .on_click(cx.listener(move |this, _, window, cx| {
                                 cx.stop_propagation();
@@ -1096,7 +1116,7 @@ impl Render for Providers {
                             .ghost()
                             .text_color(p.accent)
                             .icon(IconName::Pencil)
-                            .tooltip("Edit provider")
+                            .tooltip("settings.ai.provider.edit")
                             .disabled(self.busy)
                             .on_click(cx.listener(move |this, _, window, cx| {
                                 cx.stop_propagation();
@@ -1111,7 +1131,7 @@ impl Render for Providers {
                             .ghost()
                             .text_color(rgb(0xef4444))
                             .icon(IconName::Trash)
-                            .tooltip("Delete provider")
+                            .tooltip("settings.ai.provider.delete")
                             .disabled(self.busy)
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 cx.stop_propagation();
@@ -1133,9 +1153,9 @@ impl Render for Providers {
                     .text_size(px(12.))
                     .text_color(p.muted)
                     .child(crate::localization::view(if self.busy {
-                        "Loading providers…"
+                        "settings.ai.providers.loading"
                     } else {
-                        "No AI providers yet. Add one to use the assistant."
+                        "settings.ai.providers.empty"
                     }))
                     .when(!self.busy, |view| {
                         view.child(
@@ -1143,7 +1163,7 @@ impl Render for Providers {
                                 .primary()
                                 .small()
                                 .icon(crate::assets::icon(IconName::Plus))
-                                .label("Add Provider")
+                                .label("settings.label.addProvider")
                                 .disabled(unavailable)
                                 .on_click(cx.listener(|this, _, _, cx| {
                                     this.adding = true;
@@ -1244,7 +1264,7 @@ impl Settings {
                                 "settings.ai.terminalSelection.description",
                                 Switch::new(
                                     "ai-terminal-selection",
-                                    "Terminal Selection",
+                                    "settings.ai.terminalSelection.label",
                                     self.values.ai.include_selection,
                                 )
                                 .on_change(cx.listener(
@@ -1261,7 +1281,7 @@ impl Settings {
                                 "settings.ai.recentOutput.description",
                                 Switch::new(
                                     "ai-recent-output",
-                                    "Recent Output",
+                                    "ai.label.recentOutput",
                                     self.values.ai.include_recent_output,
                                 )
                                 .on_change(cx.listener(

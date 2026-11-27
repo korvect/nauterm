@@ -148,7 +148,7 @@ impl Nauterm {
                 menu.width(180.)
                     .when(id.is_some() && kind == ItemKind::Host, |menu| {
                         menu.item(item(
-                            MenuItem::localized("Connect").icon(IconName::Terminal),
+                            MenuItem::localized("common.action.connect").icon(IconName::Terminal),
                             EditorAction::Connect,
                         ))
                     })
@@ -157,14 +157,15 @@ impl Nauterm {
                             && matches!(kind, ItemKind::Host | ItemKind::Group | ItemKind::Snippet),
                         |menu| {
                             menu.item(item(
-                                MenuItem::localized("Duplicate").icon(IconName::Copy),
+                                MenuItem::localized("workspace.action.duplicate")
+                                    .icon(IconName::Copy),
                                 EditorAction::Duplicate,
                             ))
                         },
                     )
                     .when(id.is_some(), |menu| {
                         menu.item(item(
-                            MenuItem::localized("Delete")
+                            MenuItem::localized("common.action.delete")
                                 .icon(IconName::Trash)
                                 .destructive(true),
                             EditorAction::Delete,

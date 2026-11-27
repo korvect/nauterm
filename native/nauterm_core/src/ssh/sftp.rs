@@ -822,12 +822,16 @@ pub(super) async fn upload_sftp_path(
     remote_path: &str,
     replace_existing: bool,
     transfer_concurrency: usize,
+    expected: Option<&super::SftpRemoteFileVersion>,
     progress: &mut SftpTaskProgress,
 ) -> Result<(u64, String), String> {
     let plan = local_upload::Plan::read(local_path, &progress.cancel)?;
     let total = plan.total;
     let directory = plan.directory;
     progress.set_total(total, &local_path.to_string_lossy());
+    if let Some(expected) = expected {
+        verify_remote_file_version(sftp, remote_path, expected).await?;
+    }
     if !replace_existing && sftp.metadata(remote_path.to_owned()).await.is_ok() {
         return Err(format!("remote target already exists: {remote_path}"));
     }
@@ -912,9 +916,13 @@ pub(super) async fn upload_sftp_path(
             return Err(error);
         }
     };
-    if let Err(error) =
+    let commit = async {
+        if let Some(expected) = expected {
+            verify_remote_file_version(sftp, remote_path, expected).await?;
+        }
         commit_remote_staging_path(sftp, &staging_path, remote_path, replace_existing).await
-    {
+    };
+    if let Err(error) = commit.await {
         let _ = remove_remote_path_quiet(sftp, &staging_path).await;
         if !directory {
             let _ = sftp
@@ -929,6 +937,27 @@ pub(super) async fn upload_sftp_path(
             .await;
     }
     Ok(uploaded)
+}
+
+async fn verify_remote_file_version(
+    sftp: &SftpSession,
+    path: &str,
+    expected: &super::SftpRemoteFileVersion,
+) -> Result<(), String> {
+    let metadata = sftp
+        .metadata(path.to_owned())
+        .await
+        .map_err(|error| format!("Could not verify remote file {path}: {error}"))?;
+    if metadata.is_regular()
+        && metadata.size == Some(expected.size)
+        && metadata.mtime == Some(expected.modified)
+    {
+        Ok(())
+    } else {
+        Err(format!(
+            "Remote file changed before it could be saved: {path}"
+        ))
+    }
 }
 
 async fn upload_sftp_file(

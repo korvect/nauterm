@@ -346,7 +346,9 @@ class _HostsPaneState extends State<_HostsPane> {
 }
 
 class _WorkspaceLoadingLine extends StatelessWidget {
-  const _WorkspaceLoadingLine();
+  const _WorkspaceLoadingLine({this.semanticsLabelKey});
+
+  final String? semanticsLabelKey;
 
   @override
   Widget build(BuildContext context) {
@@ -357,7 +359,13 @@ class _WorkspaceLoadingLine extends StatelessWidget {
         child: SizedBox(
           width: 18,
           height: 18,
-          child: CircularProgressIndicator(strokeWidth: 2),
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            semanticsLabel: switch (semanticsLabelKey) {
+              final key? => context.tr(key),
+              null => null,
+            },
+          ),
         ),
       ),
     );

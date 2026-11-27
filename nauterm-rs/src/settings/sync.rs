@@ -330,7 +330,7 @@ impl Panel {
     }
     fn run_sync(&mut self, plan: SyncPlan, window: &mut Window, cx: &mut Context<Self>) {
         let Some(service) = self.service.clone() else {
-            self.operation_failed("Sync storage is unavailable.".into(), cx);
+            self.operation_failed("settings.sync.error.storageUnavailable".into(), cx);
             return;
         };
         let key = self.key.pending.clone();
@@ -365,11 +365,13 @@ impl Panel {
                 let message = match attempt.outcome {
                     Ok(summary) => {
                         applied = true;
-                        let message = if restoring_version {
-                            summary.message_for("Cloud version restored")
+                        let status_key = if restoring_version {
+                            "settings.sync.result.cloudRestored"
                         } else {
-                            summary.message()
+                            "settings.sync.result.complete"
                         };
+                        let message =
+                            summary.message(crate::localization::language(cx), status_key);
                         self.notice = Some(message.clone());
                         message
                     }
@@ -391,12 +393,15 @@ impl Panel {
                         self.overview = Some(overview);
                     }
                     Err(error) => {
+                        let refresh = crate::localization::format(
+                            cx,
+                            "settings.sync.error.refreshStatus",
+                            &[("error", &error)],
+                        );
                         self.error = Some(match self.error.take() {
-                            Some(previous) => {
-                                format!("{previous} Could not refresh sync status: {error}")
-                            }
-                            None => format!("Could not refresh sync status: {error}"),
-                        })
+                            Some(previous) => format!("{previous} {refresh}"),
+                            None => refresh.to_string(),
+                        });
                     }
                 }
                 self.backups = None;
@@ -418,7 +423,7 @@ impl Panel {
     }
     pub fn restore(&mut self, backup: Backup, window: &mut Window, cx: &mut Context<Self>) {
         let Some(service) = self.service.clone() else {
-            self.operation_failed("Sync storage is unavailable.".into(), cx);
+            self.operation_failed("settings.sync.error.storageUnavailable".into(), cx);
             return;
         };
         let count = self.preferences.backup_count;
@@ -437,7 +442,13 @@ impl Panel {
                         this.confirm = None;
                         this.overview = None;
                         this.backups = None;
-                        cx.emit(Event::DataChanged("Local backup restored.".into()));
+                        cx.emit(Event::DataChanged(
+                            crate::localization::message(
+                                cx,
+                                "settings.sync.backup.restore.success",
+                            )
+                            .to_string(),
+                        ));
                         this.refresh(cx);
                     }
                     Err(error) => {
@@ -580,7 +591,7 @@ impl Panel {
                                 .flex()
                                 .items_baseline()
                                 .gap(px(8.))
-                                .child(backup.date())
+                                .child(backup.date(crate::localization::language(cx)))
                                 .child(
                                     div()
                                         .text_size(px(11.))
@@ -592,7 +603,7 @@ impl Panel {
                             Button::new(("restore-sync-backup", index))
                                 .small()
                                 .ghost()
-                                .label("Restore")
+                                .label("common.action.restore")
                                 .disabled(self.busy())
                                 .on_click(cx.listener(move |this, _, _, cx| {
                                     this.confirm = Some(selected.clone());
@@ -605,7 +616,7 @@ impl Panel {
             }
         }
         Some(
-            Modal::new("local-sync-backups", "Local Backups")
+            Modal::new("local-sync-backups", "settings.label.localBackups")
                 .focus_scope(&self.backup_focus)
                 .return_focus(&self.focus)
                 .dismissible(!self.busy())
@@ -615,20 +626,20 @@ impl Panel {
                     cx.notify();
                 }))
                 .content(
-                    DialogFrame::new("local-backups-frame", "Local Backups")
+                    DialogFrame::new("local-backups-frame", "settings.label.localBackups")
                         .colors(self.colors())
                         .width(480.)
                         .content(body)
                         .action(
                             Button::new("refresh-backups")
                                 .outline()
-                                .label("Refresh")
+                                .label("common.action.refresh")
                                 .disabled(self.busy())
                                 .on_click(cx.listener(|this, _, _, cx| this.refresh(cx))),
                         )
                         .action(
                             Button::new("close-backups")
-                                .label("Done")
+                                .label("common.action.done")
                                 .disabled(self.busy())
                                 .on_click(|_, window, cx| Modal::dismiss(window, cx)),
                         ),
@@ -638,54 +649,65 @@ impl Panel {
     }
     fn restore_dialog(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let backup = self.confirm.as_ref()?;
-        let content = div().flex().flex_col().gap(px(10.))
-            .child(crate::localization::view(format!("Restore the local backup from {}? Saved data will be replaced and open resource editors will close. A backup of the current data is kept before restoring.", backup.date())));
+        let content = div()
+            .flex()
+            .flex_col()
+            .gap(px(10.))
+            .child(crate::localization::format(
+                cx,
+                "settings.sync.localBackups.restore.description",
+                &[("date", &backup.date(crate::localization::language(cx)))],
+            ));
         Some(
-            Dialog::new("restore-sync-backup-confirm", "Restore Local Backup")
-                .focus_scope(&self.confirm_focus)
-                .return_focus(&self.backup_focus)
-                .dismissible(!self.mutating)
-                .on_dismiss(cx.listener(|this, _, _, cx| {
-                    this.confirm = None;
-                    this.error = None;
-                    this.validation_error = None;
-                    cx.notify();
-                }))
-                .content(
-                    DialogFrame::new("restore-sync-backup-frame", "Restore Local Backup")
-                        .colors(self.colors())
-                        .content(content)
-                        .action(
-                            Button::new("cancel-backup-restore")
-                                .outline()
-                                .label("Cancel")
-                                .disabled(self.mutating)
-                                .on_click(|_, window, cx| Modal::dismiss(window, cx)),
-                        )
-                        .action(
-                            Button::new("confirm-backup-restore")
-                                .primary()
-                                .label(if self.mutating {
-                                    "Restoring…"
-                                } else {
-                                    "Restore"
-                                })
-                                .disabled(self.mutating)
-                                .on_click(cx.listener(|this, _, _, cx| {
-                                    if this.mutating {
-                                        return;
-                                    }
-                                    if let Some(backup) = this.confirm.clone() {
-                                        this.mutating = true;
-                                        cx.emit(Event::MutationRequested(Operation::Restore(
-                                            backup,
-                                        )));
-                                        cx.notify();
-                                    }
-                                })),
-                        ),
+            Dialog::new(
+                "restore-sync-backup-confirm",
+                "settings.sync.localBackups.restore.title",
+            )
+            .focus_scope(&self.confirm_focus)
+            .return_focus(&self.backup_focus)
+            .dismissible(!self.mutating)
+            .on_dismiss(cx.listener(|this, _, _, cx| {
+                this.confirm = None;
+                this.error = None;
+                this.validation_error = None;
+                cx.notify();
+            }))
+            .content(
+                DialogFrame::new(
+                    "restore-sync-backup-frame",
+                    "settings.sync.localBackups.restore.title",
                 )
-                .into_any_element(),
+                .colors(self.colors())
+                .content(content)
+                .action(
+                    Button::new("cancel-backup-restore")
+                        .outline()
+                        .label("common.action.cancel")
+                        .disabled(self.mutating)
+                        .on_click(|_, window, cx| Modal::dismiss(window, cx)),
+                )
+                .action(
+                    Button::new("confirm-backup-restore")
+                        .primary()
+                        .label(if self.mutating {
+                            "common.label.restoring"
+                        } else {
+                            "common.action.restore"
+                        })
+                        .disabled(self.mutating)
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            if this.mutating {
+                                return;
+                            }
+                            if let Some(backup) = this.confirm.clone() {
+                                this.mutating = true;
+                                cx.emit(Event::MutationRequested(Operation::Restore(backup)));
+                                cx.notify();
+                            }
+                        })),
+                ),
+            )
+            .into_any_element(),
         )
     }
 }
@@ -711,7 +733,7 @@ impl Render for Panel {
                         .text_color(p.muted)
                         .child(crate::localization::text(
                             cx,
-                            "rs.ui.copy.noConnectedProvidersYet",
+                            "settings.sync.providers.empty",
                         )),
                 );
             }
@@ -774,13 +796,16 @@ impl Render for Panel {
                                 .border_color(p.accent)
                                 .text_size(px(10.))
                                 .text_color(p.accent)
-                                .child(crate::localization::text(cx, "rs.ui.copy.active"))
+                                .child(
+                                    crate::localization::text(cx, "settings.ai.provider.active")
+                                        .to_uppercase(),
+                                )
                                 .into_any_element()
                         } else {
                             Button::new(("activate-sync-provider", index))
                                 .small()
                                 .ghost()
-                                .label("Use")
+                                .label("settings.ai.provider.use")
                                 .disabled(!provider.connected || self.busy())
                                 .on_click(
                                     cx.listener(move |this, _, _, cx| {
@@ -974,7 +999,7 @@ impl Render for Panel {
                                 Button::new("sync-key-details")
                                     .ghost()
                                     .icon(IconName::KeyRound)
-                                    .label("Key")
+                                    .label("common.label.key")
                                     .tooltip(if has_key {
                                         "settings.sync.status.keySaved"
                                     } else {
@@ -1035,15 +1060,18 @@ impl Render for Panel {
                     .flex()
                     .flex_col()
                     .gap(px(10.))
-                    .child(self.row(
-                        "Merge Strategy",
-                        "How to reconcile local and cloud changes.",
-                        self.strategy.control("Merge Strategy", cx),
-                    ))
                     .child(
                         self.row(
-                            "Automatic Sync",
-                            "Sync at this interval, after pending edits finish.",
+                            "settings.sync.mergeStrategy.label",
+                            "settings.sync.mergeStrategy.description",
+                            self.strategy
+                                .control("settings.sync.mergeStrategy.label", cx),
+                        ),
+                    )
+                    .child(
+                        self.row(
+                            "settings.sync.automatic.label",
+                            "settings.sync.automatic.description",
                             div()
                                 .flex()
                                 .items_center()
@@ -1062,7 +1090,7 @@ impl Render for Panel {
                                             )
                                             .aria_label(crate::localization::text(
                                                 cx,
-                                                "Sync interval in minutes",
+                                                "settings.sync.automatic.interval.label",
                                             ))
                                             .disabled(self.busy() || !self.preferences.automatic),
                                     ),
@@ -1070,7 +1098,7 @@ impl Render for Panel {
                                 .child(
                                     Switch::new(
                                         "automatic-sync",
-                                        "Automatic Sync",
+                                        "settings.sync.automatic.label",
                                         self.preferences.automatic,
                                     )
                                     .disabled(self.busy())
@@ -1094,8 +1122,8 @@ impl Render for Panel {
                     )
                     .child(
                         self.row(
-                            "Local Backups",
-                            "Keep an encrypted local backup before each sync.",
+                            "settings.label.localBackups",
+                            "settings.sync.localBackups.description",
                             div()
                                 .flex()
                                 .items_center()
@@ -1114,7 +1142,7 @@ impl Render for Panel {
                                             )
                                             .aria_label(crate::localization::text(
                                                 cx,
-                                                "Local backups to keep",
+                                                "settings.sync.localBackups.retention.label",
                                             ))
                                             .disabled(self.busy()),
                                     ),
@@ -1123,7 +1151,7 @@ impl Render for Panel {
                                     Button::new("view-sync-backups")
                                         .outline()
                                         .icon(IconName::Clock)
-                                        .label("Browse")
+                                        .label("common.action.browse")
                                         .disabled(self.busy())
                                         .on_click(
                                             cx.listener(|this, _, _, cx| this.show_backups(cx)),
@@ -1164,7 +1192,7 @@ impl Render for Panel {
                             Button::new("add-sync-provider")
                                 .outline()
                                 .icon(crate::assets::icon(IconName::Plus))
-                                .label("Add Provider")
+                                .label("settings.label.addProvider")
                                 .disabled(self.busy())
                                 .on_click(cx.listener(|this, _, _, cx| {
                                     this.catalog = true;

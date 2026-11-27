@@ -156,11 +156,28 @@ impl Nauterm {
         self.automatic_sync.refresh_pending |= result.as_ref().is_ok_and(Attempt::needs_refresh);
         self.notice = match &result {
             Ok(attempt) => match &attempt.outcome {
-                Ok(Some(summary)) => Some(summary.message_for("Automatic sync complete")),
+                Ok(Some(summary)) => Some(summary.message(
+                    crate::localization::language(cx),
+                    "settings.sync.result.automaticComplete",
+                )),
                 Ok(None) => self.notice.take(),
-                Err(error) => Some(format!("Automatic sync failed: {error}")),
+                Err(error) => Some(
+                    crate::localization::format(
+                        cx,
+                        "settings.sync.error.automatic",
+                        &[("error", &error.to_string())],
+                    )
+                    .to_string(),
+                ),
             },
-            Err(error) => Some(format!("Automatic sync failed: {error}")),
+            Err(error) => Some(
+                crate::localization::format(
+                    cx,
+                    "settings.sync.error.automatic",
+                    &[("error", &error.to_string())],
+                )
+                .to_string(),
+            ),
         };
         if let Some(settings) = &self.settings_window {
             let view = settings._view.clone();

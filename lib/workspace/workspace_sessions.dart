@@ -201,7 +201,12 @@ class _WorkspaceRuntimeButtonState extends State<_WorkspaceRuntimeButton> {
                       ),
                       SizedBox(height: 2),
                       Text(
-                        '${widget.workspace.sessionCount} ${widget.workspace.sessionCount == 1 ? 'session' : 'sessions'}',
+                        context.tr(
+                          widget.workspace.sessionCount == 1
+                              ? 'workspace.overview.sessions.single'
+                              : 'workspace.overview.sessions.count',
+                          args: {'count': widget.workspace.sessionCount},
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -335,7 +340,7 @@ class _WorkspaceRenameDialogState extends State<_WorkspaceRenameDialog> {
         children: [
           _WorkspaceInput(
             controller: _nameController,
-            label: 'Name',
+            label: tr('common.label.name', fallback: 'Name'),
             autofocus: true,
             textInputAction: TextInputAction.done,
             onSubmitted: (_) => _submit(),

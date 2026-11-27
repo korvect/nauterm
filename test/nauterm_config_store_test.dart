@@ -265,6 +265,12 @@ void main() {
     },
   );
 
+  test('local sync backup retention can be disabled', () {
+    final config = NautermSyncConfig.fromJson({'backupCount': 0});
+    expect(config.backupCount, 0);
+    expect(NautermSyncConfig.fromJson(config.toJson()).backupCount, 0);
+  });
+
   test('application language is loaded and survives runtime saves', () async {
     final directory = await Directory.systemTemp.createTemp(
       'nauterm_language_config_test_',

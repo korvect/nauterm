@@ -318,6 +318,41 @@ fn compatibility_sftp_ffi_listing_and_regular_and_sudo_tasks() {
                     ));
                     if sudo && enabled {
                         let session_id = CString::new(session_id).unwrap();
+                        let directory = CString::new("/").unwrap();
+                        let sudo_password = CString::new("test-only-password").unwrap();
+                        let list = |request, password| {
+                            decode_ffi_json(crate::nauterm_sftp_list_directory_entries_with_sudo(
+                                (u64::from(port) << 32) + request,
+                                host.as_ptr(),
+                                port,
+                                user.as_ptr(),
+                                ptr::null(),
+                                ptr::null(),
+                                ptr::null(),
+                                ptr::null(),
+                                path.as_ptr(),
+                                directory.as_ptr(),
+                                0,
+                                ptr::null(),
+                                enabled,
+                                session_id.as_ptr(),
+                                password,
+                            ))
+                        };
+                        let cached = list(3, ptr::null());
+                        assert!(cached["error"].is_null(), "{cached}");
+                        assert_eq!(cached["entries"][0]["name"], "console.txt");
+                        assert!(crate::nauterm_sftp_close_sudo_session(session_id.as_ptr()));
+                        let closed = list(4, ptr::null());
+                        assert!(
+                            closed["error"]
+                                .as_str()
+                                .is_some_and(|error| error.contains("not authenticated")),
+                            "{closed}"
+                        );
+                        let renewed = list(5, sudo_password.as_ptr());
+                        assert!(renewed["error"].is_null(), "{renewed}");
+                        assert_eq!(renewed["entries"][0]["name"], "console.txt");
                         assert!(crate::nauterm_sftp_close_sudo_session(session_id.as_ptr()));
                     }
                     result

@@ -131,7 +131,7 @@ class NautermSyncConfig {
       },
       automatic: json['automatic'] as bool? ?? false,
       interval: interval.clamp(300000, 604800000),
-      backupCount: ((json['backupCount'] as num?)?.toInt() ?? 10).clamp(1, 100),
+      backupCount: ((json['backupCount'] as num?)?.toInt() ?? 10).clamp(0, 100),
     );
   }
 

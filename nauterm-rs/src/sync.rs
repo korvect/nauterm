@@ -1,5 +1,5 @@
 //! Shared sync metadata and encrypted local backups. Background IO is opt-in.
-use crate::vault::Vault;
+use crate::{localization, localization::Language, vault::Vault};
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -9,23 +9,40 @@ pub mod oauth;
 pub mod provider;
 pub mod scheduler;
 
-pub fn validate_master_key(value: &str) -> Result<()> {
-    ensure!(
-        value.chars().count() >= 12,
-        "Master Key must contain at least 12 characters."
-    );
-    ensure!(
-        value.bytes().all(|byte| (0x20..=0x7e).contains(&byte)),
-        "Master Key contains unsupported characters."
-    );
-    ensure!(
-        master_key_classes(value)
-            .into_iter()
-            .filter(|present| *present)
-            .count()
-            >= 3,
-        "Master Key must include at least 3 character types: uppercase letters, lowercase letters, numbers, and symbols."
-    );
+#[derive(Debug, PartialEq, Eq)]
+pub enum MasterKeyValidationError {
+    Length,
+    Characters,
+    CharacterClasses,
+}
+impl std::fmt::Display for MasterKeyValidationError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::Length => "Master Key must contain at least 12 characters.",
+            Self::Characters => "Master Key contains unsupported characters.",
+            Self::CharacterClasses => {
+                "Master Key must include at least 3 character types: uppercase letters, lowercase letters, numbers, and symbols."
+            }
+        })
+    }
+}
+impl std::error::Error for MasterKeyValidationError {}
+
+pub fn validate_master_key(value: &str) -> Result<(), MasterKeyValidationError> {
+    if value.chars().count() < 12 {
+        return Err(MasterKeyValidationError::Length);
+    }
+    if !value.bytes().all(|byte| (0x20..=0x7e).contains(&byte)) {
+        return Err(MasterKeyValidationError::Characters);
+    }
+    if master_key_classes(value)
+        .into_iter()
+        .filter(|present| *present)
+        .count()
+        < 3
+    {
+        return Err(MasterKeyValidationError::CharacterClasses);
+    }
     Ok(())
 }
 pub fn master_key_classes(value: &str) -> [bool; 4] {
@@ -131,14 +148,16 @@ impl Backup {
         );
         Ok(())
     }
-    pub fn date(&self) -> String {
+    pub fn date(&self, language: crate::localization::Language) -> String {
         chrono::DateTime::from_timestamp_millis(self.created_at)
             .map(|date| {
                 date.with_timezone(&chrono::Local)
                     .format("%Y-%m-%d %H:%M:%S")
                     .to_string()
             })
-            .unwrap_or_else(|| "Unknown date".into())
+            .unwrap_or_else(|| {
+                crate::localization::text_for(language, "common.label.unknownDate").to_string()
+            })
     }
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -196,14 +215,19 @@ pub struct SyncSummary {
     pub total_records: usize,
 }
 impl SyncSummary {
-    pub fn message(&self) -> String {
-        self.message_for("Sync complete")
-    }
-    pub fn message_for(&self, action: &str) -> String {
-        format!(
-            "{action} · revision {} · imported {} · {} records.",
-            self.revision, self.imported_records, self.total_records
+    pub fn message(&self, language: Language, status_key: &str) -> String {
+        let status = localization::message_for(language, status_key);
+        localization::format_for(
+            language,
+            "settings.sync.result.summary",
+            &[
+                ("status", status.as_ref()),
+                ("revision", &self.revision.to_string()),
+                ("imported", &self.imported_records.to_string()),
+                ("total", &self.total_records.to_string()),
+            ],
         )
+        .to_string()
     }
 }
 pub struct SyncAttempt {
@@ -433,8 +457,12 @@ mod tests {
             "commit_sha":"ignored-transport-detail", "snapshot_id":"synthetic",
         }))?;
         assert_eq!(
-            summary.message(),
+            summary.message(Language::English, "settings.sync.result.complete"),
             "Sync complete · revision 42 · imported 7 · 18 records."
+        );
+        assert_eq!(
+            summary.message(Language::Chinese, "settings.sync.result.automaticComplete"),
+            "自动同步完成 · 修订 42 · 导入 7 条 · 共 18 条记录。"
         );
         assert!(serde_json::from_value::<SyncSummary>(json!({"revision":42})).is_err());
         Ok(())

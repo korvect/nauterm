@@ -258,9 +258,10 @@ class _TopBar extends StatelessWidget {
                       children: [
                         if (aiAssistantAvailable)
                           _TopBarIconButton(
-                            tooltip: tr(
-                              'common.label.aiAssistant',
-                              fallback: 'AI Assistant',
+                            tooltip: context.tr(
+                              aiAssistantOpen
+                                  ? 'terminal.action.hideAiAssistant'
+                                  : 'terminal.action.showAiAssistant',
                             ),
                             onPressed: onAiAssistant,
                             icon: LucideIcons.sparkles,
@@ -271,9 +272,10 @@ class _TopBar extends StatelessWidget {
                           ),
                         if (terminalToolsAvailable)
                           _TopBarIconButton(
-                            tooltip: tr(
-                              'workspace.label.terminalTools',
-                              fallback: 'Terminal tools',
+                            tooltip: context.tr(
+                              terminalToolsOpen
+                                  ? 'terminal.action.hideTools'
+                                  : 'terminal.action.showTools',
                             ),
                             onPressed: onTerminalTools,
                             icon: LucideIcons.panelRight,
@@ -367,7 +369,9 @@ class _LinuxWindowControls extends StatelessWidget {
               ),
               maximizeButtonArea(
                 _LinuxWindowControlButton(
-                  tooltip: isMaximized ? 'Restore' : 'Maximize',
+                  tooltip: isMaximized
+                      ? tr('common.action.restore', fallback: 'Restore')
+                      : tr('common.action.maximize', fallback: 'Maximize'),
                   icon: isMaximized
                       ? SvgPicture.asset(
                           'assets/icons/ui/window-restore.svg',

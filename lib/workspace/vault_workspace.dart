@@ -17,6 +17,7 @@ class _VaultWorkspace extends StatelessWidget {
     required this.terminalLogs,
     required this.terminalLogsHasMore,
     required this.terminalLogsLoading,
+    required this.terminalLogsLoadError,
     required this.terminalCaptureDiskUsage,
     required this.shellHistory,
     required this.selectedLogId,
@@ -37,6 +38,7 @@ class _VaultWorkspace extends StatelessWidget {
     required this.onCreatePortForward,
     required this.onPortForwardEdit,
     required this.onPortForwardToggle,
+    required this.onPortForwardDelete,
     required this.onCreateProxy,
     required this.onProxyEdit,
     required this.onProxyContextAction,
@@ -61,6 +63,7 @@ class _VaultWorkspace extends StatelessWidget {
     required this.onLogExport,
     required this.onClearLogs,
     required this.onLoadMoreLogs,
+    required this.onRetryLogs,
     required this.onImportKnownHosts,
     required this.onKnownHostContextAction,
     required this.onKnownHostContextActions,
@@ -93,6 +96,7 @@ class _VaultWorkspace extends StatelessWidget {
   final List<TerminalLogEntry> terminalLogs;
   final bool terminalLogsHasMore;
   final bool terminalLogsLoading;
+  final String? terminalLogsLoadError;
   final int terminalCaptureDiskUsage;
   final List<ShellHistoryEntry> shellHistory;
   final String? selectedLogId;
@@ -113,6 +117,7 @@ class _VaultWorkspace extends StatelessWidget {
   final ValueChanged<String> onCreatePortForward;
   final ValueChanged<_PortForwardItem> onPortForwardEdit;
   final void Function(_PortForwardItem item, bool enabled) onPortForwardToggle;
+  final ValueChanged<List<_PortForwardItem>> onPortForwardDelete;
   final VoidCallback onCreateProxy;
   final ValueChanged<_ProxyItem> onProxyEdit;
   final _WorkspaceContextAction<_ProxyItem> onProxyContextAction;
@@ -139,6 +144,7 @@ class _VaultWorkspace extends StatelessWidget {
   final _TerminalLogExportCallback onLogExport;
   final VoidCallback onClearLogs;
   final VoidCallback onLoadMoreLogs;
+  final VoidCallback onRetryLogs;
   final VoidCallback onImportKnownHosts;
   final _WorkspaceContextAction<_KnownHostItem> onKnownHostContextAction;
   final _WorkspaceContextActions<_KnownHostItem> onKnownHostContextActions;
@@ -204,9 +210,11 @@ class _VaultWorkspace extends StatelessWidget {
             onCreateForward: onCreatePortForward,
             onEditForward: onPortForwardEdit,
             onToggleForward: onPortForwardToggle,
+            onDeleteForwards: onPortForwardDelete,
           ),
           _SidebarSection.proxies => _ProxiesPane(
             proxies: proxies,
+            loading: loadingData,
             onCreateProxy: onCreateProxy,
             onEditProxy: onProxyEdit,
             onContextAction: onProxyContextAction,
@@ -215,6 +223,7 @@ class _VaultWorkspace extends StatelessWidget {
           _SidebarSection.snippets => _SnippetsPane(
             packages: snippetPackages,
             snippets: snippets,
+            loading: loadingData,
             onCreateSnippet: onCreateSnippet,
             onCreatePackage: onCreateSnippetPackage,
             onShowShellHistory: onShowShellHistory,
@@ -226,14 +235,17 @@ class _VaultWorkspace extends StatelessWidget {
           ),
           _SidebarSection.knownHosts => _KnownHostsPane(
             text: knownHostsText,
+            loading: loadingData,
             onImport: onImportKnownHosts,
             onContextAction: onKnownHostContextAction,
             onContextActions: onKnownHostContextActions,
           ),
           _SidebarSection.logs => _LogsPane(
             terminalLogs: terminalLogs,
+            loading: loadingData,
             hasMore: terminalLogsHasMore,
             loadingMore: terminalLogsLoading,
+            loadError: terminalLogsLoadError,
             captureDiskUsage: terminalCaptureDiskUsage,
             shellHistory: shellHistory,
             selectedLogId: selectedLogId,
@@ -243,6 +255,7 @@ class _VaultWorkspace extends StatelessWidget {
             onLogExport: onLogExport,
             onClearLogs: onClearLogs,
             onLoadMore: onLoadMoreLogs,
+            onRetry: onRetryLogs,
             dataStore: dataStore,
           ),
         };

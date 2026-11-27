@@ -7,21 +7,15 @@ impl Chat {
         let selected = self.provider.clone();
         let model = self.model.read(cx).value().trim().to_owned();
         let current = rows.iter().find(|provider| provider.uuid == selected);
-        let label = if !model.is_empty() {
+        let label = if selected.is_some() && current.is_none() {
+            crate::localization::text(cx, "ai.label.unavailableProvider").to_string()
+        } else if !model.is_empty() {
             model.clone()
         } else {
             current
                 .map(|provider| provider.name.clone())
                 .unwrap_or_else(|| {
-                    crate::localization::text(
-                        cx,
-                        if selected.is_some() {
-                            "Unavailable provider"
-                        } else {
-                            "Select Provider"
-                        },
-                    )
-                    .to_string()
+                    crate::localization::text(cx, "ai.label.selectProvider").to_string()
                 })
         };
         let full_label = current
@@ -58,7 +52,7 @@ impl Chat {
                     ))
                     .trailing_icon(IconName::ChevronDown)
                     .icon_size(px(14.))
-                    .localized_accessibility_label("AI provider and model")
+                    .localized_accessibility_label("ai.label.aiProviderAndModel")
                     .raw_tooltip(full_label)
                     .disabled(busy || self.provider_loading)
                     .dropdown_menu(move |menu, _, _| {
@@ -90,8 +84,11 @@ impl Chat {
                                 let checked = uuid == selected && candidate == model;
                                 menu = menu.item(
                                     MenuItem::new(if candidate.is_empty() {
-                                        crate::localization::text_for(language, "Default model")
-                                            .to_string()
+                                        crate::localization::text_for(
+                                            language,
+                                            "ai.label.defaultModel",
+                                        )
+                                        .to_string()
                                     } else {
                                         candidate.clone()
                                     })

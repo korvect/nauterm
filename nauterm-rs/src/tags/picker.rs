@@ -64,7 +64,7 @@ impl Picker {
         });
         let input = cx.new(|cx| {
             InputState::new(window, cx).placeholder(if mode == Mode::Filter {
-                "Search tags"
+                "workspace.label.searchTags"
             } else {
                 ""
             })
@@ -336,12 +336,17 @@ impl Picker {
         let (label, selected, disabled) = match &choice {
             Choice::Tag(tag) => (tag.name.clone(), self.selected.contains(&tag.id), false),
             Choice::Create(name) => (
-                crate::localization::text(cx, &format!("Create tag {name}")).to_string(),
+                crate::localization::format(
+                    cx,
+                    "workspace.tags.action.createNamed",
+                    &[("name", name)],
+                )
+                .to_string(),
                 false,
                 false,
             ),
             Choice::Clear => (
-                crate::localization::text(cx, "Clear selection").to_string(),
+                crate::localization::text(cx, "workspace.label.clearSelection").to_string(),
                 false,
                 self.selected.is_empty(),
             ),
@@ -456,7 +461,7 @@ impl Picker {
                             .size(px(20.))
                             .icon_size(px(13.))
                             .icon(IconName::Pencil)
-                            .tooltip("Rename tag")
+                            .tooltip("workspace.label.renameTag")
                             .on_click(move |_, window, cx| {
                                 let _ = rename.update(cx, |this, cx| {
                                     this.set_open(false, window, cx);
@@ -470,7 +475,7 @@ impl Picker {
                             .size(px(20.))
                             .icon_size(px(13.))
                             .icon(IconName::Trash)
-                            .tooltip("Delete tag")
+                            .tooltip("workspace.label.deleteTag")
                             .on_click(move |_, _, cx| {
                                 let _ = delete
                                     .update(cx, |_, cx| cx.emit(Event::Delete(delete_tag.clone())));
@@ -556,7 +561,7 @@ impl Picker {
             .rounded(px(10.))
             .overflow_hidden()
             .role(Role::Group)
-            .aria_label(crate::localization::text(cx, "Tags"))
+            .aria_label(crate::localization::text(cx, "common.label.tags"))
             .w(if self.mode == Mode::Filter {
                 px(208.)
             } else {
@@ -581,7 +586,7 @@ impl Picker {
                             .font_weight(FontWeights::MEDIUM)
                             .palette(search_palette)
                             .bordered(false)
-                            .aria_label(crate::localization::text(cx, "Search tags"))
+                            .aria_label(crate::localization::text(cx, "workspace.label.searchTags"))
                             .prefix(Icon::new(IconName::Search).with_size(px(16.))),
                     ),
                 )
@@ -592,7 +597,7 @@ impl Picker {
                         .p(px(10.))
                         .text_size(px(12.))
                         .text_color(p.muted)
-                        .child(crate::localization::text(cx, "rs.ui.copy.noMatchingTags")),
+                        .child(crate::localization::text(cx, "workspace.label.noMatches")),
                 )
             })
             .when(rows != 0, |view| {
@@ -675,7 +680,7 @@ impl Render for Picker {
                     .toolbar()
                     .ghost()
                     .icon(IconName::Tag)
-                    .tooltip("Filter by tags"),
+                    .tooltip("workspace.tooltip.filterByTags"),
             );
         } else {
             let toggle = cx.weak_entity();
@@ -719,7 +724,11 @@ impl Render for Picker {
                                     .focusable(false)
                                     .tab_stop(false)
                                     .disabled(self.disabled)
-                                    .tooltip("Remove tag")
+                                    .raw_tooltip(crate::localization::format(
+                                        cx,
+                                        "workspace.tags.action.remove",
+                                        &[("name", &tag.name)],
+                                    ))
                                     .on_click(
                                         move |_, _, cx| {
                                             let _ = remove.update(cx, |this, cx| {
@@ -765,7 +774,7 @@ impl Render for Picker {
                         .focusable(false)
                         .tab_stop(false)
                         .disabled(self.disabled || show_clear)
-                        .localized_accessibility_label("Show tag options")
+                        .localized_accessibility_label("workspace.tags.action.showOptions")
                         .on_click(move |_, window, cx| {
                             let _ =
                                 toggle.update(cx, |this, cx| this.set_open(!this.open, window, cx));
@@ -784,7 +793,7 @@ impl Render for Picker {
                         .right_0()
                         .opacity(amount)
                         .disabled(self.disabled || !show_clear)
-                        .tooltip("Clear selection")
+                        .tooltip("workspace.label.clearSelection")
                         .on_click(move |_, window, cx| {
                             let _ = clear.update(cx, |this, cx| {
                                 this.selected.clear();
@@ -800,7 +809,7 @@ impl Render for Picker {
                 });
             let input = Input::new(&self.input)
                 .large()
-                .aria_label(crate::localization::text(cx, "Tags"))
+                .aria_label(crate::localization::text(cx, "common.label.tags"))
                 .cursor_pointer()
                 .disabled(self.disabled)
                 .when(!self.selected.is_empty(), |input| input.prefix(chips))
@@ -844,7 +853,7 @@ impl Render for Picker {
         if self.mode == Mode::Field {
             Field::control(
                 root.w_full(),
-                "Tags",
+                "common.label.tags",
                 focus,
                 !self.selected.is_empty() || self.input.read(cx).text().len() > 0,
             )

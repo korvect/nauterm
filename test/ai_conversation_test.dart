@@ -14,6 +14,50 @@ import 'package:nauterm/terminal/terminal_driver.dart';
 void main() {
   const config = AiAssistantConfig(model: 'test-model', apiKey: 'test-key');
 
+  test('a missing saved provider requires an explicit replacement', () async {
+    const saved = AiConversationEntry(
+      title: 'Saved conversation',
+      scope: 'terminal',
+      providerUuid: 'original',
+      model: 'original-model',
+    );
+    const replacement = AiProviderEntry(
+      uuid: 'replacement',
+      name: 'Replacement',
+      protocol: 'openai',
+      baseUrl: 'https://example.test/v1',
+      model: 'replacement-model',
+      apiKey: 'replacement-key',
+      config: {},
+      active: true,
+    );
+    var sent = 0;
+    final controller = AiConversationController(
+      initialConversation: saved,
+      client: _FakeAiProtocolClient((_) {
+        sent += 1;
+        return Stream.value(const AiTextDelta('answer'));
+      }),
+    );
+    addTearDown(controller.dispose);
+
+    controller.applyProviderCatalog([replacement], config);
+    expect(controller.providerUnavailable, isTrue);
+    expect(controller.providerUuid, 'original');
+    expect(controller.currentModel, 'original-model');
+    await controller.send('keep this draft', config: config);
+    expect(sent, 0);
+    expect(controller.messages, isEmpty);
+
+    controller.selectProvider(replacement, config);
+    expect(controller.providerUnavailable, isFalse);
+    expect(controller.providerUuid, 'replacement');
+    expect(controller.config.model, 'replacement-model');
+    await controller.send('send after choosing');
+    expect(sent, 1);
+    expect(controller.messages.last.content, 'answer');
+  });
+
   test('conversation appends streamed assistant text', () async {
     final controller = AiConversationController(
       client: _FakeAiProtocolClient(
@@ -454,7 +498,28 @@ void main() {
     );
     await Future<void>.delayed(Duration.zero);
 
-    expect(controller.cancelTerminalCommand('tool-cancel'), isTrue);
+    final anotherTerminal = TerminalController(
+      driver: MemoryTerminalDriver(columns: 80, rows: 24),
+      onInput: (_) {},
+    );
+    addTearDown(anotherTerminal.dispose);
+    expect(
+      controller.ownsTerminalCommand('tool-cancel', anotherTerminal),
+      isFalse,
+    );
+    expect(
+      controller.cancelTerminalCommand(
+        'tool-cancel',
+        fromController: anotherTerminal,
+      ),
+      isFalse,
+    );
+    expect(controller.terminalCommands.single.cancellationRequested, isFalse);
+    expect(controller.ownsTerminalCommand('tool-cancel', terminal), isTrue);
+    expect(
+      controller.cancelTerminalCommand('tool-cancel', fromController: terminal),
+      isTrue,
+    );
     expect(controller.terminalCommands.single.cancellationRequested, isTrue);
     await execution;
 
