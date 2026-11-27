@@ -468,37 +468,12 @@ class _KeyExportEditorContentState extends State<_KeyExportEditorContent>
         _WorkspaceFormSection(
           title: 'common.label.destination',
           children: [
-            _WorkspaceFieldFrame(
+            _DrawerHostPickerField(
               key: const ValueKey('key-export-host-selector'),
-              label: 'Host',
-              isRequired: true,
-              size: _WorkspaceControlSize.large,
-              focused: false,
-              floatingLabel: true,
-              hasContent: selectedHost != null,
+              label: context.tr('common.label.host'),
+              host: selectedHost,
               errorText: _hostError,
               onTap: () => setState(() => _selectingHost = true),
-              child: LayoutBuilder(
-                builder: (context, constraints) => Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        selectedHost == null
-                            ? ''
-                            : _portForwardHostLabel(selectedHost),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    if (constraints.maxWidth >= 18)
-                      Icon(
-                        Icons.chevron_right_rounded,
-                        size: 18,
-                        color: _mutedText,
-                      ),
-                  ],
-                ),
-              ),
             ),
             SizedBox(height: _workspaceFormFieldGap),
             _WorkspaceInput(

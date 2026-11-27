@@ -433,21 +433,15 @@ impl KeyExport {
                 self.section("common.label.destination")
                     .mt(px(14.))
                     .child(
-                        Field::trigger(
-                            Button::new("export-select-host")
-                                .label(
-                                    host.map(|host| format!("{} — {}", host.name, host.address))
-                                        .unwrap_or_default(),
-                                )
-                                .trailing_icon(
-                                    Icon::new(IconName::ChevronRight).text_color(p.muted),
-                                )
-                                .on_click(cx.listener(|this, _, _, cx| {
-                                    this.stage = Stage::Selecting;
-                                    cx.notify();
-                                })),
+                        crate::host_picker::host_field(
+                            "export-select-host",
                             "common.label.host *",
-                            host.is_some(),
+                            host,
+                            p,
+                            cx.listener(|this, _, _, cx| {
+                                this.stage = Stage::Selecting;
+                                cx.notify();
+                            }),
                         )
                         .error(self.host_error.clone()),
                     )

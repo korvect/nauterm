@@ -1,7 +1,7 @@
 //! Product-owned typed selection over base Input/Select and our Overlay.
 //! Search/highlight are drafts; only an enabled option or Clear commits an ID.
 //! Editable mode keeps manual text in its owning InputState independently.
-use super::{Field, overlay::Overlay, settings};
+use super::{Field, menu, overlay::Overlay, settings};
 use crate::{palette::Palette, typography::FontWeights};
 use gpui_kit::base::{
     Placement, Select as BaseSelect,
@@ -202,7 +202,6 @@ struct Presentation {
     cleanable: bool,
     filterable: bool,
     actions: Vec<SelectAction>,
-    error: Option<SharedString>,
 }
 pub struct SelectState<V: Clone + PartialEq + 'static> {
     options: Vec<SelectOption<V>>,
@@ -392,6 +391,9 @@ impl<V: Clone + PartialEq + 'static> SelectState<V> {
     }
     fn terminal_popup(&self) -> bool {
         self.presentation.terminal_palette.is_some()
+    }
+    fn workspace_popup(&self) -> bool {
+        !self.terminal_popup() && !self.presentation.settings
     }
     fn dark(&self, cx: &App) -> bool {
         self.presentation
@@ -759,12 +761,9 @@ impl<V: Clone + PartialEq + 'static> SelectState<V> {
         let pick = state.downgrade();
         let hover = state.downgrade();
         let dark = self.dark(cx);
-        let hover_color = self
-            .presentation
-            .terminal_palette
-            .map(|p| p.hover)
-            .unwrap_or_else(|| rgb(if dark { 0x3e3e3e } else { 0xf0f4f5 }));
         let terminal = self.terminal_popup();
+        let workspace = self.workspace_popup();
+        let hover_color = p.hover;
         let selected_color = if terminal {
             p.accent.alpha(0.10)
         } else if S {
@@ -774,46 +773,32 @@ impl<V: Clone + PartialEq + 'static> SelectState<V> {
                 rgb(0xeaf3ff)
             }
         } else {
-            hover_color
+            rgba(0)
         };
-        let option = super::button::Button::<S>::new(("select-option", index))
-            .ghost()
-            .when(S, |row| row.ink_ripple(false))
+        let option = menu::dropdown_row::<S>(("select-option", index))
             .content_start()
-            .w_full()
-            .h(px(if S { 34. } else { 32. }))
-            .px(px(if self.terminal_popup() {
-                9.
-            } else if S {
-                10.
-            } else {
-                12.
-            }))
-            .rounded(px(if terminal {
-                6.
-            } else if S {
-                5.
-            } else {
-                8.
-            }))
+            .when(terminal, |row| {
+                row.ink_ripple(true).px(px(9.)).text_size(px(11.5))
+            })
+            .when(S, |row| {
+                row.h(px(34.))
+                    .rounded(px(5.))
+                    .text_size(px(14.))
+                    .font_weight(if selected {
+                        FontWeights::SEMIBOLD
+                    } else {
+                        FontWeight::NORMAL
+                    })
+            })
             .role(Role::ListBoxOption)
             .accessibility_label(option.title.clone())
             .selected(selected)
             .disabled(option.unavailable)
-            .focusable(false)
-            .tab_stop(false)
-            .font_weight(if terminal {
-                crate::typography::FontWeights::MEDIUM
-            } else if S && selected {
-                FontWeights::SEMIBOLD
+            .custom(if workspace {
+                super::ButtonCustomVariant::for_surface(p)
+                    .color(if highlighted { p.hover } else { rgba(0) }.into())
+                    .foreground(if selected { p.accent } else { p.text }.into())
             } else {
-                FontWeight::NORMAL
-            })
-            .text_size(px(if self.terminal_popup() { 11.5 } else { 14. }))
-            // Labels and font previews need space for ascent and descent,
-            // independently of the fixed selectable row height.
-            .line_height(relative(1.5))
-            .custom(
                 super::ButtonCustomVariant::new(cx)
                     .color(
                         if highlighted && terminal && (self.pointer_mode || !selected) {
@@ -870,8 +855,8 @@ impl<V: Clone + PartialEq + 'static> SelectState<V> {
                             rgb(if dark { 0x484848 } else { 0xe9f1f3 })
                         }
                         .into(),
-                    ),
-            )
+                    )
+            })
             .when(highlighted, |v| v.aria_active_descendant())
             .child(
                 div()
@@ -903,17 +888,17 @@ impl<V: Clone + PartialEq + 'static> SelectState<V> {
                                 .child(sample),
                         )
                     })
-                    .when(S || (terminal && selected), |v| {
+                    .when(S || selected, |v| {
                         v.child(
                             div()
-                                .w(px(if self.terminal_popup() { 15. } else { 20. }))
+                                .w(px(if S { 20. } else { 15. }))
                                 .flex_shrink_0()
                                 .flex()
                                 .justify_center()
                                 .when(selected, |v| {
                                     v.child(
                                         Icon::new(IconName::Check)
-                                            .size(px(16.))
+                                            .size(px(if workspace { 14. } else { 16. }))
                                             .text_color(p.accent),
                                     )
                                 }),
@@ -940,20 +925,23 @@ impl<V: Clone + PartialEq + 'static> SelectState<V> {
             })
             .into_any_element();
         div()
-            .h(px(if terminal { 32. } else { 34. }))
+            .h(px(self.option_row_height()))
             .px(px(if S {
                 4.
             } else if terminal {
                 6.
             } else {
-                7.
+                menu::DROPDOWN_HORIZONTAL_INSET
             }))
-            .py(px(if S || terminal { 0. } else { 1. }))
             .child(option)
             .into_any_element()
     }
-    fn action_row_height(&self) -> f32 {
-        if self.terminal_popup() { 32. } else { 34. }
+    fn option_row_height(&self) -> f32 {
+        if self.presentation.settings {
+            34.
+        } else {
+            menu::DROPDOWN_ROW_HEIGHT
+        }
     }
     fn action_rows(
         &self,
@@ -964,9 +952,11 @@ impl<V: Clone + PartialEq + 'static> SelectState<V> {
     ) -> AnyElement {
         let terminal = self.terminal_popup();
         let settings = self.presentation.settings;
-        let compact = self.terminal_popup();
+        let workspace = self.workspace_popup();
         let hover_color = if terminal {
             p.control
+        } else if workspace {
+            p.hover
         } else {
             rgb(if self.dark(cx) { 0x3e3e3e } else { 0xf0f4f5 })
         };
@@ -990,93 +980,80 @@ impl<V: Clone + PartialEq + 'static> SelectState<V> {
                     &self.input.read(cx).value(),
                     crate::localization::language(cx),
                 );
-                let button = super::Button::new(("select-create", index))
-                    .ghost()
-                    .content_start()
-                    .w_full()
-                    .h(px(if settings { 34. } else { 32. }))
-                    .px(px(if compact {
-                        9.
-                    } else if settings {
-                        10.
-                    } else {
-                        12.
-                    }))
-                    .rounded(px(if settings {
-                        0.
-                    } else if compact {
-                        6.
-                    } else {
-                        8.
-                    }))
-                    .focusable(false)
-                    .tab_stop(false)
-                    .role(Role::ListBoxOption)
-                    .accessibility_label(label.clone())
-                    .text_size(px(if compact { 11.5 } else { 14. }))
-                    .line_height(relative(1.5))
-                    .font_weight(if compact {
-                        FontWeights::MEDIUM
-                    } else {
-                        FontWeights::REGULAR
-                    })
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .w_full()
-                            .gap(px(6.))
-                            .child(
-                                crate::assets::icon(if action.from_query {
-                                    IconName::Plus
-                                } else {
-                                    action.icon
-                                })
-                                .size(px(16.))
-                                .text_color(p.muted),
-                            )
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .min_w_0()
-                                    .whitespace_nowrap()
-                                    .text_ellipsis()
-                                    .child(label),
-                            ),
-                    )
-                    .custom(
-                        super::ButtonCustomVariant::new(cx)
-                            .color(if highlighted { hover_color } else { rgba(0) }.into())
-                            .foreground(p.text.into())
-                            .hover(hover_color.into())
-                            .highlight(pressed.into())
-                            .active(pressed.into()),
-                    )
-                    .on_hover(move |over, _, cx| {
-                        let _ = hover.update(cx, |this, cx| {
-                            if *over {
-                                this.pointer_mode = true;
-                                this.hovered = Some(position);
-                                this.active = Some(position);
-                            } else if this.hovered == Some(position) {
-                                this.hovered = None;
-                            }
-                            cx.notify();
+                let button =
+                    menu::dropdown_row::<false>(("select-create", index))
+                        .content_start()
+                        .when(terminal, |row| {
+                            row.ink_ripple(true).px(px(9.)).text_size(px(11.5))
+                        })
+                        .when(settings, |row| {
+                            row.ink_ripple(true)
+                                .h(px(34.))
+                                .rounded(px(0.))
+                                .text_size(px(14.))
+                                .font_weight(FontWeights::REGULAR)
+                        })
+                        .role(Role::ListBoxOption)
+                        .accessibility_label(label.clone())
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .w_full()
+                                .gap(px(if workspace { 10. } else { 6. }))
+                                .child(
+                                    crate::assets::icon(if action.from_query {
+                                        IconName::Plus
+                                    } else {
+                                        action.icon
+                                    })
+                                    .size(px(16.))
+                                    .text_color(if workspace { p.text } else { p.muted }),
+                                )
+                                .child(
+                                    div()
+                                        .flex_1()
+                                        .min_w_0()
+                                        .whitespace_nowrap()
+                                        .text_ellipsis()
+                                        .child(label),
+                                ),
+                        )
+                        .custom(if workspace {
+                            super::ButtonCustomVariant::for_surface(p)
+                                .color(if highlighted { p.hover } else { rgba(0) }.into())
+                        } else {
+                            super::ButtonCustomVariant::new(cx)
+                                .color(if highlighted { hover_color } else { rgba(0) }.into())
+                                .foreground(p.text.into())
+                                .hover(hover_color.into())
+                                .highlight(pressed.into())
+                                .active(pressed.into())
+                        })
+                        .on_hover(move |over, _, cx| {
+                            let _ = hover.update(cx, |this, cx| {
+                                if *over {
+                                    this.pointer_mode = true;
+                                    this.hovered = Some(position);
+                                    this.active = Some(position);
+                                } else if this.hovered == Some(position) {
+                                    this.hovered = None;
+                                }
+                                cx.notify();
+                            });
+                        })
+                        .on_click(move |_, window, cx| {
+                            let _ = pick.update(cx, |this, cx| this.create(index, window, cx));
                         });
-                    })
-                    .on_click(move |_, window, cx| {
-                        let _ = pick.update(cx, |this, cx| this.create(index, window, cx));
-                    });
                 div()
-                    .h(px(self.action_row_height()))
+                    .h(px(self.option_row_height()))
                     .px(px(if settings {
                         0.
-                    } else if compact {
+                    } else if terminal {
                         6.
                     } else {
-                        7.
+                        menu::DROPDOWN_HORIZONTAL_INSET
                     }))
-                    .py(px(if settings || compact { 0. } else { 1. }))
                     .child(button)
             }))
             .into_any_element()
@@ -1084,29 +1061,25 @@ impl<V: Clone + PartialEq + 'static> SelectState<V> {
     /// Desired option list height and the fixed chrome (padding, border,
     /// action rows) around it.
     fn list_and_chrome(&self, named: usize, related: usize) -> (f32, f32) {
-        let row_height = if self.terminal_popup() {
-            32.
-        } else {
-            SELECT_ROW
-        };
+        let row_height = self.option_row_height();
         let rows = self.visible.len() as f32 * row_height;
         let list = rows.min(if self.terminal_popup() {
             224.
         } else if self.presentation.settings {
             204.
         } else {
-            228.
+            7. * menu::DROPDOWN_ROW_HEIGHT
         });
         let chrome = if self.terminal_popup() {
             12.
         } else if self.presentation.settings {
             8.
         } else {
-            10.
+            2. * menu::DROPDOWN_VERTICAL_INSET
         } + 2.
-            + named as f32 * self.action_row_height()
+            + named as f32 * row_height
             + if related > 0 {
-                9. + related as f32 * self.action_row_height()
+                9. + related as f32 * row_height
             } else {
                 0.
             };
@@ -1128,7 +1101,9 @@ impl<V: Clone + PartialEq + 'static> SelectState<V> {
     /// covering the trigger.
     fn list_height(&self, named: usize, related: usize) -> Pixels {
         let (list, chrome) = self.list_and_chrome(named, related);
-        px(list.min(self.room - chrome).max(SELECT_ROW.min(list)))
+        px(list
+            .min(self.room - chrome)
+            .max(self.option_row_height().min(list)))
     }
     fn menu(&self, state: &Entity<Self>, window: &Window, cx: &App) -> AnyElement {
         let p = self.palette(cx);
@@ -1147,23 +1122,10 @@ impl<V: Clone + PartialEq + 'static> SelectState<V> {
                 .max(self.terminal_menu_width.unwrap_or(px(0.)))
                 .min((window.viewport_size().width - px(18.)).max(px(1.))))
             .text_color(p.text)
-            .bg(
-                if self.presentation.terminal_palette.is_none()
-                    && !self.presentation.settings
-                    && self.dark(cx)
-                {
-                    rgb(0x343434)
-                } else {
-                    p.surface
-                },
-            )
-            .rounded(px(if self.terminal_popup() {
-                10.
-            } else if self.presentation.settings {
-                7.
-            } else {
-                11.
-            }))
+            .when(!self.workspace_popup(), |view| {
+                view.bg(p.surface)
+                    .rounded(px(if self.terminal_popup() { 10. } else { 7. }))
+            })
             .overflow_hidden()
             .when(!named.is_empty(), |view| {
                 view.child(self.action_rows(&named, state, p, cx))
@@ -1320,7 +1282,7 @@ impl<V: Clone + PartialEq + 'static> SelectState<V> {
             .when(!self.is_editable(), |v| v.caret_color(rgba(0)))
             .focused(self.open)
             .disabled(self.presentation.disabled)
-            .invalid(missing || self.presentation.error.is_some())
+            .invalid(missing)
             .when_some(leading, |input, leading| input.prefix(leading).gap(px(7.)))
             .suffix(suffix)
             .when(S, |v| v.h(px(34.)).pr(px(8.)))
@@ -1340,7 +1302,6 @@ impl<V: Clone + PartialEq + 'static> SelectState<V> {
 /// the overlay positioner.
 const DROPDOWN_GAP: f32 = 4.;
 const DROPDOWN_MARGIN: f32 = 8.;
-const SELECT_ROW: f32 = 34.;
 /// Window frame kept clear above/below, as the positioner's clamp does.
 fn frame_insets(window: &Window) -> (f32, f32) {
     let inset = f32::from(window.client_inset().unwrap_or(px(0.)));
@@ -1459,82 +1420,51 @@ impl<V: Clone + PartialEq + 'static> Render for SelectState<V> {
             self.room = room;
             self.placement_locked = true;
         }
-        let overlay = Overlay::new(("select-overlay", state.entity_id()))
+        let id = ("select-overlay", state.entity_id());
+        let dark = self.dark(cx);
+        let overlay = if self.workspace_popup() {
+            menu::dropdown_surface(id, p, dark).py(px(menu::DROPDOWN_VERTICAL_INSET))
+        } else {
+            let terminal = self.terminal_popup();
+            Overlay::new(id)
+                .bg(p.surface)
+                .border_color(p.border)
+                .p_0()
+                .py(px(if terminal { 6. } else { 4. }))
+                .rounded(px(if terminal { 10. } else { 7. }))
+                .shadow(if terminal {
+                    vec![BoxShadow {
+                        color: black().opacity(if dark { 0.34 } else { 0.14 }),
+                        offset: point(px(0.), px(9.)),
+                        blur_radius: px(7.),
+                        spread_radius: px(0.),
+                        inset: false,
+                    }]
+                } else {
+                    vec![
+                        BoxShadow {
+                            color: black().opacity(if dark { 0.3 } else { 0.12 }),
+                            offset: point(px(0.), px(8.)),
+                            blur_radius: px(18.),
+                            spread_radius: px(0.),
+                            inset: false,
+                        },
+                        BoxShadow {
+                            color: black().opacity(if dark { 0.14 } else { 0.05 }),
+                            offset: point(px(0.), px(1.)),
+                            blur_radius: px(3.),
+                            spread_radius: px(0.),
+                            inset: false,
+                        },
+                    ]
+                })
+        };
+        let overlay = overlay
             .open(self.is_open())
             .side(self.placement.unwrap_or(Placement::Bottom))
             // Side and size are chosen once on open; scrolling changes neither.
             .fixed_side()
             .inline_focus(&focus)
-            .bg(
-                if self.presentation.terminal_palette.is_none()
-                    && !self.presentation.settings
-                    && self.dark(cx)
-                {
-                    rgb(0x343434)
-                } else {
-                    p.surface
-                },
-            )
-            .border_color(p.border)
-            .p(px(0.))
-            .py(px(if self.terminal_popup() {
-                6.
-            } else if self.presentation.settings {
-                4.
-            } else {
-                5.
-            }))
-            .rounded(px(if self.terminal_popup() {
-                10.
-            } else if self.presentation.settings {
-                7.
-            } else {
-                11.
-            }))
-            .shadow(vec![
-                BoxShadow {
-                    color: black().opacity(if self.dark(cx) {
-                        if self.presentation.settings {
-                            0.3
-                        } else {
-                            0.34
-                        }
-                    } else {
-                        0.12
-                    }),
-                    offset: point(
-                        px(0.),
-                        px(if self.presentation.settings { 8. } else { 10. }),
-                    ),
-                    blur_radius: px(if self.presentation.settings { 18. } else { 22. }),
-                    spread_radius: px(0.),
-                    inset: false,
-                },
-                BoxShadow {
-                    color: black().opacity(if self.dark(cx) {
-                        if self.presentation.settings {
-                            0.14
-                        } else {
-                            0.18
-                        }
-                    } else {
-                        0.05
-                    }),
-                    offset: point(px(0.), px(1.)),
-                    blur_radius: px(3.),
-                    spread_radius: px(0.),
-                    inset: false,
-                },
-            ])
-            .when(self.terminal_popup(), |overlay| {
-                overlay.shadow(vec![BoxShadow {
-                    color: black().opacity(if self.dark(cx) { 0.34 } else { 0.14 }),
-                    offset: point(px(0.), px(9.)),
-                    blur_radius: px(7.),
-                    spread_radius: px(0.),
-                    inset: false,
-                }])
-            })
             .trigger_element(trigger)
             .on_open_change(move |open, w, cx| {
                 let _ = changed.update(cx, |this, cx| this.set_open(*open, w, cx));
@@ -1588,11 +1518,7 @@ impl<V: Clone + PartialEq + 'static> Render for SelectState<V> {
                 field.with_size(gpui_kit::component::Size::Medium)
             })
             .disabled(self.presentation.disabled)
-            .error(
-                self.presentation.error.clone().or_else(|| {
-                    missing.then(|| "The selected item is no longer available.".into())
-                }),
-            )
+            .error(missing.then(|| "The selected item is no longer available.".into()))
             .into_any_element()
         }
     }
@@ -1685,25 +1611,6 @@ impl<V: Clone + PartialEq + 'static> SelectModel<V> {
                 disabled,
                 cleanable: true,
                 digits_only: true,
-                ..Default::default()
-            },
-        }
-        .into_any_element()
-    }
-    pub fn field_with_error(
-        &self,
-        label: &'static str,
-        disabled: bool,
-        error: Option<SharedString>,
-    ) -> AnyElement {
-        SelectView {
-            state: self.state.clone(),
-            presentation: Presentation {
-                label: label.into(),
-                disabled,
-                cleanable: true,
-                filterable: true,
-                error,
                 ..Default::default()
             },
         }

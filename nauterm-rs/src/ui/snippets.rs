@@ -1506,7 +1506,7 @@ impl Nauterm {
                                     .iter()
                                     .find(|p| p.id == id)
                                     .map(|p| p.name.as_str())
-                                    .unwrap_or("Package")
+                                    .unwrap_or_default()
                                     .to_owned()
                                     .into(),
                             ),
@@ -1575,28 +1575,20 @@ impl Nauterm {
                         )
                     })
                     .when(packages.is_empty() && snippets.is_empty(), |view| {
-                        view.child(
-                            div()
-                                .flex()
-                                .flex_col()
-                                .gap(px(4.))
-                                .text_color(p.muted)
-                                .when(query.is_empty(), |body| {
-                                    body.child(crate::localization::view(
-                                        "workspace.label.noSnippetsYet",
-                                    ))
-                                    .child(
-                                        crate::localization::view(
-                                            "workspace.empty.snippets.description",
-                                        ),
-                                    )
-                                })
-                                .when(!query.is_empty(), |body| {
-                                    body.child(crate::localization::view(
-                                        "workspace.label.noSnippetsFound",
-                                    ))
-                                }),
-                        )
+                        view.child(crate::components::management::collection_empty(
+                            IconName::Code,
+                            if query.trim().is_empty() {
+                                "workspace.label.noSnippetsYet"
+                            } else {
+                                "workspace.label.noSnippetsFound"
+                            },
+                            if query.trim().is_empty() {
+                                "workspace.empty.snippets.description"
+                            } else {
+                                "workspace.description.tryAnotherSearch"
+                            },
+                            p,
+                        ))
                     }),
             )
             .into_any_element()

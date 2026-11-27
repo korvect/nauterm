@@ -467,6 +467,7 @@ class _WorkspaceEditorDrawer extends StatelessWidget {
       _PortForwardEditorRequest() => _PortForwardEditorContent(
         request: request,
         hosts: hosts,
+        buildHostSelector: buildHostSelector,
         onClose: onClose,
         onSave: (value) async {
           await onSavePortForward(value);
@@ -530,6 +531,53 @@ class _WorkspaceEditorDrawer extends StatelessWidget {
         child: KeyedSubtree(
           key: ValueKey(_workspaceEditorRequestKey(request)),
           child: content,
+        ),
+      ),
+    );
+  }
+}
+
+class _DrawerHostPickerField extends StatelessWidget {
+  const _DrawerHostPickerField({
+    super.key,
+    required this.label,
+    required this.host,
+    required this.onTap,
+    this.errorText,
+  });
+
+  final String label;
+  final HostEntry? host;
+  final VoidCallback? onTap;
+  final String? errorText;
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = host;
+    final address = _emptyToNull(selected?.host);
+    final value = selected == null
+        ? ''
+        : address == null
+        ? selected.name
+        : '${selected.name} ($address:${selected.port ?? 22})';
+    return _WorkspaceFieldFrame(
+      label: label,
+      isRequired: true,
+      size: _WorkspaceControlSize.large,
+      focused: false,
+      floatingLabel: true,
+      hasContent: selected != null,
+      errorText: errorText,
+      onTap: onTap,
+      child: LayoutBuilder(
+        builder: (context, constraints) => Row(
+          children: [
+            Expanded(
+              child: Text(value, maxLines: 1, overflow: TextOverflow.ellipsis),
+            ),
+            if (constraints.maxWidth >= 18)
+              Icon(Icons.chevron_right_rounded, size: 18, color: _mutedText),
+          ],
         ),
       ),
     );

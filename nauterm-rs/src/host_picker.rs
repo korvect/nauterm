@@ -3,7 +3,7 @@ use crate::components::menu::DropdownMenu;
 use crate::management::SortOrder as Order;
 use crate::{
     avatar,
-    components::{Button, Input, ScrollbarsExt},
+    components::{Button, Field, Input, ScrollbarsExt},
     model::{AppState, Host, Id},
     palette::Palette,
     typography::FontWeights,
@@ -16,6 +16,26 @@ use gpui_kit::{
     *,
 };
 use std::collections::BTreeSet;
+
+pub(crate) fn host_field(
+    id: &'static str,
+    label: &'static str,
+    host: Option<&Host>,
+    palette: Palette,
+    on_open: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+) -> Field {
+    Field::trigger(
+        Button::new(id)
+            .label(
+                host.map(|host| format!("{} ({}:{})", host.name, host.address, host.port))
+                    .unwrap_or_default(),
+            )
+            .trailing_icon(Icon::new(IconName::ChevronRight).text_color(palette.muted))
+            .on_click(on_open),
+        label,
+        host.is_some(),
+    )
+}
 
 pub enum PickerEvent {
     Back,

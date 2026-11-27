@@ -178,10 +178,7 @@ class _HostsPaneState extends State<_HostsPane> {
             _searchController.text.trim().isNotEmpty ||
             _effectiveSelectedTagUuids.isNotEmpty;
         final showEmptyState =
-            !widget.loading &&
-            groups.isEmpty &&
-            hosts.isEmpty &&
-            (!showingGroup || filtered);
+            !widget.loading && groups.isEmpty && hosts.isEmpty && !showingGroup;
 
         return Row(
           children: [
@@ -231,12 +228,6 @@ class _HostsPaneState extends State<_HostsPane> {
                             onAction: filtered
                                 ? null
                                 : () => widget.onCreateHost(currentGroupId),
-                            leading: showingGroup
-                                ? _GroupBreadcrumb(
-                                    path: breadcrumbPath,
-                                    onSelected: _openGroupId,
-                                  )
-                                : null,
                           )
                         : _WorkspaceItemScrollView(
                             padding: _workspacePanePadding,
@@ -296,8 +287,14 @@ class _HostsPaneState extends State<_HostsPane> {
                                 if (!widget.loading &&
                                     groups.isEmpty &&
                                     hosts.isEmpty)
-                                  const _WorkspaceInlineMessage(
-                                    'workspace.label.noHostsInGroup',
+                                  _WorkspaceScopedEmptyState(
+                                    icon: LucideIcons.server,
+                                    title: filtered
+                                        ? 'workspace.label.noHostsFound'
+                                        : 'workspace.label.noHostsYet',
+                                    description: filtered
+                                        ? 'workspace.description.tryAnotherSearchOrClearTags'
+                                        : 'workspace.empty.hosts.description',
                                   ),
                               ],
                             ),
@@ -372,25 +369,40 @@ class _WorkspaceLoadingLine extends StatelessWidget {
   }
 }
 
-class _WorkspaceInlineMessage extends StatelessWidget {
-  const _WorkspaceInlineMessage(this.text);
+class _WorkspaceScopedEmptyState extends StatelessWidget {
+  const _WorkspaceScopedEmptyState({
+    required this.icon,
+    required this.title,
+    required this.description,
+  });
 
-  final String text;
+  final IconData icon;
+  final String title;
+  final String description;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 58,
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: Text(
-          tr(text),
-          style: TextStyle(
-            color: _mutedText,
-            fontSize: NautermFontSizes.labelLarge,
-            fontWeight: NautermFontWeights.regular,
-            letterSpacing: 0,
-          ),
+    return Padding(
+      padding: const EdgeInsets.only(top: 64),
+      child: SizedBox(
+        width: double.infinity,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: _mutedText),
+            const SizedBox(height: 12),
+            Text(
+              context.tr(title),
+              textAlign: TextAlign.center,
+              style: TextStyle(color: _mutedText, fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              context.tr(description),
+              textAlign: TextAlign.center,
+              style: TextStyle(color: _mutedText, fontSize: 12),
+            ),
+          ],
         ),
       ),
     );
@@ -405,7 +417,6 @@ class _WorkspaceEmptyState extends StatelessWidget {
     this.description,
     this.actionLabel,
     this.onAction,
-    this.leading,
   }) : assert(
          (actionLabel == null) == (onAction == null),
          'actionLabel and onAction must be provided together',
@@ -416,11 +427,10 @@ class _WorkspaceEmptyState extends StatelessWidget {
   final String? description;
   final String? actionLabel;
   final VoidCallback? onAction;
-  final Widget? leading;
 
   @override
   Widget build(BuildContext context) {
-    final content = Center(
+    return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
         child: ConstrainedBox(
@@ -481,14 +491,6 @@ class _WorkspaceEmptyState extends StatelessWidget {
         ),
       ),
     );
-    if (leading == null) return content;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(padding: _workspacePanePadding, child: leading!),
-        Expanded(child: content),
-      ],
-    );
   }
 }
 
@@ -501,7 +503,7 @@ class _GroupBreadcrumb extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final entries = <({String label, int? id})>[
-      (label: 'Hosts', id: null),
+      (label: context.tr('common.label.hosts'), id: null),
       for (final group in path) (label: group.name, id: group.id),
     ];
 

@@ -1457,7 +1457,8 @@ class _WorkspaceItemCardState<T extends _WorkspaceItemData>
   @override
   void didUpdateWidget(covariant _WorkspaceItemCard<T> oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.item, widget.item)) {
+    if (_workspaceItemIdentity(oldWidget.item) !=
+        _workspaceItemIdentity(widget.item)) {
       _tapTracker.reset();
     }
   }
@@ -1739,7 +1740,8 @@ class _WorkspaceItemListRowState<T extends _WorkspaceItemData>
   @override
   void didUpdateWidget(covariant _WorkspaceItemListRow<T> oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.item, widget.item)) {
+    if (_workspaceItemIdentity(oldWidget.item) !=
+        _workspaceItemIdentity(widget.item)) {
       _tapTracker.reset();
     }
   }

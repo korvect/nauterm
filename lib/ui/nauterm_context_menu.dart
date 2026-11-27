@@ -1016,42 +1016,48 @@ class NautermContextMenu<T> extends StatelessWidget {
           ),
         },
     ];
-    final content = height == null
-        ? Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 6,
-              vertical: nautermContextMenuVerticalPadding,
-            ),
-            child: Column(mainAxisSize: MainAxisSize.min, children: rows),
-          )
-        : Padding(
-            padding: const EdgeInsets.symmetric(
-              vertical: nautermContextMenuVerticalPadding,
-            ),
-            child: showScrollbarOnHover
-                ? _NautermHoverScrollbarList(
-                    children: [
-                      for (final row in rows)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 6),
-                          child: row,
-                        ),
-                    ],
-                  )
-                : ListView(
-                    padding: EdgeInsets.zero,
-                    children: [
-                      for (final row in rows)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 6),
-                          child: row,
-                        ),
-                    ],
-                  ),
-          );
     return NautermDropdownSurface(
       style: style,
-      child: SizedBox(width: width, height: height, child: content),
+      child: SizedBox(
+        width: width,
+        height: height,
+        child: NautermDropdownList(
+          rows: rows,
+          scrollable: height != null,
+          showScrollbarOnHover: showScrollbarOnHover,
+        ),
+      ),
+    );
+  }
+}
+
+class NautermDropdownList extends StatelessWidget {
+  const NautermDropdownList({
+    super.key,
+    required this.rows,
+    required this.scrollable,
+    this.showScrollbarOnHover = false,
+  });
+
+  final List<Widget> rows;
+  final bool scrollable;
+  final bool showScrollbarOnHover;
+
+  @override
+  Widget build(BuildContext context) {
+    final children = [
+      for (final row in rows)
+        Padding(padding: const EdgeInsets.symmetric(horizontal: 6), child: row),
+    ];
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        vertical: nautermContextMenuVerticalPadding,
+      ),
+      child: !scrollable
+          ? Column(mainAxisSize: MainAxisSize.min, children: children)
+          : showScrollbarOnHover
+          ? _NautermHoverScrollbarList(children: children)
+          : ListView(padding: EdgeInsets.zero, children: children),
     );
   }
 }
@@ -1145,12 +1151,14 @@ class NautermDropdownRow extends StatefulWidget {
     this.style,
     this.onHoverChanged,
     this.onPointerEnter,
+    this.selected = false,
   });
 
   final Widget child;
   final VoidCallback onTap;
   final bool enabled;
   final bool destructive;
+  final bool selected;
   final NautermContextMenuStyle? style;
   final ValueChanged<bool>? onHoverChanged;
   final ValueChanged<PointerEnterEvent>? onPointerEnter;
@@ -1186,42 +1194,98 @@ class _NautermDropdownRowState extends State<NautermDropdownRow> {
       widget.onHoverChanged?.call(value);
     }
 
-    return MouseRegion(
-      cursor: widget.enabled
-          ? SystemMouseCursors.click
-          : SystemMouseCursors.basic,
-      onEnter: widget.enabled
-          ? (event) {
-              setHovered(true);
-              widget.onPointerEnter?.call(event);
-            }
-          : null,
-      onExit: widget.enabled ? (_) => setHovered(false) : null,
-      child: Container(
-        height: nautermContextMenuRowHeight,
-        decoration: BoxDecoration(
-          color: background,
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Material(
-          type: MaterialType.transparency,
-          child: InkWell(
+    return Semantics(
+      selected: widget.selected ? true : null,
+      child: MouseRegion(
+        cursor: widget.enabled
+            ? SystemMouseCursors.click
+            : SystemMouseCursors.basic,
+        onEnter: widget.enabled
+            ? (event) {
+                setHovered(true);
+                widget.onPointerEnter?.call(event);
+              }
+            : null,
+        onExit: widget.enabled ? (_) => setHovered(false) : null,
+        child: Container(
+          height: nautermContextMenuRowHeight,
+          decoration: BoxDecoration(
+            color: background,
             borderRadius: BorderRadius.circular(6),
-            hoverColor: Colors.transparent,
-            splashColor: widget.destructive
-                ? destructive.withValues(alpha: 0.16)
-                : (style?.accent ?? palette.primary).withValues(alpha: 0.16),
-            highlightColor: widget.destructive
-                ? destructive.withValues(alpha: 0.10)
-                : (style?.accent ?? palette.primary).withValues(alpha: 0.08),
-            onTap: widget.enabled ? widget.onTap : null,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              child: widget.child,
+          ),
+          child: Material(
+            type: MaterialType.transparency,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(6),
+              hoverColor: Colors.transparent,
+              splashColor: widget.destructive
+                  ? destructive.withValues(alpha: 0.16)
+                  : (style?.accent ?? palette.primary).withValues(alpha: 0.16),
+              highlightColor: widget.destructive
+                  ? destructive.withValues(alpha: 0.10)
+                  : (style?.accent ?? palette.primary).withValues(alpha: 0.08),
+              onTap: widget.enabled ? widget.onTap : null,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: widget.child,
+              ),
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+class NautermDropdownItemContent extends StatelessWidget {
+  const NautermDropdownItemContent({
+    super.key,
+    required this.child,
+    this.leading,
+    this.leadingGap = 10,
+    this.trailing,
+    this.foreground,
+    this.selected = false,
+    this.style,
+  });
+
+  final Widget child;
+  final Widget? leading;
+  final double leadingGap;
+  final Widget? trailing;
+  final Color? foreground;
+  final bool selected;
+  final NautermContextMenuStyle? style;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.nautermPalette;
+    final accent = style?.accent ?? palette.primary;
+    return Row(
+      children: [
+        if (leading case final icon?) ...[icon, SizedBox(width: leadingGap)],
+        Expanded(
+          child: DefaultTextStyle.merge(
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color:
+                  foreground ??
+                  (selected ? accent : style?.foreground ?? palette.text),
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              height: 1,
+              letterSpacing: 0,
+              decoration: TextDecoration.none,
+            ),
+            child: child,
+          ),
+        ),
+        if (trailing != null || selected) ...[
+          const SizedBox(width: 14),
+          trailing ?? Icon(Icons.check_rounded, size: 16, color: accent),
+        ],
+      ],
     );
   }
 }
@@ -1289,6 +1353,7 @@ class _NautermContextMenuItemState<T>
     return NautermDropdownRow(
       enabled: entry.enabled,
       destructive: entry.destructive,
+      selected: entry.selected,
       style: style,
       onPointerEnter: (event) {
         widget.onActionHovered?.call(entry);
@@ -1300,75 +1365,56 @@ class _NautermContextMenuItemState<T>
       onTap: entry.hasSubmenu
           ? _requestSubmenu
           : () => widget.onSelected(entry.value),
-      child: Row(
-        children: [
-          if (entry.iconBytes case final iconBytes?) ...[
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: Image.memory(
-                iconBytes,
-                width: 18,
-                height: 18,
-                fit: BoxFit.contain,
-                gaplessPlayback: true,
-                errorBuilder: (context, error, stackTrace) =>
-                    const SizedBox(width: 18, height: 18),
-              ),
-            ),
-            const SizedBox(width: 8),
-          ] else if (entry.icon != null) ...[
-            Icon(entry.icon, size: 16, color: foreground),
-            const SizedBox(width: 10),
-          ],
-          Expanded(
-            child: Text(
-              context.tr(entry.label),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: foreground,
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                height: 1,
-                letterSpacing: 0,
-                decoration: TextDecoration.none,
-              ),
+      child: NautermDropdownItemContent(
+        style: style,
+        foreground: foreground,
+        selected: entry.selected,
+        leading: switch (entry.iconBytes) {
+          final iconBytes? => ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: Image.memory(
+              iconBytes,
+              width: 18,
+              height: 18,
+              fit: BoxFit.contain,
+              gaplessPlayback: true,
+              errorBuilder: (context, error, stackTrace) =>
+                  const SizedBox(width: 18, height: 18),
             ),
           ),
-          if (entry.shortcut != null) ...[
-            const SizedBox(width: 14),
-            Text(
-              entry.shortcut!,
-              style: TextStyle(
-                color: entry.enabled
-                    ? style?.mutedForeground ?? palette.faintText
-                    : style?.disabledForeground ?? palette.outline,
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                height: 1,
-                letterSpacing: 0,
-                decoration: TextDecoration.none,
-              ),
-            ),
-          ] else if (entry.hasSubmenu) ...[
-            const SizedBox(width: 14),
-            Transform.translate(
-              offset: const Offset(4, 0),
-              child: Icon(
-                Icons.chevron_right_rounded,
-                size: 16,
-                color: foreground,
-              ),
-            ),
-          ] else if (entry.selected) ...[
-            const SizedBox(width: 14),
-            Icon(
-              Icons.check_rounded,
-              size: 16,
-              color: style?.accent ?? palette.primary,
-            ),
-          ],
-        ],
+          null when entry.icon != null => Icon(
+            entry.icon,
+            size: 16,
+            color: foreground,
+          ),
+          _ => null,
+        },
+        leadingGap: entry.iconBytes == null ? 10 : 8,
+        trailing: entry.shortcut != null
+            ? Text(
+                entry.shortcut!,
+                style: TextStyle(
+                  color: entry.enabled
+                      ? style?.mutedForeground ?? palette.faintText
+                      : style?.disabledForeground ?? palette.outline,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  height: 1,
+                  letterSpacing: 0,
+                  decoration: TextDecoration.none,
+                ),
+              )
+            : entry.hasSubmenu
+            ? Transform.translate(
+                offset: const Offset(4, 0),
+                child: Icon(
+                  Icons.chevron_right_rounded,
+                  size: 16,
+                  color: foreground,
+                ),
+              )
+            : null,
+        child: Text(context.tr(entry.label)),
       ),
     );
   }

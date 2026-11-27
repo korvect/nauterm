@@ -266,6 +266,7 @@ class _PortForwardEditorContent extends StatefulWidget {
   const _PortForwardEditorContent({
     required this.request,
     required this.hosts,
+    required this.buildHostSelector,
     required this.onClose,
     required this.onSave,
     required this.onDelete,
@@ -273,6 +274,7 @@ class _PortForwardEditorContent extends StatefulWidget {
 
   final _PortForwardEditorRequest request;
   final List<HostEntry> hosts;
+  final _BuildDrawerHostSelector buildHostSelector;
   final VoidCallback onClose;
   final _SavePortForward onSave;
   final ValueChanged<PortForwardEntry> onDelete;
@@ -323,8 +325,10 @@ class _PortForwardEditorContentState extends State<_PortForwardEditorContent>
   late final TextEditingController _bindPortController;
   late final TextEditingController _destinationHostController;
   late final TextEditingController _destinationPortController;
+  final _hostSearchController = TextEditingController();
   late String _type;
   late int? _hostId;
+  bool _selectingHost = false;
   bool _saving = false;
   String? _error;
   String? _nameError;
@@ -362,6 +366,7 @@ class _PortForwardEditorContentState extends State<_PortForwardEditorContent>
     _bindPortController.addListener(_clearBindPortError);
     _destinationHostController.addListener(_clearDestinationHostError);
     _destinationPortController.addListener(_clearDestinationPortError);
+    _hostSearchController.addListener(_refreshHostSearch);
   }
 
   @override
@@ -375,8 +380,11 @@ class _PortForwardEditorContentState extends State<_PortForwardEditorContent>
     _bindPortController.dispose();
     _destinationHostController.dispose();
     _destinationPortController.dispose();
+    _hostSearchController.dispose();
     super.dispose();
   }
+
+  void _refreshHostSearch() => setState(() {});
 
   void _clearNameError() {
     if (_nameError != null && _nameController.text.trim().isNotEmpty) {
@@ -505,6 +513,17 @@ class _PortForwardEditorContentState extends State<_PortForwardEditorContent>
 
   @override
   Widget build(BuildContext context) {
+    if (_selectingHost) {
+      return widget.buildHostSelector(
+        _hostSearchController,
+        () => setState(() => _selectingHost = false),
+        (hostId) => setState(() {
+          _hostId = hostId;
+          _hostError = null;
+          _selectingHost = false;
+        }),
+      );
+    }
     final initial = widget.request.initial;
     final isDynamic = _type == 'dynamic';
     final isRemote = _type == 'remote';
@@ -620,28 +639,16 @@ class _PortForwardEditorContentState extends State<_PortForwardEditorContent>
                   fallback: 'Intermediate Host',
                 ),
           children: [
-            _WorkspaceSelect<int?>(
+            _DrawerHostPickerField(
+              key: const ValueKey('port-forward-host-selector'),
               label: hostLabel,
-              isRequired: true,
-              value: _hostId,
+              host: widget.hosts
+                  .where((host) => host.id == _hostId)
+                  .firstOrNull,
               errorText: _hostError,
-              editable: true,
-              filterable: true,
-              clearable: true,
-              onChanged: (value) => setState(() {
-                _hostId = value;
-                if (value != null) {
-                  _hostError = null;
-                }
-              }),
-              items: [
-                for (final host in widget.hosts)
-                  if (host.id != null && host.type == NautermHostType.remote)
-                    DropdownMenuItem<int?>(
-                      value: host.id,
-                      child: Text(_portForwardHostLabel(host)),
-                    ),
-              ],
+              onTap: _saving
+                  ? null
+                  : () => setState(() => _selectingHost = true),
             ),
           ],
         ),
@@ -687,15 +694,6 @@ String _normalizePortForwardType(String? value) {
     'dynamic' => 'dynamic',
     _ => 'local',
   };
-}
-
-String _portForwardHostLabel(HostEntry host) {
-  final address = _emptyToNull(host.host);
-  if (address == null) {
-    return host.name;
-  }
-  final port = host.port ?? 22;
-  return '${host.name} ($address:$port)';
 }
 
 bool _isValidPort(int port) => port >= 1 && port <= 65535;

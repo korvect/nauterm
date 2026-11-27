@@ -485,6 +485,77 @@ void main() {
     expect(child.parentId, parent.id);
   });
 
+  testWidgets('empty groups and packages retain localized breadcrumbs', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final previousLanguage = appLanguage;
+    final previousLocalizations = NautermLocalizations.current;
+    final directory = Directory.systemTemp.createTempSync(
+      'nauterm-scoped-empty-',
+    );
+    final paths = NautermPaths(
+      configDirectory: directory,
+      dataDirectory: directory,
+    );
+    File(nautermLinuxDefaultConfigAsset).copySync(paths.configFile.path);
+    final controller = NautermWorkspaceController(
+      dataPaths: paths,
+      dataLoader: (_, _) async => const NautermWorkspaceData(
+        groups: [HostGroup(id: 41, name: 'Empty group fixture')],
+        snippetPackages: [
+          SnippetPackageEntry(id: 42, name: 'Empty package fixture'),
+        ],
+      ),
+    );
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      controller.dispose();
+      directory.deleteSync(recursive: true);
+      setAppLanguage(previousLanguage);
+      NautermLocalizations.current = previousLocalizations;
+    });
+    var ready = false;
+    unawaited(controller.initialDataReady.then((_) => ready = true));
+    await tester.pumpWidget(
+      NautermApp(onOpenSettings: () {}, workspaceController: controller),
+    );
+    await _pumpUntil(tester, () => ready);
+    await tester.runAsync(
+      () => NautermLocalizations.load(const Locale('zh', 'CN')),
+    );
+    setAppLanguage(AppLanguage.simplifiedChinese);
+    await tester.pumpAndSettle();
+
+    final group = find.byKey(const ValueKey('workspace-item-card:group:41'));
+    await tester.tap(group);
+    await tester.pump();
+    await tester.tap(group);
+    await tester.pump();
+    expect(find.text('暂无主机'), findsOneWidget);
+    expect(find.text('添加主机以保存连接信息，并快速打开远程会话。'), findsOneWidget);
+    expect(find.text('主机'), findsWidgets);
+
+    await tester.tap(find.text('代码片段'));
+    await tester.pumpAndSettle();
+    final package = find.byKey(
+      const ValueKey('workspace-item-card:snippet-package:42'),
+    );
+    await tester.tap(package);
+    await tester.pump();
+    expect(package, findsOneWidget);
+    expect(find.text('暂无代码片段'), findsNothing);
+    await tester.tap(package);
+    await tester.pump();
+    expect(package, findsNothing);
+    expect(find.text('暂无代码片段'), findsOneWidget);
+    expect(find.text('将常用命令保存为代码片段，以便在每个终端中使用。'), findsOneWidget);
+    expect(find.text('代码片段'), findsNWidgets(2));
+  });
+
   testWidgets('workspace toolbar searches can focus and show empty results', (
     tester,
   ) async {

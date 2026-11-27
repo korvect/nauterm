@@ -543,11 +543,13 @@ class _SnippetsPaneState extends State<_SnippetsPane> {
               .firstOrNull;
     final currentPackageId = selectedPackage?.id;
 
-    final packages = _sortWorkspaceItems(
-      _filterWorkspaceItems(widget.packages, _searchQuery),
-      _sortOrder,
-      ordinal: (package) => package.id,
-    );
+    final packages = selectedPackage == null
+        ? _sortWorkspaceItems(
+            _filterWorkspaceItems(widget.packages, _searchQuery),
+            _sortOrder,
+            ordinal: (package) => package.id,
+          )
+        : const <_SnippetPackageItem>[];
     final scopedSnippets = currentPackageId == null
         ? widget.snippets
         : widget.snippets.where(
@@ -573,8 +575,13 @@ class _SnippetsPaneState extends State<_SnippetsPane> {
         ? snippets.length
         : math.max(packages.length, snippets.length);
     final searching = _searchQuery.trim().isNotEmpty;
-    final showEmptyState =
-        packages.isEmpty && snippets.isEmpty && (!showingPackage || searching);
+    final empty = packages.isEmpty && snippets.isEmpty;
+    final emptyTitle = searching
+        ? 'workspace.label.noSnippetsFound'
+        : 'workspace.label.noSnippetsYet';
+    final emptyDescription = searching
+        ? 'workspace.description.tryAnotherSearch'
+        : 'workspace.empty.snippets.description';
 
     return ColoredBox(
       color: _surface,
@@ -594,31 +601,19 @@ class _SnippetsPaneState extends State<_SnippetsPane> {
             onViewModeChanged: (value) => setState(() => _viewMode = value),
           ),
           Expanded(
-            child: showEmptyState
+            child: empty && !showingPackage
                 ? _WorkspaceEmptyState(
                     icon: LucideIcons.code,
                     title: widget.loading
                         ? 'workspace.snippets.load.loading'
-                        : searching
-                        ? 'workspace.label.noSnippetsFound'
-                        : 'workspace.label.noSnippetsYet',
-                    description: widget.loading
-                        ? null
-                        : searching
-                        ? 'workspace.description.tryAnotherSearch'
-                        : 'workspace.empty.snippets.description',
+                        : emptyTitle,
+                    description: widget.loading ? null : emptyDescription,
                     actionLabel: widget.loading || searching
                         ? null
-                        : 'Add snippet',
+                        : 'workspace.label.addSnippet',
                     onAction: widget.loading || searching
                         ? null
                         : () => widget.onCreateSnippet(currentPackageId),
-                    leading: selectedPackage == null
-                        ? null
-                        : _SnippetPackageBreadcrumb(
-                            package: selectedPackage,
-                            onRootSelected: _openRoot,
-                          ),
                   )
                 : _WorkspaceItemScrollView(
                     padding: _workspacePanePadding,
@@ -633,14 +628,14 @@ class _SnippetsPaneState extends State<_SnippetsPane> {
                           SizedBox(height: 18),
                         ],
                         if (!showingPackage && packages.isNotEmpty) ...[
-                          const _SectionTitle('Packages'),
+                          const _SectionTitle('common.label.packages'),
                           SizedBox(height: 14),
                           _WorkspaceItemCollection(
                             items: packages,
                             viewMode: _viewMode,
                             maxColumns: 2,
                             layoutItemCount: sharedGridItemCount,
-                            onItemTap: _openPackage,
+                            onItemDoubleTap: _openPackage,
                             onContextAction: _handlePackageContextAction,
                             onContextActions: widget.onPackageContextActions,
                           ),
@@ -650,7 +645,7 @@ class _SnippetsPaneState extends State<_SnippetsPane> {
                             snippets.isNotEmpty)
                           SizedBox(height: 30),
                         if (snippets.isNotEmpty) ...[
-                          const _SectionTitle('Snippets'),
+                          const _SectionTitle('common.label.snippets'),
                           SizedBox(height: 14),
                           _WorkspaceItemCollection(
                             items: snippets,
@@ -662,9 +657,11 @@ class _SnippetsPaneState extends State<_SnippetsPane> {
                             onContextActions: widget.onSnippetContextActions,
                           ),
                         ],
-                        if (packages.isEmpty && snippets.isEmpty)
-                          const _WorkspaceInlineMessage(
-                            'workspace.label.noSnippetsFound',
+                        if (empty)
+                          _WorkspaceScopedEmptyState(
+                            icon: LucideIcons.code,
+                            title: emptyTitle,
+                            description: emptyDescription,
                           ),
                       ],
                     ),
@@ -711,7 +708,7 @@ class _SnippetPackageBreadcrumb extends StatelessWidget {
       child: Row(
         children: [
           _GroupBreadcrumbButton(
-            label: 'Snippets',
+            label: context.tr('common.label.snippets'),
             current: false,
             onPressed: onRootSelected,
           ),

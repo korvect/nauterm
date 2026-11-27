@@ -131,6 +131,26 @@ impl MenuItem {
         self
     }
 }
+
+pub(super) const DROPDOWN_ROW_HEIGHT: f32 = 32.;
+pub(super) const DROPDOWN_HORIZONTAL_INSET: f32 = 5.;
+pub(super) const DROPDOWN_VERTICAL_INSET: f32 = 6.;
+
+pub(super) fn dropdown_row<const S: bool>(id: impl Into<ElementId>) -> Button<S> {
+    Button::<S>::new(id)
+        .ink_ripple(false)
+        .ghost()
+        .h(px(DROPDOWN_ROW_HEIGHT))
+        .w_full()
+        .px(px(10.))
+        .rounded(px(6.))
+        .focusable(false)
+        .tab_stop(false)
+        .text_size(px(12.))
+        .line_height(relative(1.5))
+        .font_weight(FontWeights::MEDIUM)
+}
+
 #[derive(Clone)]
 enum Entry {
     Action(Box<MenuItem>),
@@ -759,21 +779,15 @@ impl MenuState {
         } else {
             p.text
         };
-        let row = Button::<S>::new(item_id(cx.entity().entity_id(), index))
-            .ink_ripple(false)
-            .ghost()
-            .h(px(if item.caption.is_some() {
-                44.
-            } else if self.menu.card {
-                35.
-            } else {
-                32.
-            }))
-            .w_full()
-            .px(px(if self.menu.card { 8. } else { 10. }))
-            .rounded(px(if self.menu.card { 7. } else { 6. }))
-            .focusable(false)
-            .tab_stop(false)
+        let row = dropdown_row::<S>(item_id(cx.entity().entity_id(), index))
+            .when(self.menu.card, |row| {
+                row.h(px(35.))
+                    .px(px(8.))
+                    .rounded(px(7.))
+                    .text_size(px(13.))
+                    .font_weight(FontWeights::SEMIBOLD)
+            })
+            .when(item.caption.is_some(), |row| row.h(px(44.)))
             .disabled(item.disabled)
             .role(if item.checked.is_some() {
                 Role::MenuItemCheckBox
@@ -788,15 +802,6 @@ impl MenuState {
             )
             .when_some(item.checked, |row, checked| row.checked(checked))
             .when(active, |row| row.aria_active_descendant())
-            .text_size(px(if self.menu.card { 13. } else { 12. }))
-            // Button's tight default line box can clip font descenders in
-            // truncated labels. Keep full glyph height within the same row.
-            .line_height(relative(1.5))
-            .font_weight(if self.menu.card {
-                FontWeights::SEMIBOLD
-            } else {
-                FontWeights::MEDIUM
-            })
             .when(
                 self.menu.card || self.menu.palette.is_some() || item.destructive,
                 |row| {
@@ -1006,7 +1011,9 @@ impl Render for MenuState {
             .menu
             .max_visible_rows
             .filter(|_| self.dropdown)
-            .map_or(max_height, |rows| max_height.min(rows as f32 * 32. + 12.));
+            .map_or(max_height, |rows| {
+                max_height.min(rows as f32 * DROPDOWN_ROW_HEIGHT + 2. * DROPDOWN_VERTICAL_INSET)
+            });
         // Never leave a trailing separator or an invisible separator Tab stop.
         let count = self.menu.entries.len()
             - usize::from(matches!(self.menu.entries.last(), Some(Entry::Separator)));
@@ -1109,8 +1116,16 @@ impl Render for MenuState {
                     .track_scroll(&self.scroll)
                     .scrollbars_with(&self.scroll)
                     .hover_only()
-                    .py(px(if self.menu.card { 10. } else { 6. }))
-                    .px(px(if self.menu.card { 9. } else { 5. }))
+                    .py(px(if self.menu.card {
+                        10.
+                    } else {
+                        DROPDOWN_VERTICAL_INSET
+                    }))
+                    .px(px(if self.menu.card {
+                        9.
+                    } else {
+                        DROPDOWN_HORIZONTAL_INSET
+                    }))
                     .children(self.menu.entries.iter().take(count).enumerate().map(
                         |(i, entry)| {
                             match entry {

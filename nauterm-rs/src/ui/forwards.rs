@@ -1,4 +1,5 @@
 use super::*;
+use crate::host_picker::{HostPicker, PickerEvent};
 use crate::port_forward::{self, Kind, State, Status};
 use crate::typography::FontWeights;
 use anyhow::{Context as _, Result, ensure};
@@ -9,23 +10,12 @@ pub(super) struct ForwardSelects {
     kind: Kind,
     host: Option<Id>,
     types: SelectModel<Kind>,
-    hosts: SelectModel<Id>,
+    picker: Entity<HostPicker>,
+    selecting_host: bool,
     pub(super) errors: [Option<SharedString>; 5],
     pub(super) host_error: Option<SharedString>,
     saving: bool,
     _events: Vec<Subscription>,
-}
-fn host_options(hosts: &[Host]) -> Vec<SelectOption<Id>> {
-    hosts
-        .iter()
-        .filter(|host| host.supports_ssh())
-        .map(|host| {
-            SelectOption::new(
-                host.id,
-                format!("{} ({}:{})", host.name, host.address, host.port),
-            )
-        })
-        .collect()
 }
 impl ForwardSelects {
     pub(super) fn draft_fields(&self) -> (&'static str, Option<Id>) {
@@ -35,9 +25,8 @@ impl ForwardSelects {
     pub fn saving(&self) -> bool {
         self.saving
     }
-    pub fn reconcile(&mut self, hosts: &[Host], window: &mut Window, cx: &mut App) {
-        self.hosts
-            .reconcile(host_options(hosts), self.host, window, cx);
+    pub(super) fn host_picker(&self) -> Option<Entity<HostPicker>> {
+        self.selecting_host.then(|| self.picker.clone())
     }
 }
 impl Nauterm {
@@ -96,7 +85,7 @@ impl Nauterm {
             window,
             cx,
         );
-        let hosts = SelectModel::new(host_options(&self.data.hosts), host, window, cx);
+        let picker = cx.new(|cx| HostPicker::new(self.data.clone(), window, cx));
         let type_event = cx.subscribe_in(
             &types.state,
             window,
@@ -125,19 +114,27 @@ impl Nauterm {
             },
         );
         let host_event = cx.subscribe_in(
-            &hosts.state,
+            &picker,
             window,
-            |this, state, event: &SelectEvent<Id>, _, cx| {
+            |this, picker, event: &PickerEvent, window, cx| {
                 if let Some(forward) = this
                     .editor
                     .as_mut()
                     .and_then(|editor| editor.forward.as_mut())
-                    && forward.hosts.state == *state
+                    && forward.selecting_host
+                    && forward.picker == *picker
                 {
-                    let SelectEvent::Confirm(value) = event;
-                    forward.host = value.flatten();
-                    if forward.host.is_some() {
-                        forward.host_error = None;
+                    match event {
+                        PickerEvent::UseLocal => return,
+                        PickerEvent::Back => {}
+                        PickerEvent::Selected(id) => {
+                            forward.host = Some(*id);
+                            forward.host_error = None;
+                        }
+                    }
+                    forward.selecting_host = false;
+                    if picker.read(cx).contains_focus(window, cx) {
+                        this.focus.focus(window, cx);
                     }
                     cx.notify();
                 }
@@ -176,7 +173,8 @@ impl Nauterm {
             kind,
             host,
             types,
-            hosts,
+            picker,
+            selecting_host: false,
             errors: Default::default(),
             host_error: None,
             saving: false,
@@ -470,7 +468,7 @@ impl Nauterm {
         &self,
         editor: &Editor,
         forward: &ForwardSelects,
-        cx: &App,
+        cx: &Context<Self>,
     ) -> Vec<AnyElement> {
         let busy = forward.saving;
         let field = |index: usize, label: &str| {
@@ -517,15 +515,37 @@ impl Nauterm {
                 } else {
                     "workspace.portForward.section.intermediateHost"
                 },
-                vec![forward.hosts.field_with_error(
-                    if forward.kind == Kind::Remote {
-                        "workspace.portForward.field.remoteHost *"
-                    } else {
-                        "workspace.portForward.field.intermediateHost *"
-                    },
-                    busy,
-                    forward.host_error.clone(),
-                )],
+                vec![
+                    crate::host_picker::host_field(
+                        "forward-select-host",
+                        if forward.kind == Kind::Remote {
+                            "workspace.portForward.field.remoteHost *"
+                        } else {
+                            "workspace.portForward.field.intermediateHost *"
+                        },
+                        forward
+                            .host
+                            .and_then(|id| self.data.hosts.iter().find(|host| host.id == id)),
+                        Palette::new(self.data.dark),
+                        cx.listener(|this, _, _, cx| {
+                            if let Some(forward) = this
+                                .editor
+                                .as_mut()
+                                .and_then(|editor| editor.forward.as_mut())
+                                .filter(|forward| !forward.saving)
+                            {
+                                forward.picker.update(cx, |picker, cx| {
+                                    picker.set_data(this.data.clone(), cx);
+                                });
+                                forward.selecting_host = true;
+                                cx.notify();
+                            }
+                        }),
+                    )
+                    .disabled(busy)
+                    .error(forward.host_error.clone())
+                    .into_any_element(),
+                ],
             ),
         ];
         if forward.kind != Kind::Dynamic {

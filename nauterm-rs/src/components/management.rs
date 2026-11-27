@@ -17,6 +17,28 @@ type EmptyAction = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 pub const COLLECTION_SECTION_GAP: f32 = 28.;
 pub const COLLECTION_TITLE_GAP: f32 = 12.;
 
+pub fn collection_empty(
+    icon: IconName,
+    title: &'static str,
+    description: &'static str,
+    palette: Palette,
+) -> Div {
+    div()
+        .pt(px(64.))
+        .flex()
+        .flex_col()
+        .items_center()
+        .gap(px(12.))
+        .text_color(palette.muted)
+        .child(crate::assets::icon(icon).size(px(16.)))
+        .child(crate::localization::view(title))
+        .child(
+            div()
+                .text_size(px(12.))
+                .child(crate::localization::view(description)),
+        )
+}
+
 pub fn editor_section(surface: Rgba, title: &str, fields: Vec<AnyElement>) -> AnyElement {
     div()
         .rounded(px(10.))

@@ -88,9 +88,6 @@ ButtonStyle? get _workspaceIconButtonInteractionStyle => _workspaceDark
         highlightColor: _workspaceMenuPressed,
       )
     : null;
-const double _workspacePopupMenuRowHeight = 34;
-const double _workspaceMenuHorizontalInset = 7;
-const double _workspaceMenuVerticalInset = 5;
 List<BoxShadow> get _workspaceMenuShadows => _workspaceDark
     ? const [
         BoxShadow(

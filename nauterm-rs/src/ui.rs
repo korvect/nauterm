@@ -3417,7 +3417,7 @@ impl Nauterm {
             cx.stop_propagation();
             this.focus.focus(window, cx);
             if kind == ItemKind::SnippetPackage
-                && this.editor.is_none()
+                && event.click_count() == 2
                 && !event.modifiers().platform
                 && !event.modifiers().control
                 && !event.modifiers().shift
@@ -3786,28 +3786,20 @@ impl Nauterm {
                     .when(
                         count == 0 && (self.page != Page::Hosts || visible_groups == 0),
                         |view| {
-                            view.child(
-                                div()
-                                    .pt(px(64.))
-                                    .flex()
-                                    .flex_col()
-                                    .items_center()
-                                    .gap(px(12.))
-                                    .text_color(p.muted)
-                                    .child(icon(page_icon(self.page)))
-                                    .child(crate::localization::view(if filtered {
-                                        "workspace.label.noHostsFound"
-                                    } else {
-                                        "workspace.label.noHostsYet"
-                                    }))
-                                    .child(div().text_size(px(12.)).child(
-                                        crate::localization::view(if filtered {
-                                            "workspace.description.tryAnotherSearchOrClearTags"
-                                        } else {
-                                            "workspace.empty.hosts.description"
-                                        }),
-                                    )),
-                            )
+                            view.child(crate::components::management::collection_empty(
+                                page_icon(self.page),
+                                if filtered {
+                                    "workspace.label.noHostsFound"
+                                } else {
+                                    "workspace.label.noHostsYet"
+                                },
+                                if filtered {
+                                    "workspace.description.tryAnotherSearchOrClearTags"
+                                } else {
+                                    "workspace.empty.hosts.description"
+                                },
+                                p,
+                            ))
                         },
                     ),
             )
@@ -3910,13 +3902,6 @@ impl Nauterm {
                 .unwrap_or_default();
             draft.telnet.reconcile(&inventory, window, cx);
         }
-        if let Some(forward) = self
-            .editor
-            .as_mut()
-            .and_then(|editor| editor.forward.as_mut())
-        {
-            forward.reconcile(&self.data.hosts, window, cx);
-        }
         let Some(editor) = &self.editor else {
             return div().into_any_element();
         };
@@ -3929,6 +3914,13 @@ impl Nauterm {
         }
         if editor.theme_gallery_target().is_some() {
             return self.host_theme_gallery(cx);
+        }
+        if let Some(picker) = editor
+            .forward
+            .as_ref()
+            .and_then(forwards::ForwardSelects::host_picker)
+        {
+            return picker.into_any_element();
         }
         let sections = if editor.kind == ItemKind::Host {
             self.host_editor_sections(editor, cx)
