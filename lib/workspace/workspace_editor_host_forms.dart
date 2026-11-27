@@ -26,7 +26,7 @@ class _ParentGroupSelect extends StatelessWidget {
       editable: true,
       filterable: true,
       clearable: true,
-      createLabel: 'workspace.action.createGroup',
+      createLabel: onCreate == null ? null : 'workspace.action.createGroup',
       onCreate: onCreate,
       items: [
         for (final group in choices ?? groups)
