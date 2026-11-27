@@ -70,7 +70,7 @@ case "$DIST_DIR" in
 esac
 
 bash scripts/ci/verify_app_icons.sh --generated-only
-install -Dm644 "assets/icons/generated/png/app_icon_512.png" "linux/runner/resources/nauterm.png"
+install -Dm644 "assets/icons/generated/png/app_icon_1024.png" "linux/runner/resources/nauterm.png"
 
 if [ "$CLEAN_DIST" = "1" ]; then
   rm -rf "$DIST_DIR"
@@ -154,6 +154,7 @@ fi
 
 create_desktop_file() {
   local path="$1"
+  local icon_value="${2:-$APP_ID}"
   cat > "$path" <<EOF
 [Desktop Entry]
 Type=Application
@@ -161,7 +162,7 @@ Name=$APP_LABEL
 Comment=$APP_DESCRIPTION
 Exec=$BINARY_NAME %U
 MimeType=x-scheme-handler/ssh;x-scheme-handler/sftp;x-scheme-handler/telnet;
-Icon=$APP_ID
+Icon=$icon_value
 Categories=Network;RemoteAccess;TerminalEmulator;
 Terminal=false
 # Must match the application ID set by the Flutter or GPUI Linux client.
@@ -172,7 +173,7 @@ EOF
 install_icon() {
   local root="$1"
   local size png installed=0
-  for size in 16 24 32 48 64 128 256 512; do
+  for size in 16 24 32 48 64 128 256 512 1024; do
     png="$ICON_GENERATED_PNG_DIR/app_icon_$size.png"
     [ -f "$png" ] || continue
     install -Dm644 "$png" \
@@ -194,7 +195,7 @@ if [ "${NAUTERM_APPIMAGE_ONLY:-0}" != "1" ]; then
     "$PKG_ROOT/usr/share/applications"
   cp -a "$BUNDLE_DIR/." "$PKG_ROOT/opt/$BINARY_NAME/"
   ln -s "/opt/$BINARY_NAME/$BINARY_NAME" "$PKG_ROOT/usr/bin/$BINARY_NAME"
-  create_desktop_file "$PKG_ROOT/usr/share/applications/$APP_ID.desktop"
+  create_desktop_file "$PKG_ROOT/usr/share/applications/$APP_ID.desktop" "/usr/share/pixmaps/$APP_ID.png"
   install_icon "$PKG_ROOT"
 
   COMMON_FPM_ARGS=(

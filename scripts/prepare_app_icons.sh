@@ -25,7 +25,7 @@ done
 rm -rf "$MAC_COMPOSER_ICON"
 cp -R "$SOURCE_COMPOSER_ICON" "$MAC_COMPOSER_ICON"
 cp "$GENERATED_ROOT/app_icon.ico" "$WINDOWS_ICON"
-cp "$PNG_DIR/app_icon_512.png" "$LINUX_ICON"
+cp "$PNG_DIR/app_icon_1024.png" "$LINUX_ICON"
 
 bash "$ROOT_DIR/scripts/ci/verify_app_icons.sh"
 echo "Prepared platform app icons from assets/icons/."

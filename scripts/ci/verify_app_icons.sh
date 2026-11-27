@@ -181,7 +181,7 @@ if directory_hashes(source_composer) != directory_hashes(mac_composer):
         "Run `make prepare-icons`."
     )
 
-if linux_icon.read_bytes() != generated[512]:
+if linux_icon.read_bytes() != generated[1024]:
     raise SystemExit("Prepared Linux app icon is stale")
 if windows_icon.read_bytes() != generated_windows_icon.read_bytes():
     raise SystemExit("Prepared Windows app icon is stale")

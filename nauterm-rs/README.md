@@ -27,8 +27,7 @@ the linker name. Install `libxkbcommon-x11-dev` before `make run-rs`.
 On GNOME Wayland, standard window titlebars use libdecor's GTK plugin.
 The main window retains its product-owned controls. A local Cargo patch in
 `third_party/gpui-pre-linux` contains the backend integration pending migration
-to the dependency fork. `cargo run -p nauterm-rs --example native_titlebar`
-opens a data-free window for manual decoration/resize testing.
+to the dependency fork.
 
 Run these commands from the repository root:
 
