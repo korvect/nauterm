@@ -31,7 +31,16 @@ impl Document {
         } else {
             include_bytes!("../../../assets/config/default-linux.json") as &[u8]
         };
-        Self::parse(defaults)
+        let mut document = Self::parse(defaults)?;
+        if cfg!(any(target_os = "windows", target_os = "linux")) {
+            // This settings document is shared with Flutter. Let Rust resolve
+            // its own monospace default without changing the shared files.
+            document.put(
+                "/terminal/appearance/font/family",
+                crate::terminal_appearance::DEFAULT_FAMILY,
+            )?;
+        }
+        Ok(document)
     }
 
     fn read<T: DeserializeOwned>(&self, path: &str, target: &mut T) -> Result<()> {
@@ -758,6 +767,39 @@ mod tests {
                 crate::general_preferences::Preferences::default()
             );
         }
+        Ok(())
+    }
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    #[test]
+    fn bundled_terminal_fonts_are_defaults_and_preserve_explicit_preferences() -> Result<()> {
+        let mut state = AppState::default();
+        Document::new()?.apply(&mut state)?;
+        assert_eq!(state.terminal.resolved_family(), crate::fonts::MONO_FAMILY);
+        let defaults = crate::fonts::mono_cjk_fallbacks();
+        let families = state.terminal.fallback_families();
+        assert!(
+            families
+                .iter()
+                .map(String::as_str)
+                .take(defaults.len())
+                .eq(defaults)
+        );
+
+        Document::parse(
+            br#"{"schemaVersion":1,"terminal":{"appearance":{"font":{
+            "family":"Custom Mono","cjkFamily":"Custom CJK"
+        }}}}"#,
+        )?
+        .apply(&mut state)?;
+        assert_eq!(state.terminal.resolved_family(), "Custom Mono");
+        let families = state.terminal.fallback_families();
+        assert!(
+            families
+                .iter()
+                .map(String::as_str)
+                .take(defaults.len() + 1)
+                .eq(std::iter::once("Custom CJK").chain(defaults))
+        );
         Ok(())
     }
     #[test]

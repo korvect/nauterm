@@ -52,7 +52,7 @@ impl Language {
         }
     }
 }
-fn system_locale() -> &'static str {
+pub(crate) fn system_locale() -> &'static str {
     static LOCALE: OnceLock<String> = OnceLock::new();
     LOCALE.get_or_init(|| sys_locale::get_locale().unwrap_or_else(|| "en".into()))
 }
@@ -74,28 +74,38 @@ pub fn text(cx: &App, source: &str) -> SharedString {
 /// Resolve product copy when rendering so composed forms follow language changes.
 /// Pass user-owned names, paths and terminal content directly to their text nodes.
 #[derive(IntoElement)]
-pub struct Text {
-    source: SharedString,
-    is_message: bool,
+pub struct Text(TextSource);
+
+enum TextSource {
+    Label(SharedString),
+    Message(SharedString),
+    Translated(SharedString),
 }
 pub fn view(source: impl Into<SharedString>) -> Text {
-    Text {
-        source: source.into(),
-        is_message: false,
-    }
+    Text(TextSource::Label(source.into()))
 }
 pub fn message_view(source: impl Into<SharedString>) -> Text {
-    Text {
-        source: source.into(),
-        is_message: true,
-    }
+    Text(TextSource::Message(source.into()))
+}
+
+/// Display product copy that was already translated by the caller.
+pub(crate) fn translated_view(text: SharedString) -> Text {
+    Text(TextSource::Translated(text))
 }
 impl RenderOnce for Text {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        if self.is_message {
-            message(cx, &self.source)
-        } else {
-            label(cx, &self.source)
+    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let text = match self.0 {
+            TextSource::Label(source) => label(cx, &source),
+            TextSource::Message(source) => message(cx, &source),
+            TextSource::Translated(text) => text,
+        };
+        #[cfg(any(target_os = "linux", target_os = "windows"))]
+        {
+            crate::typography::ui_label_text(text, _window)
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "windows")))]
+        {
+            text.into_any_element()
         }
     }
 }

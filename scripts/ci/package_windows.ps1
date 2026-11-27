@@ -239,7 +239,7 @@ if ($Client -eq "flutter") {
     New-Item -ItemType Directory -Path $ReleaseDir | Out-Null
     Copy-Item $Executables[0] (Join-Path $ReleaseDir "$BinaryName.exe")
     python scripts/stage_rs_mosh.py --project . --executable $Executables[0] --destination $ReleaseDir
-    python scripts/package_rs_notices.py --project . --build-log $BuildLog --destination (Join-Path $ReleaseDir "licenses")
+    python scripts/package_rs_notices.py --project . --build-log $BuildLog --destination (Join-Path $ReleaseDir "licenses") --include-noto
     Copy-Item LICENSE (Join-Path $ReleaseDir "LICENSE")
   } finally {
     Remove-Item $BuildLog -Force -ErrorAction SilentlyContinue

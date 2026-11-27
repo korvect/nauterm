@@ -1,10 +1,11 @@
 [workspace]
 members = ["native/nauterm_core", "native/nauterm_cmd_integration", "nauterm-rs"]
 resolver = "2"
-exclude = ["third_party/gpui-pre-linux"]
+exclude = ["third_party/gpui-pre-linux", "third_party/gpui-pre-windows"]
 
 [patch.crates-io]
 gpui-pre-linux = { path = "third_party/gpui-pre-linux" }
+gpui-pre-windows = { path = "third_party/gpui-pre-windows" }
 
 [workspace.package]
 version = "0.3.13"

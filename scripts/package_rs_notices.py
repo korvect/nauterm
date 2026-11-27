@@ -6,7 +6,9 @@ from pathlib import Path
 import shutil
 
 
-def stage_notices(project: Path, build_log: Path, destination: Path) -> None:
+def stage_notices(
+    project: Path, build_log: Path, destination: Path, include_noto: bool = False
+) -> None:
     assets = project / "nauterm-rs/assets/licenses"
     notices_file = assets / "nauterm-rs-rust.json"
     notices = json.loads(notices_file.read_text(encoding="utf-8"))
@@ -21,6 +23,9 @@ def stage_notices(project: Path, build_log: Path, destination: Path) -> None:
     shutil.copy2(project / "assets/licenses/nauterm-mosh-rust.json", destination / "nauterm-mosh-rust.json")
     shutil.copy2(assets / "README.md", destination / "README.md")
     shutil.copy2(assets / "manual/lucide-LICENSE", destination / "lucide-LICENSE")
+    if include_noto:
+        for name in ("noto-sans-OFL.txt", "noto-cjk-OFL.txt"):
+            shutil.copy2(assets / "manual" / name, destination / name)
     shutil.copy2(project / "assets/licenses/manual/ghostty-LICENSE", destination / "ghostty-LICENSE")
     shutil.copy2(project / "assets/licenses/manual/nerd-fonts-LICENSE", destination / "nerd-fonts-LICENSE")
     copied = set()
@@ -67,5 +72,6 @@ if __name__ == "__main__":
     parser.add_argument("--project", type=Path, required=True)
     parser.add_argument("--build-log", type=Path, required=True)
     parser.add_argument("--destination", type=Path, required=True)
+    parser.add_argument("--include-noto", action="store_true")
     args = parser.parse_args()
-    stage_notices(args.project, args.build_log, args.destination)
+    stage_notices(args.project, args.build_log, args.destination, args.include_noto)

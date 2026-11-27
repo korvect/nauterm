@@ -834,7 +834,10 @@ impl Settings {
                 Field::Family,
                 crate::fonts::primary_options(&fonts, &self.values.terminal.family),
             ),
-            (Field::CjkFamily, fonts.cjk),
+            (
+                Field::CjkFamily,
+                crate::fonts::cjk_options(&fonts, &Field::CjkFamily.value(&self.values.terminal)),
+            ),
             (
                 Field::Size,
                 crate::fonts::size_options(self.values.terminal.size),
@@ -885,7 +888,20 @@ impl Settings {
                             return;
                         }
                         this.validation_error = None;
+                        #[cfg(any(target_os = "linux", target_os = "windows"))]
+                        let refresh_font_options =
+                            matches!(field, Field::Family | Field::CjkFamily)
+                                && [&this.values.terminal, &appearance]
+                                    .into_iter()
+                                    .any(|value| {
+                                        crate::fonts::weight_alias_family(&field.value(value))
+                                            .is_some()
+                                    });
                         this.values.terminal = appearance;
+                        #[cfg(any(target_os = "linux", target_os = "windows"))]
+                        if refresh_font_options {
+                            this.refresh_font_options(window, cx);
+                        }
                         this.changed(window, cx);
                     }
                 },
@@ -903,17 +919,11 @@ impl Settings {
         };
         for control in &mut self.controls {
             let selected = control.field.value(&self.values.terminal);
-            let mut options = match control.field {
+            let options = match control.field {
                 Field::Family => crate::fonts::primary_options(fonts, &selected),
-                Field::CjkFamily => fonts.cjk.clone(),
+                Field::CjkFamily => crate::fonts::cjk_options(fonts, &selected),
                 _ => continue,
             };
-            if !options
-                .iter()
-                .any(|option| option.value().as_ref() == Some(&selected))
-            {
-                options.push(SelectOption::new(selected.clone(), selected.clone()));
-            }
             control
                 .select
                 .reconcile(options, Some(selected), window, cx);

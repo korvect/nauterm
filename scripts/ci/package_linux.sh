@@ -16,21 +16,30 @@ case "$CLIENT" in
   flutter) APP_LABEL="Nauterm"; APP_DESCRIPTION="$APP_DESCRIPTION_BASE, built with Flutter." ;;
   rs)
     PROJECT_ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
+    mapfile -t RS_APP_IDENTITY < <(python3 - "$PROJECT_ROOT/nauterm-rs/application.json" <<'PY'
+import json
+import sys
+
+metadata = json.load(open(sys.argv[1], encoding="utf-8"))
+for key in ("id", "name", "description"):
+    print(metadata[key])
+PY
+)
     mapfile -t RS_APP_METADATA < <(python3 - "$PROJECT_ROOT/nauterm-rs/linux/application.json" <<'PY'
 import json
 import sys
 
 metadata = json.load(open(sys.argv[1], encoding="utf-8"))
-for key in ("id", "name", "package_name", "description", "binary_name", "icon"):
+for key in ("package_name", "binary_name", "icon"):
     print(metadata[key])
 PY
 )
-    APP_ID="${RS_APP_METADATA[0]}"
-    APP_LABEL="${RS_APP_METADATA[1]}"
-    APP_NAME="${RS_APP_METADATA[2]}"
-    APP_DESCRIPTION="${RS_APP_METADATA[3]}"
-    BINARY_NAME="${RS_APP_METADATA[4]}"
-    ICON_SOURCE="$PROJECT_ROOT/${RS_APP_METADATA[5]}"
+    APP_ID="${RS_APP_IDENTITY[0]}"
+    APP_LABEL="${RS_APP_IDENTITY[1]}"
+    APP_DESCRIPTION="${RS_APP_IDENTITY[2]}"
+    APP_NAME="${RS_APP_METADATA[0]}"
+    BINARY_NAME="${RS_APP_METADATA[1]}"
+    ICON_SOURCE="$PROJECT_ROOT/${RS_APP_METADATA[2]}"
     ;;
   *) echo 'Client must be flutter or rs.' >&2; exit 2 ;;
 esac
@@ -84,7 +93,7 @@ if [ "$CLIENT" = rs ]; then
   mkdir -p "$BUNDLE_DIR"
   install -m755 "$RS_EXECUTABLE" "$BUNDLE_DIR/$BINARY_NAME"
   python3 scripts/stage_rs_mosh.py --project . --executable "$RS_EXECUTABLE" --destination "$BUNDLE_DIR"
-  python3 scripts/package_rs_notices.py --project . --build-log "$RS_BUILD_LOG" --destination "$BUNDLE_DIR/licenses"
+  python3 scripts/package_rs_notices.py --project . --build-log "$RS_BUILD_LOG" --destination "$BUNDLE_DIR/licenses" --include-noto
   cp LICENSE "$BUNDLE_DIR/LICENSE"
   rm "$RS_BUILD_LOG"
 else

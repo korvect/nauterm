@@ -59,7 +59,8 @@ function Initialize-BuildEnvironment([string]$Target) {
     }
     $hostArchitecture = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'amd64' }
     Write-ProgressMessage "Configuring Visual Studio ($architecture)..."
-    & $developerShell -Arch $architecture -HostArch $hostArchitecture -SkipAutomaticLocation 1>$null 6>$null
+    $developerArchitecture = if ($architecture -eq 'x64') { 'amd64' } else { $architecture }
+    & $developerShell -Arch $developerArchitecture -HostArch $hostArchitecture -SkipAutomaticLocation 1>$null 6>$null
   }
   $compiler = Get-Command cl.exe -ErrorAction Stop
   Get-Command rc.exe -ErrorAction Stop | Out-Null

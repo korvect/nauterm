@@ -166,7 +166,7 @@ impl RenderOnce for DialogFrame {
                     .border_color(colors.border)
                     .text_size(px(15.))
                     .line_height(relative(1.2))
-                    .font_weight(FontWeights::MEDIUM)
+                    .font_weight(FontWeights::CONTROL_LABEL)
                     .child(match self.title {
                         Title::Text(title) => {
                             crate::localization::text(cx, &title).into_any_element()

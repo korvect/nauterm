@@ -1055,7 +1055,7 @@
         {"name": "gpui-pre-sum-tree", "version": "0.3.12", "source": "registry+https://github.com/rust-lang/crates.io-index"},
         {"name": "gpui-pre-util", "version": "0.3.12", "source": "registry+https://github.com/rust-lang/crates.io-index"},
         {"name": "gpui-pre-wgpu", "version": "0.3.12", "source": "registry+https://github.com/rust-lang/crates.io-index"},
-        {"name": "gpui-pre-windows", "version": "0.3.12", "source": "registry+https://github.com/rust-lang/crates.io-index"},
+        {"name": "gpui-pre-windows", "version": "0.3.12", "source": null},
         {"name": "gpui-pre-ztracing-macro", "version": "0.3.12", "source": "registry+https://github.com/rust-lang/crates.io-index"},
         {"name": "gpui-pre-ztracing", "version": "0.3.12", "source": "registry+https://github.com/rust-lang/crates.io-index"},
         {"name": "gpui-pre", "version": "0.3.12", "source": "registry+https://github.com/rust-lang/crates.io-index"}

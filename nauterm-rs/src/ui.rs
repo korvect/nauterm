@@ -2935,9 +2935,8 @@ impl Nauterm {
                 .line_height(px(20.))
                 .overflow_hidden()
                 .opacity(reveal)
-                .child(crate::localization::text_for(
-                    self.data.general.language,
-                    text,
+                .child(crate::localization::translated_view(
+                    crate::localization::text_for(self.data.general.language, text),
                 ))
         };
         let custom = ButtonCustomVariant::new(cx).foreground(p.text.into());

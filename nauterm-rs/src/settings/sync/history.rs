@@ -198,7 +198,7 @@ impl Panel {
                                 .flex()
                                 .flex_col()
                                 .gap(px(2.))
-                                .child(div().font_weight(FontWeights::MEDIUM).child(
+                                .child(div().font_weight(FontWeights::CONTROL_LABEL).child(
                                     crate::localization::view(if version.current {
                                         "settings.sync.history.current"
                                     } else {

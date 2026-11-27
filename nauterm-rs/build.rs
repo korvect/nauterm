@@ -5,6 +5,14 @@ mod theme_resource_parser;
 mod windows_resources;
 
 fn main() {
+    if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows")
+        && env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc")
+    {
+        // The workspace overview builds a deep GPUI element tree on the main
+        // thread. Windows' 1 MiB executable default is too small for that
+        // initial render, so reserve 8 MiB for the Rust client binary.
+        println!("cargo:rustc-link-arg-bin=nauterm-rs=/STACK:8388608");
+    }
     for name in [
         "NAUTERM_GITHUB_CLIENT_ID",
         "NAUTERM_GOOGLE_CLIENT_ID",
@@ -32,12 +40,16 @@ fn main() {
     };
     println!("cargo:rustc-env=NAUTERM_RS_BUILD_NUMBER={build}");
     let root = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap());
-    let application_metadata = root.join("linux/application.json");
+    let application_metadata = root.join("application.json");
     println!("cargo:rerun-if-changed={}", application_metadata.display());
     let application: serde_json::Value = serde_json::from_slice(
-        &fs::read(&application_metadata).expect("Linux application metadata is required"),
+        &fs::read(&application_metadata).expect("Rust application metadata is required"),
     )
-    .expect("Linux application metadata must be valid JSON");
+    .expect("Rust application metadata must be valid JSON");
+    let application_name = application["name"]
+        .as_str()
+        .filter(|value| !value.is_empty())
+        .expect("Rust application metadata must provide name");
     for (key, variable) in [
         ("id", "NAUTERM_RS_APPLICATION_ID"),
         ("name", "NAUTERM_RS_APPLICATION_NAME"),
@@ -45,10 +57,10 @@ fn main() {
         let value = application[key]
             .as_str()
             .filter(|value| !value.is_empty())
-            .unwrap_or_else(|| panic!("Linux application metadata must provide {key}"));
+            .unwrap_or_else(|| panic!("Rust application metadata must provide {key}"));
         println!("cargo:rustc-env={variable}={value}");
     }
-    windows_resources::compile(&root, build);
+    windows_resources::compile(&root, build, application_name);
     generate_host_icons(&root);
     generate(root);
 }

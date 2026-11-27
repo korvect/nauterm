@@ -33,8 +33,16 @@ fn await_output(pty: &mut LocalPty, bytes: &mut Vec<u8>, marker: &[u8]) {
 }
 
 #[test]
-fn cmd_native_worker_reports_commands_and_exits() {
-    exercise(std::env::var("COMSPEC").expect("Windows CMD"), false);
+fn cmd_native_worker_accepts_forward_slash_in_shell_path() {
+    let cmd = std::env::var("COMSPEC").expect("Windows CMD");
+    let cmd = Path::new(&cmd);
+    // Quick Connect discovers the system shell with this mixed separator path.
+    let shell = format!(
+        "{}/{}",
+        cmd.parent().unwrap().display(),
+        cmd.file_name().unwrap().to_string_lossy()
+    );
+    exercise(shell, false);
 }
 
 #[test]

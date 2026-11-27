@@ -1344,7 +1344,7 @@ impl<V: Clone + PartialEq + 'static> Render for SelectState<V> {
         let state = cx.entity();
         if self.terminal_popup() && self.terminal_menu_width.is_none() {
             let mut style = window.text_style();
-            style.font_weight = crate::typography::FontWeights::MEDIUM;
+            style.font_weight = FontWeights::CONTROL_LABEL;
             let longest = self
                 .options
                 .iter()

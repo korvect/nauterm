@@ -3,6 +3,7 @@ use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
 
 pub const DEFAULT_WORD_BOUNDARIES: &str = " \t'\"│`|:;,()[]{}<>$";
+pub(crate) const DEFAULT_FAMILY: &str = "monospace";
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -145,7 +146,7 @@ impl Default for Appearance {
             dark_theme: ThemeId::NysaDark,
             dark_custom_palette: None,
             follow_app_theme: false,
-            family: "monospace".into(),
+            family: DEFAULT_FAMILY.into(),
             cjk_family: None,
             enable_ligatures: false,
             size: 12.,
@@ -242,7 +243,7 @@ impl Appearance {
         Ok(())
     }
     pub fn resolved_family(&self) -> &str {
-        if self.family.trim().eq_ignore_ascii_case("monospace") {
+        if self.family.trim().eq_ignore_ascii_case(DEFAULT_FAMILY) {
             platform_family()
         } else {
             self.family.trim()
@@ -250,7 +251,12 @@ impl Appearance {
     }
     pub fn fallback_families(&self) -> Vec<String> {
         let mut families = Vec::<String>::new();
-        for candidate in self.cjk_family.as_deref().into_iter().chain([
+        let cjk = self
+            .cjk_family
+            .as_deref()
+            .into_iter()
+            .chain(platform_cjk_families());
+        for candidate in cjk.chain([
             crate::fonts::SYMBOLS_FAMILY,
             "Consolas",
             "Menlo",
@@ -329,13 +335,23 @@ impl Appearance {
     }
 }
 pub fn platform_family() -> &'static str {
-    if cfg!(target_os = "windows") {
-        "Consolas"
-    } else if cfg!(target_os = "macos") {
-        "Menlo"
-    } else {
-        "DejaVu Sans Mono"
-    }
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    return crate::fonts::MONO_FAMILY;
+
+    #[cfg(target_os = "macos")]
+    return "Menlo";
+
+    #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
+    "DejaVu Sans Mono"
+}
+
+fn platform_cjk_families<'a>() -> impl Iterator<Item = &'a str> {
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    let families = crate::fonts::mono_cjk_fallbacks();
+
+    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+    let families = [];
+    families.into_iter().map(|family| -> &'a str { family })
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -605,15 +621,12 @@ mod tests {
         );
         assert!(!fallbacks.iter().any(|f| f.eq_ignore_ascii_case("Menlo")));
         appearance.cjk_family = Some("menlo".into());
-        assert_eq!(
-            appearance.fallback_families()[0],
-            crate::fonts::SYMBOLS_FAMILY
-        );
+        let automatic_first = platform_cjk_families()
+            .next()
+            .unwrap_or(crate::fonts::SYMBOLS_FAMILY);
+        assert_eq!(appearance.fallback_families()[0], automatic_first);
         appearance.cjk_family = None;
-        assert_eq!(
-            appearance.fallback_families()[0],
-            crate::fonts::SYMBOLS_FAMILY
-        );
+        assert_eq!(appearance.fallback_families()[0], automatic_first);
     }
     #[test]
     fn composer_preferences_default_off_and_round_trip_without_migrating_old_metadata() -> Result<()>

@@ -10,6 +10,12 @@ impl FontWeights {
     pub const MEDIUM: FontWeight = ui_weight(500, cfg!(target_os = "macos"));
     pub const SEMIBOLD: FontWeight = ui_weight(500, cfg!(target_os = "macos"));
     pub const BOLD: FontWeight = ui_weight(600, cfg!(target_os = "macos"));
+
+    pub const CONTROL_LABEL: FontWeight = if cfg!(any(target_os = "linux", target_os = "windows")) {
+        Self::REGULAR
+    } else {
+        Self::MEDIUM
+    };
 }
 
 const fn ui_weight(reference: u16, macos: bool) -> FontWeight {
@@ -21,6 +27,28 @@ const fn ui_weight(reference: u16, macos: bool) -> FontWeight {
     } else {
         reference as f32
     })
+}
+
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+pub(crate) fn ui_label_text(
+    text: gpui_kit::SharedString,
+    window: &gpui_kit::Window,
+) -> gpui_kit::AnyElement {
+    use gpui_kit::{IntoElement, StyledText};
+
+    let mut style = window.text_style();
+    if text.is_empty()
+        || style.font_family != crate::fonts::UI_FAMILY
+        || style.font_weight != FontWeights::MEDIUM
+    {
+        return text.into_any_element();
+    }
+
+    style.font_weight = FontWeights::CONTROL_LABEL;
+    let run = style.to_run(text.len());
+    StyledText::new(text)
+        .with_runs(vec![run])
+        .into_any_element()
 }
 
 /// Settings has its own reference text scale. Apply it after a control's size
@@ -42,11 +70,11 @@ impl SettingsText {
             Self::Body => (14., 20., FontWeights::REGULAR),
             Self::PageTitle => (20., 28., FontWeights::SEMIBOLD),
             Self::Intro => (12., 17.2, FontWeights::REGULAR),
-            Self::Label => (14., 19.6, FontWeights::MEDIUM),
+            Self::Label => (14., 19.6, FontWeights::CONTROL_LABEL),
             Self::Description => (12., 16.2, FontWeights::REGULAR),
             Self::Header => (14., 20., FontWeights::SEMIBOLD),
             Self::Section => (11., 15.95, FontWeight::BOLD),
-            Self::Caption => (13., 18.6, FontWeights::MEDIUM),
+            Self::Caption => (13., 18.6, FontWeights::CONTROL_LABEL),
         };
         element
             .text_size(px(size))

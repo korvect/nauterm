@@ -1,7 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ "$(uname -s)" == Linux && -z "${NAUTERM_MOSH_LIB_DIR:-}" ]]; then
+platform="$(uname -s)"
+set -- run
+case "$platform" in
+  MINGW*|MSYS*|CYGWIN*)
+    # The Windows debug runner can coexist with the installed client when it
+    # uses a separate profile. Keep this profile across rebuilds and cleans.
+    export NAUTERM_DATA_DIR="${NAUTERM_DATA_DIR:-${LOCALAPPDATA:?LOCALAPPDATA is unavailable}\NautermDev}"
+    set -- "$@" -d windows
+    ;;
+esac
+
+if [[ "$platform" == Linux && -z "${NAUTERM_MOSH_LIB_DIR:-}" ]]; then
   project_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
   case "$(uname -m)" in
     x86_64|amd64) mosh_arch=linux-x86_64 ;;
@@ -13,7 +24,6 @@ if [[ "$(uname -s)" == Linux && -z "${NAUTERM_MOSH_LIB_DIR:-}" ]]; then
   fi
 fi
 
-dart_define_args=()
 for name in \
   NAUTERM_UPDATE_REPOSITORY \
   NAUTERM_POSTHOG_API_KEY \
@@ -24,8 +34,8 @@ for name in \
   NAUTERM_ONEDRIVE_CLIENT_ID \
   NAUTERM_DROPBOX_CLIENT_ID; do
   if [[ -n "${!name:-}" ]]; then
-    dart_define_args+=("--dart-define=${name}=${!name}")
+    set -- "$@" "--dart-define=${name}=${!name}"
   fi
 done
 
-exec flutter run "${dart_define_args[@]}"
+exec flutter "$@"

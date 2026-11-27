@@ -102,7 +102,17 @@ mod workspace;
 use gpui_kit::{AppContext, KeyBinding, TitlebarOptions, WindowOptions, point, px, size};
 
 pub(crate) const APPLICATION_NAME: &str = env!("NAUTERM_RS_APPLICATION_NAME");
-pub(crate) const APPLICATION_ID: &str = env!("NAUTERM_RS_APPLICATION_ID");
+const APPLICATION_ID: &str = env!("NAUTERM_RS_APPLICATION_ID");
+
+pub(crate) fn application_id() -> String {
+    #[cfg(target_os = "linux")]
+    if let Ok(id) = std::env::var("NAUTERM_RS_DEV_APP_ID")
+        && !id.is_empty()
+    {
+        return id;
+    }
+    APPLICATION_ID.to_owned()
+}
 
 fn main() -> anyhow::Result<()> {
     #[cfg(feature = "platform-diagnostics")]
@@ -160,9 +170,9 @@ fn main() -> anyhow::Result<()> {
     application.on_reopen(app_menu::reopen);
     application.run(move |cx| {
         gpui_kit::init(cx);
-        cx.set_app_identity(APPLICATION_ID, APPLICATION_NAME);
+        cx.set_app_identity(&application_id(), APPLICATION_NAME);
         if let Err(error) = fonts::install(cx) {
-            eprintln!("Could not load bundled terminal symbols: {error}");
+            eprintln!("Could not load bundled fonts: {error}");
         }
         components::overlay::init(cx);
         cx.on_app_quit(move |_| {
@@ -293,7 +303,7 @@ fn open_main_window(
     let bounds = ui::initial_window_bounds(saved_window, default_window_size, cx);
     gpui_kit::open_window(
         WindowOptions {
-            app_id: Some(APPLICATION_ID.into()),
+            app_id: Some(application_id()),
             window_bounds: Some(bounds),
             window_min_size: Some(size(px(750.), px(440.))),
             titlebar: Some(TitlebarOptions {

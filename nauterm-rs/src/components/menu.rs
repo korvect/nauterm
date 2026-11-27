@@ -148,7 +148,7 @@ pub(super) fn dropdown_row<const S: bool>(id: impl Into<ElementId>) -> Button<S>
         .tab_stop(false)
         .text_size(px(12.))
         .line_height(relative(1.5))
-        .font_weight(FontWeights::MEDIUM)
+        .font_weight(FontWeights::CONTROL_LABEL)
 }
 
 #[derive(Clone)]
@@ -781,11 +781,7 @@ impl MenuState {
         };
         let row = dropdown_row::<S>(item_id(cx.entity().entity_id(), index))
             .when(self.menu.card, |row| {
-                row.h(px(35.))
-                    .px(px(8.))
-                    .rounded(px(7.))
-                    .text_size(px(13.))
-                    .font_weight(FontWeights::SEMIBOLD)
+                row.h(px(35.)).px(px(8.)).rounded(px(7.)).text_size(px(13.))
             })
             .when(item.caption.is_some(), |row| row.h(px(44.)))
             .disabled(item.disabled)

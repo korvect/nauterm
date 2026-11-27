@@ -103,7 +103,7 @@ impl RenderOnce for ThemePreview {
                                     .overflow_hidden()
                                     .text_size(px(if compact { 13. } else { 12. }))
                                     .line_height(px(if compact { 14.04 } else { 12.96 }))
-                                    .font_weight(FontWeights::SEMIBOLD)
+                                    .font_weight(FontWeights::CONTROL_LABEL)
                                     .when(compact, |v| v.whitespace_nowrap().text_ellipsis())
                                     .child(title),
                             )

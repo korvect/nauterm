@@ -546,7 +546,7 @@ impl Providers {
             .child(
                 div()
                     .text_size(px(12.))
-                    .font_weight(FontWeights::MEDIUM)
+                    .font_weight(FontWeights::CONTROL_LABEL)
                     .child(crate::localization::view(title)),
             )
             .child(control)
@@ -885,7 +885,7 @@ impl Providers {
                                     .child(
                                         div()
                                             .text_size(px(14.))
-                                            .font_weight(FontWeights::SEMIBOLD)
+                                            .font_weight(FontWeights::CONTROL_LABEL)
                                             .child(crate::localization::text(
                                                 cx,
                                                 "settings.label.addAiProvider",
@@ -1071,7 +1071,7 @@ impl Render for Providers {
                             .child(
                                 div()
                                     .truncate()
-                                    .font_weight(FontWeights::MEDIUM)
+                                    .font_weight(FontWeights::CONTROL_LABEL)
                                     .child(row.name.clone()),
                             )
                             .child(

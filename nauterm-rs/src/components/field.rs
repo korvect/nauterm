@@ -256,7 +256,7 @@ impl RenderOnce for Field {
             .bg(fill)
             .text_color(label_color)
             .text_size(px(layout.font))
-            .font_weight(FontWeights::MEDIUM)
+            .font_weight(FontWeights::CONTROL_LABEL)
             .child(self.label.clone())
             .when_some(
                 focus.filter(|_| !self.disabled && !matches!(self.content, Content::Control(..))),

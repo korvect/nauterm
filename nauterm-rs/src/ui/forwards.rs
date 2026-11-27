@@ -654,8 +654,11 @@ impl Nauterm {
             .hosts
             .iter()
             .find(|host| Some(host.id) == rule.host_id);
+        let kind_label =
+            crate::localization::text_for(self.data.general.language, rule.kind.label_key());
         rule.matches_query(
             query,
+            &kind_label,
             host.map_or(rule.host.as_str(), |host| host.name.as_str()),
             self.forward_states
                 .get(&rule.id)

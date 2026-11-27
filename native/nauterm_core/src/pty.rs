@@ -736,19 +736,22 @@ fn resolve_shell_program(shell_path: &str) -> Option<String> {
     }
 
     let path = Path::new(shell_path);
-    if path.is_absolute() || shell_path.contains(std::path::MAIN_SEPARATOR) {
-        return shell_executable_available(path).then(|| shell_path.to_owned());
+    let program = if path.is_absolute() || shell_path.contains(std::path::MAIN_SEPARATOR) {
+        shell_executable_available(path).then(|| shell_path.to_owned())?
+    } else {
+        let path_env = std::env::var_os("PATH")?;
+        std::env::split_paths(&path_env)
+            .map(|directory| directory.join(shell_path))
+            .find(|candidate| shell_executable_available(candidate))?
+            .to_string_lossy()
+            .into_owned()
+    };
+    #[cfg(windows)]
+    if shell_name(&program).as_deref() == Some("cmd") {
+        // CMD recognizes /c even inside its own executable path (e.g. System32/cmd.exe).
+        return Some(program.replace('/', "\\"));
     }
-
-    let path_env = std::env::var_os("PATH")?;
-    for directory in std::env::split_paths(&path_env) {
-        let candidate = directory.join(shell_path);
-        if shell_executable_available(&candidate) {
-            return Some(candidate.to_string_lossy().into_owned());
-        }
-    }
-
-    None
+    Some(program)
 }
 
 fn shell_executable_available(path: &Path) -> bool {

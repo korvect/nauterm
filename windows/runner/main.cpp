@@ -7,11 +7,12 @@
 
 namespace {
 
-bool ForwardConnectionUris(const std::vector<std::string>& arguments) {
+bool ForwardConnectionUris(const std::vector<std::string>& arguments,
+                           const wchar_t* window_class) {
   HWND existing = nullptr;
   // Another process can still be creating its hidden runner window.
   for (int attempt = 0; attempt < 50 && existing == nullptr; ++attempt) {
-    existing = FindWindowW(L"FLUTTER_RUNNER_WIN32_WINDOW", L"nauterm");
+    existing = FindWindowW(window_class, L"nauterm");
     if (existing == nullptr) Sleep(100);
   }
   if (existing == nullptr) return false;
@@ -48,11 +49,20 @@ bool ForwardConnectionUris(const std::vector<std::string>& arguments) {
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                       _In_ wchar_t *command_line, _In_ int show_command) {
   const auto arguments = GetCommandLineArguments();
-  HANDLE instance_mutex = CreateMutexW(
-      nullptr, FALSE, L"Local\\com.korvect.nauterm.instance");
+  const wchar_t* mutex_name = L"Local\\com.korvect.nauterm.instance";
+  const wchar_t* window_class = L"FLUTTER_RUNNER_WIN32_WINDOW";
+#ifdef _DEBUG
+  // A debug session with its own data must start its own Dart VM so Flutter
+  // can attach to it even when the installed client is already running.
+  if (GetEnvironmentVariableW(L"NAUTERM_DATA_DIR", nullptr, 0) > 1) {
+    mutex_name = L"Local\\com.korvect.nauterm.debug.instance";
+    window_class = L"NAUTERM_DEBUG_RUNNER_WIN32_WINDOW";
+  }
+#endif
+  HANDLE instance_mutex = CreateMutexW(nullptr, FALSE, mutex_name);
   if (instance_mutex == nullptr) return EXIT_FAILURE;
   if (GetLastError() == ERROR_ALREADY_EXISTS) {
-    const bool forwarded = ForwardConnectionUris(arguments);
+    const bool forwarded = ForwardConnectionUris(arguments, window_class);
     CloseHandle(instance_mutex);
     return forwarded ? EXIT_SUCCESS : EXIT_FAILURE;
   }
@@ -73,7 +83,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   FlutterWindow window(project, false);
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(1280, 720);
-  if (!window.Create(L"nauterm", origin, size)) {
+  if (!window.Create(window_class, L"nauterm", origin, size)) {
     CloseHandle(instance_mutex);
     return EXIT_FAILURE;
   }

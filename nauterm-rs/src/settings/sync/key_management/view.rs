@@ -135,7 +135,7 @@ impl Panel {
                             .flex()
                             .flex_col()
                             .gap(px(4.))
-                            .child(div().font_weight(FontWeights::MEDIUM).child(
+                            .child(div().font_weight(FontWeights::CONTROL_LABEL).child(
                                 crate::localization::view(if info.state.has_key {
                                     "settings.sync.key.localAvailable.label"
                                 } else {

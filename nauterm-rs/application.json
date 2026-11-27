@@ -1,0 +1,5 @@
+{
+  "id": "com.korvect.nauterm.rs",
+  "name": "Nauterm RS",
+  "description": "A modern, cross-platform terminal and SSH client with SFTP file transfer, built with Rust and GPUI."
+}

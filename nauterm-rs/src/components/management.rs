@@ -83,7 +83,9 @@ pub fn section_title(title: &str, cx: &App) -> Div {
         .text_size(px(13.))
         .line_height(px(18.))
         .font_weight(FontWeights::SEMIBOLD)
-        .child(crate::localization::text(cx, title))
+        .child(crate::localization::translated_view(
+            crate::localization::text(cx, title),
+        ))
 }
 
 pub fn collection_section(title: &str, cx: &App) -> Div {
@@ -176,7 +178,7 @@ impl RenderOnce for EmptyState {
                             .text_size(px(16.))
                             .font_weight(FontWeights::MEDIUM)
                             .text_color(p.text)
-                            .child(title),
+                            .child(crate::localization::translated_view(title)),
                     )
                     .when_some(description, |view, text| {
                         view.child(

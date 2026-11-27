@@ -331,7 +331,7 @@ impl<const S: bool> Input<S> {
             .px(px(10.))
             .text_size(px(11.5))
             .line_height(px(18.))
-            .font_weight(crate::typography::FontWeights::MEDIUM)
+            .font_weight(crate::typography::FontWeights::CONTROL_LABEL)
             .when(!multiline, |input| input.h(px(34.)))
             .when(multiline, |input| input.py(px(8.)))
     }

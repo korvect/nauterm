@@ -2,16 +2,24 @@
 use crate::components::SelectOption;
 use gpui_kit::{TextSystem, font, px};
 
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+mod noto;
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+pub(crate) use noto::{MONO_FAMILY, UI_FAMILY, mono_cjk_fallbacks, weight_alias_family};
+
 pub(crate) const SYMBOLS_FAMILY: &str = "Symbols Nerd Font";
 const SYMBOLS_DATA: &[u8] = include_bytes!("../../assets/fonts/SymbolsNerdFont-Regular.ttf");
 #[cfg(target_os = "macos")]
 mod macos;
 
-pub(crate) fn install(cx: &gpui_kit::App) -> anyhow::Result<()> {
+pub(crate) fn install(cx: &mut gpui_kit::App) -> anyhow::Result<()> {
     #[cfg(target_os = "macos")]
     macos::register(SYMBOLS_DATA)?;
     cx.text_system()
-        .add_fonts(vec![std::borrow::Cow::Borrowed(SYMBOLS_DATA)])
+        .add_fonts(vec![std::borrow::Cow::Borrowed(SYMBOLS_DATA)])?;
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    noto::install(cx)?;
+    Ok(())
 }
 
 /// Font settings use standard numeric weights, independently of UI role aliases.
@@ -38,8 +46,8 @@ pub(crate) fn weight_options(values: &[u16]) -> Vec<SelectOption<String>> {
 
 #[derive(Clone)]
 pub(crate) struct Options {
-    pub primary: Vec<SelectOption<String>>,
-    pub cjk: Vec<SelectOption<String>>,
+    primary: Vec<SelectOption<String>>,
+    cjk: Vec<SelectOption<String>>,
 }
 impl Default for Options {
     fn default() -> Self {
@@ -57,21 +65,48 @@ impl Default for Options {
 }
 
 pub(crate) fn primary_options(fonts: &Options, selected: &str) -> Vec<SelectOption<String>> {
-    let mut options = fonts.primary.clone();
-    if !options
-        .iter()
-        .any(|option| option.value().as_deref() == Some(selected))
-    {
+    with_saved_family(&fonts.primary, selected, |title| {
         let family = if selected.eq_ignore_ascii_case("monospace") {
             crate::terminal_appearance::platform_family()
         } else {
             selected
         };
-        options.push(
-            SelectOption::new(selected.to_owned(), selected.to_owned())
-                .font_sample(family, "Aa 0123"),
-        );
+        SelectOption::new(selected.to_owned(), title.to_owned()).font_sample(family, "Aa 0123")
+    })
+}
+
+pub(crate) fn cjk_options(fonts: &Options, selected: &str) -> Vec<SelectOption<String>> {
+    with_saved_family(&fonts.cjk, selected, |title| {
+        SelectOption::new(selected.to_owned(), title.to_owned())
+    })
+}
+
+fn with_saved_family(
+    available: &[SelectOption<String>],
+    selected: &str,
+    option_for_selected: impl FnOnce(&str) -> SelectOption<String>,
+) -> Vec<SelectOption<String>> {
+    let mut options = available.to_vec();
+    if options
+        .iter()
+        .any(|option| option.value().as_deref() == Some(selected))
+    {
+        return options;
     }
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    if let Some(family) = noto::weight_alias_family(selected)
+        && let Some(option) = options.iter_mut().find(|option| {
+            option
+                .value()
+                .as_deref()
+                .is_some_and(|name| name.eq_ignore_ascii_case(family))
+        })
+    {
+        // Keep the saved value selected without exposing the same family twice.
+        *option = option_for_selected(family);
+        return options;
+    }
+    options.push(option_for_selected(selected));
     options
 }
 
@@ -96,6 +131,8 @@ pub(crate) fn options(text: &TextSystem) -> Options {
     let mut names = text.all_font_names();
     names.sort_by_key(|name| name.to_lowercase());
     names.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    noto::merge_weight_aliases(&mut names);
     let mut primary = vec!["monospace".to_owned()];
     let mut cjk = vec![SelectOption::localized(
         String::new(),
@@ -154,6 +191,70 @@ pub(crate) fn options(text: &TextSystem) -> Options {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    #[test]
+    fn noto_weights_merge_only_into_available_families() {
+        let families = [
+            "Noto Sans",
+            "Noto Sans Mono",
+            "Noto Sans CJK SC",
+            "Noto Sans CJK TC",
+            "Noto Sans CJK JP",
+            "Noto Sans CJK KR",
+            "Noto Sans CJK HK",
+            "Noto Sans Mono CJK SC",
+            "Noto Sans Mono CJK TC",
+            "Noto Sans Mono CJK JP",
+            "Noto Sans Mono CJK KR",
+            "Noto Sans Mono CJK HK",
+            "Other Font",
+            "Other Font Medium",
+        ];
+        let mut names = families
+            .into_iter()
+            .chain([
+                "Noto Sans Medium",
+                "Noto Sans SemiBold",
+                "Noto Sans CJK SC Medium",
+                "Noto Sans CJK TC Medium",
+                "Noto Sans CJK JP Medium",
+                "Noto Sans CJK KR Medium",
+                "Noto Sans CJK HK Medium",
+            ])
+            .map(str::to_owned)
+            .collect();
+        noto::merge_weight_aliases(&mut names);
+        assert_eq!(names, families);
+
+        let mut alias_only = vec!["Noto Sans CJK SC Medium".to_owned()];
+        noto::merge_weight_aliases(&mut alias_only);
+        assert_eq!(alias_only, ["Noto Sans CJK SC Medium"]);
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    #[test]
+    fn saved_noto_alias_uses_one_row_with_the_original_value() {
+        let family = "Noto Sans CJK HK";
+        let alias = "Noto Sans CJK HK Medium";
+        let fonts = Options {
+            cjk: vec![SelectOption::new(family.to_owned(), family)],
+            ..Options::default()
+        };
+
+        assert_eq!(
+            cjk_options(&fonts, alias),
+            [SelectOption::new(alias.to_owned(), family)]
+        );
+        assert_eq!(
+            cjk_options(&fonts, "Custom CJK"),
+            [
+                SelectOption::new(family.to_owned(), family),
+                SelectOption::new("Custom CJK".to_owned(), "Custom CJK"),
+            ]
+        );
+        assert_eq!(cjk_options(&fonts, family), fonts.cjk);
+    }
 
     #[test]
     fn saved_custom_fonts_remain_selectable_while_inventory_is_loading() {

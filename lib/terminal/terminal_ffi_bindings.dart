@@ -975,10 +975,13 @@ List<String> _libraryCandidates() {
   final separator = Platform.pathSeparator;
   final root = Directory.current.path;
   final executableDirectory = File(Platform.resolvedExecutable).parent.path;
+  final bundledLibrary = '$executableDirectory$separator$name';
   final candidates = <String>[
+    // Loading the Cargo artifact locks it against rebuilds on Windows.
+    if (Platform.isWindows) bundledLibrary,
     [root, 'target', 'debug', name].join(separator),
     [root, 'target', 'release', name].join(separator),
-    '$executableDirectory$separator$name',
+    if (!Platform.isWindows) bundledLibrary,
     [executableDirectory, 'lib', name].join(separator),
     if (Platform.isMacOS)
       [executableDirectory, '..', 'Frameworks', name].join(separator),

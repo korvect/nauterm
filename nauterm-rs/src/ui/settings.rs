@@ -120,7 +120,7 @@ impl Nauterm {
         };
         let result = gpui_kit::open_window(
             WindowOptions {
-                app_id: Some(crate::APPLICATION_ID.into()),
+                app_id: Some(crate::application_id()),
                 window_decorations: Some(if standard_titlebar {
                     WindowDecorations::Server
                 } else {

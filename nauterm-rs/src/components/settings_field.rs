@@ -39,7 +39,7 @@ impl RenderOnce for Field {
                     .aria_label(self.label.clone())
                     .text_size(px(12.))
                     .line_height(px(18.))
-                    .font_weight(FontWeights::MEDIUM)
+                    .font_weight(FontWeights::CONTROL_LABEL)
                     .text_color(p.text)
                     .child(self.label)
                     .on_mouse_down(MouseButton::Left, move |_, window, cx| {

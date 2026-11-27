@@ -520,7 +520,7 @@ impl Panel {
             .child(
                 div()
                     .text_size(px(12.))
-                    .font_weight(FontWeights::MEDIUM)
+                    .font_weight(FontWeights::CONTROL_LABEL)
                     .child(crate::localization::view(title)),
             )
             .child(control)
@@ -768,7 +768,7 @@ impl Render for Panel {
                                 .child(
                                     div()
                                         .truncate()
-                                        .font_weight(FontWeights::MEDIUM)
+                                        .font_weight(FontWeights::CONTROL_LABEL)
                                         .child(provider.name.clone()),
                                 )
                                 .child(
@@ -940,7 +940,7 @@ impl Render for Panel {
                                     .gap(px(6.))
                                     .child(
                                         div()
-                                            .font_weight(FontWeights::SEMIBOLD)
+                                            .font_weight(FontWeights::CONTROL_LABEL)
                                             .child(crate::localization::view(status_label)),
                                     )
                                     .child(div().size(px(6.)).rounded_full().bg(status_color))

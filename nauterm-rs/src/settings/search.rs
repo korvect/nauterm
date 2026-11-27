@@ -776,7 +776,7 @@ impl Settings {
                                             .gap(px(3.))
                                             .child(
                                                 div()
-                                                    .font_weight(FontWeights::MEDIUM)
+                                                    .font_weight(FontWeights::CONTROL_LABEL)
                                                     .child(self.text(entry.title)),
                                             )
                                             .child(

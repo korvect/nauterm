@@ -1,11 +1,29 @@
 //! Embed the icon GPUI loads from resource ID 1 and the package version.
 use std::{env, fs, path::Path, process::Command};
 
-pub fn compile(root: &Path, build: u16) {
+pub fn compile(root: &Path, build: u16, application_name: &str) {
     if env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows") {
         return;
     }
-    let icon = root.join("../windows/runner/resources/app_icon.ico");
+    let metadata_path = root.join("windows/application.json");
+    println!("cargo:rerun-if-changed={}", metadata_path.display());
+    let metadata: serde_json::Value = serde_json::from_slice(
+        &fs::read(&metadata_path).expect("Windows application metadata is required"),
+    )
+    .expect("Windows application metadata must be valid JSON");
+    let executable_name = metadata["executable_name"]
+        .as_str()
+        .filter(|value| !value.is_empty())
+        .expect("Windows application metadata must provide executable_name");
+    let icon_relative_path = metadata["icon"]
+        .as_str()
+        .filter(|value| !value.is_empty())
+        .expect("Windows application metadata must provide icon");
+    let internal_name = Path::new(executable_name)
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .expect("Windows executable_name must have a valid file stem");
+    let icon = root.join(icon_relative_path);
     println!("cargo:rerun-if-changed={}", icon.display());
     println!("cargo:rerun-if-env-changed=RC");
     let output = std::path::PathBuf::from(env::var_os("OUT_DIR").unwrap());
@@ -28,11 +46,11 @@ BEGIN
     BLOCK "040904b0"
     BEGIN
       VALUE "CompanyName", "Nauterm\0"
-      VALUE "FileDescription", "Nauterm RS\0"
+      VALUE "FileDescription", "{application_name}\0"
       VALUE "FileVersion", "{version}.{build}\0"
-      VALUE "InternalName", "nauterm-rs\0"
-      VALUE "OriginalFilename", "nauterm-rs.exe\0"
-      VALUE "ProductName", "Nauterm RS\0"
+      VALUE "InternalName", "{internal_name}\0"
+      VALUE "OriginalFilename", "{executable_name}\0"
+      VALUE "ProductName", "{application_name}\0"
       VALUE "ProductVersion", "{version}\0"
     END
   END

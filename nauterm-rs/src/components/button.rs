@@ -962,7 +962,18 @@ impl<const S: bool> RenderOnce for Button<S> {
                     v.child(i.with_size(icon_size).flex_shrink_0())
                 })
                 .when_some(self.label, |v, l| {
-                    v.child(div().min_w_0().whitespace_nowrap().text_ellipsis().child(l))
+                    let label = if self.label_localized {
+                        crate::localization::translated_view(l).into_any_element()
+                    } else {
+                        l.into_any_element()
+                    };
+                    v.child(
+                        div()
+                            .min_w_0()
+                            .whitespace_nowrap()
+                            .text_ellipsis()
+                            .child(label),
+                    )
                 })
                 .children(children)
                 .when(self.list_menu_hint, |content| {

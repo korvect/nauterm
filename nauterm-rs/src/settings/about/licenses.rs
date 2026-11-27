@@ -219,7 +219,7 @@ impl Panel {
                 detail = detail
                     .child(
                         div()
-                            .font_weight(FontWeights::MEDIUM)
+                            .font_weight(FontWeights::CONTROL_LABEL)
                             .child(package.label()),
                     )
                     .child(

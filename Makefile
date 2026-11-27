@@ -4,6 +4,16 @@ DIST_DIR ?= dist
 CLEAN_DIST ?= 1
 LOCAL_BUILD_ENV ?= .env.build.local
 
+ifeq ($(OS),Windows_NT)
+rs_empty :=
+rs_space := $(rs_empty) $(rs_empty)
+rs_git_bash = $(if $(strip $(1)),$(wildcard $(subst $(rs_space),\$(rs_space),$(subst \,/,$(1))/$(2)/bin/bash.exe)))
+GIT_BASH ?= $(or $(call rs_git_bash,$(ProgramW6432),Git),$(call rs_git_bash,$(ProgramFiles),Git),$(call rs_git_bash,$(LOCALAPPDATA),Programs/Git),bash)
+BASH ?= $(GIT_BASH)
+else
+BASH ?= bash
+endif
+
 -include $(LOCAL_BUILD_ENV)
 
 export NAUTERM_UPDATE_REPOSITORY
@@ -84,7 +94,7 @@ analyze:
 
 .PHONY: run
 run: prepare-icons
-	@bash scripts/run_flutter.sh
+	@"$(BASH)" scripts/run_flutter.sh
 
 .PHONY: test-data
 test-data:
@@ -104,15 +114,15 @@ native-release:
 
 .PHONY: generate-icons
 generate-icons:
-	bash scripts/generate_app_icons.sh
+	"$(BASH)" scripts/generate_app_icons.sh
 
 .PHONY: prepare-icons
 prepare-icons:
-	bash scripts/prepare_app_icons.sh
+	"$(BASH)" scripts/prepare_app_icons.sh
 
 .PHONY: verify-icons
 verify-icons:
-	bash scripts/ci/verify_app_icons.sh
+	"$(BASH)" scripts/ci/verify_app_icons.sh
 
 .PHONY: generate-rust-licenses generate-rs-licenses
 generate-rust-licenses:
@@ -191,11 +201,6 @@ package-windows-arm64:
 
 .PHONY: run-rs build-rs check-rs bundle-rs-macos package-rs-macos appcast-rs-macos
 ifeq ($(OS),Windows_NT)
-rs_empty :=
-rs_space := $(rs_empty) $(rs_empty)
-rs_git_bash = $(if $(strip $(1)),$(wildcard $(subst $(rs_space),\$(rs_space),$(subst \,/,$(1))/$(2)/bin/bash.exe)))
-GIT_BASH ?= $(or $(call rs_git_bash,$(ProgramW6432),Git),$(call rs_git_bash,$(ProgramFiles),Git),$(call rs_git_bash,$(LOCALAPPDATA),Programs/Git),bash)
-
 run-rs:
 	"$(GIT_BASH)" nauterm-rs/scripts/run.sh
 

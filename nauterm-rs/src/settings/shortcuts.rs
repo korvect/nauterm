@@ -226,7 +226,7 @@ impl Settings {
                         column(2.)
                             .text_size(px(11.))
                             .line_height(px(16.))
-                            .font_weight(FontWeights::MEDIUM)
+                            .font_weight(FontWeights::CONTROL_LABEL)
                             .text_color(faint)
                             .truncate()
                             .child(crate::localization::view(scope)),
@@ -235,7 +235,7 @@ impl Settings {
                         column(4.)
                             .text_size(px(13.))
                             .line_height(px(18.))
-                            .font_weight(FontWeights::MEDIUM)
+                            .font_weight(FontWeights::CONTROL_LABEL)
                             .truncate()
                             .child(label),
                     )

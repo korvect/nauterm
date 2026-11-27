@@ -372,14 +372,16 @@ impl Forward {
     pub fn matches_query(
         &self,
         query: &str,
+        kind_label: &str,
         host: &str,
         status: Option<&crate::port_forward::Status>,
     ) -> bool {
         let state = status.map_or(crate::port_forward::State::Stopped, |status| status.state);
         let text = format!(
-            "{} {} {} {} {} {} {} {} {}",
+            "{} {} {} {} {} {} {} {} {} {}",
             self.name,
             self.kind.as_str(),
+            kind_label,
             self.bind_address,
             self.local_port,
             self.destination,
@@ -975,14 +977,17 @@ mod tests {
             host: "Old host name".into(),
             host_id: Some(2),
         };
-        assert!(rule.matches_query("  LOCAL\t5432  Bastion\nDISABLED ", "Bastion", None));
-        assert!(!rule.matches_query("active", "Bastion", None));
+        let matches = |query, status| rule.matches_query(query, "本地", "Bastion", status);
+        assert!(matches("  LOCAL\t5432  Bastion\nDISABLED ", None));
+        assert!(matches("本地 5432 bastion", None));
+        assert!(!matches("远程 5432 bastion", None));
+        assert!(!matches("active", None));
         let running = Status::new(7, State::Running);
-        assert!(rule.matches_query("active DB bastion", "Bastion", Some(&running)));
-        assert!(!rule.matches_query("disabled", "Bastion", Some(&running)));
+        assert!(matches("active DB bastion", Some(&running)));
+        assert!(!matches("disabled", Some(&running)));
         let failed = Status::failed(7, "Connection timed out");
-        assert!(rule.matches_query("ERROR timed DB", "Bastion", Some(&failed)));
-        assert!(!rule.matches_query("Old host name", "Bastion", Some(&failed)));
+        assert!(matches("ERROR timed DB", Some(&failed)));
+        assert!(!matches("Old host name", Some(&failed)));
     }
 
     #[test]
