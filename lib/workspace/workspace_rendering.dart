@@ -1283,7 +1283,7 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
                   aiConversation.clear();
                 } else {
                   _showWorkspaceMessage(
-                    'Unable to save the current AI conversation.',
+                    context.tr('ai.error.saveConversation'),
                   );
                 }
               },
@@ -1457,18 +1457,30 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
     int availableSlots,
   ) async {
     if (availableSlots <= 0) {
-      return const _AiAttachmentPickerResult(
-        errors: ['Attach up to 5 files per message.'],
+      return _AiAttachmentPickerResult(
+        errors: [
+          context.tr(
+            'ai.attachment.error.limit',
+            args: {'count': AiAttachment.maximumCount},
+          ),
+        ],
       );
     }
     final files = await _runExclusiveFilePicker(openFiles);
     if (files == null || files.isEmpty) {
       return const _AiAttachmentPickerResult();
     }
+    if (!mounted) return const _AiAttachmentPickerResult();
+    final l10n = context.l10n;
     final attachments = <AiAttachment>[];
     final errors = <String>[];
     if (files.length > availableSlots) {
-      errors.add('Only the first $availableSlots selected files were added.');
+      errors.add(
+        l10n.tr(
+          'ai.attachment.selectionTruncated',
+          args: {'count': availableSlots},
+        ),
+      );
     }
     for (final file in files.take(availableSlots)) {
       try {
@@ -1476,7 +1488,9 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
       } on AiAttachmentException catch (error) {
         errors.add(error.message);
       } on Object {
-        errors.add('Unable to read ${file.name}.');
+        errors.add(
+          l10n.tr('ai.attachment.error.read', args: {'name': file.name}),
+        );
       }
     }
     return _AiAttachmentPickerResult(attachments: attachments, errors: errors);

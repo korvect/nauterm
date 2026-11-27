@@ -78,7 +78,7 @@ impl Terminal {
                     .separator()
                     .item(
                         shortcuts.menu(
-                            command("Split Right", Command::SplitRight)
+                            command("common.label.splitRight", Command::SplitRight)
                                 .icon(IconName::Columns2)
                                 .disabled(this.session.is_replay()),
                             Shortcut::SplitRight,
@@ -86,7 +86,7 @@ impl Terminal {
                     )
                     .item(
                         shortcuts.menu(
-                            command("Split Down", Command::SplitDown)
+                            command("common.label.splitDown", Command::SplitDown)
                                 .icon(IconName::Rows2)
                                 .disabled(this.session.is_replay()),
                             Shortcut::SplitDown,
@@ -95,7 +95,7 @@ impl Terminal {
                     .separator()
                     .when(this.appearance.multiple_tabs, |menu| {
                         menu.item(
-                            command("New Tab", Command::NewTab)
+                            command("terminal.label.newTab", Command::NewTab)
                                 .icon(IconName::Plus)
                                 .disabled(this.session.is_replay()),
                         )
@@ -144,13 +144,16 @@ impl Terminal {
                             }),
                     )
                     .separator()
-                    .item(shortcuts.menu(
-                        command("Settings", Command::Settings).icon(IconName::Settings),
-                        Shortcut::OpenSettings,
-                    ))
                     .item(
                         shortcuts.menu(
-                            command("Close", Command::Close)
+                            command("common.label.settings", Command::Settings)
+                                .icon(IconName::Settings),
+                            Shortcut::OpenSettings,
+                        ),
+                    )
+                    .item(
+                        shortcuts.menu(
+                            command("common.action.close", Command::Close)
                                 .icon(IconName::X)
                                 .destructive(true),
                             Shortcut::CloseTab,

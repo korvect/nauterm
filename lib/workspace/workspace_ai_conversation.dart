@@ -34,7 +34,7 @@ class _AiAssistantNotice extends StatelessWidget {
           SizedBox(width: 7),
           Expanded(
             child: Text(
-              tr(message),
+              context.tr(message),
               style: TextStyle(
                 color: muted ? colors.muted : colors.foreground,
                 fontSize: 11.5,
@@ -185,7 +185,7 @@ class _AiConversationHistoryView extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 4),
             child: Text(
-              tr(message),
+              context.tr(message),
               style: TextStyle(
                 color: colors.foreground,
                 fontSize: 12,
@@ -657,7 +657,7 @@ class _AiConversationMessageState extends State<_AiConversationMessage> {
               styleSheet: markdownStyle,
               onTapLink: (text, href, title) => _openAiExternalLink(href),
               imageBuilder: (uri, title, alt) => Text(
-                alt ?? 'Image',
+                alt ?? context.tr('ai.label.image'),
                 style: TextStyle(
                   color: colors.muted,
                   fontSize: 12,
@@ -801,12 +801,9 @@ class _AiConversationMessageState extends State<_AiConversationMessage> {
                 SizedBox(width: 5),
               ],
               _AiMessageActionButton(
-                tooltip: _copied
-                    ? 'Copied'
-                    : context.tr(
-                        'ai.action.copyMessage',
-                        fallback: 'Copy message',
-                      ),
+                tooltip: context.tr(
+                  _copied ? 'common.status.copied' : 'ai.action.copyMessage',
+                ),
                 icon: _copied ? LucideIcons.check : LucideIcons.copy,
                 color: _copied ? widget.colors.accent : widget.colors.muted,
                 onPressed: widget.message.content.isEmpty ? null : _copyMessage,
@@ -1060,7 +1057,10 @@ class _AiSentAttachmentChip extends StatelessWidget {
           Flexible(
             child: Text(
               attachment.redacted
-                  ? '${attachment.name} (redacted)'
+                  ? context.tr(
+                      'ai.attachment.redacted',
+                      args: {'name': attachment.name},
+                    )
                   : attachment.name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -1212,7 +1212,7 @@ class _AiTerminalCommandElapsedState extends State<_AiTerminalCommandElapsed> {
     final end = widget.finishedAt ?? DateTime.now();
     final elapsed = end.difference(widget.startedAt);
     return Text(
-      tr('${widget.prefix}${_formatAiCommandDuration(elapsed)}'),
+      '${widget.prefix}${_formatAiCommandDuration(elapsed)}',
       style: TextStyle(
         color: widget.color,
         fontSize: 11,
@@ -1261,6 +1261,9 @@ class _AiTerminalCommandCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final running = command.status == AiTerminalCommandStatus.running;
+    final runningStatus = command.cancellationRequested
+        ? 'common.status.stopping'
+        : 'common.status.running';
     final submitted = command.status == AiTerminalCommandStatus.submitted;
     final succeeded = command.status == AiTerminalCommandStatus.succeeded;
     final failed = command.status == AiTerminalCommandStatus.failed;
@@ -1430,7 +1433,7 @@ class _AiTerminalCommandCard extends StatelessWidget {
                         ),
                       ),
                       if (command.startedAt != null) ...[
-                        Text(tr(' · '), style: TextStyle(color: colors.muted)),
+                        Text(' · ', style: TextStyle(color: colors.muted)),
                         _AiTerminalCommandElapsed(
                           startedAt: command.startedAt!,
                           finishedAt: command.finishedAt,
@@ -1447,9 +1450,7 @@ class _AiTerminalCommandCard extends StatelessWidget {
                         _AiTerminalCommandElapsed(
                           startedAt: startedAt,
                           color: colors.muted,
-                          prefix: command.cancellationRequested
-                              ? 'Stopping '
-                              : 'Running ',
+                          prefix: '${context.tr(runningStatus)} ',
                         ),
                       SizedBox(width: 8),
                       _AiCommandActionButton(
@@ -1690,9 +1691,9 @@ class _AiCopyCommandButtonState extends State<_AiCopyCommandButton> {
   @override
   Widget build(BuildContext context) {
     return _AiMessageActionButton(
-      tooltip: _copied
-          ? 'Copied'
-          : context.tr('ai.action.copyCommand', fallback: 'Copy command'),
+      tooltip: context.tr(
+        _copied ? 'common.status.copied' : 'ai.action.copyCommand',
+      ),
       onPressed: _copy,
       icon: _copied ? LucideIcons.check : LucideIcons.copy,
       color: _copied ? widget.accent : widget.color,

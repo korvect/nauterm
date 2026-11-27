@@ -1829,6 +1829,38 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('workspace AI Assistant and its history use the app language', (
+    WidgetTester tester,
+  ) async {
+    setAppLanguage(AppLanguage.simplifiedChinese);
+    await tester.runAsync(() async {
+      NautermLocalizations.current = await NautermLocalizations.load(
+        const Locale('zh', 'CN'),
+      );
+    });
+    await tester.pumpWidget(NautermApp(onOpenSettings: () {}));
+    await tester.tap(find.byKey(const ValueKey('workspace-top-tab:workspace')));
+    await tester.pump();
+    await tester.tap(find.byTooltip('显示 AI 助手'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    final panel = find.byKey(const ValueKey('ai-assistant-panel'));
+    expect(
+      find.descendant(of: panel, matching: find.text('AI 助手')),
+      findsOneWidget,
+    );
+    expect(find.text('询问有关此工作区的问题…'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('对话历史'));
+    await tester.pump();
+    expect(
+      find.descendant(of: panel, matching: find.text('对话历史')),
+      findsOneWidget,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('AI Assistant panel can be resized from its left edge', (
     WidgetTester tester,
   ) async {

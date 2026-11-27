@@ -4304,7 +4304,6 @@ impl Render for Nauterm {
             .key_context("Nauterm")
             .on_key_down(cx.listener(Self::navigate_collection))
             .on_mouse_move(cx.listener(|this, event, window, cx| {
-                this.resize_workspace_assistant(event, window, cx);
                 this.resize_terminal_tools(event, window, cx);
                 this.resize_split(event, cx);
             }))
@@ -4313,8 +4312,7 @@ impl Render for Nauterm {
                 cx.listener(|this, _, _, cx| {
                     let split = this.split_drag.take().is_some();
                     let tools = this.terminal_tools_drag.take().is_some();
-                    let assistant = this.workspace_assistant_drag.take().is_some();
-                    if split || tools || assistant {
+                    if split || tools {
                         cx.notify();
                     }
                 }),
@@ -4324,8 +4322,7 @@ impl Render for Nauterm {
                 cx.listener(|this, _, _, cx| {
                     let split = this.split_drag.take().is_some();
                     let tools = this.terminal_tools_drag.take().is_some();
-                    let assistant = this.workspace_assistant_drag.take().is_some();
-                    if split || tools || assistant {
+                    if split || tools {
                         cx.notify();
                     }
                 }),

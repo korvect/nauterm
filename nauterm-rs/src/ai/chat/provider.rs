@@ -56,7 +56,7 @@ impl Chat {
                     .raw_tooltip(full_label)
                     .disabled(busy || self.provider_loading)
                     .dropdown_menu(move |menu, _, _| {
-                        let mut menu = menu.width(260.).palette(p);
+                        let mut menu = menu.width(200.).palette(p);
                         for provider in &rows {
                             let mut models: Vec<String> = provider
                                 .model

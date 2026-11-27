@@ -258,6 +258,7 @@ impl Nauterm {
         let dragging = self
             .workspace_assistant_drag
             .is_some_and(|(workspace, _, _)| workspace == id);
+        let owner = cx.weak_entity();
         div()
             .size_full()
             .min_w_0()
@@ -320,9 +321,45 @@ impl Nauterm {
                             .child(div().flex_1().min_h_0().child(chat)),
                     ),
             )
+            .child(
+                canvas(
+                    |_, _, _| (),
+                    move |_, (), window, _| {
+                        // The panel occludes the workspace hitbox when the
+                        // pointer moves into it to narrow the panel.
+                        let moved = owner.clone();
+                        window.on_mouse_event(move |event: &MouseMoveEvent, phase, window, cx| {
+                            if phase == DispatchPhase::Capture
+                                && let Some(view) = moved.upgrade()
+                                && view.read(cx).workspace_assistant_drag.is_some()
+                            {
+                                view.update(cx, |this, cx| {
+                                    this.resize_workspace_assistant(event, window, cx);
+                                });
+                            }
+                        });
+                        let released = owner;
+                        window.on_mouse_event(move |event: &MouseUpEvent, phase, _, cx| {
+                            if phase == DispatchPhase::Capture
+                                && event.button == MouseButton::Left
+                                && let Some(view) = released.upgrade()
+                                && view.read(cx).workspace_assistant_drag.is_some()
+                            {
+                                view.update(cx, |this, cx| {
+                                    this.workspace_assistant_drag = None;
+                                    cx.stop_propagation();
+                                    cx.notify();
+                                });
+                            }
+                        });
+                    },
+                )
+                .absolute()
+                .inset_0(),
+            )
             .into_any_element()
     }
-    pub(super) fn resize_workspace_assistant(
+    fn resize_workspace_assistant(
         &mut self,
         event: &MouseMoveEvent,
         window: &Window,

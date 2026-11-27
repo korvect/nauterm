@@ -583,7 +583,9 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
     } on MissingPluginException {
       if (mounted) {
         setState(
-          () => _attachmentError = 'Attachment picker is not registered. Fully restart the rebuilt application.',
+          () => _attachmentError = context.tr(
+            'ai.attachment.error.pickerUnavailable',
+          ),
         );
       }
     } on PlatformException catch (error) {
@@ -591,8 +593,11 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
         final detail = error.message?.trim();
         setState(
           () => _attachmentError = detail == null || detail.isEmpty
-              ? 'The system attachment picker failed to open.'
-              : 'The system attachment picker failed: $detail',
+              ? context.tr('ai.attachment.error.open')
+              : context.tr(
+                  'ai.attachment.error.pickerFailed',
+                  args: {'error': detail},
+                ),
         );
       }
     } on Object catch (error, stackTrace) {
@@ -603,7 +608,9 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
         stackTrace: stackTrace,
       );
       if (mounted) {
-        setState(() => _attachmentError = 'Unable to open attachments.');
+        setState(
+          () => _attachmentError = context.tr('ai.attachment.error.open'),
+        );
       }
     } finally {
       if (mounted) {
@@ -737,7 +744,7 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
         stackTrace: stackTrace,
       );
       if (mounted && _historyOpen) {
-        setState(() => _historyError = 'Unable to load conversation history.');
+        setState(() => _historyError = 'ai.history.error.load');
       }
     } finally {
       if (mounted) {
@@ -763,9 +770,7 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
         setState(() => _historyOpen = false);
         _scrollToLatestMessage(resume: true);
       } else {
-        setState(
-          () => _historyError = 'This conversation cannot be opened now.',
-        );
+        setState(() => _historyError = 'ai.history.error.open');
       }
     } on Object catch (error, stackTrace) {
       NautermLog.warning(
@@ -775,7 +780,7 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
         stackTrace: stackTrace,
       );
       if (mounted) {
-        setState(() => _historyError = 'Unable to open this conversation.');
+        setState(() => _historyError = 'ai.history.error.open');
       }
     } finally {
       if (mounted) {
@@ -802,7 +807,7 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
               .toList(growable: false);
         });
       } else if (deleted == false) {
-        setState(() => _historyError = 'Unable to delete this conversation.');
+        setState(() => _historyError = 'ai.history.error.delete');
       }
     } on Object catch (error, stackTrace) {
       NautermLog.warning(
@@ -812,7 +817,7 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
         stackTrace: stackTrace,
       );
       if (mounted) {
-        setState(() => _historyError = 'Unable to delete this conversation.');
+        setState(() => _historyError = 'ai.history.error.delete');
       }
     } finally {
       _deletingHistoryIds.remove(uuid);
@@ -851,17 +856,13 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
         );
     final waitingForCommands =
         widget.conversation.hasUnresolvedTerminalCommands;
-    final composerHint = waitingForCommands
-        ? 'Review terminal commands to continue'
-        : widget.workspaceScope
-        ? context.tr(
-            'ai.prompt.workspace',
-            fallback: 'Ask about this workspace...',
-          )
-        : context.tr(
-            'ai.prompt.terminal',
-            fallback: 'Ask about this terminal...',
-          );
+    final composerHint = context.tr(
+      waitingForCommands
+          ? 'ai.prompt.reviewCommands'
+          : widget.workspaceScope
+          ? 'ai.prompt.workspace'
+          : 'ai.prompt.terminal',
+    );
     return Material(
       key: const ValueKey('ai-assistant-panel'),
       color: background,
@@ -930,7 +931,11 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
                     SizedBox(width: 9),
                     Expanded(
                       child: Text(
-                        _historyOpen ? 'Conversation history' : 'AI Assistant',
+                        context.tr(
+                          _historyOpen
+                              ? 'workspace.label.conversationHistory'
+                              : 'common.label.aiAssistant',
+                        ),
                         style: TextStyle(
                           color: foreground,
                           fontSize: 14,
@@ -1157,7 +1162,7 @@ class _AiAssistantPanelState extends State<_AiAssistantPanel> {
               ),
             if (waitingForCommands && !_historyOpen)
               _AiAssistantNotice(
-                message: 'Run or skip each command before continuing.',
+                message: 'workspace.description.runOrSkipEachCommandBeforeContinuing',
                 icon: LucideIcons.squareTerminal,
                 colors: widget.colors,
                 muted: true,
