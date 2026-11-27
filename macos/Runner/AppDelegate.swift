@@ -366,6 +366,18 @@ class AppDelegate: FlutterAppDelegate {
     appMenuChannel?.invokeMethod("showAbout", arguments: nil)
   }
 
+  @IBAction func openDocumentation(_ sender: Any?) {
+    if let url = URL(string: "https://github.com/korvect/nauterm#readme") {
+      NSWorkspace.shared.open(url)
+    }
+  }
+
+  @IBAction func reportIssue(_ sender: Any?) {
+    if let url = URL(string: "https://github.com/korvect/nauterm/issues") {
+      NSWorkspace.shared.open(url)
+    }
+  }
+
   @IBAction func newLocalTerminal(_ sender: Any?) {
     appMenuChannel?.invokeMethod("newLocalTerminal", arguments: nil)
   }
