@@ -141,8 +141,8 @@ impl Client {
     pub(crate) fn new(core: Arc<Core>) -> Self {
         Self { _core: core }
     }
-    pub fn devices(&self) -> Vec<Device> {
-        nauterm_core::fido2::list_devices()
+    pub fn devices(&self) -> Result<Vec<Device>> {
+        nauterm_core::fido2::list_devices().map_err(anyhow::Error::msg)
     }
     pub fn verify(&self, device: &str, pin: Zeroizing<String>) -> Result<()> {
         ensure!(!pin.is_empty(), "Enter the security key PIN.");

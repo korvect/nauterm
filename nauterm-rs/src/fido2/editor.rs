@@ -193,7 +193,7 @@ impl Wizard {
             let result = cx
                 .background_spawn(async move {
                     let client = Arc::new(Core::discover()?.fido2()?);
-                    let devices = client.devices();
+                    let devices = client.devices()?;
                     Ok::<_, anyhow::Error>((client, devices))
                 })
                 .await;

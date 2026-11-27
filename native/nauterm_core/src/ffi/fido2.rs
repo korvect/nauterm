@@ -40,8 +40,9 @@ fn response_json<T: Serialize>(response: Fido2Response<T>) -> *mut c_char {
 
 #[no_mangle]
 pub extern "C" fn nauterm_fido2_list_devices() -> *mut c_char {
-    guard(std::ptr::null_mut(), || {
-        response_json(Fido2Response::success(fido2::list_devices()))
+    guard(std::ptr::null_mut(), || match fido2::list_devices() {
+        Ok(devices) => response_json(Fido2Response::success(devices)),
+        Err(error) => response_json(Fido2Response::<()>::failure(error)),
     })
 }
 

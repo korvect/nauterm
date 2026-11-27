@@ -17,6 +17,60 @@ const OPENSSH_APPLICATION: &str = "ssh:";
 const SSH_SK_USER_PRESENCE_REQUIRED: u8 = 0x01;
 const SSH_SK_USER_VERIFICATION_REQUIRED: u8 = 0x04;
 
+#[cfg(target_os = "macos")]
+use hid_worker::run as run_hid;
+
+#[cfg(target_os = "macos")]
+mod hid_worker {
+    use std::{
+        panic::{catch_unwind, AssertUnwindSafe},
+        sync::{mpsc, OnceLock},
+        thread,
+    };
+
+    type Job = Box<dyn FnOnce() + Send>;
+    static WORKER: OnceLock<Result<mpsc::Sender<Job>, String>> = OnceLock::new();
+
+    pub(super) fn run<T: Send + 'static>(
+        operation: impl FnOnce() -> Result<T, String> + Send + 'static,
+    ) -> Result<T, String> {
+        // HIDAPI schedules its shared macOS HID manager on the first caller's
+        // RunLoop. Keep that thread alive and use it for all HID operations.
+        let worker = WORKER
+            .get_or_init(|| {
+                let (sender, jobs) = mpsc::channel::<Job>();
+                thread::Builder::new()
+                    .name("nauterm-fido2-hid".to_owned())
+                    .spawn(move || {
+                        while let Ok(job) = jobs.recv() {
+                            job();
+                        }
+                    })
+                    .map_err(|error| format!("Unable to start the FIDO2 HID worker: {error}"))?;
+                Ok(sender)
+            })
+            .as_ref()
+            .map_err(Clone::clone)?;
+
+        let (reply, result) = mpsc::sync_channel(1);
+        worker
+            .send(Box::new(move || {
+                let outcome = catch_unwind(AssertUnwindSafe(operation))
+                    .unwrap_or_else(|_| Err("FIDO2 HID operation panicked.".to_owned()));
+                let _ = reply.send(outcome);
+            }))
+            .map_err(|_| "The FIDO2 HID worker is unavailable.".to_owned())?;
+        result
+            .recv()
+            .map_err(|_| "The FIDO2 HID worker did not return a result.".to_owned())?
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn run_hid<T>(operation: impl FnOnce() -> Result<T, String>) -> Result<T, String> {
+    operation()
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Fido2Device {
@@ -75,7 +129,11 @@ fn default_rounds() -> u32 {
     100
 }
 
-pub fn list_devices() -> Vec<Fido2Device> {
+pub fn list_devices() -> Result<Vec<Fido2Device>, String> {
+    run_hid(|| Ok(list_connected_devices()))
+}
+
+fn list_connected_devices() -> Vec<Fido2Device> {
     get_fidokey_devices()
         .into_iter()
         .filter_map(|device| {
@@ -108,6 +166,11 @@ pub fn verify_pin(device_id: String, pin: String) -> Result<(), String> {
     if pin.is_empty() {
         return Err("Enter the security key PIN.".to_owned());
     }
+    let pin = zeroize::Zeroizing::new(pin);
+    run_hid(move || verify_device_pin(device_id, &pin))
+}
+
+fn verify_device_pin(device_id: String, pin: &str) -> Result<(), String> {
     let cfg = Cfg::init().with_enable_log(false);
     let mut device = FidoKeyHidFactory::create_by_params(&[HidParam::Path(device_id)], &cfg)
         .map_err(|error| error.to_string())?;
@@ -116,12 +179,16 @@ pub fn verify_pin(device_id: String, pin: String) -> Result<(), String> {
         .set_pin_uv_auth_protocol_two()
         .map_err(|error| friendly_error(&error.to_string()))?;
     device
-        .get_pin_token(&pin)
+        .get_pin_token(pin)
         .map(|_| ())
         .map_err(|error| friendly_error(&error.to_string()))
 }
 
 pub fn generate_key(request: Fido2GenerateRequest) -> Result<Fido2GeneratedKey, String> {
+    run_hid(move || generate_device_key(request))
+}
+
+fn generate_device_key(request: Fido2GenerateRequest) -> Result<Fido2GeneratedKey, String> {
     let label = request.label.trim();
     if label.is_empty() {
         return Err("Label is required.".to_owned());
@@ -277,6 +344,46 @@ pub fn sign_ssh(
     pin: Option<&str>,
     require_user_presence: bool,
 ) -> Result<Vec<u8>, String> {
+    #[cfg(target_os = "macos")]
+    let (application, key_handle, message, pin) = (
+        application.to_owned(),
+        key_handle.to_vec(),
+        message.to_vec(),
+        pin.map(|value| zeroize::Zeroizing::new(value.to_owned())),
+    );
+    #[cfg(target_os = "macos")]
+    let sign = move || {
+        sign_with_device(
+            &application,
+            &key_handle,
+            algorithm,
+            &message,
+            pin.as_ref().map(|value| value.as_str()),
+            require_user_presence,
+        )
+    };
+    #[cfg(not(target_os = "macos"))]
+    let sign = || {
+        sign_with_device(
+            application,
+            key_handle,
+            algorithm,
+            message,
+            pin,
+            require_user_presence,
+        )
+    };
+    run_hid(sign)
+}
+
+fn sign_with_device(
+    application: &str,
+    key_handle: &[u8],
+    algorithm: Fido2SshAlgorithm,
+    message: &[u8],
+    pin: Option<&str>,
+    require_user_presence: bool,
+) -> Result<Vec<u8>, String> {
     let mut last_error = "FIDO2 security key not found.".to_owned();
     for info in get_fidokey_devices() {
         let cfg = Cfg::init().with_enable_log(false);
@@ -373,6 +480,22 @@ fn encode_ssh_signature(
 mod tests {
     use super::*;
     use russh::keys::ssh_key::Algorithm;
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn hid_worker_outlives_its_callers() {
+        let worker_for_caller = || {
+            std::thread::spawn(|| {
+                let caller = std::thread::current().id();
+                let worker = run_hid(|| Ok(std::thread::current().id())).unwrap();
+                assert_ne!(worker, caller);
+                worker
+            })
+            .join()
+            .unwrap()
+        };
+        assert_eq!(worker_for_caller(), worker_for_caller());
+    }
 
     fn decode_framed_signature(encoded: &[u8]) -> Signature {
         assert!(encoded.len() >= 4);
