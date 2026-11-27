@@ -101,7 +101,8 @@ mod workspace;
 
 use gpui_kit::{AppContext, KeyBinding, TitlebarOptions, WindowOptions, point, px, size};
 
-const APPLICATION_NAME: &str = "Nauterm RS";
+pub(crate) const APPLICATION_NAME: &str = env!("NAUTERM_RS_APPLICATION_NAME");
+pub(crate) const APPLICATION_ID: &str = env!("NAUTERM_RS_APPLICATION_ID");
 
 fn main() -> anyhow::Result<()> {
     #[cfg(feature = "platform-diagnostics")]
@@ -159,7 +160,7 @@ fn main() -> anyhow::Result<()> {
     application.on_reopen(app_menu::reopen);
     application.run(move |cx| {
         gpui_kit::init(cx);
-        cx.set_app_identity("com.korvect.nauterm.rs", APPLICATION_NAME);
+        cx.set_app_identity(APPLICATION_ID, APPLICATION_NAME);
         if let Err(error) = fonts::install(cx) {
             eprintln!("Could not load bundled terminal symbols: {error}");
         }
@@ -292,11 +293,11 @@ fn open_main_window(
     let bounds = ui::initial_window_bounds(saved_window, default_window_size, cx);
     gpui_kit::open_window(
         WindowOptions {
-            app_id: Some("com.korvect.nauterm.rs".into()),
+            app_id: Some(APPLICATION_ID.into()),
             window_bounds: Some(bounds),
             window_min_size: Some(size(px(750.), px(440.))),
             titlebar: Some(TitlebarOptions {
-                title: Some("Nauterm RS".into()),
+                title: Some(APPLICATION_NAME.into()),
                 appears_transparent: true,
                 // GPUI expects the button's inset, not its center.
                 // Native buttons are 14pt high: 15pt centers them in

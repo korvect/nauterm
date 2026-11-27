@@ -120,7 +120,7 @@ impl Nauterm {
         };
         let result = gpui_kit::open_window(
             WindowOptions {
-                app_id: Some("com.korvect.nauterm.rs".into()),
+                app_id: Some(crate::APPLICATION_ID.into()),
                 window_decorations: Some(if standard_titlebar {
                     WindowDecorations::Server
                 } else {
@@ -135,7 +135,8 @@ impl Nauterm {
                 titlebar: Some(TitlebarOptions {
                     title: Some(
                         format!(
-                            "Nauterm RS {}",
+                            "{} {}",
+                            crate::APPLICATION_NAME,
                             crate::localization::text(cx, "common.label.settings"),
                         )
                         .into(),

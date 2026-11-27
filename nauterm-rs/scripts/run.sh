@@ -18,5 +18,21 @@ if [[ "$(uname -s)" == Darwin ]]; then
   exec "$bundle/Contents/MacOS/nauterm-rs" "$@"
 fi
 
+if [[ "$(uname -s)" == Linux ]]; then
+  build_output="$(bash "$client/scripts/build.sh")"
+  executable="${build_output##*$'\n'}"
+  bundle_dir="$(python3 - "$executable" <<'PY'
+from pathlib import Path
+import sys
+print(Path(sys.argv[1]).resolve().parent.parent / "nauterm-rs-run-appdir")
+PY
+)"
+  python3 "$repository/scripts/ci/package_rs_linux_run_bundle.py" \
+    --project "$repository" \
+    --executable "$executable" \
+    --bundle "$bundle_dir"
+  exec "$bundle_dir/AppRun" "$@"
+fi
+
 bash "$client/scripts/build.sh" >&2
 exec cargo run --manifest-path "$repository/Cargo.toml" -p nauterm-rs --locked -- "$@"

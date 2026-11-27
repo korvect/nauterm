@@ -11,14 +11,31 @@ APP_NAME="Nauterm"
 APP_ID="com.korvect.nauterm"
 BINARY_NAME="nauterm"
 APP_DESCRIPTION_BASE="A cross-platform terminal and SSH client with SFTP file transfer"
+ICON_SOURCE="linux/runner/resources/nauterm.png"
 case "$CLIENT" in
   flutter) APP_LABEL="Nauterm"; APP_DESCRIPTION="$APP_DESCRIPTION_BASE, built with Flutter." ;;
-  rs) APP_NAME="Nauterm-RS"; APP_LABEL="Nauterm RS"; APP_ID="com.korvect.nauterm.rs"; BINARY_NAME="nauterm-rs"; APP_DESCRIPTION="$APP_DESCRIPTION_BASE, built with Rust and GPUI." ;;
+  rs)
+    PROJECT_ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
+    mapfile -t RS_APP_METADATA < <(python3 - "$PROJECT_ROOT/nauterm-rs/linux/application.json" <<'PY'
+import json
+import sys
+
+metadata = json.load(open(sys.argv[1], encoding="utf-8"))
+for key in ("id", "name", "package_name", "description", "binary_name", "icon"):
+    print(metadata[key])
+PY
+)
+    APP_ID="${RS_APP_METADATA[0]}"
+    APP_LABEL="${RS_APP_METADATA[1]}"
+    APP_NAME="${RS_APP_METADATA[2]}"
+    APP_DESCRIPTION="${RS_APP_METADATA[3]}"
+    BINARY_NAME="${RS_APP_METADATA[4]}"
+    ICON_SOURCE="$PROJECT_ROOT/${RS_APP_METADATA[5]}"
+    ;;
   *) echo 'Client must be flutter or rs.' >&2; exit 2 ;;
 esac
 DIST_DIR="${DIST_DIR:-dist}"
 CLEAN_DIST="${CLEAN_DIST:-1}"
-ICON_SOURCE="linux/runner/resources/nauterm.png"
 ICON_GENERATED_PNG_DIR="assets/icons/generated/png"
 
 PUBSPEC_VERSION="$(awk '/^version: / { print $2; exit }' pubspec.yaml)"
@@ -147,10 +164,7 @@ MimeType=x-scheme-handler/ssh;x-scheme-handler/sftp;x-scheme-handler/telnet;
 Icon=$APP_ID
 Categories=Network;RemoteAccess;TerminalEmulator;
 Terminal=false
-# Must match the WM_CLASS the running window actually reports. GTK sets it to
-# the value passed to g_set_prgname(), which in this app is APPLICATION_ID
-# (com.korvect.nauterm). If it does not match, GNOME shows the running window
-# as an unrelated entry with the default icon and the process name.
+# Must match the application ID set by the Flutter or GPUI Linux client.
 StartupWMClass=$APP_ID
 EOF
 }

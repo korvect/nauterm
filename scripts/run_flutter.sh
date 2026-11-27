@@ -1,6 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ "$(uname -s)" == Linux && -z "${NAUTERM_MOSH_LIB_DIR:-}" ]]; then
+  project_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+  case "$(uname -m)" in
+    x86_64|amd64) mosh_arch=linux-x86_64 ;;
+    aarch64|arm64) mosh_arch=linux-arm64 ;;
+    *) mosh_arch="" ;;
+  esac
+  if [[ -n "$mosh_arch" && -f "$project_root/third_party/nauterm_mosh_ffi/$mosh_arch/libnauterm_mosh_ffi.so" ]]; then
+    export NAUTERM_MOSH_LIB_DIR="$project_root/third_party/nauterm_mosh_ffi/$mosh_arch"
+  fi
+fi
+
 dart_define_args=()
 for name in \
   NAUTERM_UPDATE_REPOSITORY \

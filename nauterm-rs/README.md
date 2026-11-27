@@ -45,6 +45,16 @@ cargo test -p nauterm-rs --locked
 application identity, compiled icon and bundled frameworks. Mosh libraries are
 staged by the build scripts.
 
+On Linux, `make run-rs` builds a local AppDir under Cargo's target directory and
+runs its `AppRun`. It refreshes a hidden user-local desktop entry and icon from
+the same metadata used to build the Rust app and its Linux packages. Wayland
+shells use that entry to match the app ID to the Nauterm RS name and icon, while
+`NoDisplay` keeps the development launcher out of the app menu. The executable
+stays in the local AppDir and is not installed. Remove
+`$XDG_DATA_HOME/applications/com.korvect.nauterm.rs.desktop` (or
+`~/.local/share/applications/com.korvect.nauterm.rs.desktop` when unset) to
+remove the development entry.
+
 Automated checks use pure models, mocks, in-memory databases or isolated
 temporary files. They must not open persistent application databases, access
 real credentials, connect to live services or enumerate hardware. UI and

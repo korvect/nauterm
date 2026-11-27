@@ -32,6 +32,22 @@ fn main() {
     };
     println!("cargo:rustc-env=NAUTERM_RS_BUILD_NUMBER={build}");
     let root = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap());
+    let application_metadata = root.join("linux/application.json");
+    println!("cargo:rerun-if-changed={}", application_metadata.display());
+    let application: serde_json::Value = serde_json::from_slice(
+        &fs::read(&application_metadata).expect("Linux application metadata is required"),
+    )
+    .expect("Linux application metadata must be valid JSON");
+    for (key, variable) in [
+        ("id", "NAUTERM_RS_APPLICATION_ID"),
+        ("name", "NAUTERM_RS_APPLICATION_NAME"),
+    ] {
+        let value = application[key]
+            .as_str()
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| panic!("Linux application metadata must provide {key}"));
+        println!("cargo:rustc-env={variable}={value}");
+    }
     windows_resources::compile(&root, build);
     generate_host_icons(&root);
     generate(root);

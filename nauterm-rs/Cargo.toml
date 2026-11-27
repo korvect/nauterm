@@ -46,6 +46,7 @@ uuid = { version = "1", features = ["v4"] }
 rfd = "=0.17.2"
 
 [build-dependencies]
+serde_json.workspace = true
 toml.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
