@@ -1521,7 +1521,7 @@ class _LogsFooter extends StatelessWidget {
   }
 }
 
-const _logsDateColumnWidth = 156.0;
+const _logsDateColumnWidth = 136.0;
 
 class _LogsTableHeader extends StatelessWidget {
   const _LogsTableHeader({

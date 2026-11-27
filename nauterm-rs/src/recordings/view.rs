@@ -27,7 +27,7 @@ const TABLE_MARGIN: f32 = 10.;
 const TABLE_INSET: f32 = 26.;
 const PAGE_SIZE: usize = 40;
 fn date_column() -> Div {
-    div().w(px(156.)).flex_shrink_0()
+    div().w(px(136.)).flex_shrink_0()
 }
 fn user_column() -> Div {
     div().flex_1().min_w_0().flex_grow(3.)

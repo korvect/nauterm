@@ -76,7 +76,7 @@ void main() {
         find.ancestor(
           of: range,
           matching: find.byWidgetPredicate(
-            (widget) => widget is SizedBox && widget.width == 156,
+            (widget) => widget is SizedBox && widget.width == 136,
           ),
         ),
         findsOneWidget,
