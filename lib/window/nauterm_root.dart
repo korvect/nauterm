@@ -37,7 +37,6 @@ class _NautermRootState extends State<NautermRoot>
   bool _isMainWindowMounted = true;
   bool _isMainWindowContentMounted = true;
   bool _isSettingsWindowMounted = false;
-  bool _isSettingsWindowContentMounted = false;
   WindowController? _settingsWindowController;
   bool _isClosingMainWindow = false;
   int _mainWindowVisibilityRevision = 0;
@@ -181,7 +180,6 @@ class _NautermRootState extends State<NautermRoot>
           setState(() {
             _isMainWindowContentMounted = false;
             _isSettingsWindowMounted = false;
-            _isSettingsWindowContentMounted = false;
           });
         });
         WidgetsBinding.instance.scheduleFrame();
@@ -206,7 +204,6 @@ class _NautermRootState extends State<NautermRoot>
       _isMainWindowMounted = false;
       _isMainWindowContentMounted = false;
       _isSettingsWindowMounted = false;
-      _isSettingsWindowContentMounted = false;
     });
   }
 
@@ -215,18 +212,7 @@ class _NautermRootState extends State<NautermRoot>
     markSettingsWindowRequested(true);
 
     if (_isSettingsWindowMounted || _settingsWindowController != null) {
-      if (!_isSettingsWindowContentMounted) {
-        setState(() {
-          _isSettingsWindowContentMounted = true;
-        });
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && _isSettingsWindowContentMounted) {
-            requestSettingsWindowFocus();
-          }
-        });
-      } else {
-        requestSettingsWindowFocus();
-      }
+      requestSettingsWindowFocus();
       return;
     }
 
@@ -238,7 +224,6 @@ class _NautermRootState extends State<NautermRoot>
     setState(() {
       _settingsWindowController = controller;
       _isSettingsWindowMounted = true;
-      _isSettingsWindowContentMounted = true;
     });
     if (defaultTargetPlatform == TargetPlatform.windows) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -264,7 +249,6 @@ class _NautermRootState extends State<NautermRoot>
     if (mounted) {
       setState(() {
         _isSettingsWindowMounted = false;
-        _isSettingsWindowContentMounted = false;
       });
     }
   }
@@ -279,20 +263,9 @@ class _NautermRootState extends State<NautermRoot>
     }
 
     hideSettingsNativeWindow();
-    if (defaultTargetPlatform == TargetPlatform.linux) {
-      // Flutter 3.44 may continue presenting queued frames after a Linux
-      // secondary view is destroyed. Keep the native view/compositor alive,
-      // but unmount the expensive settings widget tree while it is hidden.
-      setState(() {
-        _isSettingsWindowContentMounted = false;
-      });
-      return;
-    }
-
     setState(() {
       _settingsWindowController = null;
       _isSettingsWindowMounted = false;
-      _isSettingsWindowContentMounted = false;
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       controller.destroy();
@@ -335,10 +308,7 @@ class _NautermRootState extends State<NautermRoot>
     return ViewCollection(
       views: [
         if (_isSettingsWindowMounted && _settingsWindowController != null)
-          SettingsWindow(
-            controller: _settingsWindowController!,
-            isContentMounted: _isSettingsWindowContentMounted,
-          ),
+          SettingsWindow(controller: _settingsWindowController!),
         if (_isMainWindowMounted)
           MainWindow(
             workspaceController: _workspaceController,
