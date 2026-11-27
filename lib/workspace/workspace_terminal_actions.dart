@@ -157,8 +157,9 @@ extension _NautermWorkspaceTerminalActions on _NautermWorkspaceState {
         return;
       }
 
-      // Check if the current view has an SSH connection to reuse.
-      final sshProfile = view.activeTab.controller.sshProfile;
+      final activeController = view.activeTab.controller;
+      final sshProfile = activeController.sshProfile;
+      final shellPath = _resolvedLocalShellPath(activeController.shellPath);
 
       final id = _nextTerminalId++;
       late final TerminalController controller;
@@ -205,14 +206,14 @@ extension _NautermWorkspaceTerminalActions on _NautermWorkspaceState {
             : 'Local Terminal ${view.tabs.length + 1}';
         controller = TerminalController(
           config: currentTerminalConfig(),
-          shellPath: _resolvedLocalShellPath(null),
+          shellPath: shellPath,
           environment: _terminalEnvironmentForTheme(view.theme),
           theme: view.theme,
           recorder: _createTerminalRecorder(
             title: title,
             username: _localShellUsername(),
             sourceHostUuid: view.activeTab.sourceHostUuid,
-            shellPath: _resolvedLocalShellPath(null),
+            shellPath: shellPath,
           ),
           onExit: () =>
               _closeTerminalViewTab(terminalSessionId, terminalViewId, id),
@@ -391,8 +392,9 @@ extension _NautermWorkspaceTerminalActions on _NautermWorkspaceState {
     final targetView = currentLayout.viewFor(targetViewId) ?? tab.primaryView;
     final viewId = _nextTerminalId++;
 
-    // Check if the target view has an SSH connection to reuse.
-    final sshProfile = targetView.activeTab.controller.sshProfile;
+    final activeController = targetView.activeTab.controller;
+    final sshProfile = activeController.sshProfile;
+    final shellPath = _resolvedLocalShellPath(activeController.shellPath);
 
     late final TerminalController controller;
     late final String title;
@@ -436,14 +438,14 @@ extension _NautermWorkspaceTerminalActions on _NautermWorkspaceState {
       title = 'Local Terminal';
       controller = TerminalController(
         config: currentTerminalConfig(),
-        shellPath: _resolvedLocalShellPath(null),
+        shellPath: shellPath,
         environment: _terminalEnvironmentForTheme(targetView.theme),
         theme: targetView.theme,
         recorder: _createTerminalRecorder(
           title: title,
           username: _localShellUsername(),
           sourceHostUuid: targetView.activeTab.sourceHostUuid,
-          shellPath: _resolvedLocalShellPath(null),
+          shellPath: shellPath,
         ),
         onExit: () => _closeTerminalViewTab(tab.id, viewId, viewId),
       );
