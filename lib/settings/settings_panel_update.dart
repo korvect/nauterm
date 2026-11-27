@@ -23,6 +23,8 @@ class _AboutSettingsPage extends StatefulWidget {
 }
 
 class _AboutSettingsPageState extends State<_AboutSettingsPage> {
+  static const _githubRepositoryUrl = 'https://github.com/korvect/nauterm';
+
   DesktopUpdateService? _service;
   final MacosSparkleUpdater _sparkle = const MacosSparkleUpdater();
   bool? _sparkleConfigured;
@@ -382,6 +384,32 @@ class _AboutSettingsPageState extends State<_AboutSettingsPage> {
     });
   }
 
+  Future<void> _openGithubRepository() async {
+    try {
+      if (Platform.isMacOS) {
+        await Process.start(
+          'open',
+          [_githubRepositoryUrl],
+          mode: ProcessStartMode.detached,
+        );
+      } else if (Platform.isWindows) {
+        await Process.start(
+          'rundll32',
+          ['url.dll,FileProtocolHandler', _githubRepositoryUrl],
+          mode: ProcessStartMode.detached,
+        );
+      } else {
+        await Process.start(
+          'xdg-open',
+          [_githubRepositoryUrl],
+          mode: ProcessStartMode.detached,
+        );
+      }
+    } on Object catch (error) {
+      debugPrint('Unable to open GitHub repository: $error');
+    }
+  }
+
   Future<void> _showThirdPartyLicenses() async {
     await showNautermDialog<void>(
       context: context,
@@ -495,6 +523,19 @@ class _AboutSettingsPageState extends State<_AboutSettingsPage> {
                         _platformName,
                         key: const ValueKey('settings-about-platform'),
                         style: TextStyle(color: _text, fontSize: 13),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  _SettingsRow(
+                    title: 'settings.label.repositoryUrl',
+                    subtitle: _githubRepositoryUrl,
+                    trailing: Align(
+                      alignment: Alignment.centerRight,
+                      child: _SettingsOutlineButton(
+                        key: const ValueKey('settings-about-github'),
+                        label: 'settings.label.openGithub',
+                        onTap: _openGithubRepository,
                       ),
                     ),
                   ),
