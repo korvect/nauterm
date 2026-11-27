@@ -357,6 +357,8 @@ enum RetiredDrawer {
 
 pub struct Nauterm {
     window_id: WindowId,
+    #[cfg(target_os = "macos")]
+    _fullscreen_traffic_lights: Option<crate::window_chrome::FullscreenTrafficLightObserver>,
     data: AppState,
     store: Arc<Store>,
     storage_loading: bool,
@@ -634,9 +636,14 @@ impl Nauterm {
             .as_ref()
             .and_then(|recovery| recovery.previous.clone());
         let shell_history = crate::shell_history::store::Service::new(store.paths.shell_history());
+        #[cfg(target_os = "macos")]
+        let fullscreen_traffic_lights =
+            crate::window_chrome::FullscreenTrafficLightObserver::new(window);
         let overview = data.general.workspace_enabled;
         let mut this = Self {
             window_id: window.window_handle().window_id(),
+            #[cfg(target_os = "macos")]
+            _fullscreen_traffic_lights: fullscreen_traffic_lights,
             data,
             store,
             storage_loading: true,
@@ -2583,6 +2590,7 @@ impl Nauterm {
     }
 
     fn topbar(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let fullscreen = window.is_fullscreen();
         let palette = Palette::new(self.data.dark);
         let session_page = self.page == Page::Sessions && !self.overview;
         let terminal_sftp_page = self
@@ -2687,13 +2695,17 @@ impl Nauterm {
             .gap(px(6.))
             .px(px(8.))
             .when(crate::window_chrome::has_controls(window), |bar| bar.pr_0())
-            .pl(px(if cfg!(target_os = "macos") { 78. } else { 8. }))
+            .pl(px(if cfg!(target_os = "macos") {
+                if fullscreen { 14. } else { 78. }
+            } else {
+                8.
+            }))
             .bg(painted_bar)
             .text_color(foreground)
             .when(cfg!(target_os = "windows"), |bar| {
                 bar.window_control_area(WindowControlArea::Drag)
             })
-            .when(!cfg!(target_os = "windows"), |bar| {
+            .when(!cfg!(target_os = "windows") && !fullscreen, |bar| {
                 bar.on_mouse_down(MouseButton::Left, |event, window, cx| {
                     // Buttons consume their own presses. All remaining chrome,
                     // including gaps between tabs, shares native drag/zoom behavior.

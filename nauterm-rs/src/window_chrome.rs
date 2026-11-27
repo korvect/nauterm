@@ -62,6 +62,104 @@ pub fn align_traffic_lights(window: &gpui_kit::Window) {
 }
 
 #[cfg(target_os = "macos")]
+pub struct FullscreenTrafficLightObserver {
+    center: objc2::rc::Retained<objc2_foundation::NSNotificationCenter>,
+    observers: Vec<objc2::rc::Retained<objc2::runtime::AnyObject>>,
+}
+
+#[cfg(target_os = "macos")]
+impl FullscreenTrafficLightObserver {
+    pub fn new(window: &gpui_kit::Window) -> Option<Self> {
+        use block2::RcBlock;
+        use objc2::rc::Retained;
+        use objc2_app_kit::{
+            NSWindowDidExitFullScreenNotification, NSWindowWillExitFullScreenNotification,
+        };
+        use objc2_foundation::{NSNotification, NSNotificationCenter};
+        use std::ptr::NonNull;
+
+        let native = native_window(window)?;
+        let window_address = Retained::as_ptr(&native) as usize;
+        let center = NSNotificationCenter::defaultCenter();
+        let will_exit = RcBlock::new(move |notification: NonNull<NSNotification>| {
+            set_traffic_light_container_hidden(notification, window_address, true);
+        });
+        let will_exit_observer: Retained<objc2::runtime::AnyObject> = unsafe {
+            center.addObserverForName_object_queue_usingBlock(
+                Some(NSWindowWillExitFullScreenNotification),
+                None,
+                None,
+                &will_exit,
+            )
+        }
+        .into();
+        let did_exit = RcBlock::new(move |notification: NonNull<NSNotification>| {
+            set_traffic_light_container_hidden(notification, window_address, false);
+        });
+        let did_exit_observer: Retained<objc2::runtime::AnyObject> = unsafe {
+            center.addObserverForName_object_queue_usingBlock(
+                Some(NSWindowDidExitFullScreenNotification),
+                None,
+                None,
+                &did_exit,
+            )
+        }
+        .into();
+
+        Some(Self {
+            center,
+            observers: vec![will_exit_observer, did_exit_observer],
+        })
+    }
+}
+
+#[cfg(target_os = "macos")]
+impl Drop for FullscreenTrafficLightObserver {
+    fn drop(&mut self) {
+        for observer in &self.observers {
+            // SAFETY: Each token was returned by addObserverForName and belongs
+            // to this notification center.
+            unsafe { self.center.removeObserver(&**observer) };
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn set_traffic_light_container_hidden(
+    notification: std::ptr::NonNull<objc2_foundation::NSNotification>,
+    window_address: usize,
+    hidden: bool,
+) {
+    use objc2_app_kit::{NSWindow, NSWindowButton};
+
+    // SAFETY: AppKit invokes the observer with a live notification for the
+    // duration of this callback.
+    let notification = unsafe { notification.as_ref() };
+    let Some(object) = notification.object() else {
+        return;
+    };
+    if objc2::rc::Retained::as_ptr(&object) as usize != window_address {
+        return;
+    }
+    let Some(window) = object.downcast_ref::<NSWindow>() else {
+        return;
+    };
+    let Some(close) = window.standardWindowButton(NSWindowButton::CloseButton) else {
+        return;
+    };
+    // SAFETY: This callback runs on AppKit's main thread and the button stays
+    // alive through its window while its current parent is retained below.
+    let Some(parent) = (unsafe { close.superview() }) else {
+        return;
+    };
+    // SAFETY: The retained parent remains alive while AppKit returns its parent.
+    let Some(container) = (unsafe { parent.superview() }) else {
+        return;
+    };
+    container.setHidden(hidden);
+}
+
+#[cfg(target_os = "macos")]
 pub(crate) fn native_window(
     window: &gpui_kit::Window,
 ) -> Option<objc2::rc::Retained<objc2_app_kit::NSWindow>> {
