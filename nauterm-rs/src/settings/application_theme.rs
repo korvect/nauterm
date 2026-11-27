@@ -29,12 +29,14 @@ fn miniature(dark: bool) -> AnyElement {
         .flex()
         .flex_col()
         .gap(px(5.))
-        .child(
-            div().flex().gap(px(3.)).children(
-                [0xff6058, 0xffbd2e, 0x28c840]
-                    .map(|color| div().size(px(5.)).rounded_full().bg(rgb(color))),
-            ),
-        )
+        .when(cfg!(target_os = "macos"), |preview| {
+            preview.child(
+                div().flex().gap(px(3.)).children(
+                    [0xff6058, 0xffbd2e, 0x28c840]
+                        .map(|color| div().size(px(5.)).rounded_full().bg(rgb(color))),
+                ),
+            )
+        })
         .child(
             div()
                 .flex_1()
