@@ -19,7 +19,7 @@ pub(super) struct ForwardSelects {
 }
 impl ForwardSelects {
     pub(super) fn draft_fields(&self) -> (&'static str, Option<Id>) {
-        (self.kind.label(), self.host)
+        (self.kind.as_str(), self.host)
     }
 
     pub fn saving(&self) -> bool {
@@ -45,7 +45,7 @@ impl Nauterm {
             forward.types.reconcile(
                 Kind::ALL
                     .into_iter()
-                    .map(|kind| SelectOption::localized(kind, kind.label()))
+                    .map(|kind| SelectOption::localized(kind, kind.label_key()))
                     .collect(),
                 Some(kind),
                 window,
@@ -79,7 +79,7 @@ impl Nauterm {
         let types = SelectModel::new(
             Kind::ALL
                 .into_iter()
-                .map(|kind| SelectOption::localized(kind, kind.label()))
+                .map(|kind| SelectOption::localized(kind, kind.label_key()))
                 .collect(),
             Some(kind),
             window,
@@ -785,7 +785,7 @@ impl Nauterm {
                                     .border_color(rgba(0x075e9233))
                                     .text_size(px(11.))
                                     .font_weight(FontWeights::SEMIBOLD)
-                                    .child(crate::localization::view(rule.kind.label())),
+                                    .child(crate::localization::view(rule.kind.label_key())),
                             )
                             .child(
                                 div()

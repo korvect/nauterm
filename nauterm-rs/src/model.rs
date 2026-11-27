@@ -379,7 +379,7 @@ impl Forward {
         let text = format!(
             "{} {} {} {} {} {} {} {} {}",
             self.name,
-            self.kind.label(),
+            self.kind.as_str(),
             self.bind_address,
             self.local_port,
             self.destination,

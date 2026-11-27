@@ -3139,7 +3139,7 @@ impl Nauterm {
                                         for kind in crate::port_forward::Kind::ALL {
                                             let owner = owner.clone();
                                             menu = menu.item(
-                                                MenuItem::localized(kind.label())
+                                                MenuItem::localized(kind.label_key())
                                                     .icon(match kind {
                                                         crate::port_forward::Kind::Local => {
                                                             IconName::GitBranch
@@ -3920,7 +3920,12 @@ impl Nauterm {
             .as_ref()
             .and_then(forwards::ForwardSelects::host_picker)
         {
-            return picker.into_any_element();
+            return div()
+                .size_full()
+                .border_l_1()
+                .border_color(Palette::new(self.data.dark).border)
+                .child(picker)
+                .into_any_element();
         }
         let sections = if editor.kind == ItemKind::Host {
             self.host_editor_sections(editor, cx)

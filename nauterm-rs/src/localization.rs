@@ -220,6 +220,19 @@ mod tests {
         assert_eq!(serde_json::to_value(Language::Chinese).unwrap(), "zh-CN");
     }
     #[test]
+    fn forwarding_types_use_the_shared_english_and_chinese_labels() {
+        use crate::port_forward::Kind;
+        for (kind, english, chinese) in [
+            (Kind::Local, "Local", "本地"),
+            (Kind::Remote, "Remote", "远程"),
+            (Kind::Dynamic, "Dynamic", "动态"),
+        ] {
+            assert_eq!(text_for(Language::English, kind.label_key()), english);
+            assert_eq!(text_for(Language::Chinese, kind.label_key()), chinese);
+        }
+    }
+
+    #[test]
     fn localization_catalogs_resolve_keys_only() {
         assert_eq!(
             catalog().english.keys().collect::<Vec<_>>(),

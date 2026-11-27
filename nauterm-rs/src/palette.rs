@@ -44,6 +44,10 @@ pub fn apply_theme(dark: bool, window: &mut gpui_kit::Window, cx: &mut gpui_kit:
             rgb(0xdce0e2).into()
         };
         theme.colors.border = p.border.into();
+        #[cfg(target_os = "linux")]
+        {
+            theme.colors.window_border = rgb(if dark { 0x505050 } else { 0xa3a3a3 }).into();
+        }
         theme.colors.input = p.border.into();
         theme.colors.muted_foreground = p.muted.into();
         theme.colors.ring = p.accent.into();

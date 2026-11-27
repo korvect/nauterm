@@ -32,11 +32,11 @@ impl Kind {
             Self::Dynamic => "dynamic",
         }
     }
-    pub fn label(self) -> &'static str {
+    pub fn label_key(self) -> &'static str {
         match self {
-            Self::Local => "Local",
-            Self::Remote => "Remote",
-            Self::Dynamic => "Dynamic",
+            Self::Local => "common.label.local",
+            Self::Remote => "common.label.remote",
+            Self::Dynamic => "common.label.dynamic",
         }
     }
 }
