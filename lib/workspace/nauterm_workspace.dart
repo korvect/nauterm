@@ -167,6 +167,10 @@ class NautermWorkspaceController extends ChangeNotifier {
     _state?._closeSelectedTerminalTab();
   }
 
+  Future<void> openQuickConnect() async {
+    await _state?._openQuickConnectDialog();
+  }
+
   Future<void> openNewLocalTerminal() async {
     final state = _state;
     if (state == null) return;

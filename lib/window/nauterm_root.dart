@@ -278,6 +278,13 @@ class _NautermRootState extends State<NautermRoot>
   }
 
   @override
+  Future<void> openQuickConnect() async {
+    showMainWindow();
+    await WidgetsBinding.instance.endOfFrame;
+    await _workspaceController.openQuickConnect();
+  }
+
+  @override
   Future<void> openNewLocalTerminal() async {
     showMainWindow();
     await WidgetsBinding.instance.endOfFrame;

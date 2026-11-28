@@ -26,6 +26,8 @@ abstract interface class NautermRootController {
 
   void closeSelectedTerminalTab();
 
+  Future<void> openQuickConnect();
+
   Future<void> openNewLocalTerminal();
 
   Future<bool> requestQuit();
@@ -40,7 +42,7 @@ NautermRootController? _rootController;
 final Set<int> _positionedWindowIds = <int>{};
 Timer? _windowGeometryPersistTimer;
 bool _mainWindowMaximized = false;
-List<String>? _lastNativeMenuShortcuts;
+Map<String, String>? _lastNativeMenuShortcuts;
 const MethodChannel _appMenuChannel = MethodChannel(
   'com.korvect.nauterm/app_menu',
 );
@@ -148,22 +150,19 @@ void configureNativeWindowing() {
 
 void syncNativeMenuShortcuts() {
   if (!io.Platform.isMacOS) return;
-  final shortcuts = <String>[
-    terminalShortcutConfig.newLocalTerminal,
-    terminalShortcutConfig.openSettings,
-    terminalShortcutConfig.closeTab,
-  ];
-  if (listEquals(shortcuts, _lastNativeMenuShortcuts)) return;
-  _lastNativeMenuShortcuts = List<String>.unmodifiable(shortcuts);
+  final shortcuts = <String, String>{
+    'quickConnect': terminalShortcutConfig.quickConnect,
+    'newLocalTerminal': terminalShortcutConfig.newLocalTerminal,
+    'openSettings': terminalShortcutConfig.openSettings,
+    'closeTab': terminalShortcutConfig.closeTab,
+  };
+  if (mapEquals(shortcuts, _lastNativeMenuShortcuts)) return;
+  _lastNativeMenuShortcuts = shortcuts;
   unawaited(
     _appMenuChannel
-        .invokeMethod<void>('setMenuShortcuts', <String, String>{
-          'newLocalTerminal': shortcuts[0],
-          'openSettings': shortcuts[1],
-          'closeTab': shortcuts[2],
-        })
+        .invokeMethod<void>('setMenuShortcuts', shortcuts)
         .catchError((Object _) {
-          if (listEquals(shortcuts, _lastNativeMenuShortcuts)) {
+          if (identical(shortcuts, _lastNativeMenuShortcuts)) {
             _lastNativeMenuShortcuts = null;
           }
         }),
@@ -207,6 +206,9 @@ Future<Object?> _handleAppMenuMethodCall(MethodCall call) async {
       return null;
     case 'closeSelectedTerminalTab':
       _rootController?.closeSelectedTerminalTab();
+      return null;
+    case 'newConnection':
+      await _rootController?.openQuickConnect();
       return null;
     case 'newLocalTerminal':
       await _rootController?.openNewLocalTerminal();

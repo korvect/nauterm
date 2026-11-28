@@ -16,6 +16,7 @@
         <customObject id="Voe-Tx-rLC" customClass="AppDelegate" customModule="Runner" customModuleProvider="target">
             <connections>
                 <outlet property="applicationMenu" destination="uQy-DD-JDr" id="XBo-yE-nKs"/>
+                <outlet property="newConnectionMenuItem" destination="Nau-New-Connection" id="Nau-New-Connection-Outlet"/>
                 <outlet property="newLocalTerminalMenuItem" destination="Nau-NL-Terminal" id="Nau-NL-Outlet"/>
                 <outlet property="settingsMenuItem" destination="BOF-NM-1cW" id="Nau-Settings-Outlet"/>
                 <outlet property="closeTabMenuItem" destination="Nau-Close-Tab" id="Nau-Close-Tab-Outlet"/>
@@ -82,9 +83,26 @@
                     <modifierMask key="keyEquivalentModifierMask"/>
                     <menu key="submenu" title="File" id="h7P-zC-1mN">
                         <items>
+                            <menuItem title="New Connection…" keyEquivalent="t" id="Nau-New-Connection">
+                                <connections>
+                                    <action selector="newConnection:" target="Voe-Tx-rLC" id="Nau-New-Connection-Action"/>
+                                </connections>
+                            </menuItem>
                             <menuItem title="New Local Terminal" keyEquivalent="l" id="Nau-NL-Terminal">
                                 <connections>
                                     <action selector="newLocalTerminal:" target="Voe-Tx-rLC" id="Nau-NL-Action"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="pza-cls-sep"/>
+                            <menuItem title="Close Tab" keyEquivalent="w" id="Nau-Close-Tab">
+                                <connections>
+                                    <action selector="closeSelectedTerminalTab:" target="Voe-Tx-rLC" id="Nau-Close-Tab-Act"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Close Window" keyEquivalent="w" id="Close-Window">
+                                <modifierMask key="keyEquivalentModifierMask" shift="YES" command="YES"/>
+                                <connections>
+                                    <action selector="performClose:" target="-1" id="Close-Window-Action"/>
                                 </connections>
                             </menuItem>
                         </items>
@@ -326,12 +344,6 @@
                     <modifierMask key="keyEquivalentModifierMask"/>
                     <menu key="submenu" title="Window" systemMenu="window" id="Td7-aD-5lo">
                         <items>
-                            <menuItem title="Close Tab" keyEquivalent="w" id="Nau-Close-Tab">
-                                <connections>
-                                    <action selector="closeSelectedTerminalTab:" target="Voe-Tx-rLC" id="Nau-Close-Tab-Act"/>
-                                </connections>
-                            </menuItem>
-                            <menuItem isSeparatorItem="YES" id="pza-cls-sep"/>
                             <menuItem title="Minimize" keyEquivalent="m" id="OY7-WF-poV">
                                 <connections>
                                     <action selector="performMiniaturize:" target="-1" id="VwT-WD-YPe"/>

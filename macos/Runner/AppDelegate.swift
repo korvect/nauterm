@@ -39,6 +39,7 @@ class AppDelegate: FlutterAppDelegate {
   private var appMenuChannel: FlutterMethodChannel?
   private var connectionUriChannel: FlutterMethodChannel?
   private var pendingConnectionUris: [String] = []
+  @IBOutlet weak var newConnectionMenuItem: NSMenuItem?
   @IBOutlet weak var newLocalTerminalMenuItem: NSMenuItem?
   @IBOutlet weak var settingsMenuItem: NSMenuItem?
   @IBOutlet weak var closeTabMenuItem: NSMenuItem?
@@ -378,11 +379,16 @@ class AppDelegate: FlutterAppDelegate {
     }
   }
 
+  @IBAction func newConnection(_ sender: Any?) {
+    appMenuChannel?.invokeMethod("newConnection", arguments: nil)
+  }
+
   @IBAction func newLocalTerminal(_ sender: Any?) {
     appMenuChannel?.invokeMethod("newLocalTerminal", arguments: nil)
   }
 
   private func setMenuShortcuts(_ shortcuts: [String: String]) {
+    setMenuShortcut(newConnectionMenuItem, shortcuts["quickConnect"] ?? "")
     setMenuShortcut(newLocalTerminalMenuItem, shortcuts["newLocalTerminal"] ?? "")
     setMenuShortcut(settingsMenuItem, shortcuts["openSettings"] ?? "")
     setMenuShortcut(closeTabMenuItem, shortcuts["closeTab"] ?? "")
