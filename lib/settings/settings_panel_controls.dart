@@ -339,7 +339,7 @@ class _SearchField extends StatelessWidget {
         decoration: InputDecoration(
           hintText: tr(
             'settings.search.settings.hint',
-            fallback: 'Search settings...',
+            fallback: 'Search settings…',
           ),
           hintStyle: TextStyle(color: _faintText),
           prefixIcon: Icon(Icons.search_rounded, size: 16),

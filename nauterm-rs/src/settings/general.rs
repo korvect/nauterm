@@ -72,7 +72,7 @@ impl Settings {
         );
         self.search.input.update(cx, |input, cx| {
             input.set_placeholder(
-                crate::localization::text_for(language, "settings.label.searchSettings"),
+                crate::localization::text_for(language, "settings.search.settings.hint"),
                 window,
                 cx,
             )

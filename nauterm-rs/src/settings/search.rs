@@ -528,7 +528,7 @@ impl Settings {
         let input = cx.new(|cx| {
             InputState::new(window, cx).placeholder(crate::localization::text_for(
                 language,
-                "settings.label.searchSettings",
+                "settings.search.settings.hint",
             ))
         });
         let events = cx.subscribe(&input, |this, input, event: &InputEvent, cx| {
