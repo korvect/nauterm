@@ -5195,7 +5195,7 @@ dependencies = [
 
 [[package]]
 name = "nauterm-rs"
-version = "0.3.13"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "async-channel",
@@ -5245,7 +5245,7 @@ dependencies = [
 
 [[package]]
 name = "nauterm_cmd_integration"
-version = "0.3.13"
+version = "0.4.0"
 dependencies = [
  "base64 0.23.1",
  "cc",
@@ -5254,7 +5254,7 @@ dependencies = [
 
 [[package]]
 name = "nauterm_core"
-version = "0.3.13"
+version = "0.4.0"
 dependencies = [
  "aes-gcm",
  "alacritty_terminal",
