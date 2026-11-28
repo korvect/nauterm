@@ -1217,34 +1217,6 @@ impl FilePane {
                         (pane.selected_entries().len(), pane.remote.is_some())
                     })
                     .unwrap_or_default();
-                let mut menu = menu;
-                for (key, absolute_path) in [
-                    ("sftp.action.copyName", false),
-                    ("sftp.action.copyAbsolutePath", true),
-                ] {
-                    let owner = menu_owner.clone();
-                    menu = menu.item(MenuItem::localized(key).disabled(selected == 0).on_click(
-                        move |_, _, cx| {
-                            let _ = owner.update(cx, |pane, cx| {
-                                let text = pane
-                                    .selected_entries()
-                                    .into_iter()
-                                    .map(|entry| {
-                                        if absolute_path {
-                                            pane.display_path(&entry.path)
-                                        } else {
-                                            entry.name
-                                        }
-                                    })
-                                    .collect::<Vec<_>>()
-                                    .join("\n");
-                                if !text.is_empty() {
-                                    cx.write_to_clipboard(ClipboardItem::new_string(text));
-                                }
-                            });
-                        },
-                    ));
-                }
                 actions::menu(menu, menu_owner.clone(), selected, remote, cx)
             })
             .when(self.compact, |button| {

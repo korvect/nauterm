@@ -220,6 +220,47 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
+  testWidgets('Actions groups clipboard commands and follows file selection', (
+    tester,
+  ) async {
+    await _openLocalFixture(tester);
+    final name = find.text('Copy Name');
+    final path = find.text('Copy Absolute Path');
+    Finder row(Finder label) =>
+        find.ancestor(of: label, matching: find.byType(NautermDropdownRow));
+    Future<void> openActions() async {
+      await tester.tap(_leftText('Actions'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 150));
+    }
+
+    await openActions();
+    expect(tester.widget<NautermDropdownRow>(row(name)).enabled, isFalse);
+    expect(tester.widget<NautermDropdownRow>(row(path)).enabled, isFalse);
+    final rowHeight = tester.getSize(row(name)).height;
+    expect(tester.getCenter(path).dy - tester.getCenter(name).dy, rowHeight);
+    expect(
+      tester.getCenter(find.text('Open')).dy - tester.getCenter(path).dy,
+      greaterThan(rowHeight),
+    );
+
+    await tester.tapAt(tester.getCenter(_leftText('a folder')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 150));
+    expect(name, findsNothing);
+    await tester.tap(_leftText('a folder'));
+    await tester.pump();
+    await tester.pump();
+    await openActions();
+    expect(tester.widget<NautermDropdownRow>(row(name)).enabled, isTrue);
+    expect(tester.widget<NautermDropdownRow>(row(path)).enabled, isTrue);
+    await tester.tap(name);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 150));
+    expect(writes, ['a folder']);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 }
 
 Finder _leftText(String text) => find.descendant(

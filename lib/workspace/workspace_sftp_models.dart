@@ -329,7 +329,7 @@ List<_SftpMenuEntry> _sftpClipboardMenuEntries({required bool enabled}) => [
   ),
 ];
 
-List<_SftpMenuEntry> _sftpActionMenuEntries({
+List<List<_SftpMenuEntry>> _sftpActionMenuGroups({
   required bool hasSelection,
   required bool showHiddenFiles,
   required bool remote,
@@ -338,93 +338,9 @@ List<_SftpMenuEntry> _sftpActionMenuEntries({
   bool selectionIsFile = false,
   bool selectionCanOpenWithSystemDefault = true,
 }) {
-  if (remote) {
-    return [
-      if (!selectionIsFile || selectionCanOpenWithSystemDefault)
-        _sftpMenuItem(
-          _SftpAction.open,
-          'common.action.open',
-          enabled: hasSelection,
-        ),
-      if (sshEditorAvailable)
-        _sftpMenuItem(
-          _SftpAction.openWithSshEditor,
-          'sftp.action.openWithSshEditor',
-          enabled: hasSelection,
-        ),
-      ..._sftpClipboardMenuEntries(enabled: hasSelection),
-      _sftpMenuItem(
-        _SftpAction.copyToTarget,
-        'sftp.action.download',
-        enabled: hasSelection,
-      ),
-      _sftpMenuItem(_SftpAction.uploadFiles, 'sftp.action.upload'),
-      _sftpMenuItem(
-        _SftpAction.rename,
-        'common.action.rename',
-        enabled: hasSelection,
-      ),
-      _sftpMenuItem(
-        _SftpAction.moveTo,
-        'sftp.action.moveTo',
-        enabled: hasSelection,
-      ),
-      _sftpMenuItem(
-        _SftpAction.copyTo,
-        'sftp.action.copyTo',
-        enabled: hasSelection,
-      ),
-      _sftpMenuItem(
-        _SftpAction.delete,
-        'common.action.delete',
-        enabled: hasSelection,
-        destructive: true,
-      ),
+  return [
+    [
       _sftpMenuItem(_SftpAction.refresh, 'Refresh'),
-      _sftpMenuItem(_SftpAction.newFolder, 'sftp.action.newFolder'),
-      _sudoSftpMenu(
-        children: [
-          _sftpMenuItem(
-            _SftpAction.sudoOpen,
-            'common.action.open',
-            enabled: hasSelection,
-          ),
-          if (sshEditorAvailable)
-            _sftpMenuItem(
-              _SftpAction.sudoOpenWithSshEditor,
-              'sftp.action.openWithSshEditor',
-              enabled: hasSelection,
-            ),
-          _sftpMenuItem(
-            _SftpAction.sudoDownload,
-            'sftp.action.download',
-            enabled: hasSelection,
-          ),
-          _sftpMenuItem(_SftpAction.sudoUpload, 'sftp.action.upload'),
-          _sftpMenuItem(
-            _SftpAction.sudoRename,
-            'common.action.rename',
-            enabled: hasSelection,
-          ),
-          _sftpMenuItem(
-            _SftpAction.sudoMoveTo,
-            'sftp.action.moveTo',
-            enabled: hasSelection,
-          ),
-          _sftpMenuItem(
-            _SftpAction.sudoCopyTo,
-            'sftp.action.copyTo',
-            enabled: hasSelection,
-          ),
-          _sftpMenuItem(
-            _SftpAction.sudoDelete,
-            'common.action.delete',
-            enabled: hasSelection,
-            destructive: true,
-          ),
-          _sftpMenuItem(_SftpAction.sudoNewFolder, 'sftp.action.newFolder'),
-        ],
-      ),
       _sftpMenuItem(
         _SftpAction.showHiddenFiles,
         showHiddenFiles ? 'Hide Hidden Files' : 'Show Hidden Files',
@@ -432,30 +348,102 @@ List<_SftpMenuEntry> _sftpActionMenuEntries({
       _sftpMenuItem(_SftpAction.selectAll, 'Select All'),
       if (showCloseAction)
         _sftpMenuItem(_SftpAction.close, 'Close', destructive: true),
-    ];
-  }
-
-  return [
-    if (!selectionIsFile || selectionCanOpenWithSystemDefault)
-      _sftpMenuItem(
-        _SftpAction.open,
-        'common.action.open',
-        enabled: hasSelection,
-      ),
-    ..._sftpClipboardMenuEntries(enabled: hasSelection),
-    _sftpMenuItem(_SftpAction.refresh, 'Refresh'),
-    _sftpMenuItem(_SftpAction.newFolder, 'sftp.action.newFolder'),
-    _sftpMenuItem(
-      _SftpAction.showHiddenFiles,
-      showHiddenFiles ? 'Hide Hidden Files' : 'Show Hidden Files',
-    ),
-    _sftpMenuItem(_SftpAction.selectAll, 'Select All'),
-    if (showCloseAction)
-      _sftpMenuItem(_SftpAction.close, 'Close', destructive: true),
+    ],
+    _sftpClipboardMenuEntries(enabled: hasSelection),
+    [
+      if (!selectionIsFile || selectionCanOpenWithSystemDefault)
+        _sftpMenuItem(
+          _SftpAction.open,
+          'common.action.open',
+          enabled: hasSelection,
+        ),
+      if (remote && sshEditorAvailable)
+        _sftpMenuItem(
+          _SftpAction.openWithSshEditor,
+          'sftp.action.openWithSshEditor',
+          enabled: hasSelection,
+        ),
+      if (remote) ...[
+        _sftpMenuItem(
+          _SftpAction.copyToTarget,
+          'sftp.action.download',
+          enabled: hasSelection,
+        ),
+        _sftpMenuItem(_SftpAction.uploadFiles, 'sftp.action.upload'),
+        _sftpMenuItem(
+          _SftpAction.rename,
+          'common.action.rename',
+          enabled: hasSelection,
+        ),
+        _sftpMenuItem(
+          _SftpAction.moveTo,
+          'sftp.action.moveTo',
+          enabled: hasSelection,
+        ),
+        _sftpMenuItem(
+          _SftpAction.copyTo,
+          'sftp.action.copyTo',
+          enabled: hasSelection,
+        ),
+        _sftpMenuItem(
+          _SftpAction.delete,
+          'common.action.delete',
+          enabled: hasSelection,
+          destructive: true,
+        ),
+      ],
+      _sftpMenuItem(_SftpAction.newFolder, 'sftp.action.newFolder'),
+    ],
+    if (remote)
+      [
+        _sudoSftpMenu(
+          children: [
+            _sftpMenuItem(
+              _SftpAction.sudoOpen,
+              'common.action.open',
+              enabled: hasSelection,
+            ),
+            if (sshEditorAvailable)
+              _sftpMenuItem(
+                _SftpAction.sudoOpenWithSshEditor,
+                'sftp.action.openWithSshEditor',
+                enabled: hasSelection,
+              ),
+            _sftpMenuItem(
+              _SftpAction.sudoDownload,
+              'sftp.action.download',
+              enabled: hasSelection,
+            ),
+            _sftpMenuItem(_SftpAction.sudoUpload, 'sftp.action.upload'),
+            _sftpMenuItem(
+              _SftpAction.sudoRename,
+              'common.action.rename',
+              enabled: hasSelection,
+            ),
+            _sftpMenuItem(
+              _SftpAction.sudoMoveTo,
+              'sftp.action.moveTo',
+              enabled: hasSelection,
+            ),
+            _sftpMenuItem(
+              _SftpAction.sudoCopyTo,
+              'sftp.action.copyTo',
+              enabled: hasSelection,
+            ),
+            _sftpMenuItem(
+              _SftpAction.sudoDelete,
+              'common.action.delete',
+              enabled: hasSelection,
+              destructive: true,
+            ),
+            _sftpMenuItem(_SftpAction.sudoNewFolder, 'sftp.action.newFolder'),
+          ],
+        ),
+      ],
   ];
 }
 
-List<_SftpMenuEntry> _sftpRowMenuEntries(
+List<List<_SftpMenuEntry>> _sftpRowMenuGroups(
   _SftpFileEntry entry, {
   required bool remote,
   bool sshEditorAvailable = false,
@@ -467,8 +455,9 @@ List<_SftpMenuEntry> _sftpRowMenuEntries(
         entry.name,
         permissions: entry.permissions,
       );
-  if (remote) {
-    return [
+  return [
+    _sftpClipboardMenuEntries(enabled: !entry.isParent),
+    [
       if (!canOpenFile || canOpenWithSystemDefault)
         _sftpMenuItem(
           _SftpAction.open,
@@ -480,87 +469,74 @@ List<_SftpMenuEntry> _sftpRowMenuEntries(
         'sftp.action.openWith',
         enabled: canOpenFile,
       ),
-      if (sshEditorAvailable)
+      if (remote && sshEditorAvailable)
         _sftpMenuItem(
           _SftpAction.openWithSshEditor,
           'sftp.action.openWithSshEditor',
           enabled: canOpenFile,
         ),
-      ..._sftpClipboardMenuEntries(enabled: !entry.isParent),
-      _sftpMenuItem(
-        _SftpAction.copyToTarget,
-        'sftp.action.download',
-        enabled: !entry.isParent,
-      ),
-      _sftpMenuItem(_SftpAction.uploadFiles, 'sftp.action.upload'),
-      _sftpMenuItem(
-        _SftpAction.rename,
-        'common.action.rename',
-        enabled: !entry.isParent,
-      ),
-      _sftpMenuItem(
-        _SftpAction.moveTo,
-        'sftp.action.moveTo',
-        enabled: !entry.isParent,
-      ),
-      _sftpMenuItem(
-        _SftpAction.copyTo,
-        'sftp.action.copyTo',
-        enabled: !entry.isParent,
-      ),
-      _sftpMenuItem(
-        _SftpAction.delete,
-        'common.action.delete',
-        enabled: !entry.isParent,
-        destructive: true,
-      ),
+      if (remote) ...[
+        _sftpMenuItem(
+          _SftpAction.copyToTarget,
+          'sftp.action.download',
+          enabled: !entry.isParent,
+        ),
+        _sftpMenuItem(_SftpAction.uploadFiles, 'sftp.action.upload'),
+        _sftpMenuItem(
+          _SftpAction.rename,
+          'common.action.rename',
+          enabled: !entry.isParent,
+        ),
+        _sftpMenuItem(
+          _SftpAction.moveTo,
+          'sftp.action.moveTo',
+          enabled: !entry.isParent,
+        ),
+        _sftpMenuItem(
+          _SftpAction.copyTo,
+          'sftp.action.copyTo',
+          enabled: !entry.isParent,
+        ),
+        _sftpMenuItem(
+          _SftpAction.delete,
+          'common.action.delete',
+          enabled: !entry.isParent,
+          destructive: true,
+        ),
+      ],
       _sftpMenuItem(_SftpAction.refresh, 'Refresh'),
       _sftpMenuItem(_SftpAction.newFolder, 'sftp.action.newFolder'),
-      _sudoSftpMenu(
-        children: [
-          _sftpMenuItem(_SftpAction.sudoOpen, 'common.action.open'),
-          _sftpMenuItem(
-            _SftpAction.sudoOpenWith,
-            'sftp.action.openWith',
-            enabled: canOpenFile,
-          ),
-          if (sshEditorAvailable)
+    ],
+    if (remote)
+      [
+        _sudoSftpMenu(
+          children: [
+            _sftpMenuItem(_SftpAction.sudoOpen, 'common.action.open'),
             _sftpMenuItem(
-              _SftpAction.sudoOpenWithSshEditor,
-              'sftp.action.openWithSshEditor',
+              _SftpAction.sudoOpenWith,
+              'sftp.action.openWith',
               enabled: canOpenFile,
             ),
-          _sftpMenuItem(_SftpAction.sudoDownload, 'sftp.action.download'),
-          _sftpMenuItem(_SftpAction.sudoUpload, 'sftp.action.upload'),
-          _sftpMenuItem(_SftpAction.sudoRename, 'common.action.rename'),
-          _sftpMenuItem(_SftpAction.sudoMoveTo, 'sftp.action.moveTo'),
-          _sftpMenuItem(_SftpAction.sudoCopyTo, 'sftp.action.copyTo'),
-          _sftpMenuItem(
-            _SftpAction.sudoDelete,
-            'common.action.delete',
-            destructive: true,
-          ),
-          _sftpMenuItem(_SftpAction.sudoNewFolder, 'sftp.action.newFolder'),
-        ],
-      ),
-    ];
-  }
-
-  return [
-    if (!canOpenFile || canOpenWithSystemDefault)
-      _sftpMenuItem(
-        _SftpAction.open,
-        'common.action.open',
-        enabled: !entry.isParent,
-      ),
-    _sftpMenuItem(
-      _SftpAction.openWith,
-      'sftp.action.openWith',
-      enabled: canOpenFile,
-    ),
-    ..._sftpClipboardMenuEntries(enabled: !entry.isParent),
-    _sftpMenuItem(_SftpAction.refresh, 'Refresh'),
-    _sftpMenuItem(_SftpAction.newFolder, 'sftp.action.newFolder'),
+            if (sshEditorAvailable)
+              _sftpMenuItem(
+                _SftpAction.sudoOpenWithSshEditor,
+                'sftp.action.openWithSshEditor',
+                enabled: canOpenFile,
+              ),
+            _sftpMenuItem(_SftpAction.sudoDownload, 'sftp.action.download'),
+            _sftpMenuItem(_SftpAction.sudoUpload, 'sftp.action.upload'),
+            _sftpMenuItem(_SftpAction.sudoRename, 'common.action.rename'),
+            _sftpMenuItem(_SftpAction.sudoMoveTo, 'sftp.action.moveTo'),
+            _sftpMenuItem(_SftpAction.sudoCopyTo, 'sftp.action.copyTo'),
+            _sftpMenuItem(
+              _SftpAction.sudoDelete,
+              'common.action.delete',
+              destructive: true,
+            ),
+            _sftpMenuItem(_SftpAction.sudoNewFolder, 'sftp.action.newFolder'),
+          ],
+        ),
+      ],
   ];
 }
 
@@ -621,22 +597,33 @@ class _SftpMenuCommand {
 }
 
 List<NautermContextMenuEntry<_SftpAction>> _sftpContextMenuEntries(
-  Iterable<_SftpMenuEntry> entries,
+  List<List<_SftpMenuEntry>> groups,
+) => _sftpMenuWithDividers(groups, _sftpContextMenuAction);
+
+NautermContextMenuAction<_SftpAction> _sftpContextMenuAction(
+  _SftpMenuEntry entry,
+) => NautermContextMenuAction<_SftpAction>(
+  value: entry.action,
+  label: entry.label,
+  enabled: entry.enabled,
+  destructive: entry.destructive,
+  children: entry.children.map(_sftpContextMenuAction).toList(),
+);
+
+List<NautermContextMenuEntry<T>> _sftpMenuWithDividers<T>(
+  List<List<_SftpMenuEntry>> groups,
+  NautermContextMenuAction<T> Function(_SftpMenuEntry) buildAction,
 ) {
   return [
-    for (final entry in entries)
-      NautermContextMenuAction<_SftpAction>(
-        value: entry.action,
-        label: entry.label,
-        enabled: entry.enabled,
-        destructive: entry.destructive,
-        children: _sftpContextMenuEntries(entry.children),
-      ),
+    for (final (index, group) in groups.indexed) ...[
+      if (index > 0) NautermContextMenuDivider<T>(),
+      ...group.map(buildAction),
+    ],
   ];
 }
 
 List<NautermContextMenuEntry<_SftpMenuCommand>> _sftpFileContextMenuEntries(
-  Iterable<_SftpMenuEntry> entries, {
+  List<List<_SftpMenuEntry>> groups, {
   required String fileName,
   required List<SystemFileApplication> applications,
   required bool sshEditorAvailable,
@@ -669,9 +656,9 @@ List<NautermContextMenuEntry<_SftpMenuCommand>> _sftpFileContextMenuEntries(
                         configuredEditor.label.trim().toLowerCase())),
       )
       .toList(growable: false);
-  final canOpenWithSystemDefault = entries.any(
-    (entry) => entry.action == _SftpAction.open && entry.enabled,
-  );
+  final canOpenWithSystemDefault = groups
+      .expand((group) => group)
+      .any((entry) => entry.action == _SftpAction.open && entry.enabled);
   final canChooseOtherApplication = io.Platform.isMacOS;
   final hasRecommendedApplication = recommendedApplications.isNotEmpty;
   final hasConfiguredEditor = configuredEditor != null || sshEditorAvailable;
@@ -756,36 +743,36 @@ List<NautermContextMenuEntry<_SftpMenuCommand>> _sftpFileContextMenuEntries(
     ];
   }
 
-  return [
-    for (final entry in entries)
-      NautermContextMenuAction<_SftpMenuCommand>(
-        value: _SftpMenuCommand(entry.action),
-        label: entry.label,
-        enabled:
-            entry.enabled &&
-            (entry.action != _SftpAction.openWith || hasOpenWithAction),
-        destructive: entry.destructive,
-        children: entry.children.isNotEmpty
-            ? [
-                for (final child in entry.children)
-                  NautermContextMenuAction<_SftpMenuCommand>(
-                    value: _SftpMenuCommand(
-                      child.action,
-                      withSudo: entry.action == _SftpAction.withSudo,
-                    ),
-                    label: child.label,
-                    enabled: child.enabled,
-                    destructive: child.destructive,
-                    children: child.action == _SftpAction.sudoOpenWith
-                        ? openWithEntries(true)
-                        : const [],
+  return _sftpMenuWithDividers(
+    groups,
+    (entry) => NautermContextMenuAction<_SftpMenuCommand>(
+      value: _SftpMenuCommand(entry.action),
+      label: entry.label,
+      enabled:
+          entry.enabled &&
+          (entry.action != _SftpAction.openWith || hasOpenWithAction),
+      destructive: entry.destructive,
+      children: entry.children.isNotEmpty
+          ? [
+              for (final child in entry.children)
+                NautermContextMenuAction<_SftpMenuCommand>(
+                  value: _SftpMenuCommand(
+                    child.action,
+                    withSudo: entry.action == _SftpAction.withSudo,
                   ),
-              ]
-            : entry.action != _SftpAction.openWith
-            ? const []
-            : openWithEntries(false),
-      ),
-  ];
+                  label: child.label,
+                  enabled: child.enabled,
+                  destructive: child.destructive,
+                  children: child.action == _SftpAction.sudoOpenWith
+                      ? openWithEntries(true)
+                      : const [],
+                ),
+            ]
+          : entry.action != _SftpAction.openWith
+          ? const []
+          : openWithEntries(false),
+    ),
+  );
 }
 
 String _defaultSftpPath() {

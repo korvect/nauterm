@@ -5616,7 +5616,7 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
     bool sshEditorAvailable = false,
     _AiAssistantColors? colors,
   }) async {
-    final menuEntries = _sftpRowMenuEntries(
+    final menuGroups = _sftpRowMenuGroups(
       entry,
       remote: remote,
       sshEditorAvailable: sshEditorAvailable,
@@ -5625,7 +5625,7 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
       List<SystemFileApplication> applications, {
       String? catalogStatus,
     }) => _sftpFileContextMenuEntries(
-      menuEntries,
+      menuGroups,
       fileName: entry.name,
       applications: applications,
       sshEditorAvailable: sshEditorAvailable,
@@ -5733,7 +5733,7 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
         position: details.globalPosition,
         scaleAnimation: false,
         entries: _sftpContextMenuEntries(
-          _sftpActionMenuEntries(
+          _sftpActionMenuGroups(
             hasSelection: false,
             showHiddenFiles: session.showHiddenFiles,
             remote: false,
@@ -5803,7 +5803,7 @@ class _SftpPaneState extends ConsumerState<_SftpPane> {
         position: details.globalPosition,
         scaleAnimation: false,
         entries: _sftpContextMenuEntries(
-          _sftpActionMenuEntries(
+          _sftpActionMenuGroups(
             hasSelection: false,
             showHiddenFiles: session.showHiddenFiles,
             remote: true,

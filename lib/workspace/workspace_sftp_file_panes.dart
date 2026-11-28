@@ -436,7 +436,7 @@ class _SftpActionsMenuButtonState extends State<_SftpActionsMenuButton> {
       anchor: buttonRect,
       width: math.max(220, buttonRect.width),
       entries: _sftpContextMenuEntries(
-        _sftpActionMenuEntries(
+        _sftpActionMenuGroups(
           hasSelection: widget.hasSelection,
           selectionIsFile: widget.selectionIsFile,
           selectionCanOpenWithSystemDefault:

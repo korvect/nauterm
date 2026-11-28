@@ -143,7 +143,6 @@ pub(super) fn browser_menu(menu: Menu, owner: WeakEntity<FilePane>, cx: &App) ->
     let selected = pane.selected_entries().len();
     let refresh = owner.clone();
     let toggle = owner.clone();
-    let copy = owner.clone();
     let close = owner.clone();
     let menu = menu
         .max_visible_rows(None)
@@ -161,15 +160,6 @@ pub(super) fn browser_menu(menu: Menu, owner: WeakEntity<FilePane>, cx: &App) ->
                         cx.notify();
                     });
                 }),
-        )
-        .item(
-            MenuItem::localized("sftp.action.copyAbsolutePath").on_click(move |_, _, cx| {
-                let _ = copy.update(cx, |pane, cx| {
-                    cx.write_to_clipboard(ClipboardItem::new_string(
-                        pane.display_path(&pane.history.path),
-                    ))
-                });
-            }),
         )
         .when(close_allowed, |menu| {
             menu.item(
@@ -195,7 +185,7 @@ pub(super) fn menu(
     {
         menu = menu.palette(pane.read(cx).tool_menu_palette());
     }
-    menu = menu.separator();
+    menu = clipboard_menu(menu.separator(), &owner, selected > 0).separator();
     let actions = if remote {
         &[
             Action::Open,
@@ -279,6 +269,37 @@ pub(super) fn menu(
                 .destructive(true)
                 .submenu(elevated),
         );
+    }
+    menu
+}
+
+fn clipboard_menu(mut menu: Menu, owner: &WeakEntity<FilePane>, has_selection: bool) -> Menu {
+    for (key, absolute_path) in [
+        ("sftp.action.copyName", false),
+        ("sftp.action.copyAbsolutePath", true),
+    ] {
+        let owner = owner.clone();
+        menu = menu.item(MenuItem::localized(key).disabled(!has_selection).on_click(
+            move |_, _, cx| {
+                let _ = owner.update(cx, |pane, cx| {
+                    let text = pane
+                        .selected_entries()
+                        .into_iter()
+                        .map(|entry| {
+                            if absolute_path {
+                                pane.display_path(&entry.path)
+                            } else {
+                                entry.name
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    if !text.is_empty() {
+                        cx.write_to_clipboard(ClipboardItem::new_string(text));
+                    }
+                });
+            },
+        ));
     }
     menu
 }

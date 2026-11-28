@@ -303,7 +303,7 @@ class _TerminalSftpBrowserState extends State<_TerminalSftpBrowser> {
       width: 210,
       style: _terminalSftpMenuStyle(widget.colors),
       entries: _sftpContextMenuEntries(
-        _sftpActionMenuEntries(
+        _sftpActionMenuGroups(
           hasSelection: widget.entries.any(
             (entry) =>
                 !entry.isParent &&
