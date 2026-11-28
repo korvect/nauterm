@@ -42,6 +42,10 @@ use search::Section;
 
 gpui_kit::actions!(settings, [Dismiss]);
 
+const SIDEBAR_WIDTH: Pixels = px(200.);
+const CONTENT_MAX_WIDTH: Pixels = px(1000.);
+const COMPACT_WIDTH: Pixels = px(720.);
+
 #[derive(Clone, PartialEq)]
 pub struct Values {
     pub dark: bool,
@@ -1430,7 +1434,9 @@ impl Settings {
 impl Render for Settings {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = Palette::settings(self.values.dark);
-        let compact = window.viewport_size().width < px(720.);
+        let width = window.viewport_size().width;
+        let compact = width < COMPACT_WIDTH;
+        let content_inset = settings_content_inset(width);
         self.editors
             .update(cx, |editors, cx| editors.set_dark(self.values.dark, cx));
         self.sftp
@@ -1516,7 +1522,7 @@ impl Render for Settings {
             }))
             .child(
                 div()
-                    .w(px(200.))
+                    .w(SIDEBAR_WIDTH)
                     .h_full()
                     .flex_shrink_0()
                     .p(px(8.))
@@ -1626,7 +1632,7 @@ impl Render for Settings {
                             ),
                     )
                     .child(if !self.search.query.is_empty() {
-                        self.search_results(compact, cx)
+                        self.search_results(content_inset, cx)
                     } else {
                         div()
                             .id("settings-content")
@@ -1634,8 +1640,7 @@ impl Render for Settings {
                             .min_h_0()
                             .overflow_y_scroll()
                             .scrollbars_with(&self.search.content[self.page as usize])
-                            .pl(px(if compact { 20. } else { 26. }))
-                            .pr(px(if compact { 22. } else { 30. }))
+                            .px(content_inset)
                             .pt(px(if compact { 20. } else { 24. }))
                             .pb(px(30.))
                             .child(SettingsText::PageTitle.apply(div()).child(self.text(title)))
@@ -1650,22 +1655,29 @@ impl Render for Settings {
                                     .text_color(p.muted)
                                     .child(self.text(description)),
                             )
-                            .child(div().mt(px(30.)).max_w(px(1000.)).w_full().child(
-                                match self.page {
-                                    Page::General => self.general(window, cx),
-                                    Page::Terminal => self.terminal(window, cx),
-                                    Page::Sftp => self.sftp(cx),
-                                    Page::Ai => self.ai_settings(cx),
-                                    Page::Shortcuts => self.shortcut_settings(cx),
-                                    Page::Sync => self.sync_settings(window, cx),
-                                    Page::About => self.about_settings(cx),
-                                },
-                            ))
+                            .child(div().mt(px(30.)).w_full().child(match self.page {
+                                Page::General => self.general(window, cx),
+                                Page::Terminal => self.terminal(window, cx),
+                                Page::Sftp => self.sftp(cx),
+                                Page::Ai => self.ai_settings(cx),
+                                Page::Shortcuts => self.shortcut_settings(cx),
+                                Page::Sync => self.sync_settings(window, cx),
+                                Page::About => self.about_settings(cx),
+                            }))
                             .into_any_element()
                     }),
             )
             .children(self.exit_guard(cx))
     }
+}
+
+fn settings_content_inset(window_width: Pixels) -> Pixels {
+    let minimum = if window_width < COMPACT_WIDTH {
+        px(21.)
+    } else {
+        px(28.)
+    };
+    minimum.max((window_width - SIDEBAR_WIDTH - CONTENT_MAX_WIDTH) / 2.)
 }
 
 fn parse_scrollback(value: &str) -> anyhow::Result<u32> {
@@ -1681,6 +1693,23 @@ fn parse_scrollback(value: &str) -> anyhow::Result<u32> {
 mod tests {
     use super::*;
     use core::prelude::v1::test;
+
+    #[test]
+    fn settings_content_keeps_equal_insets_and_caps_its_width() {
+        for (width, inset, content) in [
+            (680., 21., 438.),
+            (720., 28., 464.),
+            (1256., 28., 1000.),
+            (1400., 100., 1000.),
+            (1600., 200., 1000.),
+        ] {
+            let width = px(width);
+            let actual = settings_content_inset(width);
+            assert_eq!(actual, px(inset));
+            assert_eq!(width - SIDEBAR_WIDTH - actual * 2., px(content));
+        }
+    }
+
     #[test]
     fn scrollback_accepts_zero_and_custom_counts_without_truncation() -> anyhow::Result<()> {
         assert_eq!(parse_scrollback("0")?, 0);

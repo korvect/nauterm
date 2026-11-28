@@ -702,7 +702,11 @@ impl Settings {
         true
     }
 
-    pub(super) fn search_results(&self, compact: bool, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn search_results(
+        &self,
+        content_inset: Pixels,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let p = Palette::settings(self.values.dark);
         div()
             .id("settings-search-results")
@@ -710,7 +714,7 @@ impl Settings {
             .min_h_0()
             .overflow_y_scroll()
             .scrollbars_with(&self.search.results)
-            .px(px(if compact { 20. } else { 26. }))
+            .px(content_inset)
             .py(px(24.))
             .child(
                 div()
