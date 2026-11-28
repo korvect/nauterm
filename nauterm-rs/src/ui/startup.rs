@@ -102,6 +102,7 @@ impl Nauterm {
                                     this.load_snippets(cx);
                                 }
                                 this.schedule_secure_preload(window, cx);
+                                crate::analytics::start(&this.store, cx);
                             }
                             Err(error) => this.storage_error = Some(error.to_string()),
                         }

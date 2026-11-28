@@ -20,6 +20,8 @@ fn main() {
         "NAUTERM_ONEDRIVE_CLIENT_ID",
         "NAUTERM_DROPBOX_CLIENT_ID",
         "NAUTERM_UPDATE_REPOSITORY",
+        "NAUTERM_POSTHOG_API_KEY",
+        "NAUTERM_POSTHOG_HOST",
         "NAUTERM_BUILD_NUMBER",
     ] {
         println!("cargo:rerun-if-env-changed={name}");

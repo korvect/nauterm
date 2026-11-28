@@ -226,6 +226,8 @@ jobs:
       - name: Build macOS RS package
         env:
           NAUTERM_GOOGLE_CLIENT_SECRET: ${{ secrets.NAUTERM_GOOGLE_CLIENT_SECRET }}
+          NAUTERM_POSTHOG_API_KEY: ${{ vars.NAUTERM_POSTHOG_API_KEY }}
+          NAUTERM_POSTHOG_HOST: ${{ vars.NAUTERM_POSTHOG_HOST }}
           SPARKLE_PUBLIC_ED_KEY: ${{ vars.SPARKLE_PUBLIC_ED_KEY }}
         run: make rs-package ARCH=${{ matrix.arch }}
 
@@ -354,6 +356,8 @@ jobs:
         env:
           CLEAN_DIST: "0"
           NAUTERM_GOOGLE_CLIENT_SECRET: ${{ secrets.NAUTERM_GOOGLE_CLIENT_SECRET }}
+          NAUTERM_POSTHOG_API_KEY: ${{ vars.NAUTERM_POSTHOG_API_KEY }}
+          NAUTERM_POSTHOG_HOST: ${{ vars.NAUTERM_POSTHOG_HOST }}
         run: make rs-package ARCH=${{ matrix.arch }}
 
 
@@ -455,6 +459,8 @@ jobs:
         env:
           CLEAN_DIST: "0"
           NAUTERM_GOOGLE_CLIENT_SECRET: ${{ secrets.NAUTERM_GOOGLE_CLIENT_SECRET }}
+          NAUTERM_POSTHOG_API_KEY: ${{ vars.NAUTERM_POSTHOG_API_KEY }}
+          NAUTERM_POSTHOG_HOST: ${{ vars.NAUTERM_POSTHOG_HOST }}
         run: ./scripts/ci/package_windows.ps1 -Arch '${{ matrix.arch }}' -Client rs
 
 

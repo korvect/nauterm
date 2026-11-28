@@ -4,6 +4,7 @@
 )]
 mod about;
 mod ai;
+mod analytics;
 mod app_menu;
 mod assets;
 mod avatar;

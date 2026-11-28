@@ -120,6 +120,10 @@ impl Store {
             .context("The Nauterm RS database is unavailable")
     }
 
+    pub(crate) fn loaded_vault(&self) -> Option<&Vault> {
+        self.vault.get()
+    }
+
     /// Workspace metadata and public preferences can be rendered before any
     /// encrypted resource is opened. Saved resource rows always come from SQL.
     pub fn initial_state(&self) -> Result<AppState> {
