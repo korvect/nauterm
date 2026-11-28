@@ -8,8 +8,9 @@ case "${1:-$(uname -m)}" in
 esac
 
 # Keep the release version in sync with GHOSTTY_LIB_VERSION in build.rs.
-release=libghostty-vt-1.0.1
-base_url=https://release.files.ghostty.org/libghostty-vt/1.0.1
+version=1.0.2
+release="libghostty-vt-$version"
+base_url="https://release.files.ghostty.org/libghostty-vt/$version"
 work_dir="$(mktemp -d "${RUNNER_TEMP:?}/nauterm-ghostty-vt.XXXXXX")"
 cd "$work_dir"
 
@@ -19,9 +20,9 @@ for archive in "$release.tar.gz" "$release-deps.tar.gz"; do
 done
 
 # From the signed SHA256SUMS published with this release.
-sha256sum --check --strict <<'EOF'
-333dfce97641ef9b536bb9e08907ad86abaaada50e8f7417b70d9284adef37aa  libghostty-vt-1.0.1.tar.gz
-91a4e10960a52bf5bf4b15aa2a2cddaff8a89d6cd903d3055bda4fd17de3356d  libghostty-vt-1.0.1-deps.tar.gz
+sha256sum --check --strict <<EOF
+1dcafa8a3357f3a6bbf4f2696e61de611400c5469518716793dfffd35f008b3e  $release.tar.gz
+c56156dbea82fdf71f13bf0d704cdf4393b6a04208d7f9691e0d7f60c7f9ca4d  $release-deps.tar.gz
 EOF
 tar -xzf "$release.tar.gz"
 tar -xzf "$release-deps.tar.gz"

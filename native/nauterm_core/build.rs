@@ -2,14 +2,14 @@ use std::env;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const REQUIRED_ZIG_VERSION: &str = "0.17.0";
+const REQUIRED_ZIG_VERSION: &str = "0.17.1";
 const GHOSTTY_REPOSITORY: &str = "https://github.com/ghostty-org/ghostty.git";
 /// libghostty-vt is released separately from the Ghostty app under `vt-X.Y.Z`
 /// tags. Pin the release tag commit, not a moving branch.
-const GHOSTTY_COMMIT: &str = "108cacb17ed8990840cd14abfce43d8ed8503ca1";
+const GHOSTTY_COMMIT: &str = "573c4a21e02311ae87844af26b6a7a179f82858e";
 /// The version of the pinned sources after their Git metadata is removed.
 /// An explicit source override keeps its own upstream version metadata.
-const GHOSTTY_LIB_VERSION: &str = "1.0.1";
+const GHOSTTY_LIB_VERSION: &str = "1.0.2";
 
 fn main() {
     println!("cargo:rerun-if-env-changed=NAUTERM_ZIG");
@@ -103,8 +103,7 @@ fn verify_zig_version(zig: &std::ffi::OsStr) {
         .expect("Zig is required to build libghostty-vt");
     let version = String::from_utf8_lossy(&output.stdout);
     let found = version.trim();
-    // libghostty-vt's own build check accepts any patch release of the required
-    // major.minor, so 0.17.1 satisfies a 0.17.0 minimum.
+    // Stay within the Zig major.minor supported by libghostty-vt.
     if !output.status.success() || !zig_version_satisfies(found, REQUIRED_ZIG_VERSION) {
         panic!("libghostty-vt requires Zig {REQUIRED_ZIG_VERSION} or a newer patch release; found `{found}`");
     }
@@ -116,7 +115,7 @@ fn zig_version_satisfies(found: &str, required: &str) -> bool {
         let major = parts.next()?.parse().ok()?;
         let minor = parts.next()?.parse().ok()?;
         let patch = parts.next().unwrap_or("0").parse().ok()?;
-        // Reject pre-release suffixes such as `0.17.0-dev.1`.
+        // Reject pre-release suffixes such as `0.17.1-dev.1`.
         if parts.next().is_some() {
             return None;
         }

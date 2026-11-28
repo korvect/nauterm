@@ -7,13 +7,13 @@ param(
 $ErrorActionPreference = "Stop"
 
 # Keep in sync with GHOSTTY_LIB_VERSION in native/nauterm_core/build.rs.
-$version = "1.0.1"
+$version = "1.0.2"
 if ($Arch -eq "arm64") {
   $target = "aarch64"
-  $expectedSha256 = "cc61da5f968ea0b08639bdf019c6b7da46bad1d985774fd8a2de57af32862892"
+  $expectedSha256 = "463f092cd94540580b1e4d3b3e57661b60eceafbf9f74f53ecb2db5eb05cbdd9"
 } else {
   $target = "x86_64"
-  $expectedSha256 = "8e2eb9e1822e85d786b456c8beb86f49d09c318c91f0c2913f91e7ffa12cda29"
+  $expectedSha256 = "f16ec4c167631e7feb24b9793d1f4b8e9b922e959c900dee984b111bb94a8fa8"
 }
 $package = "ghostty-vt-$version-$target-windows-gnu"
 $archive = Join-Path $env:RUNNER_TEMP "$package.zip"

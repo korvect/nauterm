@@ -38,7 +38,7 @@ permissions:
 env:
   FLUTTER_VERSION: 3.50.1
   RUST_TOOLCHAIN: 1.99.1
-  ZIG_VERSION: 0.17.0
+  ZIG_VERSION: 0.17.1
   RELEASE_CLIENT: ${{ inputs.client || 'all' }}
   NAUTERM_BUILD_NUMBER: ${{ github.run_number }}
   NAUTERM_UPDATE_REPOSITORY: ${{ vars.NAUTERM_UPDATE_REPOSITORY || github.repository }}

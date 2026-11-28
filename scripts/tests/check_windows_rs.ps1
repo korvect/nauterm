@@ -58,9 +58,10 @@ try {
   $env:CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER = $linker
 
   $zig = if ($env:NAUTERM_ZIG) { $env:NAUTERM_ZIG } else { "zig" }
-  if (-not (Get-Command $zig -ErrorAction SilentlyContinue)) { throw "Zig 0.16.0 was not found." }
+  $requiredZigVersion = "0.17.1"
+  if (-not (Get-Command $zig -ErrorAction SilentlyContinue)) { throw "Zig $requiredZigVersion was not found." }
   $zigVersion = (& $zig version | Out-String).Trim()
-  if ($LASTEXITCODE -ne 0 -or $zigVersion -ne "0.16.0") { throw "Zig 0.16.0 is required; found $zigVersion." }
+  if ($LASTEXITCODE -ne 0 -or $zigVersion -ne $requiredZigVersion) { throw "Zig $requiredZigVersion is required; found $zigVersion." }
 
   $openssl = $env:OPENSSL_DIR
   if (-not $openssl) {
