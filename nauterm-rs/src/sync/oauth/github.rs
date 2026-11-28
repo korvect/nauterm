@@ -77,7 +77,6 @@ pub(super) async fn authorize(
         Event::Device {
             code: device.user_code.clone(),
             url: VERIFICATION_URI.into(),
-            expires_in: device.expires_in,
         },
     )
     .await?;

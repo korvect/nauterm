@@ -3,12 +3,20 @@ use super::*;
 use crate::sync::provider::{Draft, Field, Kind};
 use zeroize::Zeroizing;
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum GistStep {
+    Connect,
+    Authorized,
+    Settings,
+}
+
 pub(super) struct Editor {
     pub(super) draft: Draft,
     pub(super) generation: String,
     pub(super) authorized: Option<nauterm_core::SyncProviderCredentials>,
     pub(super) authorized_account: Option<String>,
     pub(super) authorizing: Option<super::authorization::Authorization>,
+    pub(super) gist_step: Option<GistStep>,
     name: Entity<InputState>,
     fields: Vec<(Field, Entity<InputState>)>,
 }
@@ -25,9 +33,12 @@ impl Editor {
                     "Saved; leave blank to keep"
                 } else if field.credential {
                     "Enter credential"
+                } else if field.key == "gist_id" {
+                    "settings.label.createAutomatically"
                 } else {
                     field.default
                 };
+                let hint = crate::localization::text(cx, hint);
                 (
                     field,
                     cx.new(|cx| {
@@ -39,12 +50,20 @@ impl Editor {
                 )
             })
             .collect();
+        let gist_step = (draft.kind == Kind::Gist).then(|| {
+            if draft.has_credentials() {
+                GistStep::Settings
+            } else {
+                GistStep::Connect
+            }
+        });
         Self {
             draft,
             generation: uuid::Uuid::new_v4().to_string(),
             authorized: None,
             authorized_account: None,
             authorizing: None,
+            gist_step,
             name,
             fields,
         }
@@ -70,6 +89,13 @@ impl Panel {
         self.editor = Some(Editor::new(draft, window, cx));
         self.error = None;
         self.validation_error = None;
+        if self
+            .editor
+            .as_ref()
+            .is_some_and(|editor| editor.gist_step == Some(GistStep::Connect))
+        {
+            self.start_authorization(window, cx);
+        }
         cx.notify();
     }
     pub(super) fn open_provider_editor(
@@ -169,7 +195,7 @@ impl Panel {
                 this.loading = false;
                 let success = result.is_ok();
                 match result {
-                    Ok(overview) => {
+                    Ok((_, overview)) => {
                         this.overview = Some(overview);
                         Modal::complete(&this.provider_focus, window, cx);
                         this.close_provider_editor(window, cx);
@@ -283,8 +309,7 @@ impl Panel {
                 .into_any_element(),
         )
     }
-    pub(super) fn provider_editor(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let editor = self.editor.as_ref()?;
+    fn provider_fields(&self, editor: &Editor, cx: &mut Context<Self>) -> Div {
         let p = Palette::settings(self.dark);
         let mut body = div().w_full().flex().flex_col().gap(px(14.));
         let location =
@@ -332,19 +357,14 @@ impl Panel {
             } else {
                 0
             };
-            let hint = if field.key == "gist_id" {
-                "settings.sync.gist.id.description"
-            } else {
-                ""
-            };
             let cell = self.field(
                 field.label,
-                hint,
+                "",
                 Input::new(input)
                     .readonly(field.readonly)
                     .aria_label(crate::localization::text(cx, field.label)),
             );
-            if wide(field.key) || !hint.is_empty() {
+            if wide(field.key) {
                 flush(&mut pending[index], &mut groups[index].2);
                 groups[index].2.push(cell);
             } else {
@@ -396,11 +416,129 @@ impl Panel {
                 }),
             ));
         }
-        body = body.children(crate::components::validation_message(
+        body
+    }
+
+    fn gist_field(&self, field: Field, input: &Entity<InputState>, cx: &App) -> AnyElement {
+        let is_gist_id = field.key == "gist_id";
+        self.field(
+            field.label,
+            if is_gist_id {
+                "settings.sync.gist.id.description"
+            } else {
+                ""
+            },
+            Input::new(input)
+                .readonly(field.readonly)
+                .cleanable(is_gist_id)
+                .aria_label(crate::localization::text(cx, field.label)),
+        )
+    }
+
+    fn gist_authorized_frame(&self, editor: &Editor, cx: &mut Context<Self>) -> DialogFrame {
+        let p = Palette::settings(self.dark);
+        let green = rgb(if self.dark { 0x34d399 } else { 0x10b981 });
+        let status = div()
+            .flex()
+            .flex_col()
+            .items_center()
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .size(px(48.))
+                    .rounded_full()
+                    .bg(green.opacity(0.10))
+                    .child(
+                        Icon::new(IconName::CircleCheck)
+                            .size(px(23.))
+                            .text_color(green),
+                    ),
+            )
+            .child(
+                div()
+                    .mt(px(12.))
+                    .text_size(px(14.))
+                    .font_weight(FontWeights::SEMIBOLD)
+                    .child(crate::localization::view("settings.label.githubConnected")),
+            )
+            .when_some(editor.authorized_account.as_ref(), |view, account| {
+                view.child(
+                    div()
+                        .mt(px(5.))
+                        .text_center()
+                        .text_size(px(11.))
+                        .text_color(p.muted)
+                        .child(crate::localization::format(
+                            cx,
+                            "settings.sync.github.authorized",
+                            &[("account", account)],
+                        )),
+                )
+            });
+        let body = div()
+            .w_full()
+            .flex()
+            .flex_col()
+            .gap(px(16.))
+            .child(status)
+            .children(
+                editor
+                    .fields
+                    .iter()
+                    .filter(|(field, _)| field.key == "gist_id")
+                    .map(|(field, input)| self.gist_field(*field, input, cx)),
+            )
+            .children(crate::components::validation_message(
+                self.validation_error.as_deref(),
+                cx,
+            ))
+            .child(
+                Button::new("save-authorized-gist-settings")
+                    .primary()
+                    .w_full()
+                    .h(px(32.))
+                    .label(if self.loading {
+                        "common.label.saving"
+                    } else {
+                        "settings.label.saveGistSettings"
+                    })
+                    .disabled(self.busy())
+                    .on_click(
+                        cx.listener(|this, _, window, cx| this.save_provider_editor(window, cx)),
+                    ),
+            );
+        self.gist_flow_frame(cx).content(body)
+    }
+
+    pub(super) fn provider_editor(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let editor = self.editor.as_ref()?;
+        let flow_frame = match editor.gist_step {
+            Some(GistStep::Connect) => Some(self.gist_authorization_frame(editor, cx)),
+            Some(GistStep::Authorized) => Some(self.gist_authorized_frame(editor, cx)),
+            _ => None,
+        };
+        if let Some(frame) = flow_frame {
+            return Some(self.provider_modal("settings.label.connectToGithub", frame, cx));
+        }
+        let is_gist = editor.draft.kind == Kind::Gist;
+        let body = if is_gist {
+            div().w_full().flex().flex_col().gap(px(14.)).children(
+                editor
+                    .fields
+                    .iter()
+                    .map(|(field, input)| self.gist_field(*field, input, cx)),
+            )
+        } else {
+            self.provider_fields(editor, cx)
+        }
+        .children(crate::components::validation_message(
             self.validation_error.as_deref(),
             cx,
         ));
-        let mut frame = DialogFrame::new("sync-provider-editor-frame", editor.draft.kind.label())
+        let title = editor.draft.kind.label();
+        let mut frame = DialogFrame::new("sync-provider-editor-frame", title)
             .colors(self.colors())
             .width(560.)
             .content(
@@ -428,16 +566,33 @@ impl Panel {
                         cx.notify();
                     })),
             );
-            let id = editor.draft.id.clone();
-            frame = frame.action(
-                Button::new("reload-sync-provider")
-                    .outline()
-                    .label("common.action.refresh")
-                    .disabled(self.busy())
-                    .on_click(cx.listener(move |this, _, window, cx| {
-                        this.open_provider_editor(id.clone(), window, cx)
-                    })),
-            );
+            frame = if is_gist {
+                frame.action(
+                    Button::new("reconnect-gist")
+                        .outline()
+                        .label("common.label.reconnect")
+                        .disabled(self.busy())
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            if !this.busy()
+                                && let Some(editor) = &mut this.editor
+                            {
+                                editor.gist_step = Some(GistStep::Connect);
+                                this.start_authorization(window, cx);
+                            }
+                        })),
+                )
+            } else {
+                let id = editor.draft.id.clone();
+                frame.action(
+                    Button::new("reload-sync-provider")
+                        .outline()
+                        .label("common.action.refresh")
+                        .disabled(self.busy())
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            this.open_provider_editor(id.clone(), window, cx)
+                        })),
+                )
+            };
         }
         frame = frame
             .action(
@@ -452,6 +607,8 @@ impl Panel {
                     .primary()
                     .label(if self.loading {
                         "common.label.saving"
+                    } else if is_gist {
+                        "settings.label.saveGistSettings"
                     } else {
                         "settings.sync.action.saveSettings"
                     })
@@ -460,18 +617,23 @@ impl Panel {
                         cx.listener(|this, _, window, cx| this.save_provider_editor(window, cx)),
                     ),
             );
-        Some(
-            Modal::new("sync-provider-editor", editor.draft.kind.label())
-                .focus_scope(&self.provider_focus)
-                .return_focus(&self.focus)
-                .dismissible(!self.storage_busy())
-                .dismiss_on_backdrop(false)
-                .on_dismiss(
-                    cx.listener(|this, _, window, cx| this.close_provider_editor(window, cx)),
-                )
-                .content(frame)
-                .into_any_element(),
-        )
+        Some(self.provider_modal(title, frame, cx))
+    }
+
+    fn provider_modal(
+        &self,
+        title: &'static str,
+        frame: DialogFrame,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        Modal::new("sync-provider-editor", title)
+            .focus_scope(&self.provider_focus)
+            .return_focus(&self.focus)
+            .dismissible(!self.storage_busy())
+            .dismiss_on_backdrop(false)
+            .on_dismiss(cx.listener(|this, _, window, cx| this.close_provider_editor(window, cx)))
+            .content(frame)
+            .into_any_element()
     }
     pub(super) fn remove_provider_dialog(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let disconnect = self.remove_provider?;

@@ -1,5 +1,5 @@
-//! Explicit user-initiated authorization. No provider credentials are persisted
-//! until the owning editor saves; dropping a flow cancels requests/listeners.
+//! Explicit user-initiated authorization. The owning editor persists credentials;
+//! dropping a flow cancels requests/listeners.
 use crate::cancel::Cancel;
 use anyhow::{Result, ensure};
 use futures_util::future::{Either, select};
@@ -18,11 +18,7 @@ pub struct Authorized {
     pub account: Option<String>,
 }
 pub enum Event {
-    Device {
-        code: String,
-        url: String,
-        expires_in: u64,
-    },
+    Device { code: String, url: String },
     Browser(String),
     Exchanging,
     Authorized(Authorized),

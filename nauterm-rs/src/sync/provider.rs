@@ -354,13 +354,15 @@ impl Service {
         &self,
         expected: Option<SyncProviderRecord>,
         update: SyncProviderUpdate,
-    ) -> Result<Overview> {
+    ) -> Result<(Draft, Overview)> {
         self.vault
             .dispatch(move |db| {
-                db.inner
-                    .save_sync_provider_checked(&update, expected.as_ref())
-                    .map_err(|error| anyhow::anyhow!(error.to_string()))?;
-                overview(&mut db.inner)
+                db.inner.atomic(|database| {
+                    let record = database
+                        .save_sync_provider_checked(&update, expected.as_ref())
+                        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+                    Ok((Draft::stored(record)?, overview(database)?))
+                })
             })
             .await
     }
@@ -461,6 +463,52 @@ mod tests {
         }
         Ok(())
     }
+    #[test]
+    fn gist_authorization_can_be_saved_before_editing_or_clearing_the_id() -> Result<()> {
+        let mut database = nauterm_core::NautermDatabase::open_in_memory().unwrap();
+        let draft = Draft::new(Kind::Gist);
+        let mut credentials = SyncProviderCredentials::default();
+        credentials
+            .values
+            .insert("token".into(), Zeroizing::new("synthetic-token".into()));
+        let authorization = draft.update_authorized(&draft.name, Vec::new(), Some(credentials))?;
+        let mut saved = Draft::stored(
+            database
+                .save_sync_provider_checked(&authorization, None)
+                .unwrap(),
+        )?;
+        let field = Kind::Gist
+            .fields()
+            .into_iter()
+            .find(|field| field.key == "gist_id")
+            .unwrap();
+        assert!(saved.has_credentials());
+        assert!(saved.value(field).is_empty());
+        assert!(
+            overview(&mut database)?
+                .providers
+                .iter()
+                .any(|provider| provider.id == saved.id && provider.connected)
+        );
+
+        for gist_id in ["saved-gist", ""] {
+            let update = saved.update_authorized(
+                &saved.name,
+                vec![(field, Zeroizing::new(gist_id.into()))],
+                None,
+            )?;
+            assert!(update.credentials.is_none());
+            saved = Draft::stored(
+                database
+                    .save_sync_provider_checked(&update, saved.expected.as_ref())
+                    .unwrap(),
+            )?;
+            assert!(saved.has_credentials());
+            assert_eq!(saved.value(field), gist_id);
+        }
+        Ok(())
+    }
+
     #[test]
     fn provider_forms_match_transport_fields_and_keep_credentials_write_only() -> Result<()> {
         for kind in Kind::BUILT_IN.into_iter().chain(Kind::CATALOG) {

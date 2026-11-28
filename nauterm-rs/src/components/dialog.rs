@@ -82,6 +82,7 @@ pub struct DialogFrame {
     title: Title,
     content: Option<AnyElement>,
     actions: Vec<AnyElement>,
+    hide_empty_footer: bool,
     width: f32,
     colors: Option<DialogColors>,
 }
@@ -92,6 +93,7 @@ impl DialogFrame {
             title: Title::Text(title.into()),
             content: None,
             actions: Vec::new(),
+            hide_empty_footer: false,
             width: 420.,
             colors: None,
         }
@@ -122,6 +124,10 @@ impl DialogFrame {
     }
     pub fn actions(mut self, actions: impl IntoIterator<Item = AnyElement>) -> Self {
         self.actions.extend(actions);
+        self
+    }
+    pub fn hide_empty_footer(mut self) -> Self {
+        self.hide_empty_footer = true;
         self
     }
 }
@@ -193,22 +199,27 @@ impl RenderOnce for DialogFrame {
                             .children(self.content),
                     ),
             )
-            .child(
-                div()
-                    .id((self.id, "footer"))
-                    .flex_shrink_0()
-                    .min_w_0()
-                    .px(px(16.))
-                    .pt(px(8.))
-                    .pb(px(10.))
-                    .border_t_1()
-                    .border_color(colors.border)
-                    .flex()
-                    .items_center()
-                    .justify_end()
-                    .flex_wrap()
-                    .gap(px(8.))
-                    .children(self.actions),
+            .when(
+                !self.hide_empty_footer || !self.actions.is_empty(),
+                |frame| {
+                    frame.child(
+                        div()
+                            .id((self.id, "footer"))
+                            .flex_shrink_0()
+                            .min_w_0()
+                            .px(px(16.))
+                            .pt(px(8.))
+                            .pb(px(10.))
+                            .border_t_1()
+                            .border_color(colors.border)
+                            .flex()
+                            .items_center()
+                            .justify_end()
+                            .flex_wrap()
+                            .gap(px(8.))
+                            .children(self.actions),
+                    )
+                },
             )
     }
 }

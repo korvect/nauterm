@@ -1684,6 +1684,7 @@ class _SettingsTextField extends StatefulWidget {
     this.obscureText = false,
     this.readOnly = false,
     this.revealable = false,
+    this.clearable = false,
     this.onSubmitted,
     this.onFocusLost,
     this.keyboardType,
@@ -1698,6 +1699,7 @@ class _SettingsTextField extends StatefulWidget {
   final bool obscureText;
   final bool readOnly;
   final bool revealable;
+  final bool clearable;
   final ValueChanged<String>? onSubmitted;
   final ValueChanged<String>? onFocusLost;
   final TextInputType? keyboardType;
@@ -1763,6 +1765,41 @@ class _SettingsTextFieldState extends State<_SettingsTextField> {
     if (mounted && _hovered != value) {
       setState(() => _hovered = value);
     }
+  }
+
+  Widget _buildClearButton(BuildContext context, {required bool visible}) {
+    return TextFieldTapRegion(
+      child: IgnorePointer(
+        ignoring: !visible,
+        child: ExcludeSemantics(
+          excluding: !visible,
+          child: AnimatedOpacity(
+            opacity: visible ? 1 : 0,
+            duration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : const Duration(milliseconds: 150),
+            curve: Curves.easeInOut,
+            child: ExcludeFocus(
+              child: IconButton(
+                tooltip: context.tr('common.action.clear'),
+                onPressed: () {
+                  widget.controller.clear();
+                  widget.onChanged('');
+                  _focusNode.requestFocus();
+                },
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints.tightFor(
+                  width: 24,
+                  height: 24,
+                ),
+                splashRadius: 12,
+                icon: Icon(Icons.clear_rounded, size: 14, color: _mutedText),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -1864,6 +1901,11 @@ class _SettingsTextFieldState extends State<_SettingsTextField> {
                       style: textStyle.copyWith(color: _mutedText),
                     ),
                   ],
+                  if (widget.clearable && !widget.readOnly)
+                    _buildClearButton(
+                      context,
+                      visible: focused && widget.controller.text.isNotEmpty,
+                    ),
                   if (widget.obscureText && widget.revealable)
                     ExcludeFocusTraversal(
                       key: const ValueKey('settings-credential-reveal'),

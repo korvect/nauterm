@@ -718,7 +718,9 @@ Widget _buildGithubGistAuthorizationSettings(
     icon: LucideIcons.badgeCheck,
     title: 'settings.label.githubAuthorization',
     child: _SettingsRow(
-      title: state._githubGistHasToken ? 'GitHub connected' : 'Not connected',
+      title: state._githubGistHasToken
+          ? 'settings.label.githubConnected'
+          : 'Not connected',
       subtitle: state._githubGistHasToken
           ? 'Authorized with the gist and read:user scopes.'
           : 'Authorize Nauterm with GitHub Device Flow. No token needs to be pasted.',
@@ -803,13 +805,13 @@ Widget _buildGithubGistSettings(_SettingsPanelState state) {
       child: Column(
         children: [
           _SettingsRow(
-            title: 'Gist ID',
-            subtitle:
-                'Leave empty to create a new private gist on the first sync.',
+            title: 'settings.label.gistId',
+            subtitle: 'settings.sync.gist.id.description',
             showSubtitle: false,
             trailing: _SettingsTextField(
               controller: state._githubGistIdController,
               hint: 'settings.label.createAutomatically',
+              clearable: true,
               onChanged: (_) => state._mutate(() {}),
             ),
           ),
@@ -3137,9 +3139,7 @@ class _GithubDeviceFlowDialogState extends State<_GithubDeviceFlowDialog> {
     return _SyncDialogFrame(
       icon: LucideIcons.gitFork,
       title: 'settings.label.connectToGithub',
-      subtitle: _authorized
-          ? 'GitHub Gist authorization is ready.'
-          : 'Authorize Nauterm without pasting an access token.',
+      subtitle: '',
       width: 460,
       child: AnimatedSize(
         duration: const Duration(milliseconds: 160),
@@ -3184,14 +3184,14 @@ class _GithubDeviceFlowDialogState extends State<_GithubDeviceFlowDialog> {
               fontWeight: NautermFontWeights.semibold,
             ),
           ),
-          SizedBox(height: 5),
-          Text(
-            _authorizedLogin == null
-                ? 'Nauterm can now access private Gists for sync.'
-                : 'Connected as @$_authorizedLogin.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: _mutedText, fontSize: 11),
-          ),
+          if (_authorizedLogin case final login?) ...[
+            SizedBox(height: 5),
+            Text(
+              tr('settings.sync.github.authorized', args: {'account': login}),
+              textAlign: TextAlign.center,
+              style: TextStyle(color: _mutedText, fontSize: 11),
+            ),
+          ],
           SizedBox(height: 16),
           Align(
             alignment: Alignment.centerLeft,
@@ -3209,6 +3209,7 @@ class _GithubDeviceFlowDialogState extends State<_GithubDeviceFlowDialog> {
             key: const ValueKey('github-gist-id-after-authorization'),
             controller: _gistIdController,
             hint: 'settings.label.createAutomatically',
+            clearable: true,
             onChanged: (_) => setState(() {}),
             onSubmitted: (_) => _confirmGist(),
           ),

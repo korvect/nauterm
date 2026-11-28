@@ -1428,6 +1428,46 @@ void main() {
     expect(find.text('Press shortcut…'), findsNothing);
   });
 
+  testWidgets('connected GitHub Gist settings clear the focused Gist ID', (
+    tester,
+  ) async {
+    settingsRemoteSyncStatusLoaderOverride = (_) async => {};
+    addTearDown(() => settingsRemoteSyncStatusLoaderOverride = null);
+    cacheGithubSyncSettingsForTesting(NautermPaths.resolve().databasePath, {
+      'hasLocalSyncKey': true,
+      'hasGistToken': true,
+      'gistConfig': {'gist_id': 'saved-gist-id'},
+    });
+    addTearDown(clearGithubSyncSettingsCacheForTesting);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1000, 820);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+
+    await tester.pumpWidget(
+      const MaterialApp(home: SettingsPanel(detectExternalEditors: false)),
+    );
+    await tester.tap(find.byKey(const ValueKey('settings-nav-sync')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('GitHub Gist'));
+    await tester.pumpAndSettle();
+
+    final editable = find.byWidgetPredicate(
+      (widget) =>
+          widget is EditableText && widget.controller.text == 'saved-gist-id',
+    );
+    final input = tester.widget<EditableText>(editable);
+    final clear = find.byTooltip('Clear');
+    expect(clear.hitTestable(), findsNothing);
+    await tester.tap(editable);
+    await tester.pumpAndSettle();
+    await tester.tap(clear.hitTestable());
+    await tester.pumpAndSettle();
+    expect(input.controller.text, isEmpty);
+    expect(input.focusNode.hasFocus, isTrue);
+    expect(clear.hitTestable(), findsNothing);
+  });
+
   testWidgets('data sync page exposes storage providers and their settings', (
     WidgetTester tester,
   ) async {
