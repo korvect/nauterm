@@ -387,23 +387,18 @@ class _AboutSettingsPageState extends State<_AboutSettingsPage> {
   Future<void> _openGithubRepository() async {
     try {
       if (Platform.isMacOS) {
-        await Process.start(
-          'open',
-          [_githubRepositoryUrl],
-          mode: ProcessStartMode.detached,
-        );
+        await Process.start('open', [
+          _githubRepositoryUrl,
+        ], mode: ProcessStartMode.detached);
       } else if (Platform.isWindows) {
-        await Process.start(
-          'rundll32',
-          ['url.dll,FileProtocolHandler', _githubRepositoryUrl],
-          mode: ProcessStartMode.detached,
-        );
+        await Process.start('rundll32', [
+          'url.dll,FileProtocolHandler',
+          _githubRepositoryUrl,
+        ], mode: ProcessStartMode.detached);
       } else {
-        await Process.start(
-          'xdg-open',
-          [_githubRepositoryUrl],
-          mode: ProcessStartMode.detached,
-        );
+        await Process.start('xdg-open', [
+          _githubRepositoryUrl,
+        ], mode: ProcessStartMode.detached);
       }
     } on Object catch (error) {
       debugPrint('Unable to open GitHub repository: $error');
