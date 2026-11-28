@@ -21,6 +21,11 @@ import threading
 import time
 
 
+# Windows PowerShell 5.1 can take nearly 30 seconds to initialize on ARM64 CI.
+# Use a separate startup budget; command and cancellation checks still use 15s.
+POWERSHELL_STARTUP_TIMEOUT = 90
+
+
 class COORD(C.Structure):
     _fields_ = [("X", C.c_short), ("Y", C.c_short)]
 
@@ -164,7 +169,7 @@ def run(arguments, directory, environment, powershell):
     session = ConPTY(arguments, directory, environment)
     try:
         if powershell:
-            startup = session.until(b"]133;B;aid=", timeout=30)
+            startup = session.until(b"]133;B;aid=", timeout=POWERSHELL_STARTUP_TIMEOUT)
             if b"NAUTERM_POWERSHELL_HOOKS_READY" not in startup:
                 raise RuntimeError(f"{session.program}: incomplete PowerShell setup; output: {startup!r}")
         else:
@@ -311,15 +316,32 @@ def main():
         for powershell in args.powershell:
             print(f"{powershell}: checking PowerShell hooks without ConPTY.", flush=True)
             script = (
+                "[Console]::Error.WriteLine('Loading Nauterm PowerShell hooks');\n"
                 "$env:NAUTERM_SHELL_INTEGRATION_TOKEN='fixture-token';\n"
                 "function global:prompt { 'fixture> ' };\n"
-                f"{load_hooks}{fixture}"
+                f"{load_hooks}"
+                "[Console]::Error.WriteLine('Checking Nauterm PowerShell protocol');\n"
+                f"{fixture}"
             )
             encoded = base64.b64encode(script.encode("utf-16le")).decode("ascii")
-            checked = subprocess.run([powershell, "-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded],
-                                     env=environment, cwd=directory, capture_output=True, timeout=30)
+            started = time.monotonic()
+            try:
+                checked = subprocess.run(
+                    [powershell, "-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded],
+                    env=environment, cwd=directory, stdin=subprocess.DEVNULL,
+                    capture_output=True, timeout=POWERSHELL_STARTUP_TIMEOUT,
+                )
+            except subprocess.TimeoutExpired as error:
+                raise RuntimeError(
+                    f"{powershell}: hook check timed out after {POWERSHELL_STARTUP_TIMEOUT}s"
+                    f"; stdout: {error.stdout!r}; stderr: {error.stderr!r}"
+                ) from None
             if checked.returncode or b"NAUTERM_POWERSHELL_PROTOCOL_OK" not in checked.stdout:
-                raise RuntimeError(f"PowerShell protocol fixture failed: {checked.stderr!r}")
+                raise RuntimeError(
+                    f"{powershell}: hook check failed with exit code {checked.returncode}"
+                    f"; stdout: {checked.stdout!r}; stderr: {checked.stderr!r}"
+                )
+            print(f"{powershell}: hook check passed in {time.monotonic() - started:.1f}s.", flush=True)
             print(f"{powershell}: checking interactive PowerShell hooks in ConPTY.", flush=True)
             script = (
                 "[Console]::WriteLine('NAUTERM_POWERSHELL_BOOTSTRAP');\n"
