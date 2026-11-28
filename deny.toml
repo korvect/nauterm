@@ -19,6 +19,12 @@ allow = [
     "Zlib",
 ]
 
+# GPUI uses cbindgen to generate headers during the Apple build.
+[[licenses.exceptions]]
+name = "cbindgen"
+version = "=0.28.0"
+allow = ["MPL-2.0"]
+
 [[licenses.exceptions]]
 name = "dwrote"
 version = "=0.11.5"
@@ -28,6 +34,12 @@ allow = ["MPL-2.0"]
 name = "option-ext"
 version = "=0.2.0"
 allow = ["MPL-2.0"]
+
+# system-deps uses target-lexicon while building Linux system bindings.
+[[licenses.exceptions]]
+name = "target-lexicon"
+version = "=0.13.5"
+allow = ["Apache-2.0 WITH LLVM-exception"]
 
 [licenses.private]
 ignore = true

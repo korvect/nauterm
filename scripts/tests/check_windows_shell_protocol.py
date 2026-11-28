@@ -102,6 +102,7 @@ class ConPTY:
             for index, handle in saved_handles: self.k.SetStdHandle(index, handle)
         self.k.DeleteProcThreadAttributeList(attributes)
         self.k.CloseHandle(self.process.thread)
+        self.program = Path(arguments[0]).name
         self.chunks = queue.Queue()
         self.data = bytearray()
         self.queries = 0
@@ -135,8 +136,14 @@ class ConPTY:
         deadline = time.monotonic() + timeout
         while marker not in self.data[start:]:
             self.pump()
-            if time.monotonic() >= deadline:
-                raise RuntimeError(f"Missing {marker!r}; output: {bytes(self.data[start:])!r}")
+            if marker not in self.data[start:] and time.monotonic() >= deadline:
+                code = W.DWORD()
+                self.check(self.k.GetExitCodeProcess(self.process.process, C.byref(code)))
+                state = "still running" if code.value == 259 else f"exit code {code.value:#x}"
+                output = bytes(self.data[start:])
+                raise RuntimeError(
+                    f"{self.program}: missing {marker!r} after {timeout}s ({state}); output: {output!r}"
+                )
         return bytes(self.data[start:])
 
     def settle(self):
@@ -156,7 +163,12 @@ class ConPTY:
 def run(arguments, directory, environment, powershell):
     session = ConPTY(arguments, directory, environment)
     try:
-        session.until(b"]133;B;aid=")
+        if powershell:
+            startup = session.until(b"]133;B;aid=", timeout=30)
+            if b"NAUTERM_POWERSHELL_HOOKS_READY" not in startup:
+                raise RuntimeError(f"{session.program}: incomplete PowerShell setup; output: {startup!r}")
+        else:
+            session.until(b"]133;B;aid=")
         session.settle()
 
         def command(text, code, ai=False):
@@ -289,16 +301,37 @@ def main():
             run([str(args.cmd_launcher.resolve()), os.environ["COMSPEC"]], directory, environment, False)
             print("CMD ConPTY boundaries, status, Unicode cwd, AI, cancel, resize, exit passed.")
         sources = Path(__file__).resolve().parents[2] / "native/nauterm_core/src/pty"
-        hooks = (sources / "powershell.ps1").read_text(encoding="utf-8")
+        hooks = directory / "nauterm.ps1"
+        shutil.copyfile(sources / "powershell.ps1", hooks)
+        hooks_path = str(hooks).replace("'", "''")
+        # Match the application's EncodedCommand bootstrap and let the hook
+        # choose PSReadLine for the engine instead of preloading by module name.
+        load_hooks = f". ([scriptblock]::Create([IO.File]::ReadAllText('{hooks_path}')))\n"
         fixture = (sources / "powershell_test.ps1").read_text(encoding="utf-8")
         for powershell in args.powershell:
-            script = "$env:NAUTERM_SHELL_INTEGRATION_TOKEN='fixture-token'; function global:prompt { 'fixture> ' };\n" + hooks + "\n" + fixture
+            print(f"{powershell}: checking PowerShell hooks without ConPTY.", flush=True)
+            script = (
+                "$env:NAUTERM_SHELL_INTEGRATION_TOKEN='fixture-token';\n"
+                "function global:prompt { 'fixture> ' };\n"
+                f"{load_hooks}{fixture}"
+            )
             encoded = base64.b64encode(script.encode("utf-16le")).decode("ascii")
             checked = subprocess.run([powershell, "-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded],
                                      env=environment, cwd=directory, capture_output=True, timeout=30)
             if checked.returncode or b"NAUTERM_POWERSHELL_PROTOCOL_OK" not in checked.stdout:
                 raise RuntimeError(f"PowerShell protocol fixture failed: {checked.stderr!r}")
-            script = "Import-Module PSReadLine; Set-PSReadLineOption -HistorySaveStyle SaveNothing;\n" + hooks
+            print(f"{powershell}: checking interactive PowerShell hooks in ConPTY.", flush=True)
+            script = (
+                "[Console]::WriteLine('NAUTERM_POWERSHELL_BOOTSTRAP');\n"
+                "try {\n"
+                f"    {load_hooks}"
+                "    Set-PSReadLineOption -HistorySaveStyle SaveNothing -ErrorAction Stop\n"
+                "} catch {\n"
+                "    [Console]::Error.WriteLine($_.ToString())\n"
+                "    exit 1\n"
+                "}\n"
+                "[Console]::WriteLine('NAUTERM_POWERSHELL_HOOKS_READY');\n"
+            )
             encoded = base64.b64encode(script.encode("utf-16le")).decode("ascii")
             run([powershell, "-NoLogo", "-NoProfile", "-NoExit", "-EncodedCommand", encoded], directory, environment, True)
             print(f"{powershell}: ConPTY boundaries, status, Unicode cwd, AI, cancel, resize, exit passed.")

@@ -12,7 +12,7 @@ rust_version="$(awk '
   package && /^version = / { gsub(/["[:space:]]/, "", $3); print $3; exit }
 ' Cargo.toml)"
 for manifest in native/nauterm_core/Cargo.toml nauterm-rs/Cargo.toml; do
-  if ! rg -q '^version.workspace = true$' "$manifest"; then
+  if ! grep -Fxq 'version.workspace = true' "$manifest"; then
     echo "$manifest must inherit the workspace release version" >&2
     exit 1
   fi
