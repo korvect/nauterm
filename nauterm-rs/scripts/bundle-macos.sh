@@ -138,6 +138,7 @@ if [[ "$profile" == release ]]; then
   arch="$(lipo -archs "$bundle/Contents/MacOS/nauterm-rs")"
   dist="${DIST_DIR:-$repository/dist}"
   mkdir -p "$dist"
-  ditto -c -k --sequesterRsrc --keepParent "$bundle" "$dist/Nauterm-RS-$version-macos-$arch.app.zip"
+  bash "$repository/scripts/ci/package_macos_bundle.sh" \
+    "$bundle" "$dist/Nauterm-RS-$version-macos-$arch" "Nauterm RS $version $arch" >&2
 fi
 printf '%s\n' "$bundle"

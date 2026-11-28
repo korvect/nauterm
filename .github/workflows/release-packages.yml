@@ -243,15 +243,26 @@ jobs:
           make flutter-appcast ARCH=${{ matrix.arch }}
           make rs-appcast ARCH=${{ matrix.arch }}
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - name: Verify macOS packages
+        id: packages
+        run: >-
+          python3 scripts/ci/verify_release_packages.py dist
+          '${{ steps.version.outputs.value }}' "$NAUTERM_BUILD_NUMBER"
+          --platform macos --arch '${{ matrix.arch }}'
+
+      - name: Upload Flutter macOS packages
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: nauterm-${{ steps.version.outputs.value }}-macos-${{ matrix.arch }}
-          path: |
-            dist/Nauterm-${{ steps.version.outputs.value }}-macos-${{ matrix.arch }}.app.zip
-            dist/Nauterm-${{ steps.version.outputs.value }}-macos-${{ matrix.arch }}.dmg
-            dist/appcast-${{ matrix.arch }}.xml
-            dist/Nauterm-RS-${{ steps.version.outputs.value }}-macos-${{ matrix.arch }}.app.zip
-            dist/appcast-rs-${{ matrix.arch }}.xml
+          path: ${{ steps.packages.outputs.flutter }}
+          if-no-files-found: error
+          retention-days: ${{ github.event_name == 'push' && 1 || 7 }}
+
+      - name: Upload Rust macOS packages
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: nauterm-rs-${{ steps.version.outputs.value }}-macos-${{ matrix.arch }}
+          path: ${{ steps.packages.outputs.rs }}
           if-no-files-found: error
           retention-days: ${{ github.event_name == 'push' && 1 || 7 }}
 
@@ -361,13 +372,26 @@ jobs:
         run: make rs-package ARCH=${{ matrix.arch }}
 
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - name: Verify Linux packages
+        id: packages
+        run: >-
+          python3 scripts/ci/verify_release_packages.py dist
+          '${{ steps.version.outputs.value }}' "$NAUTERM_BUILD_NUMBER"
+          --platform linux --arch '${{ matrix.arch }}'
+
+      - name: Upload Flutter Linux packages
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: nauterm-${{ steps.version.outputs.value }}-linux-${{ matrix.arch }}
-          path: |
-            dist/*.deb
-            dist/*.rpm
-            dist/*.AppImage.tar.gz
+          path: ${{ steps.packages.outputs.flutter }}
+          if-no-files-found: error
+          retention-days: ${{ github.event_name == 'push' && 1 || 7 }}
+
+      - name: Upload Rust Linux packages
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: nauterm-rs-${{ steps.version.outputs.value }}-linux-${{ matrix.arch }}
+          path: ${{ steps.packages.outputs.rs }}
           if-no-files-found: error
           retention-days: ${{ github.event_name == 'push' && 1 || 7 }}
 
@@ -464,12 +488,27 @@ jobs:
         run: ./scripts/ci/package_windows.ps1 -Arch '${{ matrix.arch }}' -Client rs
 
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - name: Verify Windows packages
+        id: packages
+        shell: pwsh
+        run: >-
+          python scripts/ci/verify_release_packages.py dist
+          '${{ steps.version.outputs.value }}' "$env:NAUTERM_BUILD_NUMBER"
+          --platform windows --arch '${{ matrix.arch }}'
+
+      - name: Upload Flutter Windows packages
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: nauterm-${{ steps.version.outputs.value }}-windows-${{ matrix.arch }}
-          path: |
-            dist/*-setup.exe
-            dist/*.zip
+          path: ${{ steps.packages.outputs.flutter }}
+          if-no-files-found: error
+          retention-days: ${{ github.event_name == 'push' && 1 || 7 }}
+
+      - name: Upload Rust Windows packages
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: nauterm-rs-${{ steps.version.outputs.value }}-windows-${{ matrix.arch }}
+          path: ${{ steps.packages.outputs.rs }}
           if-no-files-found: error
           retention-days: ${{ github.event_name == 'push' && 1 || 7 }}
 
@@ -497,7 +536,7 @@ jobs:
         run: |
           bash scripts/ci/verify_versions.sh release-artifacts
           version="$(awk '/^version: / { split($2, parts, "+"); print parts[1]; exit }' pubspec.yaml)"
-          python3 scripts/ci/verify_rs_packages.py release-artifacts "$version"
+          python3 scripts/ci/verify_release_packages.py release-artifacts "$version" "$NAUTERM_BUILD_NUMBER"
 
       - name: Publish release assets
         env:

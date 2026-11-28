@@ -117,9 +117,11 @@ make rs-appcast
 ```
 
 Packaging defaults to the host architecture. Set `ARCH=arm64` or
-`ARCH=x86_64` to select the architecture explicitly. Release packages use
-`DIST_DIR` (default `dist`). Set `CLEAN_DIST=0` to retain existing packages
-when building on Linux or Windows. The release profile enables
+`ARCH=x86_64` to select the architecture explicitly. macOS produces a DMG and
+an app ZIP, Linux produces an AppImage archive, DEB and RPM, and Windows
+produces a setup executable and ZIP. Release packages use `DIST_DIR` (default
+`dist`). Set `CLEAN_DIST=0` to retain existing packages when building on Linux
+or Windows. The release profile enables
 ThinLTO, one codegen unit and stripped symbols. Platform signing and publishing
 are configured in the [release workflow](../.github/workflows/release-packages.yml).
 
