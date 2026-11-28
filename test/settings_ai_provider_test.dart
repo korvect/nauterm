@@ -94,7 +94,17 @@ void main() {
       await _pumpSettings(tester, store);
       await tester.tap(find.byTooltip('Delete provider'));
       await tester.pumpAndSettle();
-      expect(find.text('Delete Example?'), findsOneWidget);
+      expect(find.text('Delete Provider'), findsOneWidget);
+      expect(
+        find.text('Delete "Example" and any saved API key?'),
+        findsOneWidget,
+      );
+      expect(
+        find.text(
+          'This is your only provider. The assistant will be unavailable until you add another.',
+        ),
+        findsOneWidget,
+      );
       await tester.tap(
         find.byKey(const ValueKey('settings-ai-confirm-delete')),
       );

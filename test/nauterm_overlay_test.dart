@@ -413,6 +413,64 @@ void main() {
     expect(find.byType(NautermContextMenu<int>), findsNothing);
   });
 
+  testWidgets('an open submenu refreshes when applications finish loading', (
+    tester,
+  ) async {
+    List<NautermContextMenuEntry<int>> entries({required bool loading}) => [
+      NautermContextMenuAction<int>(
+        value: 0,
+        label: 'Open With',
+        children: [
+          NautermContextMenuAction<int>(
+            value: 1,
+            label: loading ? 'Loading applications…' : 'Preview',
+            enabled: !loading,
+          ),
+        ],
+      ),
+    ];
+
+    final updates = ValueNotifier(entries(loading: true));
+    addTearDown(updates.dispose);
+    int? selected;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Center(
+            child: FilledButton(
+              onPressed: () {
+                showNautermContextMenu<int>(
+                  context: context,
+                  position: const Offset(100, 100),
+                  animate: false,
+                  entries: updates.value,
+                  updatedEntries: updates,
+                ).then((value) => selected = value);
+              },
+              child: const Text('Show submenu'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Show submenu'));
+    await tester.pump();
+    await tester.tap(find.text('Open With'));
+    await tester.pump();
+    expect(find.text('Loading applications…'), findsOneWidget);
+    await tester.tap(find.text('Loading applications…'));
+    await tester.pump();
+    expect(selected, isNull);
+
+    updates.value = entries(loading: false);
+    await tester.pump();
+    expect(find.text('Loading applications…'), findsNothing);
+    await tester.tap(find.text('Preview'));
+    await tester.pump();
+    expect(selected, 1);
+  });
+
   testWidgets('context menu supports nested submenus at any depth', (
     tester,
   ) async {

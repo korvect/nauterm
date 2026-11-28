@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
+const nautermApplicationName = 'Nauterm';
+
 enum AppLanguage {
   system,
   english,
@@ -111,20 +113,26 @@ class NautermLocalizations {
     Map<String, Object?> args = const {},
   }) {
     if (locale.languageCode == 'en' && fallback != null) {
-      return _interpolateLocalizationArgs(fallback, args);
+      return _interpolateLocalizationArgs(fallback, args, includeAppName: true);
     }
     final resolvedKey = messages.containsKey(key)
         ? key
         : keysByEnglishFallback[key];
     final exact = resolvedKey == null ? null : messages[resolvedKey];
-    if (exact != null) return _interpolateLocalizationArgs(exact, args);
+    if (exact != null) {
+      return _interpolateLocalizationArgs(exact, args, includeAppName: true);
+    }
     for (final pattern in patterns) {
       final translated = pattern.translate(key);
       if (translated != null) {
         return _interpolateLocalizationArgs(translated, args);
       }
     }
-    return _interpolateLocalizationArgs(fallback ?? key, args);
+    return _interpolateLocalizationArgs(
+      fallback ?? key,
+      args,
+      includeAppName: fallback != null,
+    );
   }
 
   static Future<NautermLocalizations> load(Locale locale) async {
@@ -186,12 +194,22 @@ class NautermLocalizations {
   }
 }
 
-String _interpolateLocalizationArgs(String message, Map<String, Object?> args) {
-  var value = message;
-  for (final entry in args.entries) {
-    value = value.replaceAll('{${entry.key}}', entry.value?.toString() ?? '');
+final _localizationArgument = RegExp(r'\{([^{}]+)\}');
+
+String _interpolateLocalizationArgs(
+  String message,
+  Map<String, Object?> args, {
+  bool includeAppName = false,
+}) {
+  if (args.isEmpty && (!includeAppName || !message.contains('{appName}'))) {
+    return message;
   }
-  return value;
+  return message.replaceAllMapped(_localizationArgument, (match) {
+    final name = match[1]!;
+    if (args.containsKey(name)) return args[name]?.toString() ?? '';
+    if (includeAppName && name == 'appName') return nautermApplicationName;
+    return match[0]!;
+  });
 }
 
 String tr(
@@ -201,7 +219,11 @@ String tr(
 }) {
   if (appLanguage == AppLanguage.english &&
       NautermLocalizations.current.locale.languageCode != 'en') {
-    return _interpolateLocalizationArgs(fallback ?? key, args);
+    return _interpolateLocalizationArgs(
+      fallback ?? key,
+      args,
+      includeAppName: fallback != null,
+    );
   }
   return NautermLocalizations.current.tr(key, fallback: fallback, args: args);
 }

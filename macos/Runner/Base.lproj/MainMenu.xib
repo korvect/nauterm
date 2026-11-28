@@ -355,7 +355,22 @@
                 </menuItem>
                 <menuItem title="Help" id="EPT-qC-fAb">
                     <modifierMask key="keyEquivalentModifierMask"/>
-                    <menu key="submenu" title="Help" systemMenu="help" id="rJ0-wn-3NY"/>
+                    <menu key="submenu" title="Help" systemMenu="help" id="rJ0-wn-3NY">
+                        <items>
+                            <menuItem title="Nauterm Documentation" id="Nau-Documentation">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="openDocumentation:" target="Voe-Tx-rLC" id="Nau-Documentation-Action"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Report an Issue…" id="Nau-Report-Issue">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="reportIssue:" target="Voe-Tx-rLC" id="Nau-Report-Issue-Action"/>
+                                </connections>
+                            </menuItem>
+                        </items>
+                    </menu>
                 </menuItem>
             </items>
             <point key="canvasLocation" x="142" y="-258"/>

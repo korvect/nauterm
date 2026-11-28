@@ -12,9 +12,3 @@ PRODUCT_BUNDLE_IDENTIFIER = com.korvect.nauterm
 
 // The copyright displayed in application information
 PRODUCT_COPYRIGHT = Copyright © 2026 Korvect. All rights reserved.
-
-// Keep Skia on Intel Macs: Impeller still stutters with Flutter 3.50.
-// Apple Silicon continues to use Impeller.
-NAUTERM_ENABLE_IMPELLER_arm64 = YES
-NAUTERM_ENABLE_IMPELLER_x86_64 = NO
-NAUTERM_ENABLE_IMPELLER = $(NAUTERM_ENABLE_IMPELLER_$(NATIVE_ARCH_ACTUAL))

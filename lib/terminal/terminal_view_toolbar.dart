@@ -194,17 +194,20 @@ class _TerminalViewTab extends StatelessWidget {
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 260),
       child: Padding(
-        padding: const EdgeInsets.only(left: 2, top: 2),
+        padding: const EdgeInsets.only(left: 2, top: 3, bottom: 3),
         child: Material(
-          color: Colors.transparent,
-          borderRadius: BorderRadius.circular(6),
+          color: tab.selected
+              ? foreground.withValues(alpha: 0.08)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(7),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: tab.onSelected,
+            borderRadius: BorderRadius.circular(7),
             hoverColor: foreground.withValues(alpha: 0.055),
             child: Container(
               height: 28,
-              padding: const EdgeInsets.only(left: 8, right: 7),
+              padding: const EdgeInsets.only(left: 8, right: 3),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.center,
@@ -225,23 +228,29 @@ class _TerminalViewTab extends StatelessWidget {
                   ),
                   const SizedBox(width: 6),
                   SizedBox(
-                    width: 22,
-                    height: 22,
+                    width: 18,
+                    height: 18,
                     child: IconButton(
                       tooltip: tr(
                         'terminal.label.closeTab',
                         fallback: 'Close tab',
                       ),
                       constraints: const BoxConstraints.tightFor(
-                        width: 22,
-                        height: 22,
+                        width: 18,
+                        height: 18,
                       ),
                       padding: EdgeInsets.zero,
-                      visualDensity: VisualDensity.compact,
+                      style: IconButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(5),
+                        ),
+                        hoverColor: foreground.withValues(alpha: 0.12),
+                        highlightColor: foreground.withValues(alpha: 0.18),
+                      ),
                       onPressed: tab.onClose,
                       icon: Icon(
                         Icons.close_rounded,
-                        size: 14,
+                        size: 12,
                         color: textColor.withValues(alpha: 0.82),
                       ),
                     ),
@@ -279,29 +288,23 @@ class _TerminalViewToolbarButton extends StatelessWidget {
         ? foreground.withValues(alpha: selected ? 0.95 : 0.80)
         : foreground.withValues(alpha: 0.28);
     return SizedBox(
-      width: 26,
-      height: 30,
-      child: Center(
-        child: Tooltip(
-          message: tr(tooltip),
-          child: SizedBox(
-            width: 26,
-            height: 26,
-            child: Material(
-              color: selected && enabled
-                  ? foreground.withValues(alpha: 0.11)
-                  : Colors.transparent,
-              shape: const CircleBorder(),
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                onTap: onPressed,
-                customBorder: const CircleBorder(),
-                hoverColor: foreground.withValues(alpha: 0.12),
-                splashColor: foreground.withValues(alpha: 0.18),
-                highlightColor: foreground.withValues(alpha: 0.15),
-                child: Center(child: Icon(icon, size: 16, color: color)),
-              ),
-            ),
+      width: 24,
+      height: 24,
+      child: Tooltip(
+        message: tr(tooltip),
+        child: Material(
+          color: selected && enabled
+              ? foreground.withValues(alpha: 0.11)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(7),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onPressed,
+            borderRadius: BorderRadius.circular(7),
+            hoverColor: foreground.withValues(alpha: 0.12),
+            splashColor: foreground.withValues(alpha: 0.18),
+            highlightColor: foreground.withValues(alpha: 0.15),
+            child: Center(child: Icon(icon, size: 16, color: color)),
           ),
         ),
       ),
@@ -489,8 +492,14 @@ class _TerminalComposer extends StatelessWidget {
                         child: IconButton(
                           key: const ValueKey('terminal-composer-expand'),
                           tooltip: controlsExpanded
-                              ? 'Collapse Composer'
-                              : 'Expand Composer',
+                              ? context.tr(
+                                  'terminal.action.collapseComposer',
+                                  fallback: 'Collapse Composer',
+                                )
+                              : context.tr(
+                                  'terminal.action.expandComposer',
+                                  fallback: 'Expand Composer',
+                                ),
                           padding: EdgeInsets.zero,
                           icon: Icon(
                             controlsExpanded
@@ -509,7 +518,10 @@ class _TerminalComposer extends StatelessWidget {
                         height: buttonSize,
                         child: IconButton(
                           key: const ValueKey('terminal-composer-send'),
-                          tooltip: tr('common.action.send', fallback: 'Send'),
+                          tooltip: context.tr(
+                            'terminal.composer.send.hint',
+                            fallback: 'Send · Shift+Enter for a new line',
+                          ),
                           padding: EdgeInsets.zero,
                           icon: Icon(
                             Icons.keyboard_return_rounded,
@@ -534,6 +546,27 @@ class _TerminalComposer extends StatelessWidget {
   KeyEventResult _handleSuggestionKey(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.numpadEnter) {
+      final value = controller.value;
+      if (value.isComposingRangeValid && !value.composing.isCollapsed) {
+        return KeyEventResult.ignored;
+      }
+      if (HardwareKeyboard.instance.isShiftPressed) {
+        if (!sensitive) {
+          final selection = value.selection.isValid
+              ? value.selection
+              : TextSelection.collapsed(offset: value.text.length);
+          controller.value = TextEditingValue(
+            text: value.text.replaceRange(selection.start, selection.end, '\n'),
+            selection: TextSelection.collapsed(offset: selection.start + 1),
+          );
+        }
+      } else if (event is KeyDownEvent) {
+        onSubmitted();
+      }
+      return KeyEventResult.handled;
     }
     if (event.logicalKey == LogicalKeyboardKey.escape) {
       return onCancelCompletion()
@@ -763,32 +796,38 @@ class _TerminalComposerSuggestionListState
         color: background,
         border: Border(top: BorderSide(color: borderColor)),
       ),
-      child: ListView.builder(
-        controller: _scrollController,
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        itemExtent: rowHeight,
-        itemCount: widget.candidates.length,
-        itemBuilder: (context, index) {
-          final selected = index == widget.selectedIndex;
-          final candidate = widget.candidates[index];
-          return MouseRegion(
-            onEnter: (_) => widget.onHighlighted(index),
-            child: InkWell(
-              onTap: () => widget.onSelected(candidate),
-              child: Container(
-                alignment: Alignment.centerLeft,
-                padding: const EdgeInsets.symmetric(horizontal: 28),
-                color: selected ? selectedColor : Colors.transparent,
-                child: Text(
-                  candidate,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: widget.textStyle.copyWith(color: foreground),
+      child: Semantics(
+        label: context.tr(
+          'terminal.composer.suggestions.label',
+          fallback: 'Command suggestions',
+        ),
+        child: ListView.builder(
+          controller: _scrollController,
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          itemExtent: rowHeight,
+          itemCount: widget.candidates.length,
+          itemBuilder: (context, index) {
+            final selected = index == widget.selectedIndex;
+            final candidate = widget.candidates[index];
+            return MouseRegion(
+              onEnter: (_) => widget.onHighlighted(index),
+              child: InkWell(
+                onTap: () => widget.onSelected(candidate),
+                child: Container(
+                  alignment: Alignment.centerLeft,
+                  padding: const EdgeInsets.symmetric(horizontal: 28),
+                  color: selected ? selectedColor : Colors.transparent,
+                  child: Text(
+                    candidate,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: widget.textStyle.copyWith(color: foreground),
+                  ),
                 ),
               ),
-            ),
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }

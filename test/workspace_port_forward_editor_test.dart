@@ -29,13 +29,20 @@ void main() {
     expect(find.text('Intermediate host *'), findsOneWidget);
     expect(find.text('Destination address *'), findsOneWidget);
     expect(find.text('Destination port number *'), findsOneWidget);
-    _expectFilterableSelect(tester, 'Intermediate host *');
+    _expectHostPicker('Intermediate host *');
     _expectFieldsStacked(tester, 'Bind Address', 'Local port number *');
     _expectFieldsStacked(
       tester,
       'Destination address *',
       'Destination port number *',
     );
+    await tester.tap(find.byKey(const ValueKey('port-forward-host-selector')));
+    await tester.pump();
+    expect(find.text('Select Host'), findsOneWidget);
+    expect(find.text('Search hosts or tags'), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.arrow_back_rounded).first);
+    await tester.pump();
+    expect(find.text('Intermediate host *'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -75,7 +82,7 @@ void main() {
     expect(find.text('Remote host *'), findsOneWidget);
     expect(find.text('Destination address *'), findsOneWidget);
     expect(find.text('Destination port number *'), findsOneWidget);
-    _expectFilterableSelect(tester, 'Remote host *');
+    _expectHostPicker('Remote host *');
     _expectFieldsStacked(tester, 'Bind Address', 'Remote port number *');
     _expectFieldsStacked(
       tester,
@@ -109,7 +116,7 @@ void main() {
     expect(find.text('Intermediate host *'), findsOneWidget);
     expect(find.text('Destination address *'), findsNothing);
     expect(find.text('Destination port number *'), findsNothing);
-    _expectFilterableSelect(tester, 'Intermediate host *');
+    _expectHostPicker('Intermediate host *');
     _expectFieldsStacked(tester, 'Bind Address', 'Local port number *');
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -219,11 +226,11 @@ void _expectFieldsStacked(WidgetTester tester, String first, String second) {
   );
 }
 
-void _expectFilterableSelect(WidgetTester tester, String label) {
+void _expectHostPicker(String label) {
   expect(
     find.descendant(
-      of: _decoratorForLabel(label),
-      matching: find.byType(TextField),
+      of: find.byKey(const ValueKey('port-forward-host-selector')),
+      matching: find.text(label),
     ),
     findsOneWidget,
   );

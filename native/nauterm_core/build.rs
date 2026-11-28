@@ -1,0 +1,342 @@
+use std::env;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+const REQUIRED_ZIG_VERSION: &str = "0.17.0";
+const GHOSTTY_REPOSITORY: &str = "https://github.com/ghostty-org/ghostty.git";
+/// libghostty-vt is released separately from the Ghostty app under `vt-X.Y.Z`
+/// tags. Pin the release tag commit, not a moving branch.
+const GHOSTTY_COMMIT: &str = "108cacb17ed8990840cd14abfce43d8ed8503ca1";
+/// The version of the pinned sources after their Git metadata is removed.
+/// An explicit source override keeps its own upstream version metadata.
+const GHOSTTY_LIB_VERSION: &str = "1.0.1";
+
+fn main() {
+    println!("cargo:rerun-if-env-changed=NAUTERM_ZIG");
+    println!("cargo:rerun-if-env-changed=NAUTERM_GHOSTTY_SOURCE_DIR");
+    println!("cargo:rerun-if-env-changed=NAUTERM_GHOSTTY_VT_LIB_DIR");
+
+    if env::var_os("CARGO_FEATURE_TERMINAL_GHOSTTY").is_none() {
+        return;
+    }
+
+    let cargo_out_dir = PathBuf::from(env::var_os("OUT_DIR").unwrap());
+    if let Some(lib_dir) = env::var_os("NAUTERM_GHOSTTY_VT_LIB_DIR") {
+        println!("cargo:rerun-if-changed={}", Path::new(&lib_dir).display());
+        link_ghostty(Path::new(&lib_dir), &cargo_out_dir);
+        return;
+    }
+
+    let source_override = env::var_os("NAUTERM_GHOSTTY_SOURCE_DIR");
+    let ghostty_root = match &source_override {
+        Some(source_dir) => {
+            let source_dir = PathBuf::from(source_dir);
+            if !source_dir.join("build.zig").is_file() {
+                panic!(
+                    "NAUTERM_GHOSTTY_SOURCE_DIR does not contain build.zig: {}",
+                    source_dir.display()
+                );
+            }
+            source_dir
+        }
+        None => fetch_ghostty(&cargo_out_dir),
+    };
+    let zig = env::var_os("NAUTERM_ZIG").unwrap_or_else(|| "zig".into());
+    verify_zig_version(&zig);
+
+    let target = env::var("TARGET").expect("Cargo TARGET is required");
+    let zig_target = zig_target(&target);
+    let out_dir = cargo_out_dir.join("ghostty-vt");
+    let mut build = Command::new(&zig);
+    build.current_dir(&ghostty_root).args([
+        "build",
+        "--verbose",
+        "-Demit-lib-vt=true",
+        "-Demit-xcframework=false",
+        "-Doptimize=ReleaseFast",
+        &format!("-Dtarget={zig_target}"),
+    ]);
+    if source_override.is_none() {
+        // Ghostty detects the app and library versions separately. The cached
+        // sources have no .git, so stop Git before it reaches Nauterm's tags.
+        build
+            .env("GIT_CEILING_DIRECTORIES", &cargo_out_dir)
+            .env_remove("GIT_DIR")
+            .arg(format!("-Dlib-version-string={GHOSTTY_LIB_VERSION}"));
+    }
+    let output = build
+        .arg("--prefix")
+        .arg(&out_dir)
+        .output()
+        .expect("failed to execute Zig while building libghostty-vt");
+    if !output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        eprintln!("Zig failed to build libghostty-vt for {zig_target}.");
+        if !stdout.trim().is_empty() {
+            eprintln!("Zig stdout:\n{stdout}");
+        }
+        if !stderr.trim().is_empty() {
+            eprintln!("Zig stderr:\n{stderr}");
+        }
+        panic!(
+            "Zig failed to build libghostty-vt for {zig_target} ({})",
+            output.status
+        );
+    }
+
+    // Include build helpers and the split C headers as well as terminal code.
+    // Do not watch the source root: Zig writes its caches below it.
+    for input in ["build.zig", "build.zig.zon", "src", "include", "pkg"] {
+        println!(
+            "cargo:rerun-if-changed={}",
+            ghostty_root.join(input).display()
+        );
+    }
+    link_ghostty(&out_dir.join("lib"), &cargo_out_dir);
+}
+
+fn verify_zig_version(zig: &std::ffi::OsStr) {
+    let output = Command::new(zig)
+        .arg("version")
+        .output()
+        .expect("Zig is required to build libghostty-vt");
+    let version = String::from_utf8_lossy(&output.stdout);
+    let found = version.trim();
+    // libghostty-vt's own build check accepts any patch release of the required
+    // major.minor, so 0.17.1 satisfies a 0.17.0 minimum.
+    if !output.status.success() || !zig_version_satisfies(found, REQUIRED_ZIG_VERSION) {
+        panic!("libghostty-vt requires Zig {REQUIRED_ZIG_VERSION} or a newer patch release; found `{found}`");
+    }
+}
+
+fn zig_version_satisfies(found: &str, required: &str) -> bool {
+    let parse = |text: &str| -> Option<[u64; 3]> {
+        let mut parts = text.trim().split('.');
+        let major = parts.next()?.parse().ok()?;
+        let minor = parts.next()?.parse().ok()?;
+        let patch = parts.next().unwrap_or("0").parse().ok()?;
+        // Reject pre-release suffixes such as `0.17.0-dev.1`.
+        if parts.next().is_some() {
+            return None;
+        }
+        Some([major, minor, patch])
+    };
+    match (parse(found), parse(required)) {
+        (Some(found), Some(required)) => {
+            found[0] == required[0] && found[1] == required[1] && found[2] >= required[2]
+        }
+        _ => false,
+    }
+}
+
+fn fetch_ghostty(out_dir: &Path) -> PathBuf {
+    let source_dir = out_dir.join("ghostty-src");
+    let commit_stamp = source_dir.join(".nauterm-ghostty-commit");
+
+    let cached_commit_matches = std::fs::read_to_string(&commit_stamp)
+        .map(|existing_commit| existing_commit.trim() == GHOSTTY_COMMIT)
+        .unwrap_or(false);
+    if source_dir.join("build.zig").is_file() && cached_commit_matches {
+        remove_ghostty_git_metadata(&source_dir);
+        return source_dir;
+    }
+
+    if source_dir.exists() {
+        std::fs::remove_dir_all(&source_dir).unwrap_or_else(|error| {
+            panic!(
+                "failed to remove stale Ghostty source at {}: {error}",
+                source_dir.display()
+            )
+        });
+    }
+
+    eprintln!("Fetching Ghostty commit {GHOSTTY_COMMIT}...");
+    run(
+        Command::new("git")
+            .args(["clone", "--filter=blob:none", "--no-checkout"])
+            .arg(GHOSTTY_REPOSITORY)
+            .arg(&source_dir),
+        "clone Ghostty repository",
+    );
+    run(
+        Command::new("git")
+            .args(["checkout", GHOSTTY_COMMIT])
+            .current_dir(&source_dir),
+        "checkout pinned Ghostty commit",
+    );
+    std::fs::write(&commit_stamp, GHOSTTY_COMMIT).unwrap_or_else(|error| {
+        panic!(
+            "failed to record Ghostty commit at {}: {error}",
+            commit_stamp.display()
+        )
+    });
+    remove_ghostty_git_metadata(&source_dir);
+
+    source_dir
+}
+
+fn remove_ghostty_git_metadata(source_dir: &Path) {
+    let git_dir = source_dir.join(".git");
+    if !git_dir.exists() {
+        return;
+    }
+    std::fs::remove_dir_all(&git_dir).unwrap_or_else(|error| {
+        panic!(
+            "failed to remove Ghostty Git metadata at {}: {error}",
+            git_dir.display()
+        )
+    });
+}
+
+fn run(command: &mut Command, description: &str) {
+    let status = command
+        .status()
+        .unwrap_or_else(|error| panic!("failed to {description}: {error}"));
+    if !status.success() {
+        panic!("failed to {description}: {status}");
+    }
+}
+
+fn zig_target(target: &str) -> &'static str {
+    match target {
+        "aarch64-apple-darwin" => "aarch64-macos",
+        "x86_64-apple-darwin" => "x86_64-macos",
+        "aarch64-unknown-linux-gnu" => "aarch64-linux-gnu",
+        "x86_64-unknown-linux-gnu" => "x86_64-linux-gnu",
+        // Keep the target explicit instead of using native-native-msvc. This
+        // avoids host CPU detection in Zig on the Windows ARM runner while
+        // still using the runner's native ARM64 MSVC SDK.
+        "aarch64-pc-windows-msvc" => "aarch64-windows-msvc",
+        "x86_64-pc-windows-msvc" => "x86_64-windows-msvc",
+        other => panic!("unsupported libghostty-vt target: {other}"),
+    }
+}
+
+fn link_ghostty(lib_dir: &Path, cargo_out_dir: &Path) {
+    let target = env::var("TARGET").unwrap_or_default();
+    if target.contains("windows") {
+        link_ghostty_windows(lib_dir, cargo_out_dir);
+        return;
+    }
+
+    let archive = lib_dir.join("libghostty-vt.a");
+    if !archive.is_file() {
+        panic!(
+            "libghostty-vt static archive not found: {}",
+            archive.display()
+        );
+    }
+    // Keep only the static archive in the search directory: Zig also installs
+    // a dylib beside it. A link-lib directive carries the dependency through
+    // the rlib into RS; a bare link-arg only links the Flutter cdylib itself.
+    let static_dir = cargo_out_dir.join("ghostty-static");
+    std::fs::create_dir_all(&static_dir).expect("create static VT link directory");
+    std::fs::copy(&archive, static_dir.join("libghostty-vt.a")).expect("stage static VT archive");
+    println!("cargo:rustc-link-search=native={}", static_dir.display());
+    println!("cargo:rustc-link-lib=static=ghostty-vt");
+}
+
+fn link_ghostty_windows(lib_dir: &Path, cargo_out_dir: &Path) {
+    let dll = [
+        lib_dir.join("ghostty-vt.dll"),
+        lib_dir
+            .parent()
+            .unwrap_or(lib_dir)
+            .join("bin")
+            .join("ghostty-vt.dll"),
+    ]
+    .into_iter()
+    .find(|candidate| candidate.is_file())
+    .unwrap_or_else(|| {
+        panic!(
+            "libghostty-vt runtime DLL not found beside {} or in its sibling bin directory",
+            lib_dir.display()
+        )
+    });
+
+    // Keep Zig's compiler runtime inside ghostty-vt.dll. Linking the static
+    // archive into Rust on Windows puts Zig compiler_rt and Rust
+    // compiler_builtins in the same image, where MSVC rejects conflicting
+    // weak extern defaults (LNK1227 on ARM64). The Rust extern block uses
+    // raw-dylib so rustc generates a clean import library directly from the
+    // C declarations instead of consuming Zig's CRT-affecting import library.
+    if env::var_os("NAUTERM_GHOSTTY_VT_LIB_DIR").is_some() {
+        // A Windows DLL may live in bin/, beside the watched lib/ directory.
+        println!("cargo:rerun-if-changed={}", dll.display());
+    }
+    stage_windows_runtime_dll(&dll, cargo_out_dir);
+}
+
+fn stage_windows_runtime_dll(dll: &Path, cargo_out_dir: &Path) {
+    // OUT_DIR is <cargo-target>/<profile>/build/<package-hash>/out. Cargo test
+    // executes binaries from <profile>/deps, while Flutter and the packaging
+    // scripts load nauterm_core from <profile>. Put the dependency in both
+    // locations so every build mode uses Windows' normal adjacent-DLL lookup.
+    let profile_dir = cargo_out_dir
+        .parent()
+        .and_then(Path::parent)
+        .and_then(Path::parent)
+        .unwrap_or_else(|| {
+            panic!(
+                "unable to resolve Cargo profile directory from OUT_DIR={}",
+                cargo_out_dir.display()
+            )
+        });
+    for destination_dir in [profile_dir.to_path_buf(), profile_dir.join("deps")] {
+        std::fs::create_dir_all(&destination_dir).unwrap_or_else(|error| {
+            panic!(
+                "failed to create Ghostty runtime directory {}: {error}",
+                destination_dir.display()
+            )
+        });
+        let destination = destination_dir.join("ghostty-vt.dll");
+        // Windows locks a loaded DLL against replacement. A running debug
+        // client must not prevent `cargo test` or Clippy from staging the
+        // identical pinned runtime in another feature configuration.
+        if std::fs::read(&destination)
+            .ok()
+            .zip(std::fs::read(dll).ok())
+            .is_some_and(|(existing, source)| existing == source)
+        {
+            continue;
+        }
+        replace_windows_runtime(dll, &destination).unwrap_or_else(|error| {
+            panic!(
+                "failed to stage {} at {}: {error}",
+                dll.display(),
+                destination.display()
+            )
+        });
+    }
+}
+
+fn replace_windows_runtime(source: &Path, destination: &Path) -> std::io::Result<()> {
+    // Windows permits renaming a mapped DLL but prevents writing its bytes.
+    // Publish a complete file so new child processes get this build's DLL,
+    // while an already-running application retains its original mapping.
+    let id = std::process::id();
+    let temporary = destination.with_file_name(format!(".ghostty-vt-{id}.new"));
+    let previous = destination.with_file_name(format!(".ghostty-vt-{id}.old"));
+    std::fs::copy(source, &temporary)?;
+    let had_previous = destination.exists();
+    if had_previous {
+        if let Err(error) = std::fs::rename(destination, &previous) {
+            let _ = std::fs::remove_file(&temporary);
+            return Err(error);
+        }
+    }
+    if let Err(error) = std::fs::rename(&temporary, destination) {
+        if had_previous {
+            let _ = std::fs::rename(&previous, destination);
+        }
+        let _ = std::fs::remove_file(&temporary);
+        return Err(error);
+    }
+    if had_previous {
+        // A loaded mapping can keep the old owned build artifact alive until
+        // its process exits. Never remove or overwrite the mapped file's bytes.
+        let _ = std::fs::remove_file(previous);
+    }
+    Ok(())
+}

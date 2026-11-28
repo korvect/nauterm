@@ -47,6 +47,11 @@ typedef _CreateRelatedEntry = void Function(
   String initialName,
   ValueChanged<int> onCreated,
 );
+typedef _CreateRelatedGroup = void Function(
+  String initialName,
+  ValueChanged<HostGroup> onCreated, {
+  required bool rootOnly,
+});
 typedef _CreateGroupFromProtocol = void Function(HostGroup template);
 typedef _CreateRelatedCredential = void Function(
   String initialName, {
@@ -76,12 +81,14 @@ class _GroupEditorRequest extends _WorkspaceEditorRequest {
     this.template,
     this.initialParentId,
     this.initialName,
+    this.rootOnly = false,
   });
 
   final HostGroup? initial;
   final HostGroup? template;
   final int? initialParentId;
   final String? initialName;
+  final bool rootOnly;
 }
 
 class _HostEditorRequest extends _WorkspaceEditorRequest {
@@ -89,6 +96,29 @@ class _HostEditorRequest extends _WorkspaceEditorRequest {
 
   final HostEntry? initial;
   final int? initialGroupId;
+}
+
+class _LoadHostEditorRequest extends _WorkspaceEditorRequest {
+  _LoadHostEditorRequest({required this.host, required this.databasePath});
+
+  final _HostItem host;
+  final String databasePath;
+  Future<HostEntry?>? _pending;
+  HostEntry? details;
+
+  Future<HostEntry?> load({bool retry = false}) {
+    final pending = _pending;
+    if (!retry && pending != null) return pending;
+    late final Future<HostEntry?> request;
+    request = loadNautermHostDetails(databasePath, host.id).then((value) {
+      final match = host.uuid == null || value?.uuid == host.uuid
+          ? value
+          : null;
+      if (identical(_pending, request)) details = match;
+      return match;
+    });
+    return _pending = request;
+  }
 }
 
 class _HostEnvironmentEditorRequest extends _WorkspaceEditorRequest {
@@ -253,6 +283,7 @@ class _WorkspaceEditorDrawer extends StatelessWidget {
     required this.onDeleteSnippet,
     required this.onCreateSnippetFromShellHistory,
     required this.onClearShellHistory,
+    required this.onReloadShellHistory,
   });
 
   final _WorkspaceEditorRequest? request;
@@ -269,7 +300,7 @@ class _WorkspaceEditorDrawer extends StatelessWidget {
   final List<ShellHistoryEntry> shellHistory;
   final TerminalThemeCatalog? terminalThemeCatalog;
   final VoidCallback onClose;
-  final _CreateRelatedEntry onCreateGroup;
+  final _CreateRelatedGroup onCreateGroup;
   final _CreateGroupFromProtocol onCreateGroupFromProtocol;
   final _CreateRelatedCredential onCreateCredential;
   final _CreateRelatedEntry onCreateIdentity;
@@ -312,6 +343,34 @@ class _WorkspaceEditorDrawer extends StatelessWidget {
   final ValueChanged<_SnippetItem> onDeleteSnippet;
   final ValueChanged<String> onCreateSnippetFromShellHistory;
   final VoidCallback onClearShellHistory;
+  final Future<void> Function() onReloadShellHistory;
+
+  Widget _buildHostEditor(_HostEditorRequest request) => _HostEditorContent(
+    request: request,
+    groups: groups,
+    snippets: snippets,
+    keys: keys,
+    identities: identities,
+    tags: tags,
+    proxies: proxies,
+    terminalThemeCatalog: terminalThemeCatalog,
+    onClose: onClose,
+    onCreateGroup: onCreateGroup,
+    onCreateGroupFromProtocol: onCreateGroupFromProtocol,
+    onCreateCredential: onCreateCredential,
+    onCreateIdentity: onCreateIdentity,
+    onCreateProxy: onCreateProxy,
+    onCreateTag: onCreateTag,
+    onCreateSnippet: onCreateSnippet,
+    onEditEnvironment: onEditHostEnvironment,
+    onSave: (value) async {
+      await onSaveHost(value);
+      draft.discard();
+    },
+    onConnect: onConnectHost,
+    onDuplicate: onDuplicateHost,
+    onDelete: onDeleteHost,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -329,6 +388,7 @@ class _WorkspaceEditorDrawer extends StatelessWidget {
         identities: identities,
         proxies: proxies,
         terminalThemeCatalog: terminalThemeCatalog,
+        onCreateGroup: onCreateGroup,
         onCreateCredential: onCreateCredential,
         onCreateIdentity: onCreateIdentity,
         onCreateSnippet: onCreateSnippet,
@@ -341,31 +401,11 @@ class _WorkspaceEditorDrawer extends StatelessWidget {
         onDuplicate: onDuplicateGroup,
         onDelete: onDeleteGroup,
       ),
-      _HostEditorRequest() => _HostEditorContent(
+      _HostEditorRequest() => _buildHostEditor(request),
+      _LoadHostEditorRequest() => _HostEditorLoader(
         request: request,
-        groups: groups,
-        snippets: snippets,
-        keys: keys,
-        identities: identities,
-        tags: tags,
-        proxies: proxies,
-        terminalThemeCatalog: terminalThemeCatalog,
         onClose: onClose,
-        onCreateGroup: onCreateGroup,
-        onCreateGroupFromProtocol: onCreateGroupFromProtocol,
-        onCreateCredential: onCreateCredential,
-        onCreateIdentity: onCreateIdentity,
-        onCreateProxy: onCreateProxy,
-        onCreateTag: onCreateTag,
-        onCreateSnippet: onCreateSnippet,
-        onEditEnvironment: onEditHostEnvironment,
-        onSave: (value) async {
-          await onSaveHost(value);
-          draft.discard();
-        },
-        onConnect: onConnectHost,
-        onDuplicate: onDuplicateHost,
-        onDelete: onDeleteHost,
+        builder: (host) => _buildHostEditor(_HostEditorRequest(initial: host)),
       ),
       _HostEnvironmentEditorRequest() => _HostEnvironmentEditorContent(
         request: request,
@@ -395,6 +435,7 @@ class _WorkspaceEditorDrawer extends StatelessWidget {
         onDelete: onDeleteKey,
       ),
       _Fido2KeyEditorRequest() => _Fido2KeyEditorContent(
+        generation: draft.fido2Key ??= _Fido2KeyDraft(),
         onClose: onClose,
         onSave: (value) async {
           await onSaveGeneratedKey(value);
@@ -426,6 +467,7 @@ class _WorkspaceEditorDrawer extends StatelessWidget {
       _PortForwardEditorRequest() => _PortForwardEditorContent(
         request: request,
         hosts: hosts,
+        buildHostSelector: buildHostSelector,
         onClose: onClose,
         onSave: (value) async {
           await onSavePortForward(value);
@@ -473,6 +515,7 @@ class _WorkspaceEditorDrawer extends StatelessWidget {
         onClose: onClose,
         onSaveCommand: onCreateSnippetFromShellHistory,
         onClearAll: onClearShellHistory,
+        onReload: onReloadShellHistory,
       ),
     };
 
@@ -494,15 +537,66 @@ class _WorkspaceEditorDrawer extends StatelessWidget {
   }
 }
 
+class _DrawerHostPickerField extends StatelessWidget {
+  const _DrawerHostPickerField({
+    super.key,
+    required this.label,
+    required this.host,
+    required this.onTap,
+    this.errorText,
+  });
+
+  final String label;
+  final HostEntry? host;
+  final VoidCallback? onTap;
+  final String? errorText;
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = host;
+    final address = _emptyToNull(selected?.host);
+    final value = selected == null
+        ? ''
+        : address == null
+        ? selected.name
+        : '${selected.name} ($address:${selected.port ?? 22})';
+    return _WorkspaceFieldFrame(
+      label: label,
+      isRequired: true,
+      size: _WorkspaceControlSize.large,
+      focused: false,
+      floatingLabel: true,
+      hasContent: selected != null,
+      errorText: errorText,
+      onTap: onTap,
+      child: LayoutBuilder(
+        builder: (context, constraints) => Row(
+          children: [
+            Expanded(
+              child: Text(value, maxLines: 1, overflow: TextOverflow.ellipsis),
+            ),
+            if (constraints.maxWidth >= 18)
+              Icon(Icons.chevron_right_rounded, size: 18, color: _mutedText),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 Object _workspaceEditorRequestKey(_WorkspaceEditorRequest request) {
   return switch (request) {
     _GroupEditorRequest(
       initial: final initial,
       initialParentId: final parentId,
+      rootOnly: final rootOnly,
     ) =>
-      'group:${initial?.id ?? 'new:${parentId ?? 'root'}'}',
+      rootOnly
+          ? 'group:new:parent'
+          : 'group:${initial?.id ?? 'new:${parentId ?? 'root'}'}',
     _HostEditorRequest(initial: final initial, initialGroupId: final groupId) =>
       'host:${initial?.id ?? 'new:${groupId ?? 'root'}'}',
+    _LoadHostEditorRequest(host: final host) => 'host:${host.id}',
     _HostEnvironmentEditorRequest() => request,
     _KeyEditorRequest(
       initial: final initial,
@@ -534,22 +628,133 @@ Object _workspaceEditorRequestKey(_WorkspaceEditorRequest request) {
   };
 }
 
-class _ShellHistoryDrawerContent extends StatelessWidget {
+class _HostEditorLoader extends StatefulWidget {
+  const _HostEditorLoader({
+    required this.request,
+    required this.onClose,
+    required this.builder,
+  });
+
+  final _LoadHostEditorRequest request;
+  final VoidCallback onClose;
+  final Widget Function(HostEntry) builder;
+
+  @override
+  State<_HostEditorLoader> createState() => _HostEditorLoaderState();
+}
+
+class _HostEditorLoaderState extends State<_HostEditorLoader> {
+  late Future<HostEntry?> _host = widget.request.load();
+
+  @override
+  void didUpdateWidget(covariant _HostEditorLoader oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.request, widget.request)) {
+      _host = widget.request.load();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.request.details case final details?) {
+      return widget.builder(details);
+    }
+    return FutureBuilder<HostEntry?>(
+      future: _host,
+      builder: (context, snapshot) {
+        final host = snapshot.data;
+        if (snapshot.connectionState == ConnectionState.done && host != null) {
+          return widget.builder(host);
+        }
+        final loading = snapshot.connectionState != ConnectionState.done;
+        final item = widget.request.host;
+        final message = loading
+            ? item.sshEnabled || item.telnetEnabled || item.moshEnabled
+                  ? context.tr(
+                      'workspace.host.credentials.loading',
+                      fallback: 'Loading password…',
+                    )
+                  : context.tr('common.status.loading', fallback: 'Loading…')
+            : snapshot.error?.toString() ??
+                  context.tr(
+                    'workspace.host.error.unavailable',
+                    fallback: 'Host is not available.',
+                  );
+        return _EditorShell(
+          title: context.tr('workspace.label.editHost', fallback: 'Edit Host'),
+          onClose: widget.onClose,
+          onSave: null,
+          body: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (loading) ...[
+                    const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  Text(
+                    message,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: _mutedText),
+                  ),
+                  if (!loading)
+                    TextButton(
+                      onPressed: () => setState(
+                        () => _host = widget.request.load(retry: true),
+                      ),
+                      child: Text(
+                        context.tr('common.action.retry', fallback: 'Retry'),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          children: const [],
+        );
+      },
+    );
+  }
+}
+
+class _ShellHistoryDrawerContent extends StatefulWidget {
   const _ShellHistoryDrawerContent({
     required this.entries,
     required this.onClose,
     required this.onSaveCommand,
     required this.onClearAll,
+    required this.onReload,
   });
 
   final List<ShellHistoryEntry> entries;
   final VoidCallback onClose;
   final ValueChanged<String> onSaveCommand;
   final VoidCallback onClearAll;
+  final Future<void> Function() onReload;
 
   @override
-  Widget build(BuildContext context) {
-    final history = entries.toList(growable: false)
+  State<_ShellHistoryDrawerContent> createState() =>
+      _ShellHistoryDrawerContentState();
+}
+
+class _ShellHistoryDrawerContentState
+    extends State<_ShellHistoryDrawerContent> {
+  late Future<void> _load = widget.onReload();
+
+  @override
+  Widget build(BuildContext context) =>
+      FutureBuilder<void>(future: _load, builder: _buildHistory);
+
+  Widget _buildHistory(BuildContext context, AsyncSnapshot<void> snapshot) {
+    final loading = snapshot.connectionState != ConnectionState.done;
+    final error = loading ? null : snapshot.error?.toString();
+    final errorColor = Theme.of(context).colorScheme.error;
+    final history = widget.entries.toList(growable: false)
       ..sort(
         (a, b) => (b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0))
             .compareTo(a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0)),
@@ -568,6 +773,7 @@ class _ShellHistoryDrawerContent extends StatelessWidget {
             builder: (context, constraints) {
               final showClose = constraints.maxWidth >= 28;
               final showMore = constraints.maxWidth >= 56;
+              final showRetry = error != null && constraints.maxWidth >= 84;
               return Row(
                 children: [
                   Expanded(
@@ -586,20 +792,30 @@ class _ShellHistoryDrawerContent extends StatelessWidget {
                       ),
                     ),
                   ),
+                  if (showRetry)
+                    _WorkspaceDrawerHeaderButton(
+                      icon: LucideIcons.refreshCw,
+                      tooltip: context.tr(
+                        'common.action.retry',
+                        fallback: 'Retry',
+                      ),
+                      onPressed: () =>
+                          setState(() => _load = widget.onReload()),
+                    ),
                   if (showMore)
                     _WorkspaceDropdown<_ShellHistoryAction>(
                       width: 170,
                       entries: const [
                         NautermContextMenuAction<_ShellHistoryAction>(
                           value: _ShellHistoryAction.clearAll,
-                          label: 'Clear all',
+                          label: 'workspace.label.clearAll',
                           icon: LucideIcons.trash2,
                           destructive: true,
                         ),
                       ],
                       onSelected: (action) {
                         if (action == _ShellHistoryAction.clearAll) {
-                          onClearAll();
+                          widget.onClearAll();
                         }
                       },
                       triggerBuilder: (openMenu) =>
@@ -609,20 +825,30 @@ class _ShellHistoryDrawerContent extends StatelessWidget {
                               'workspace.label.more',
                               fallback: 'More',
                             ),
-                            onPressed: openMenu,
+                            onPressed: loading ? null : openMenu,
                           ),
                     ),
                   if (showClose)
                     _WorkspaceDrawerHeaderButton(
                       icon: Icons.keyboard_tab_rounded,
                       tooltip: tr('common.action.close', fallback: 'Close'),
-                      onPressed: onClose,
+                      onPressed: widget.onClose,
                     ),
                 ],
               );
             },
           ),
         ),
+        if (error != null && history.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+            child: Text(
+              error,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: errorColor),
+            ),
+          ),
         Expanded(
           child: ColoredBox(
             color: _card,
@@ -631,13 +857,19 @@ class _ShellHistoryDrawerContent extends StatelessWidget {
                     child: Padding(
                       padding: EdgeInsets.all(24),
                       child: Text(
-                        tr(
-                          'workspace.description.noShellHistoryRecordedYet',
-                          fallback: 'No shell history recorded yet.',
-                        ),
+                        error ??
+                            (loading
+                                ? context.tr(
+                                    'workspace.history.loading',
+                                    fallback: 'Loading shell history…',
+                                  )
+                                : context.tr(
+                                    'workspace.description.noShellHistoryRecordedYet',
+                                    fallback: 'No shell history recorded yet.',
+                                  )),
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          color: _mutedText,
+                          color: error == null ? _mutedText : errorColor,
                           fontSize: NautermFontSizes.labelLarge,
                           fontWeight: NautermFontWeights.medium,
                           letterSpacing: 0,
@@ -652,7 +884,7 @@ class _ShellHistoryDrawerContent extends StatelessWidget {
                       final entry = history[index];
                       return _ShellHistoryEntryRow(
                         command: entry.command,
-                        onSave: () => onSaveCommand(entry.command),
+                        onSave: () => widget.onSaveCommand(entry.command),
                       );
                     },
                   ),
@@ -813,14 +1045,14 @@ class _EditorShell extends StatelessWidget {
     this.saving = false,
     this.error,
     this.saveLabel = 'Save',
-    this.savingLabel = 'Saving...',
+    this.savingLabel = 'Saving…',
     this.headerActions = const [],
   });
 
   final String title;
   final String? subtitle;
   final VoidCallback onClose;
-  final VoidCallback onSave;
+  final VoidCallback? onSave;
   final List<Widget> children;
   final Widget? body;
   final bool saving;
@@ -832,18 +1064,43 @@ class _EditorShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final draftScope = _WorkspaceEditorDraftScope.maybeOf(context);
-    final actions = [
-      ...headerActions,
-      if (draftScope != null)
-        _EditorShellMenuAction(
-          label: tr(
-            'workspace.action.discardChanges',
-            fallback: 'Discard changes',
-          ),
-          icon: Icons.undo_rounded,
-          onSelected: draftScope.onDiscard,
+    final discard = draftScope == null
+        ? null
+        : _EditorShellMenuAction(
+            label: tr(
+              'workspace.action.discardChanges',
+              fallback: 'Discard changes',
+            ),
+            icon: Icons.undo_rounded,
+            onSelected: () {
+              if (draftScope.draft.hasChanges) draftScope.onDiscard();
+            },
+          );
+    final actions = [...headerActions, ?discard];
+
+    Widget buildMore() {
+      return _WorkspaceDropdown<_EditorShellMenuAction>(
+        width: 170,
+        entries: [
+          for (final action in actions)
+            NautermContextMenuAction<_EditorShellMenuAction>(
+              value: action,
+              label: action.label,
+              icon: action.icon,
+              destructive: action.destructive,
+              enabled:
+                  action != discard || (draftScope?.draft.hasChanges ?? false),
+            ),
+        ],
+        onSelected: (action) => action.onSelected(),
+        triggerBuilder: (openMenu) => _WorkspaceDrawerHeaderButton(
+          icon: Icons.more_horiz_rounded,
+          tooltip: tr('workspace.label.more', fallback: 'More'),
+          onPressed: saving ? null : openMenu,
         ),
-    ];
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -867,28 +1124,13 @@ class _EditorShell extends StatelessWidget {
                     ),
                   ),
                   if (showMore)
-                    _WorkspaceDropdown<_EditorShellMenuAction>(
-                      width: 170,
-                      entries: [
-                        for (final action in actions)
-                          NautermContextMenuAction<_EditorShellMenuAction>(
-                            value: action,
-                            label: action.label,
-                            icon: action.icon,
-                            destructive: action.destructive,
-                          ),
-                      ],
-                      onSelected: (action) => action.onSelected(),
-                      triggerBuilder: (openMenu) =>
-                          _WorkspaceDrawerHeaderButton(
-                            icon: Icons.more_horiz_rounded,
-                            tooltip: tr(
-                              'workspace.label.more',
-                              fallback: 'More',
-                            ),
-                            onPressed: saving ? null : openMenu,
-                          ),
-                    ),
+                    if (draftScope == null)
+                      buildMore()
+                    else
+                      ListenableBuilder(
+                        listenable: draftScope.draft,
+                        builder: (context, _) => buildMore(),
+                      ),
                   if (showClose)
                     _WorkspaceDrawerHeaderButton(
                       tooltip: tr('common.action.close', fallback: 'Close'),
@@ -926,33 +1168,34 @@ class _EditorShell extends StatelessWidget {
                 ),
               ),
         ),
-        Container(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
-          decoration: BoxDecoration(
-            color: _surface,
-            border: Border(top: BorderSide(color: _sidebarDivider)),
-          ),
-          child: SizedBox(
-            height: 38,
-            child: FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: _blue,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+        if (onSave != null)
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+            decoration: BoxDecoration(
+              color: _surface,
+              border: Border(top: BorderSide(color: _sidebarDivider)),
+            ),
+            child: SizedBox(
+              height: 38,
+              child: FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: _blue,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
-              ),
-              onPressed: saving ? null : onSave,
-              child: Text(
-                tr(saving ? savingLabel : saveLabel),
-                style: TextStyle(
-                  fontSize: NautermFontSizes.labelLarge,
-                  fontWeight: NautermFontWeights.medium,
-                  letterSpacing: 0,
+                onPressed: saving ? null : onSave,
+                child: Text(
+                  tr(saving ? savingLabel : saveLabel),
+                  style: TextStyle(
+                    fontSize: NautermFontSizes.labelLarge,
+                    fontWeight: NautermFontWeights.medium,
+                    letterSpacing: 0,
+                  ),
                 ),
               ),
             ),
           ),
-        ),
       ],
     );
   }
@@ -992,7 +1235,7 @@ class _EditorShellMenuAction {
 
   factory _EditorShellMenuAction.exportToFile(VoidCallback onSelected) {
     return _EditorShellMenuAction(
-      label: 'Export to File',
+      label: 'workspace.label.exportToFile',
       icon: Icons.save_alt_rounded,
       onSelected: onSelected,
     );

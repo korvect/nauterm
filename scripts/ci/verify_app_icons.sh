@@ -2,20 +2,34 @@
 set -euo pipefail
 
 ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
+allow_missing_python=false
+if [[ "${1:-}" == --allow-missing-python ]]; then
+  allow_missing_python=true
+  shift
+fi
 MODE="${1:-full}"
 case "$MODE" in
   full|--generated-only) ;;
   *)
-    echo "Usage: $0 [--generated-only]" >&2
+    echo "Usage: $0 [--allow-missing-python] [--generated-only]" >&2
     exit 1
     ;;
 esac
 
-if command -v python3 >/dev/null 2>&1; then
-  PYTHON=python3
-elif command -v python >/dev/null 2>&1; then
-  PYTHON=python
-else
+PYTHON=""
+for candidate in python3 python; do
+  if command -v "$candidate" >/dev/null 2>&1 && "$candidate" -c 'pass' >/dev/null 2>&1; then
+    PYTHON="$candidate"
+    break
+  fi
+done
+if [[ -z "$PYTHON" ]]; then
+  if "$allow_missing_python"; then
+    if [[ "$MODE" == --generated-only ]]; then
+      echo "Python is unavailable; skipping icon validation." >&2
+    fi
+    exit 0
+  fi
   echo "Python is required to verify generated app icons." >&2
   exit 1
 fi
@@ -65,7 +79,7 @@ expected_hash = sha256(source_data).hexdigest()
 recorded_hash = source_hash_file.read_text(encoding="utf-8").split()[0]
 if recorded_hash != expected_hash:
     raise SystemExit(
-        "Generated app icons are stale. Run `make generate-icons` on macOS."
+        "Generated app icons are stale. Run `make icons-generate` on macOS."
     )
 
 pixel_sizes = (16, 24, 32, 48, 64, 128, 256, 512, 1024)
@@ -178,10 +192,10 @@ def directory_hashes(path: Path) -> dict[str, str]:
 if directory_hashes(source_composer) != directory_hashes(mac_composer):
     raise SystemExit(
         "Prepared macOS Icon Composer resource is stale. "
-        "Run `make prepare-icons`."
+        "Run `make icons-prepare`."
     )
 
-if linux_icon.read_bytes() != generated[512]:
+if linux_icon.read_bytes() != generated[1024]:
     raise SystemExit("Prepared Linux app icon is stale")
 if windows_icon.read_bytes() != generated_windows_icon.read_bytes():
     raise SystemExit("Prepared Windows app icon is stale")

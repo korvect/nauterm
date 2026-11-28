@@ -127,7 +127,7 @@ class _TopBar extends StatelessWidget {
                   SizedBox(
                     width: isMacOS
                         ? (isFullscreen ? 14 : _macTrafficLightInset)
-                        : 14,
+                        : 8,
                   ),
                   _WorkspaceTabButton(
                     key: const ValueKey('workspace-top-tab:vaults'),
@@ -258,9 +258,10 @@ class _TopBar extends StatelessWidget {
                       children: [
                         if (aiAssistantAvailable)
                           _TopBarIconButton(
-                            tooltip: tr(
-                              'common.label.aiAssistant',
-                              fallback: 'AI Assistant',
+                            tooltip: context.tr(
+                              aiAssistantOpen
+                                  ? 'terminal.action.hideAiAssistant'
+                                  : 'terminal.action.showAiAssistant',
                             ),
                             onPressed: onAiAssistant,
                             icon: LucideIcons.sparkles,
@@ -271,9 +272,10 @@ class _TopBar extends StatelessWidget {
                           ),
                         if (terminalToolsAvailable)
                           _TopBarIconButton(
-                            tooltip: tr(
-                              'workspace.label.terminalTools',
-                              fallback: 'Terminal tools',
+                            tooltip: context.tr(
+                              terminalToolsOpen
+                                  ? 'terminal.action.hideTools'
+                                  : 'terminal.action.showTools',
                             ),
                             onPressed: onTerminalTools,
                             icon: LucideIcons.panelRight,
@@ -367,7 +369,9 @@ class _LinuxWindowControls extends StatelessWidget {
               ),
               maximizeButtonArea(
                 _LinuxWindowControlButton(
-                  tooltip: isMaximized ? 'Restore' : 'Maximize',
+                  tooltip: isMaximized
+                      ? tr('common.action.restore', fallback: 'Restore')
+                      : tr('common.action.maximize', fallback: 'Maximize'),
                   icon: isMaximized
                       ? SvgPicture.asset(
                           'assets/icons/ui/window-restore.svg',
@@ -768,7 +772,10 @@ class _WorkspaceTabButtonState extends State<_WorkspaceTabButton> {
                 ],
               );
               return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
+                padding: EdgeInsets.only(
+                  left: 8,
+                  right: widget.onClose == null ? 8 : 6,
+                ),
                 child: IconTheme(
                   data: IconThemeData(color: foreground),
                   child: DefaultTextStyle(
@@ -831,15 +838,22 @@ class _TopBarTabCloseButton extends StatefulWidget {
 
 class _TopBarTabCloseButtonState extends State<_TopBarTabCloseButton> {
   bool _hovered = false;
+  bool _pressed = false;
 
   @override
   Widget build(BuildContext context) {
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
+      onExit: (_) => setState(() {
+        _hovered = false;
+        _pressed = false;
+      }),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => setState(() => _pressed = true),
+        onTapUp: (_) => setState(() => _pressed = false),
+        onTapCancel: () => setState(() => _pressed = false),
         onTap: widget.onPressed,
         child: AnimatedContainer(
           duration: _topBarMotionDuration(
@@ -850,15 +864,19 @@ class _TopBarTabCloseButtonState extends State<_TopBarTabCloseButton> {
           width: 18,
           height: 18,
           decoration: BoxDecoration(
-            color: _hovered
+            color: _pressed
+                ? widget.color.withValues(alpha: 0.18)
+                : _hovered
                 ? widget.color.withValues(alpha: 0.12)
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(5),
           ),
           child: Icon(
             Icons.close_rounded,
-            size: 14,
-            color: widget.color.withValues(alpha: _hovered ? 0.95 : 0.72),
+            size: 12,
+            color: widget.color.withValues(
+              alpha: _pressed || _hovered ? 0.95 : 0.72,
+            ),
           ),
         ),
       ),

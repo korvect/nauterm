@@ -11,6 +11,9 @@ class MacosSparkleUpdater {
     'com.korvect.nauterm/sparkle',
   );
 
+  Future<bool> isConfigured() async =>
+      await _channel.invokeMethod<bool>('isConfigured') ?? false;
+
   Future<void> checkForUpdates() async {
     final operation = NautermLog.begin('update', 'Check Sparkle update');
     try {

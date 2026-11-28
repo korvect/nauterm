@@ -362,6 +362,36 @@ void main() {
           tester,
           'Public Key → Password → Verification code',
         );
+
+        await tester.enterText(find.byType(TextField), 'incorrect-code');
+        await tester.tap(find.text('Continue'));
+        await tester.pump();
+        expect(driver.answers.last, ['incorrect-code']);
+        driver.events.add(
+          TerminalConnectionEvent.fromJson({
+            'kind': 'auth_interactive_request',
+            'message': 'SSH authentication response rejected. Try again.',
+            'challenge': {
+              'id': 103,
+              'retry': true,
+              'prompts': [
+                {'prompt': 'Verification code:', 'echo': false},
+              ],
+            },
+          }),
+        );
+        controller.poll();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        expect(find.text('Authentication failed. Try again.'), findsOneWidget);
+        expect(
+          tester.widget<TextField>(find.byType(TextField)).controller!.text,
+          isEmpty,
+        );
+        _expectProgressLabel(
+          tester,
+          'Public Key → Password → Verification code',
+        );
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
       },

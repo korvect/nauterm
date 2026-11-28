@@ -1,0 +1,4 @@
+/target
+/vendor/gpui-base/.cargo-ok
+/vendor/gpui-base/.cargo_vcs_info.json
+/vendor/gpui-base/.cargo-checksum.json

@@ -174,12 +174,11 @@ class _HostsPaneState extends State<_HostsPane> {
         final breadcrumbPath = _groupBreadcrumbPath(currentGroupId);
         final showingGroup = currentGroupId != null;
         final canCreateGroup = breadcrumbPath.length < 2;
-        final hasStoredItems =
-            widget.groups.isNotEmpty || widget.hosts.isNotEmpty;
+        final filtered =
+            _searchController.text.trim().isNotEmpty ||
+            _effectiveSelectedTagUuids.isNotEmpty;
         final showEmptyState =
-            !widget.loading &&
-            !hasStoredItems &&
-            _searchController.text.trim().isEmpty;
+            !widget.loading && groups.isEmpty && hosts.isEmpty && !showingGroup;
 
         return Row(
           children: [
@@ -219,10 +218,16 @@ class _HostsPaneState extends State<_HostsPane> {
                     child: showEmptyState
                         ? _WorkspaceEmptyState(
                             icon: LucideIcons.server,
-                            title: 'No hosts yet',
-                            description: 'Add a host to save connection details and open remote sessions quickly.',
-                            actionLabel: 'Add host',
-                            onAction: () => widget.onCreateHost(currentGroupId),
+                            title: filtered
+                                ? 'workspace.label.noHostsFound'
+                                : 'workspace.label.noHostsYet',
+                            description: filtered
+                                ? 'workspace.description.tryAnotherSearchOrClearTags'
+                                : 'workspace.empty.hosts.description',
+                            actionLabel: filtered ? null : 'Add host',
+                            onAction: filtered
+                                ? null
+                                : () => widget.onCreateHost(currentGroupId),
                           )
                         : _WorkspaceItemScrollView(
                             padding: _workspacePanePadding,
@@ -282,10 +287,14 @@ class _HostsPaneState extends State<_HostsPane> {
                                 if (!widget.loading &&
                                     groups.isEmpty &&
                                     hosts.isEmpty)
-                                  _WorkspaceInlineMessage(
-                                    _searchController.text.trim().isEmpty
-                                        ? 'No hosts in this group.'
-                                        : 'No hosts found.',
+                                  _WorkspaceScopedEmptyState(
+                                    icon: LucideIcons.server,
+                                    title: filtered
+                                        ? 'workspace.label.noHostsFound'
+                                        : 'workspace.label.noHostsYet',
+                                    description: filtered
+                                        ? 'workspace.description.tryAnotherSearchOrClearTags'
+                                        : 'workspace.empty.hosts.description',
                                   ),
                               ],
                             ),
@@ -334,7 +343,9 @@ class _HostsPaneState extends State<_HostsPane> {
 }
 
 class _WorkspaceLoadingLine extends StatelessWidget {
-  const _WorkspaceLoadingLine();
+  const _WorkspaceLoadingLine({this.semanticsLabelKey});
+
+  final String? semanticsLabelKey;
 
   @override
   Widget build(BuildContext context) {
@@ -345,32 +356,53 @@ class _WorkspaceLoadingLine extends StatelessWidget {
         child: SizedBox(
           width: 18,
           height: 18,
-          child: CircularProgressIndicator(strokeWidth: 2),
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            semanticsLabel: switch (semanticsLabelKey) {
+              final key? => context.tr(key),
+              null => null,
+            },
+          ),
         ),
       ),
     );
   }
 }
 
-class _WorkspaceInlineMessage extends StatelessWidget {
-  const _WorkspaceInlineMessage(this.text);
+class _WorkspaceScopedEmptyState extends StatelessWidget {
+  const _WorkspaceScopedEmptyState({
+    required this.icon,
+    required this.title,
+    required this.description,
+  });
 
-  final String text;
+  final IconData icon;
+  final String title;
+  final String description;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 58,
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: Text(
-          tr(text),
-          style: TextStyle(
-            color: _mutedText,
-            fontSize: NautermFontSizes.labelLarge,
-            fontWeight: NautermFontWeights.regular,
-            letterSpacing: 0,
-          ),
+    return Padding(
+      padding: const EdgeInsets.only(top: 64),
+      child: SizedBox(
+        width: double.infinity,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: _mutedText),
+            const SizedBox(height: 12),
+            Text(
+              context.tr(title),
+              textAlign: TextAlign.center,
+              style: TextStyle(color: _mutedText, fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              context.tr(description),
+              textAlign: TextAlign.center,
+              style: TextStyle(color: _mutedText, fontSize: 12),
+            ),
+          ],
         ),
       ),
     );
@@ -471,7 +503,7 @@ class _GroupBreadcrumb extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final entries = <({String label, int? id})>[
-      (label: 'Hosts', id: null),
+      (label: context.tr('common.label.hosts'), id: null),
       for (final group in path) (label: group.name, id: group.id),
     ];
 
@@ -604,9 +636,9 @@ class _HostSearchBar extends StatelessWidget {
                           fallback: 'Search host:, group:, username:, tag:, or user@host',
                         ),
                         hintStyle: TextStyle(
-                          color: _mutedText,
+                          color: _text.withValues(alpha: 0.66),
                           fontSize: _WorkspaceControlSize.medium.inputFontSize,
-                          fontWeight: NautermFontWeights.regular,
+                          fontWeight: NautermFontWeights.medium,
                           letterSpacing: 0,
                         ),
                       ),

@@ -4,11 +4,11 @@ set -eu
 MODE="${1:-debug}"
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 PROJECT_ROOT="$SCRIPT_DIR/.."
-FFI_CRATE_DIR="$PROJECT_ROOT/native/nauterm_ffi"
+CORE_CRATE_DIR="$PROJECT_ROOT/native/nauterm_core"
 MOSH_LIB_DIR="${NAUTERM_MOSH_LIB_DIR:-}"
 DEFAULT_MOSH_REPO_DIR="$(CDPATH= cd -- "$PROJECT_ROOT/../nauterm-mosh" 2>/dev/null && pwd || true)"
 MOSH_REPO_DIR="${NAUTERM_MOSH_REPO_DIR:-$DEFAULT_MOSH_REPO_DIR}"
-MOSH_FFI_CRATE_DIR="$MOSH_REPO_DIR/nauterm_mosh_ffi"
+MOSH_CORE_CRATE_DIR="$MOSH_REPO_DIR/nauterm_mosh_ffi"
 
 case "$(uname -s)" in
   Darwin)
@@ -31,22 +31,22 @@ if [ -n "$MOSH_LIB_DIR" ] && [ ! -f "$MOSH_LIB_DIR/$MOSH_LIBRARY_NAME" ]; then
   exit 1
 fi
 
-if [ -z "$MOSH_LIB_DIR" ] && { [ -z "$MOSH_REPO_DIR" ] || [ ! -f "$MOSH_FFI_CRATE_DIR/Cargo.toml" ]; }; then
+if [ -z "$MOSH_LIB_DIR" ] && { [ -z "$MOSH_REPO_DIR" ] || [ ! -f "$MOSH_CORE_CRATE_DIR/Cargo.toml" ]; }; then
   echo "Missing nauterm-mosh workspace. Set NAUTERM_MOSH_REPO_DIR to a checkout containing nauterm_mosh_ffi." >&2
   exit 1
 fi
 
 if [ "$MODE" = "release" ]; then
-  cargo build --manifest-path "$FFI_CRATE_DIR/Cargo.toml" --release
+  cargo build --manifest-path "$CORE_CRATE_DIR/Cargo.toml" --release
   if [ -z "$MOSH_LIB_DIR" ]; then
-    cargo build --manifest-path "$MOSH_FFI_CRATE_DIR/Cargo.toml" --release
+    cargo build --manifest-path "$MOSH_CORE_CRATE_DIR/Cargo.toml" --release
   fi
   NATIVE_PROFILE="release"
   MACOS_CONFIGURATION="Release"
 else
-  cargo build --manifest-path "$FFI_CRATE_DIR/Cargo.toml"
+  cargo build --manifest-path "$CORE_CRATE_DIR/Cargo.toml"
   if [ -z "$MOSH_LIB_DIR" ]; then
-    cargo build --manifest-path "$MOSH_FFI_CRATE_DIR/Cargo.toml"
+    cargo build --manifest-path "$MOSH_CORE_CRATE_DIR/Cargo.toml"
   fi
   NATIVE_PROFILE="debug"
   MACOS_CONFIGURATION="Debug"
@@ -55,10 +55,10 @@ fi
 if [ "$(uname -s)" = "Darwin" ]; then
   FRAMEWORKS_DIR="$PROJECT_ROOT/build/macos/Build/Products/$MACOS_CONFIGURATION/Nauterm.app/Contents/Frameworks"
   if [ -d "$FRAMEWORKS_DIR" ]; then
-    for library in libnauterm_ffi.dylib libnauterm_mosh_ffi.dylib; do
+    for library in libnauterm_core.dylib libnauterm_mosh_ffi.dylib; do
       case "$library" in
-        libnauterm_ffi.dylib)
-          SOURCE_DYLIB="$FFI_CRATE_DIR/target/$NATIVE_PROFILE/$library"
+        libnauterm_core.dylib)
+          SOURCE_DYLIB="$PROJECT_ROOT/target/$NATIVE_PROFILE/$library"
           ;;
         *)
           if [ -n "$MOSH_LIB_DIR" ]; then

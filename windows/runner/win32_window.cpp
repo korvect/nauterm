@@ -16,8 +16,6 @@ namespace {
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
 #endif
 
-constexpr const wchar_t kWindowClassName[] = L"FLUTTER_RUNNER_WIN32_WINDOW";
-
 /// Registry key for app theme preference.
 ///
 /// A value of 0 indicates apps should use dark mode. A non-zero or missing
@@ -70,7 +68,7 @@ class WindowClassRegistrar {
 
   // Returns the name of the window class, registering the class if it hasn't
   // previously been registered.
-  const wchar_t* GetWindowClass();
+  const wchar_t* GetWindowClass(const wchar_t* class_name);
 
   // Unregisters the window class. Should only be called if there are no
   // instances of the window.
@@ -81,16 +79,16 @@ class WindowClassRegistrar {
 
   static WindowClassRegistrar* instance_;
 
-  bool class_registered_ = false;
+  const wchar_t* registered_class_ = nullptr;
 };
 
 WindowClassRegistrar* WindowClassRegistrar::instance_ = nullptr;
 
-const wchar_t* WindowClassRegistrar::GetWindowClass() {
-  if (!class_registered_) {
+const wchar_t* WindowClassRegistrar::GetWindowClass(const wchar_t* class_name) {
+  if (registered_class_ == nullptr) {
     WNDCLASS window_class{};
     window_class.hCursor = LoadCursor(nullptr, IDC_ARROW);
-    window_class.lpszClassName = kWindowClassName;
+    window_class.lpszClassName = class_name;
     window_class.style = CS_HREDRAW | CS_VREDRAW;
     window_class.cbClsExtra = 0;
     window_class.cbWndExtra = 0;
@@ -101,14 +99,16 @@ const wchar_t* WindowClassRegistrar::GetWindowClass() {
     window_class.lpszMenuName = nullptr;
     window_class.lpfnWndProc = Win32Window::WndProc;
     RegisterClass(&window_class);
-    class_registered_ = true;
+    registered_class_ = class_name;
   }
-  return kWindowClassName;
+  return registered_class_;
 }
 
 void WindowClassRegistrar::UnregisterWindowClass() {
-  UnregisterClass(kWindowClassName, nullptr);
-  class_registered_ = false;
+  if (registered_class_ != nullptr) {
+    UnregisterClass(registered_class_, nullptr);
+    registered_class_ = nullptr;
+  }
 }
 
 Win32Window::Win32Window() {
@@ -120,13 +120,14 @@ Win32Window::~Win32Window() {
   Destroy();
 }
 
-bool Win32Window::Create(const std::wstring& title,
+bool Win32Window::Create(const wchar_t* class_name,
+                         const std::wstring& title,
                          const Point& origin,
                          const Size& size) {
   Destroy();
 
   const wchar_t* window_class =
-      WindowClassRegistrar::GetInstance()->GetWindowClass();
+      WindowClassRegistrar::GetInstance()->GetWindowClass(class_name);
 
   const POINT target_point = {static_cast<LONG>(origin.x),
                               static_cast<LONG>(origin.y)};

@@ -287,12 +287,12 @@ class NautermWorkspaceStateSnapshot {
   final List<WorkspaceSnapshot> workspaces;
   final List<String> activePortForwardUuids;
 
+  bool get hasRestorableSessions => workspaces.any(
+    (workspace) => workspace.tabs.any((tab) => tab.layout.sessions.isNotEmpty),
+  );
+
   bool get hasRestorableContent =>
-      activePortForwardUuids.isNotEmpty ||
-      workspaces.any(
-        (workspace) =>
-            workspace.tabs.any((tab) => tab.layout.sessions.isNotEmpty),
-      );
+      activePortForwardUuids.isNotEmpty || hasRestorableSessions;
 
   WorkspaceRestoreLaunchAction get launchAction {
     if (!hasRestorableContent) return WorkspaceRestoreLaunchAction.none;

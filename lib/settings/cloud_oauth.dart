@@ -10,6 +10,8 @@ import '../app/nauterm_log.dart';
 
 enum CloudOAuthVendor { googleCloudStorage, googleDrive, oneDrive, dropbox }
 
+enum CloudOAuthPhase { starting, waitingForBrowser, exchanging }
+
 class CloudOAuthCredentials {
   const CloudOAuthCredentials({
     required this.clientId,
@@ -40,30 +42,75 @@ class CloudOAuthException implements Exception {
 class CloudOAuthClient {
   CloudOAuthClient({http.Client? httpClient})
     : _httpClient = httpClient ?? http.Client(),
-      _ownsHttpClient = httpClient == null;
+      _ownsHttpClient = httpClient == null,
+      _browserOpener = _openBrowser,
+      _clientIdOverride = null,
+      _callbackPortOverride = null;
+
+  CloudOAuthClient.forTesting(
+    this._httpClient, {
+    required Future<void> Function(Uri) openBrowser,
+    required String clientId,
+    int callbackPort = 0,
+  }) : _ownsHttpClient = false,
+       _browserOpener = openBrowser,
+       _clientIdOverride = clientId,
+       _callbackPortOverride = callbackPort;
 
   final http.Client _httpClient;
   final bool _ownsHttpClient;
+  final Future<void> Function(Uri) _browserOpener;
+  final String? _clientIdOverride;
+  final int? _callbackPortOverride;
+  final Completer<void> _cancelled = Completer<void>();
+  bool _authorizing = false;
+  Uri? _authorizationUri;
 
-  Future<CloudOAuthCredentials> authorize(CloudOAuthVendor vendor) async {
+  bool get isCancelled => _cancelled.isCompleted;
+
+  Future<CloudOAuthCredentials?> authorize(
+    CloudOAuthVendor vendor, {
+    void Function(CloudOAuthPhase)? onPhase,
+  }) async {
+    if (isCancelled) return null;
+    if (_authorizing) {
+      throw StateError('Cloud authorization is already running.');
+    }
+    _authorizing = true;
     final operation = NautermLog.begin(
       'oauth',
       'Cloud OAuth authorization',
       fields: {'provider': vendor.name},
     );
     try {
-      final credentials = await _authorize(vendor);
+      onPhase?.call(CloudOAuthPhase.starting);
+      final credentials = await _authorize(vendor, onPhase);
+      if (isCancelled) {
+        operation.warn(fields: {'status': 'cancelled'});
+        return null;
+      }
       operation.succeed();
       return credentials;
     } on Object catch (error, stackTrace) {
+      if (isCancelled) {
+        operation.warn(fields: {'status': 'cancelled'});
+        return null;
+      }
       operation.fail(error, stackTrace: stackTrace);
       rethrow;
+    } finally {
+      _authorizationUri = null;
+      _authorizing = false;
     }
   }
 
-  Future<CloudOAuthCredentials> _authorize(CloudOAuthVendor vendor) async {
+  Future<CloudOAuthCredentials?> _authorize(
+    CloudOAuthVendor vendor,
+    void Function(CloudOAuthPhase)? onPhase,
+  ) async {
     final config = _CloudOAuthConfig.forVendor(vendor);
-    if (config.clientId.isEmpty) {
+    final clientId = _clientIdOverride ?? config.clientId;
+    if (clientId.isEmpty) {
       throw CloudOAuthException(
         '${config.label} OAuth is not configured. Build with '
         '--dart-define=${config.clientIdEnvironmentName}=your_client_id.',
@@ -71,71 +118,71 @@ class CloudOAuthClient {
     }
     final server = await HttpServer.bind(
       InternetAddress.loopbackIPv4,
-      config.callbackPort,
+      _callbackPortOverride ?? config.callbackPort,
     );
-    final redirectUri = Uri(
-      scheme: 'http',
-      host: config.callbackHost,
-      port: server.port,
-      path: config.callbackPath,
-    );
-    final verifier = _randomUrlSafeText(64);
-    final challenge = _base64UrlNoPadding(
-      sha256.convert(utf8.encode(verifier)).bytes,
-    );
-    final state = _randomUrlSafeText(32);
-    final authorizationUri = config.authorizationUri.replace(
-      queryParameters: <String, String>{
-        'client_id': config.clientId,
-        'redirect_uri': redirectUri.toString(),
-        'response_type': 'code',
-        if (config.scopes.isNotEmpty) 'scope': config.scopes.join(' '),
-        'state': state,
-        'code_challenge': challenge,
-        'code_challenge_method': 'S256',
-        ...config.authorizationParameters,
-      },
-    );
-
     try {
-      await _openBrowser(authorizationUri);
-      final request = await server
-          .firstWhere((request) => request.uri.path == config.callbackPath)
-          .timeout(const Duration(minutes: 5));
-      final parameters = request.uri.queryParameters;
-      await _respondToBrowser(request, parameters['error'] == null);
-      if (parameters['state'] != state) {
-        throw const CloudOAuthException(
-          'OAuth callback state did not match the authorization request.',
-        );
-      }
-      if (parameters['error'] case final error?) {
-        throw CloudOAuthException(
-          parameters['error_description'] ?? 'OAuth was denied: $error.',
-        );
-      }
-      final code = parameters['code'];
-      if (code == null || code.isEmpty) {
-        throw const CloudOAuthException(
-          'OAuth callback did not contain an authorization code.',
-        );
-      }
-      final response = await _httpClient.post(
-        config.tokenUri,
-        headers: const {
-          'Accept': 'application/json',
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: <String, String>{
-          'grant_type': 'authorization_code',
-          'client_id': config.clientId,
-          if (config.clientSecret.isNotEmpty)
-            'client_secret': config.clientSecret,
-          'code': code,
+      if (isCancelled) return null;
+      final redirectUri = Uri(
+        scheme: 'http',
+        host: config.callbackHost,
+        port: server.port,
+        path: config.callbackPath,
+      );
+      final verifier = _randomUrlSafeText(64);
+      final challenge = _base64UrlNoPadding(
+        sha256.convert(utf8.encode(verifier)).bytes,
+      );
+      final state = _randomUrlSafeText(32);
+      final authorizationUri = config.authorizationUri.replace(
+        queryParameters: <String, String>{
+          'client_id': clientId,
           'redirect_uri': redirectUri.toString(),
-          'code_verifier': verifier,
+          'response_type': 'code',
+          if (config.scopes.isNotEmpty) 'scope': config.scopes.join(' '),
+          'state': state,
+          'code_challenge': challenge,
+          'code_challenge_method': 'S256',
+          ...config.authorizationParameters,
         },
       );
+
+      _authorizationUri = authorizationUri;
+      await _untilCancelled(_browserOpener(authorizationUri));
+      if (isCancelled) return null;
+      onPhase?.call(CloudOAuthPhase.waitingForBrowser);
+      final code = await _untilCancelled(
+        _waitForCode(
+          server,
+          callbackPath: config.callbackPath,
+          state: state,
+        ).timeout(const Duration(minutes: 5)),
+      );
+      if (code == null || isCancelled) return null;
+      _authorizationUri = null;
+      onPhase?.call(CloudOAuthPhase.exchanging);
+      final tokenRequest =
+          http.AbortableRequest(
+              'POST',
+              config.tokenUri,
+              abortTrigger: _cancelled.future,
+            )
+            ..headers.addAll(const {
+              'Accept': 'application/json',
+              'Content-Type': 'application/x-www-form-urlencoded',
+            })
+            ..bodyFields = <String, String>{
+              'grant_type': 'authorization_code',
+              'client_id': clientId,
+              if (config.clientSecret.isNotEmpty)
+                'client_secret': config.clientSecret,
+              'code': code,
+              'redirect_uri': redirectUri.toString(),
+              'code_verifier': verifier,
+            };
+      final response = await _untilCancelled(
+        _httpClient.send(tokenRequest).then(http.Response.fromStream),
+      );
+      if (response == null || isCancelled) return null;
       final payload = _decodeTokenResponse(response, config.label);
       final accessToken = payload['access_token'] as String?;
       final refreshToken = payload['refresh_token'] as String?;
@@ -148,7 +195,7 @@ class CloudOAuthClient {
         );
       }
       return CloudOAuthCredentials(
-        clientId: config.clientId,
+        clientId: clientId,
         refreshToken: refreshToken,
         clientSecret: config.clientSecret.isEmpty ? null : config.clientSecret,
       );
@@ -159,8 +206,60 @@ class CloudOAuthClient {
     }
   }
 
+  Future<T?> _untilCancelled<T>(Future<T> result) =>
+      Future.any<T?>([result, _cancelled.future.then((_) => null)]);
+
+  Future<void> reopenBrowser() async {
+    final uri = _authorizationUri;
+    if (uri != null && !isCancelled) {
+      await _untilCancelled(_browserOpener(uri));
+    }
+  }
+
+  void cancel() {
+    if (!isCancelled) _cancelled.complete();
+  }
+
   void close() {
+    cancel();
     if (_ownsHttpClient) _httpClient.close();
+  }
+
+  static Future<String> _waitForCode(
+    HttpServer server, {
+    required String callbackPath,
+    required String state,
+  }) async {
+    await for (final request in server) {
+      if (request.uri.path != callbackPath) {
+        request.response.statusCode = HttpStatus.notFound;
+        await request.response.close();
+        continue;
+      }
+      final parameters = request.uri.queryParameters;
+      if (parameters['state'] != state) {
+        await _respondToBrowser(request, false);
+        continue;
+      }
+      final error = parameters['error'];
+      final code = parameters['code'];
+      await _respondToBrowser(
+        request,
+        error == null && (code?.isNotEmpty ?? false),
+      );
+      if (error != null) {
+        throw CloudOAuthException(
+          parameters['error_description'] ?? 'OAuth was denied: $error.',
+        );
+      }
+      if (code == null || code.isEmpty) {
+        throw const CloudOAuthException(
+          'OAuth callback did not contain an authorization code.',
+        );
+      }
+      return code;
+    }
+    throw const CloudOAuthException('OAuth callback listener closed.');
   }
 
   static Map<String, dynamic> _decodeTokenResponse(

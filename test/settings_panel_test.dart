@@ -1,18 +1,25 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:nauterm/app/nauterm_localizations.dart';
 import 'package:nauterm/data/nauterm_data_store.dart';
 import 'package:nauterm/data/nauterm_paths.dart';
+import 'package:nauterm/settings/cloud_oauth.dart';
 import 'package:nauterm/settings/github_device_flow.dart';
 import 'package:nauterm/settings/settings_panel.dart';
 import 'package:nauterm/terminal/system_shells.dart';
 import 'package:nauterm/terminal/terminal_config.dart';
 import 'package:nauterm/terminal/terminal_models.dart';
+import 'package:nauterm/update/desktop_update.dart';
 import 'package:nauterm/window/native_windowing.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -20,6 +27,53 @@ import 'support/connection_uri_defaults.dart';
 
 void main() {
   setUp(mockConnectionUriDefaults);
+
+  testWidgets('terminal padding keeps fractional values and rejects NaN', (
+    tester,
+  ) async {
+    final previous = terminalPadding;
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1000, 820);
+    addTearDown(() {
+      terminalPadding = previous;
+      tester.view.resetDevicePixelRatio();
+      tester.view.resetPhysicalSize();
+    });
+    await tester.pumpWidget(
+      const MaterialApp(home: SettingsPanel(detectExternalEditors: false)),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('settings-nav-terminal')));
+    await tester.pump();
+    final field = find.byKey(const ValueKey('settings-terminal-padding'));
+    await tester.scrollUntilVisible(
+      field,
+      250,
+      scrollable: find
+          .descendant(
+            of: find.byKey(const ValueKey('settings-terminal-scroll-view')),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    final input = find.descendant(
+      of: field,
+      matching: find.byType(EditableText),
+    );
+    await tester.enterText(input, '1.25, 2.5, 3.75');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump();
+    expect(terminalPadding, const EdgeInsets.fromLTRB(2.5, 1.25, 2.5, 3.75));
+
+    await tester.enterText(input, 'NaN');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump();
+    expect(
+      tester.widget<EditableText>(input).controller.text,
+      '1.25, 2.5, 3.75',
+    );
+    expect(terminalPadding, const EdgeInsets.fromLTRB(2.5, 1.25, 2.5, 3.75));
+  });
 
   testWidgets('word boundary field decodes tabs and permits an empty set', (
     tester,
@@ -131,10 +185,34 @@ void main() {
       ),
       findsOneWidget,
     );
+    final search = find.byKey(const ValueKey('settings-search-field'));
+    await tester.enterText(search, '新终端窗格');
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey('settings-search-result-terminal-Composer')),
+      findsOneWidget,
+    );
+    await tester.enterText(search, '');
+    await tester.pump();
 
     await tester.tap(find.byKey(const ValueKey('settings-nav-terminal')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('ANSI 颜色'), findsOneWidget);
+    expect(find.text('Normal'), findsOneWidget);
+    expect(find.text('Bright'), findsOneWidget);
+    for (final color in [
+      'Black',
+      'Red',
+      'Green',
+      'Yellow',
+      'Blue',
+      'Magenta',
+      'Cyan',
+      'White',
+    ]) {
+      expect(find.text(color), findsNWidgets(2));
+    }
     final cjkFontField = find.byKey(
       const ValueKey('settings-terminal-cjk-font-select'),
     );
@@ -343,6 +421,13 @@ void main() {
   testWidgets('about page shows application information and updates', (
     WidgetTester tester,
   ) async {
+    const sparkle = MethodChannel('com.korvect.nauterm/sparkle');
+    final messenger = tester.binding.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(sparkle, (call) async {
+      expect(call.method, 'isConfigured');
+      return false;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(sparkle, null));
     PackageInfo.setMockInitialValues(
       appName: 'Nauterm',
       packageName: 'com.korvect.nauterm',
@@ -361,6 +446,10 @@ void main() {
     expect(find.text('1.2.3'), findsOneWidget);
     expect(find.text('42'), findsOneWidget);
     expect(find.text('com.korvect.nauterm'), findsOneWidget);
+    final platform = tester.widget<Text>(
+      find.byKey(const ValueKey('settings-about-platform')),
+    );
+    expect(platform.data, matches(r'^[^·]+ · [a-z0-9_]+$'));
     expect(
       find.byKey(const ValueKey('settings-about-build-number')),
       findsOneWidget,
@@ -382,12 +471,139 @@ void main() {
       ),
       findsOneWidget,
     );
+    if (Platform.isMacOS) {
+      expect(find.text('Updates are managed by Sparkle.'), findsOneWidget);
+      expect(
+        find.text(
+          'This build does not include a Sparkle update feed and public key.',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<OutlinedButton>(
+              find.descendant(
+                of: find.byKey(const ValueKey('settings-update-action')),
+                matching: find.byType(OutlinedButton),
+              ),
+            )
+            .onPressed,
+        isNull,
+      );
+    }
     expect(find.text('Third-party licenses'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('settings-about-third-party-licenses')),
       findsOneWidget,
     );
 
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('about offers browser fallback and cancels in-app downloads', (
+    WidgetTester tester,
+  ) async {
+    PackageInfo.setMockInitialValues(
+      appName: 'Nauterm',
+      packageName: 'com.korvect.nauterm',
+      version: '1.2.3',
+      buildNumber: '42',
+      buildSignature: '',
+    );
+    const releaseUri = 'https://example.com/releases/v2.0.0';
+    const packageUri = 'https://example.com/releases/nauterm-setup.exe';
+    final manifestUri = Uri.parse(
+      'https://example.com/releases/SHA256SUMS.txt',
+    );
+    final opened = <String>[];
+    var releaseChecks = 0;
+    settingsDesktopUpdateServiceFactoryOverride = () => DesktopUpdateService(
+      repository: 'example/nauterm',
+      target: const DesktopUpdateTarget(
+        platform: DesktopUpdatePlatform.windows,
+        architecture: DesktopUpdateArchitecture.x86_64,
+      ),
+      client: MockClient.streaming((request, _) async {
+        if (request.url == manifestUri) {
+          await (request as http.Abortable).abortTrigger!;
+          throw http.RequestAbortedException(request.url);
+        }
+        releaseChecks++;
+        return http.StreamedResponse(
+          Stream.value(
+            utf8.encode(
+              jsonEncode({
+                'tag_name': 'v2.0.0',
+                'html_url': releaseUri,
+                'body': 'Example release notes',
+                'assets': [
+                  {
+                    'name': 'Nauterm-2.0.0-windows-x86_64-setup.exe',
+                    'browser_download_url': packageUri,
+                    'size': 8,
+                  },
+                  if (releaseChecks > 1)
+                    {
+                      'name': 'SHA256SUMS.txt',
+                      'browser_download_url': manifestUri.toString(),
+                      'size': 15,
+                    },
+                ],
+              }),
+            ),
+          ),
+          200,
+        );
+      }),
+      processRunner: (executable, arguments) async {
+        expect(executable, 'rundll32');
+        expect(arguments.first, 'url.dll,FileProtocolHandler');
+        opened.add(arguments.last);
+        return ProcessResult(0, 0, '', '');
+      },
+    );
+    addTearDown(() => settingsDesktopUpdateServiceFactoryOverride = null);
+    await tester.pumpWidget(
+      const MaterialApp(home: SettingsPanel(detectExternalEditors: false)),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('settings-nav-about')));
+    await tester.pumpAndSettle();
+    final action = find.byKey(const ValueKey('settings-update-action'));
+    await tester.scrollUntilVisible(
+      action,
+      300,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.tap(action);
+    await tester.pumpAndSettle();
+    expect(find.text('Nauterm 2.0.0 is available.'), findsOneWidget);
+    expect(find.text('Download update'), findsNothing);
+    for (final label in ['Release details', 'Download in Browser']) {
+      final button = find.widgetWithText(OutlinedButton, label);
+      await tester.ensureVisible(button);
+      await tester.pump();
+      await tester.tap(button);
+      await tester.pumpAndSettle();
+    }
+    expect(opened, [releaseUri, packageUri]);
+    await tester.ensureVisible(action);
+    await tester.pump();
+    await tester.tap(action);
+    await tester.pumpAndSettle();
+    expect(find.text('Download update'), findsOneWidget);
+    await tester.ensureVisible(action);
+    await tester.pump();
+    await tester.tap(action);
+    await tester.pump(const Duration(milliseconds: 150));
+    expect(find.text('Checking release checksums…'), findsOneWidget);
+    final cancel = find.widgetWithText(OutlinedButton, 'Cancel download');
+    await tester.ensureVisible(cancel);
+    await tester.pump();
+    await tester.tap(cancel);
+    await tester.pumpAndSettle();
+    expect(find.text('Download cancelled.'), findsOneWidget);
+    expect(find.text('Download update'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -420,9 +636,12 @@ void main() {
     await tester.pump();
     await tester.tap(find.byKey(const ValueKey('settings-nav-about')));
     await tester.pumpAndSettle();
-    await tester.tap(
-      find.byKey(const ValueKey('settings-about-third-party-licenses')),
+    final licenseButton = find.byKey(
+      const ValueKey('settings-about-third-party-licenses'),
     );
+    await tester.ensureVisible(licenseButton);
+    await tester.pumpAndSettle();
+    await tester.tap(licenseButton);
     await tester.pumpAndSettle();
 
     expect(find.byType(LicensePage), findsNothing);
@@ -854,13 +1073,12 @@ void main() {
       const ValueKey('settings-terminal-scroll-view'),
     );
     const cases = [
+      (query: 'font size', title: 'Terminal Font', section: 'FONT'),
+      (query: 'ligatures', title: 'Ligatures', section: 'FONT'),
+      (query: '连字', title: 'Ligatures', section: 'FONT'),
       (query: 'autocomplete', title: 'Composer', section: 'LAYOUT'),
       (query: 'multiple tabs', title: 'Multiple Tabs', section: 'SESSION'),
-      (
-        query: 'filename',
-        title: 'Open Links and Files',
-        section: 'INPUT',
-      ),
+      (query: 'filename', title: 'Open Links and Files', section: 'INPUT'),
       (
         query: 'command block',
         title: 'Select Command Block on Click',
@@ -875,7 +1093,7 @@ void main() {
         ValueKey('settings-search-result-terminal-${target.title}'),
       );
       expect(result, findsOneWidget);
-      expect(find.text('1 matching settings'), findsOneWidget);
+      expect(find.text('1 result'), findsOneWidget);
       await tester.tap(result);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 16));
@@ -1203,23 +1421,33 @@ void main() {
 
     await tester.tap(recorder);
     await tester.pump();
-    expect(find.text('Press shortcut...'), findsOneWidget);
+    expect(find.text('Press shortcut…'), findsOneWidget);
 
     await tester.tap(find.text('Shortcuts').last);
     await tester.pump();
-    expect(find.text('Press shortcut...'), findsNothing);
+    expect(find.text('Press shortcut…'), findsNothing);
   });
 
   testWidgets('data sync page exposes storage providers and their settings', (
     WidgetTester tester,
   ) async {
     githubDeviceFlowClientIdOverride = '';
+    var refreshCount = 0;
+    settingsRemoteSyncStatusLoaderOverride = (_) async {
+      refreshCount++;
+      return {};
+    };
+    cacheGithubSyncSettingsForTesting(NautermPaths.resolve().databasePath, {
+      'hasLocalSyncKey': false,
+    });
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(1000, 820);
     addTearDown(() {
       tester.view.resetDevicePixelRatio();
       tester.view.resetPhysicalSize();
       githubDeviceFlowClientIdOverride = null;
+      settingsRemoteSyncStatusLoaderOverride = null;
+      clearGithubSyncSettingsCacheForTesting();
     });
 
     await tester.pumpWidget(
@@ -1287,8 +1515,15 @@ void main() {
     expect(find.text('Automatic Sync'), findsOneWidget);
     expect(find.text('minutes'), findsOneWidget);
     expect(find.text('Local Backups'), findsOneWidget);
-    expect(find.text('Local Version'), findsOneWidget);
-    expect(find.text('Remote Version'), findsOneWidget);
+    expect(find.text('Local —', findRichText: true), findsOneWidget);
+    expect(find.text('Remote —', findRichText: true), findsOneWidget);
+    final syncNow = find.byKey(const ValueKey('settings-sync-now'));
+    expect(tester.widget<FilledButton>(syncNow).onPressed, isNull);
+    final refresh = find.byTooltip('Refresh Status');
+    final beforeRefresh = refreshCount;
+    await tester.tap(refresh);
+    await tester.pumpAndSettle();
+    expect(refreshCount, beforeRefresh + 1);
     expect(find.text('Sync Status'), findsNothing);
     expect(find.text('No sync providers yet'), findsNothing);
     expect(find.text('GitHub Repository'), findsOneWidget);
@@ -1389,6 +1624,20 @@ void main() {
     expect(find.text('Connect'), findsOneWidget);
     expect(find.text('Access Token'), findsNothing);
     expect(find.text('Folder'), findsNothing);
+    final authorization = _PendingCloudOAuth();
+    settingsCloudOAuthClientFactoryOverride = () => authorization;
+    addTearDown(() => settingsCloudOAuthClientFactoryOverride = null);
+    await tester.tap(find.text('Connect'));
+    await tester.pump();
+    expect(find.text('Waiting for browser sign-in…'), findsOneWidget);
+    await tester.tap(find.text('Open browser'));
+    expect(authorization.browserReopens, 1);
+    await tester.tap(find.text('Cancel sign-in'));
+    await tester.pump();
+    expect(authorization.isCancelled, isTrue);
+    expect(find.text('Cancel sign-in'), findsNothing);
+    expect(find.text('Add OneDrive'), findsOneWidget);
+    expect(find.text('Connect'), findsOneWidget);
     await tester.tap(find.byTooltip('Close'));
     await tester.pumpAndSettle();
 
@@ -1457,11 +1706,186 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('sync key details exposes Master Key rotation validation', (
+  testWidgets('sync provider removal asks before changing saved data', (
+    WidgetTester tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1000, 900);
+    final directory = Directory.systemTemp.createTempSync(
+      'nauterm-sync-remove-',
+    );
+    final databasePath = '${directory.path}/settings.sqlite';
+    final store = NautermDataStore.openPath(databasePath);
+    settingsRemoteSyncStatusLoaderOverride = (_) async => {};
+    addTearDown(() {
+      store.dispose();
+      directory.deleteSync(recursive: true);
+      settingsRemoteSyncStatusLoaderOverride = null;
+      clearGithubSyncSettingsCacheForTesting();
+      tester.view.resetDevicePixelRatio();
+      tester.view.resetPhysicalSize();
+    });
+    store.s3SaveConfig(
+      endpoint: 'https://legacy.example.com',
+      region: 'auto',
+      bucket: 'legacy',
+      prefix: '',
+      filename: 'nauterm-sync.enc',
+    );
+    store.s3SaveCredentials(accessKeyId: 'access', secretAccessKey: 'secret');
+    store.cloudSaveProvider(
+      provider: {
+        'id': 'sync-removal-example',
+        'scheme': 's3',
+        'vendor': 'minio',
+        'name': 'Lab MinIO',
+        'config': {
+          'endpoint': 'https://minio.example.com',
+          'region': 'auto',
+          'bucket': 'backup',
+          'filename': 'nauterm-sync.enc',
+        },
+      },
+      credentials: {'access_key_id': 'access', 'secret_access_key': 'secret'},
+    );
+    cacheGithubSyncSettingsForTesting(databasePath, {
+      's3Config': store.s3LoadConfig(),
+      'hasS3Credentials': true,
+      'cloudProviders': store.cloudListProviders(),
+      'hasLocalSyncKey': true,
+    });
+
+    Future<void> waitUntil(bool Function() condition, {String? reason}) async {
+      final wait = Stopwatch()..start();
+      while (!condition() && wait.elapsed < const Duration(seconds: 5)) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 15)),
+        );
+        await tester.pump();
+      }
+      expect(condition(), isTrue, reason: reason);
+    }
+
+    Future<void> openProvider(String cardKey, Finder whenOpen) async {
+      final configure = find.descendant(
+        of: find.byKey(ValueKey(cardKey)),
+        matching: find.byWidgetPredicate(
+          (widget) => widget is IconButton && widget.tooltip == 'Configure',
+        ),
+      );
+      await waitUntil(
+        () => tester
+            .widgetList<IconButton>(configure)
+            .any((button) => button.onPressed != null),
+        reason: 'The Configure button for $cardKey should be available.',
+      );
+      await tester.ensureVisible(configure);
+      await tester.pumpAndSettle();
+      await tester.tap(configure);
+      await waitUntil(() => whenOpen.evaluate().isNotEmpty);
+      await tester.ensureVisible(whenOpen);
+    }
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SettingsPanel(
+          detectExternalEditors: false,
+          syncDatabasePath: databasePath,
+        ),
+      ),
+    );
+    await tester.tap(find.byKey(const ValueKey('settings-nav-sync')));
+    await tester.pumpAndSettle();
+
+    final remove = find.text('Remove from Nauterm');
+    await openProvider('settings-cloud-provider-sync-removal-example', remove);
+    await tester.tap(remove);
+    await tester.pumpAndSettle();
+    expect(find.text('Delete Sync Provider'), findsOneWidget);
+    expect(store.cloudListProviders(), hasLength(1));
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(remove);
+    await tester.tap(remove);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete'));
+    await waitUntil(() => store.cloudListProviders().isEmpty);
+    await waitUntil(() => find.text('Lab MinIO').evaluate().isEmpty);
+
+    final disconnect = find.text('Disconnect');
+    await openProvider('settings-sync-provider-s3Compatible', disconnect);
+    await tester.tap(disconnect);
+    await tester.pumpAndSettle();
+    expect(find.text('Disconnect Sync Provider'), findsOneWidget);
+    expect(store.s3HasCredentials(), isTrue);
+    await tester.tap(disconnect);
+    await waitUntil(() => !store.s3HasCredentials());
+    expect(store.s3LoadConfig()?['bucket'], 'legacy');
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('sync key details confirms forgetting and validates rotation', (
     WidgetTester tester,
   ) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(760, 820);
+    settingsRemoteSyncStatusLoaderOverride = (_) async => {
+      'active_provider_id': 'cloud:provider-1',
+    };
+    final firstHistory =
+        Completer<({List<Map<String, dynamic>> versions, bool canRestore})>();
+    var historyReads = 0;
+    settingsSyncHistoryLoaderOverride = (scope, _) async {
+      expect(scope, 'cloud:provider-2');
+      historyReads++;
+      if (historyReads == 1) return firstHistory.future;
+      return (
+        versions: [
+          {'version_id': 'current-archive', 'is_current': true},
+          {'version_id': 'previous-archive', 'is_current': false},
+        ],
+        canRestore: historyReads > 2,
+      );
+    };
+    settingsSyncKeyRotationReviewOverride = (_) async => (
+      stamp: 'rotation-review',
+      targets: [
+        (scope: 'cloud:provider-1', name: 'Lab MinIO'),
+        (scope: 'cloud:provider-2', name: 'Archive R2'),
+        (scope: 'cloud:provider-3', name: 'Backup B2'),
+      ],
+    );
+    final partialRotation = Completer<SyncKeyRotationResult>();
+    var rotationAttempts = 0;
+    settingsSyncKeyRotationRunnerOverride =
+        (_, stamp, current, next, backupCount, onProgress) async {
+          rotationAttempts++;
+          expect(current, 'Current-master-key1');
+          expect(next, 'New-master-key-value1');
+          if (rotationAttempts == 1) {
+            expect(stamp, 'rotation-review');
+            onProgress((
+              scope: 'cloud:provider-1',
+              phase: SyncKeyRotationPhase.updated,
+            ));
+            onProgress((
+              scope: 'cloud:provider-2',
+              phase: SyncKeyRotationPhase.updating,
+            ));
+            return partialRotation.future;
+          }
+          expect(stamp, 'retry-review');
+          return (
+            completed: [
+              'cloud:provider-1',
+              'cloud:provider-2',
+              'cloud:provider-3',
+            ],
+            failed: null,
+            retryStamp: null,
+            hasLocalKey: true,
+          );
+        };
     cacheGithubSyncSettingsForTesting(
       NautermPaths.resolve().databasePath,
       <String, Object?>{
@@ -1523,6 +1947,10 @@ void main() {
     );
     addTearDown(() {
       clearGithubSyncSettingsCacheForTesting();
+      settingsRemoteSyncStatusLoaderOverride = null;
+      settingsSyncHistoryLoaderOverride = null;
+      settingsSyncKeyRotationReviewOverride = null;
+      settingsSyncKeyRotationRunnerOverride = null;
       tester.view.resetDevicePixelRatio();
       tester.view.resetPhysicalSize();
     });
@@ -1544,39 +1972,24 @@ void main() {
     final thirdCard = find.byKey(
       const ValueKey('settings-cloud-provider-provider-3'),
     );
+    expect(find.byKey(const ValueKey('settings-sync-now')), findsOneWidget);
     expect(
-      find.descendant(of: activeCard, matching: find.byTooltip('Sync')),
+      find.descendant(of: activeCard, matching: find.text('ACTIVE')),
       findsOneWidget,
     );
     expect(
-      find.descendant(of: activeCard, matching: find.text('Active')),
-      findsNothing,
+      find.descendant(of: inactiveCard, matching: find.text('Use')),
+      findsOneWidget,
     );
     expect(
       find.descendant(
-        of: activeCard,
-        matching: find.textContaining('Connected'),
+        of: inactiveCard,
+        matching: find.byTooltip('Version History'),
       ),
       findsOneWidget,
     );
     expect(
-      find.descendant(of: inactiveCard, matching: find.byTooltip('Sync')),
-      findsNothing,
-    );
-    expect(
-      find.descendant(of: inactiveCard, matching: find.byTooltip('History')),
-      findsNothing,
-    );
-    expect(
-      find.descendant(of: inactiveCard, matching: find.text('Activate')),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(of: inactiveCard, matching: find.textContaining('Ready')),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(of: inactiveCard, matching: find.byTooltip('Settings')),
+      find.descendant(of: inactiveCard, matching: find.byTooltip('Configure')),
       findsOneWidget,
     );
     expect(
@@ -1586,12 +1999,74 @@ void main() {
     expect(tester.getSize(activeCard).width, tester.getSize(thirdCard).width);
     expect(
       tester.getTopLeft(activeCard).dy,
-      tester.getTopLeft(inactiveCard).dy,
+      lessThan(tester.getTopLeft(inactiveCard).dy),
     );
-    expect(tester.getTopLeft(activeCard).dy, tester.getTopLeft(thirdCard).dy);
-    await tester.tap(find.text('Key details'));
+    expect(
+      tester.getTopLeft(inactiveCard).dy,
+      lessThan(tester.getTopLeft(thirdCard).dy),
+    );
+    final historyButton = find.descendant(
+      of: inactiveCard,
+      matching: find.byTooltip('Version History'),
+    );
+    await tester.ensureVisible(historyButton);
     await tester.pumpAndSettle();
+    await tester.tap(historyButton);
+    await tester.pump();
+    expect(find.text('Archive R2 History'), findsOneWidget);
+    expect(find.bySemanticsLabel('Loading history…'), findsOneWidget);
+    firstHistory.completeError(StateError('provider temporarily unavailable'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Bad state: provider temporarily unavailable'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Retry'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        'Complete a sync on this device before restoring cloud history.',
+      ),
+      findsOneWidget,
+    );
+    final restore = find.widgetWithText(OutlinedButton, 'Restore');
+    expect(tester.widget<OutlinedButton>(restore).onPressed, isNull);
+    await tester.tap(find.byTooltip('Close'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(historyButton);
+    await tester.pumpAndSettle();
+    expect(tester.widget<OutlinedButton>(restore).onPressed, isNotNull);
+    await tester.tap(restore);
+    await tester.pumpAndSettle();
+    expect(find.text('Restore Cloud Version'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Close'));
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('Key'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Key'));
+    await tester.pumpAndSettle();
+    expect(find.text('CONNECTED PROVIDERS · 3'), findsOneWidget);
     expect(find.text('Forget Master Key'), findsOneWidget);
+    await tester.tap(find.text('Forget Master Key'));
+    await tester.pumpAndSettle();
+    final confirmation = find.byKey(
+      const ValueKey('settings-sync-confirm-forget-key'),
+    );
+    expect(find.text('Forget Master Key?'), findsOneWidget);
+    expect(confirmation, findsOneWidget);
+    expect(find.byKey(const ValueKey('settings-sync-now')), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(confirmation, findsNothing);
+    expect(find.byKey(const ValueKey('settings-sync-now')), findsOneWidget);
+    await tester.tap(find.text('Key'));
+    await tester.pumpAndSettle();
+    expect(find.text('Sync DEK available locally'), findsOneWidget);
     await tester.tap(find.text('Change Master Key'));
     await tester.pumpAndSettle();
 
@@ -1631,6 +2106,146 @@ void main() {
       find.text('New Master Key confirmation does not match.'),
       findsOneWidget,
     );
+
+    final confirmKey = find.descendant(
+      of: find.byKey(const ValueKey('settings-sync-new-master-key-confirm')),
+      matching: find.byType(EditableText),
+    );
+    final submit = find.byKey(
+      const ValueKey('settings-sync-change-master-key-submit'),
+    );
+    await tester.enterText(confirmKey, 'New-master-key-value1');
+    await tester.ensureVisible(submit);
+    await tester.pumpAndSettle();
+    await tester.tap(submit);
+    await tester.pumpAndSettle();
+    expect(find.text('Updated'), findsOneWidget);
+    expect(tester.widget<EditableText>(confirmKey).readOnly, isTrue);
+    expect(
+      tester
+          .widget<IconButton>(find.widgetWithIcon(IconButton, LucideIcons.x))
+          .onPressed,
+      isNull,
+    );
+
+    partialRotation.complete((
+      completed: ['cloud:provider-1'],
+      failed: (scope: 'cloud:provider-2', error: 'temporary upload failure'),
+      retryStamp: 'retry-review',
+      hasLocalKey: true,
+    ));
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        'The Master Key change did not complete.\n'
+        'Archive R2: temporary upload failure',
+      ),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Retry with this same pair'), findsOneWidget);
+    expect(tester.widget<EditableText>(confirmKey).readOnly, isTrue);
+    await tester.ensureVisible(submit);
+    await tester.pumpAndSettle();
+    await tester.tap(submit);
+    await tester.pumpAndSettle();
+    expect(rotationAttempts, 2);
+    expect(submit, findsNothing);
+  });
+
+  testWidgets('restoring a local sync backup requires confirmation', (
+    WidgetTester tester,
+  ) async {
+    final directory = Directory.systemTemp.createTempSync(
+      'nauterm_local_backup_confirm_',
+    );
+    final databasePath = '${directory.path}/settings.sqlite';
+    final backupDirectory = Directory('${directory.path}/sync-backups')
+      ..createSync();
+
+    void createDatabase(String path, String groupName) {
+      final store = NautermDataStore.openPath(path);
+      try {
+        store.saveGroup(HostGroup(name: groupName));
+      } finally {
+        store.dispose();
+      }
+    }
+
+    String currentGroup() {
+      final store = NautermDataStore.openPath(databasePath);
+      try {
+        return store.listGroups().single.name;
+      } finally {
+        store.dispose();
+      }
+    }
+
+    createDatabase(databasePath, 'Current group');
+    createDatabase(
+      '${backupDirectory.path}/nauterm-local-backup-sync-fixture.sqlite',
+      'Backed up group',
+    );
+    cacheGithubSyncSettingsForTesting(databasePath, {'hasLocalSyncKey': true});
+    settingsRemoteSyncStatusLoaderOverride = (_) async => {};
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1000, 900);
+    addTearDown(() {
+      clearGithubSyncSettingsCacheForTesting();
+      settingsRemoteSyncStatusLoaderOverride = null;
+      tester.view.resetDevicePixelRatio();
+      tester.view.resetPhysicalSize();
+      directory.deleteSync(recursive: true);
+    });
+
+    Future<void> waitFor(Finder finder) async {
+      for (
+        var attempt = 0;
+        attempt < 100 && finder.evaluate().isEmpty;
+        attempt++
+      ) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 15)),
+        );
+        await tester.pump();
+      }
+      expect(finder, findsWidgets);
+    }
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SettingsPanel(
+          detectExternalEditors: false,
+          syncDatabasePath: databasePath,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('settings-nav-sync')));
+    await tester.pumpAndSettle();
+    final browse = find.text('Browse');
+    await tester.ensureVisible(browse);
+    await tester.tap(browse);
+    await tester.pumpAndSettle();
+    final restore = find.text('Restore');
+    final confirmTitle = find.text('Restore Local Backup');
+    await waitFor(restore);
+
+    await tester.tap(restore);
+    await tester.pumpAndSettle();
+    expect(confirmTitle, findsOneWidget);
+    expect(currentGroup(), 'Current group');
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(confirmTitle, findsNothing);
+    expect(currentGroup(), 'Current group');
+
+    await tester.tap(restore);
+    await tester.pumpAndSettle();
+    expect(confirmTitle, findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Restore'));
+    await tester.pumpAndSettle();
+    await waitFor(find.text('Local backup restored.'));
+    expect(currentGroup(), 'Backed up group');
   });
 
   test('data sync isolate tasks do not capture widget state', () async {
@@ -1663,4 +2278,30 @@ void main() {
       store.dispose();
     }
   });
+}
+
+class _PendingCloudOAuth extends CloudOAuthClient {
+  final Completer<CloudOAuthCredentials?> _result = Completer();
+  int browserReopens = 0;
+
+  @override
+  Future<CloudOAuthCredentials?> authorize(
+    CloudOAuthVendor vendor, {
+    void Function(CloudOAuthPhase)? onPhase,
+  }) {
+    expect(vendor, CloudOAuthVendor.oneDrive);
+    onPhase?.call(CloudOAuthPhase.waitingForBrowser);
+    return _result.future;
+  }
+
+  @override
+  Future<void> reopenBrowser() async {
+    browserReopens++;
+  }
+
+  @override
+  void cancel() {
+    super.cancel();
+    if (!_result.isCompleted) _result.complete(null);
+  }
 }

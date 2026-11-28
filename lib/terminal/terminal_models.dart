@@ -212,6 +212,7 @@ class SshAuthenticationChallenge {
     required this.name,
     required this.instructions,
     required this.prompts,
+    this.isRetry = false,
   });
 
   factory SshAuthenticationChallenge.fromJson(Map<String, Object?> json) {
@@ -219,6 +220,7 @@ class SshAuthenticationChallenge {
       id: json['id'] as int,
       name: json['name'] as String? ?? '',
       instructions: json['instructions'] as String? ?? '',
+      isRetry: json['retry'] == true,
       prompts: List.unmodifiable([
         for (final prompt in json['prompts'] as List<Object?>)
           SshAuthenticationPrompt(
@@ -233,6 +235,7 @@ class SshAuthenticationChallenge {
   final String name;
   final String instructions;
   final List<SshAuthenticationPrompt> prompts;
+  final bool isRetry;
 }
 
 @immutable

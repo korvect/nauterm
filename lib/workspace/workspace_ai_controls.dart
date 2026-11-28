@@ -12,6 +12,10 @@ class _AiProviderModelOption {
   final _AiProviderModelValue value;
   final String providerName;
   final String model;
+
+  String modelLabel(BuildContext context) => model.isEmpty
+      ? context.tr('ai.label.defaultModel', fallback: 'Default model')
+      : model;
 }
 
 class _AiProviderModelSelector extends StatefulWidget {
@@ -95,7 +99,10 @@ class _AiProviderModelSelectorState extends State<_AiProviderModelSelector> {
         onTap: _showMenu,
         child: Semantics(
           button: true,
-          label: 'AI provider and model',
+          label: context.tr(
+            'ai.label.aiProviderAndModel',
+            fallback: 'AI provider and model',
+          ),
           value: fullLabel,
           child: ConstrainedBox(
             key: _anchorKey,
@@ -241,7 +248,11 @@ class _AiProviderModelMenuOverlay extends StatelessWidget {
             option.providerName,
             providerTextStyle,
           ),
-          _measureWorkspaceSelectorText(context, option.model, modelTextStyle),
+          _measureWorkspaceSelectorText(
+            context,
+            option.modelLabel(context),
+            modelTextStyle,
+          ),
         ),
       ),
     );
@@ -486,7 +497,7 @@ class _AiProviderModelMenuItemState extends State<_AiProviderModelMenuItem> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          widget.option.model,
+                          widget.option.modelLabel(context),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(

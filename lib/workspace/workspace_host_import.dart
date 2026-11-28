@@ -69,7 +69,7 @@ class _HostImportDialogState extends State<_HostImportDialog> {
         _hostsExpanded = true;
         _keysExpanded = true;
         if (bundle.hosts.isEmpty && bundle.keys.isEmpty) {
-          _error = tr(
+          _error = context.tr(
             'workspace.import.empty',
             fallback: 'No supported hosts or keys were found.',
           );
@@ -119,7 +119,7 @@ class _HostImportDialogState extends State<_HostImportDialog> {
           const SizedBox(width: 9),
           Text(
             source == null
-                ? tr('workspace.import.title', fallback: 'Import to vault')
+                ? tr('workspace.import.title', fallback: 'Import to Vaults')
                 : tr(
                     'workspace.import.fromTitle',
                     fallback: 'Import from {source}',
@@ -203,7 +203,7 @@ class _HostImportDialogState extends State<_HostImportDialog> {
             ],
           ),
         ),
-        if (_loading) const LinearProgressIndicator(minHeight: 2),
+        if (_loading) _loadingStatus(),
         if (_error != null) _ImportErrorText(_error!),
       ],
     );
@@ -229,6 +229,8 @@ class _HostImportDialogState extends State<_HostImportDialog> {
       for (var index = 0; index < _bundle.keys.length; index++)
         if (_matchesKey(_bundle.keys[index], query)) index,
     ];
+    final noMatches =
+        query.isNotEmpty && visibleHosts.isEmpty && visibleKeys.isEmpty;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -279,7 +281,7 @@ class _HostImportDialogState extends State<_HostImportDialog> {
                         selected: _selectedHosts.contains(index),
                         onTap: () => _toggleIndex(_selectedHosts, index),
                       ),
-                  if (_hostsExpanded && visibleHosts.isEmpty)
+                  if (_hostsExpanded && visibleHosts.isEmpty && !noMatches)
                     _ImportEmptyRow(
                       tr(
                         'common.label.noMatchingHosts',
@@ -310,11 +312,18 @@ class _HostImportDialogState extends State<_HostImportDialog> {
                         selected: _selectedKeys.contains(index),
                         onTap: () => _toggleIndex(_selectedKeys, index),
                       ),
-                  if (_keysExpanded && visibleKeys.isEmpty)
+                  if (_keysExpanded && visibleKeys.isEmpty && !noMatches)
                     _ImportEmptyRow(
                       tr(
                         'workspace.import.noMatchingKeys',
                         fallback: 'No matching keys',
+                      ),
+                    ),
+                  if (noMatches)
+                    _ImportEmptyRow(
+                      context.tr(
+                        'workspace.import.noMatchingEntries',
+                        fallback: 'No matching hosts or keys.',
                       ),
                     ),
                 ],
@@ -322,8 +331,39 @@ class _HostImportDialogState extends State<_HostImportDialog> {
             ),
           ),
         ),
-        if (_loading) const LinearProgressIndicator(minHeight: 2),
+        const SizedBox(height: 10),
+        Text(
+          context.tr(
+            'workspace.import.preview.description',
+            fallback: 'Existing entries are reused or skipped. Select matching keys to attach them to hosts. Secrets are stored in the encrypted database.',
+          ),
+          style: TextStyle(color: _mutedText, fontSize: 12),
+        ),
+        if (_bundle.skippedFiles > 0)
+          Text(
+            context.tr(
+              'workspace.import.filesSkipped',
+              args: {'count': _bundle.skippedFiles},
+            ),
+            style: TextStyle(color: _mutedText, fontSize: 12),
+          ),
+        if (_loading) _loadingStatus(),
         if (_error != null) _ImportErrorText(_error!),
+      ],
+    );
+  }
+
+  Widget _loadingStatus() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 8),
+        const LinearProgressIndicator(minHeight: 2),
+        const SizedBox(height: 4),
+        Text(
+          context.tr('workspace.import.loading'),
+          style: TextStyle(color: _mutedText, fontSize: 12),
+        ),
       ],
     );
   }
@@ -693,7 +733,7 @@ String _hostImportSourceLabel(HostImportSource source) => switch (source) {
     'workspace.import.source.csv.label',
     fallback: 'CSV file',
   ),
-  HostImportSource.openSsh => '~/.ssh',
+  HostImportSource.openSsh => 'OpenSSH',
   HostImportSource.putty => 'PuTTY',
   HostImportSource.mobaXterm => 'MobaXterm',
   HostImportSource.secureCrt => 'SecureCRT',
@@ -713,7 +753,10 @@ String _hostImportSourceDescription(HostImportSource source) =>
         'workspace.import.source.putty.description',
         fallback: 'Sessions from an exported .reg file',
       ),
-      HostImportSource.mobaXterm => '.mxtsessions or MobaXterm.ini',
+      HostImportSource.mobaXterm => tr(
+        'workspace.import.source.mobaXterm.description',
+        fallback: 'Sessions from a .mxtsessions or .ini file',
+      ),
       HostImportSource.secureCrt => tr(
         'workspace.import.source.secureCrt.description',
         fallback: 'Sessions from a SecureCRT folder',

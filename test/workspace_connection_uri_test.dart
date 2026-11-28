@@ -21,8 +21,7 @@ void main() {
         final opened = controller.openConnectionUri(
           '$scheme://Admin@host.invalid:2022',
         );
-        await _pumpConnection(tester);
-        await opened;
+        await _finishWithPumps(tester, opened);
         final terminal = _remoteController(tester);
         expect(find.text('Protocol'), findsNothing);
         if (scheme == 'telnet') {
@@ -58,8 +57,7 @@ void main() {
       expect(complete, isFalse);
       expect(find.byType(CircularProgressIndicator), findsNWidgets(2));
       data.complete(const NautermWorkspaceData());
-      await _pumpConnection(tester);
-      await opened;
+      await _finishWithPumps(tester, opened);
       expect(find.text('Please enter username'), findsOneWidget);
       expect(find.text('Continue & Save'), findsNothing);
       expect(_remoteController(tester).sshProfile!.username, isEmpty);
@@ -75,8 +73,7 @@ void main() {
     final opened = controller.openConnectionUri(
       'ssh://user:never-display-me@host.invalid:2022',
     );
-    await _pumpConnection(tester);
-    await opened;
+    await _finishWithPumps(tester, opened);
     final profile = _remoteController(tester).sshProfile!;
     expect(profile.username, 'user');
     expect(profile.host, 'host.invalid');
@@ -94,8 +91,7 @@ void main() {
     final opened = controller.openConnectionUri(
       'ssh://user@host.invalid?password=never-display-me',
     );
-    await tester.pump();
-    await opened;
+    await _finishWithPumps(tester, opened);
     await tester.pump(const Duration(milliseconds: 200));
     expect(controller.hasTerminalTabs, isFalse);
     expect(
@@ -116,8 +112,7 @@ void main() {
       await tester.pumpWidget(
         NautermApp(onOpenSettings: () {}, workspaceController: controller),
       );
-      await _pumpConnection(tester);
-      await opened;
+      await _finishWithPumps(tester, opened);
       expect(find.text('Please enter username'), findsOneWidget);
       expect(_remoteController(tester).sshProfile!.host, 'host.invalid');
       await tester.pumpWidget(const SizedBox.shrink());
@@ -137,10 +132,13 @@ Future<NautermWorkspaceController> _pumpWorkspace(
     configDirectory: directory,
     dataDirectory: directory,
   );
+  final loading = Completer<void>();
   final controller = NautermWorkspaceController(
     workspaceStateStore: WorkspaceStateStore(paths),
-    dataLoader: (_, _) async =>
-        data == null ? const NautermWorkspaceData() : await data.future,
+    dataLoader: (_, _) async {
+      if (!loading.isCompleted) loading.complete();
+      return data == null ? const NautermWorkspaceData() : await data.future;
+    },
   );
   addTearDown(() async {
     await tester.pumpWidget(const SizedBox.shrink());
@@ -153,27 +151,26 @@ Future<NautermWorkspaceController> _pumpWorkspace(
   await tester.pumpWidget(
     NautermApp(onOpenSettings: () {}, workspaceController: controller),
   );
-  await _pumpConnection(tester);
+  await _finishWithPumps(tester, loading.future);
   if (data == null) {
-    var ready = false;
-    unawaited(controller.initialDataReady.then((_) => ready = true));
-    await _pumpConnection(tester);
-    expect(
-      ready,
-      isTrue,
-      reason: 'The workspace should finish its initial load.',
-    );
+    await _finishWithPumps(tester, controller.initialDataReady);
   }
   return controller;
 }
 
-Future<void> _pumpConnection(WidgetTester tester) async {
-  for (var attempt = 0; attempt < 50; attempt++) {
+Future<void> _finishWithPumps(WidgetTester tester, Future<void> work) async {
+  var finished = false;
+  final completion = work.whenComplete(() => finished = true);
+  final wait = Stopwatch()..start();
+  while (!finished && wait.elapsed < const Duration(seconds: 5)) {
     await tester.runAsync(
       () => Future<void>.delayed(const Duration(milliseconds: 10)),
     );
     await tester.pump(const Duration(milliseconds: 100));
   }
+  expect(finished, isTrue, reason: 'The workspace action should complete.');
+  await completion;
+  await tester.pump();
 }
 
 TerminalController _remoteController(WidgetTester tester) => tester

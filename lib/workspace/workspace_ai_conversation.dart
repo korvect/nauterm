@@ -34,7 +34,7 @@ class _AiAssistantNotice extends StatelessWidget {
           SizedBox(width: 7),
           Expanded(
             child: Text(
-              tr(message),
+              context.tr(message),
               style: TextStyle(
                 color: muted ? colors.muted : colors.foreground,
                 fontSize: 11.5,
@@ -185,7 +185,7 @@ class _AiConversationHistoryView extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 4),
             child: Text(
-              tr(message),
+              context.tr(message),
               style: TextStyle(
                 color: colors.foreground,
                 fontSize: 12,
@@ -657,7 +657,7 @@ class _AiConversationMessageState extends State<_AiConversationMessage> {
               styleSheet: markdownStyle,
               onTapLink: (text, href, title) => _openAiExternalLink(href),
               imageBuilder: (uri, title, alt) => Text(
-                alt ?? 'Image',
+                alt ?? context.tr('ai.label.image'),
                 style: TextStyle(
                   color: colors.muted,
                   fontSize: 12,
@@ -801,7 +801,9 @@ class _AiConversationMessageState extends State<_AiConversationMessage> {
                 SizedBox(width: 5),
               ],
               _AiMessageActionButton(
-                tooltip: _copied ? 'Copied' : 'Copy message',
+                tooltip: context.tr(
+                  _copied ? 'common.status.copied' : 'ai.action.copyMessage',
+                ),
                 icon: _copied ? LucideIcons.check : LucideIcons.copy,
                 color: _copied ? widget.colors.accent : widget.colors.muted,
                 onPressed: widget.message.content.isEmpty ? null : _copyMessage,
@@ -1003,7 +1005,10 @@ class _AiPendingAttachmentChip extends StatelessWidget {
               ),
             ),
             IconButton(
-              tooltip: tr('Remove ${attachment.name}'),
+              tooltip: tr(
+                'ai.attachment.remove',
+                args: {'name': attachment.name},
+              ),
               onPressed: onRemove,
               icon: Icon(LucideIcons.x, size: 13),
               color: colors.muted,
@@ -1052,7 +1057,10 @@ class _AiSentAttachmentChip extends StatelessWidget {
           Flexible(
             child: Text(
               attachment.redacted
-                  ? '${attachment.name} (redacted)'
+                  ? context.tr(
+                      'ai.attachment.redacted',
+                      args: {'name': attachment.name},
+                    )
                   : attachment.name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -1082,6 +1090,11 @@ class _AiContextChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final label = context.tr(switch (attachment.kind) {
+      AiContextKind.commandBlock => 'terminal.label.commandBlock',
+      AiContextKind.terminalSelection => 'ai.label.selection',
+      AiContextKind.recentOutput => 'ai.label.recentOutput',
+    }, fallback: attachment.label);
     return Container(
       key: ValueKey('ai-context-${attachment.kind.name}'),
       height: 27,
@@ -1104,8 +1117,12 @@ class _AiContextChip extends StatelessWidget {
           SizedBox(width: 5),
           Text(
             attachment.redacted
-                ? '${attachment.label} (redacted)'
-                : attachment.label,
+                ? context.tr(
+                    'ai.attachment.redacted',
+                    fallback: '{name} (redacted)',
+                    args: {'name': label},
+                  )
+                : label,
             style: TextStyle(
               color: colors.foreground,
               fontSize: 11,
@@ -1115,7 +1132,11 @@ class _AiContextChip extends StatelessWidget {
           ),
           SizedBox(width: 2),
           IconButton(
-            tooltip: tr('Remove ${attachment.label.toLowerCase()}'),
+            tooltip: context.tr(switch (attachment.kind) {
+              AiContextKind.commandBlock => 'ai.action.removeCommandBlock',
+              AiContextKind.terminalSelection => 'ai.action.removeSelection',
+              AiContextKind.recentOutput => 'ai.action.removeRecentOutput',
+            }),
             onPressed: onRemove,
             icon: Icon(LucideIcons.x, size: 13),
             color: colors.muted,
@@ -1191,7 +1212,7 @@ class _AiTerminalCommandElapsedState extends State<_AiTerminalCommandElapsed> {
     final end = widget.finishedAt ?? DateTime.now();
     final elapsed = end.difference(widget.startedAt);
     return Text(
-      tr('${widget.prefix}${_formatAiCommandDuration(elapsed)}'),
+      '${widget.prefix}${_formatAiCommandDuration(elapsed)}',
       style: TextStyle(
         color: widget.color,
         fontSize: 11,
@@ -1219,6 +1240,8 @@ class _AiTerminalCommandCard extends StatelessWidget {
     required this.command,
     required this.colors,
     required this.terminalAvailable,
+    required this.providerAvailable,
+    required this.ownsRunningCommand,
     required this.anotherCommandRunning,
     required this.onRun,
     required this.onSkip,
@@ -1228,6 +1251,8 @@ class _AiTerminalCommandCard extends StatelessWidget {
   final AiTerminalCommand command;
   final _AiAssistantColors colors;
   final bool terminalAvailable;
+  final bool providerAvailable;
+  final bool ownsRunningCommand;
   final bool anotherCommandRunning;
   final VoidCallback onRun;
   final VoidCallback onSkip;
@@ -1236,6 +1261,9 @@ class _AiTerminalCommandCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final running = command.status == AiTerminalCommandStatus.running;
+    final runningStatus = command.cancellationRequested
+        ? 'common.status.stopping'
+        : 'common.status.running';
     final submitted = command.status == AiTerminalCommandStatus.submitted;
     final succeeded = command.status == AiTerminalCommandStatus.succeeded;
     final failed = command.status == AiTerminalCommandStatus.failed;
@@ -1384,14 +1412,17 @@ class _AiTerminalCommandCard extends StatelessWidget {
                     children: [
                       Text(
                         skipped
-                            ? 'Skipped'
+                            ? tr('common.status.skipped')
                             : submitted
-                            ? 'Submitted · result not tracked'
+                            ? tr('ai.commands.submitted')
                             : cancelled
-                            ? 'Stopped'
+                            ? tr('common.label.stopped')
                             : command.exitCode == null
-                            ? 'Failed'
-                            : 'Exited ${command.exitCode}',
+                            ? tr('common.label.failed')
+                            : tr(
+                                'ai.commands.exited',
+                                args: {'code': command.exitCode},
+                              ),
                         style: TextStyle(
                           color: succeeded || submitted
                               ? colors.accent
@@ -1402,7 +1433,7 @@ class _AiTerminalCommandCard extends StatelessWidget {
                         ),
                       ),
                       if (command.startedAt != null) ...[
-                        Text(tr(' · '), style: TextStyle(color: colors.muted)),
+                        Text(' · ', style: TextStyle(color: colors.muted)),
                         _AiTerminalCommandElapsed(
                           startedAt: command.startedAt!,
                           finishedAt: command.finishedAt,
@@ -1419,20 +1450,31 @@ class _AiTerminalCommandCard extends StatelessWidget {
                         _AiTerminalCommandElapsed(
                           startedAt: startedAt,
                           color: colors.muted,
-                          prefix: command.cancellationRequested
-                              ? 'Stopping '
-                              : 'Running ',
+                          prefix: '${context.tr(runningStatus)} ',
                         ),
                       SizedBox(width: 8),
                       _AiCommandActionButton(
                         key: ValueKey('stop-ai-terminal-command-${command.id}'),
-                        onPressed: command.cancellationRequested
+                        onPressed:
+                            command.cancellationRequested || !ownsRunningCommand
                             ? null
                             : onStop,
+                        tooltip: ownsRunningCommand
+                            ? null
+                            : context.tr(
+                                'ai.commands.belongsToAnotherSession',
+                                fallback: 'Command belongs to another session',
+                              ),
                         icon: Icons.stop_rounded,
                         label: command.cancellationRequested
-                            ? 'Stopping'
-                            : 'Stop',
+                            ? context.tr(
+                                'common.status.stopping',
+                                fallback: 'Stopping…',
+                              )
+                            : context.tr(
+                                'common.action.stop',
+                                fallback: 'Stop',
+                              ),
                         colors: colors,
                       ),
                     ],
@@ -1442,22 +1484,32 @@ class _AiTerminalCommandCard extends StatelessWidget {
                     children: [
                       _AiCommandActionButton(
                         key: ValueKey('skip-ai-terminal-command-${command.id}'),
-                        onPressed: onSkip,
-                        label: 'Skip',
+                        onPressed: providerAvailable ? onSkip : null,
+                        label: context.tr(
+                          'common.action.skip',
+                          fallback: 'Skip',
+                        ),
                         colors: colors,
                       ),
                       SizedBox(width: 6),
                       _AiCommandActionButton(
                         key: ValueKey('run-ai-terminal-command-${command.id}'),
-                        onPressed: terminalAvailable && !anotherCommandRunning
+                        onPressed:
+                            providerAvailable &&
+                                terminalAvailable &&
+                                !anotherCommandRunning
                             ? onRun
                             : null,
                         icon: LucideIcons.play,
-                        label: !terminalAvailable
-                            ? 'No active terminal'
-                            : anotherCommandRunning
-                            ? 'Command running'
-                            : 'Run',
+                        label: context.tr(
+                          !providerAvailable
+                              ? 'ai.label.unavailableProvider'
+                              : !terminalAvailable
+                              ? 'ai.error.noActiveTerminal'
+                              : anotherCommandRunning
+                              ? 'ai.commands.running'
+                              : 'common.action.run',
+                        ),
                         colors: colors,
                         primary: true,
                       ),
@@ -1477,11 +1529,13 @@ class _AiCommandActionButton extends StatefulWidget {
     required this.colors,
     required this.onPressed,
     this.icon,
+    this.tooltip,
     this.primary = false,
   });
 
   final String label;
   final IconData? icon;
+  final String? tooltip;
   final _AiAssistantColors colors;
   final VoidCallback? onPressed;
   final bool primary;
@@ -1524,7 +1578,7 @@ class _AiCommandActionButtonState extends State<_AiCommandActionButton> {
         ? Color.lerp(colors.background, colors.inputBackground, 0.85)!
         : secondaryIdle;
 
-    return MouseRegion(
+    final button = MouseRegion(
       cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
       onEnter: enabled ? (_) => setState(() => _hovered = true) : null,
       onExit: enabled
@@ -1590,6 +1644,8 @@ class _AiCommandActionButtonState extends State<_AiCommandActionButton> {
         ),
       ),
     );
+    final tooltip = widget.tooltip;
+    return tooltip == null ? button : Tooltip(message: tooltip, child: button);
   }
 }
 
@@ -1635,7 +1691,9 @@ class _AiCopyCommandButtonState extends State<_AiCopyCommandButton> {
   @override
   Widget build(BuildContext context) {
     return _AiMessageActionButton(
-      tooltip: _copied ? 'Copied' : 'Copy command',
+      tooltip: context.tr(
+        _copied ? 'common.status.copied' : 'ai.action.copyCommand',
+      ),
       onPressed: _copy,
       icon: _copied ? LucideIcons.check : LucideIcons.copy,
       color: _copied ? widget.accent : widget.color,

@@ -211,7 +211,9 @@ class AppDelegate: FlutterAppDelegate {
 
     let feedURL = Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") as? String
     let publicKey = Bundle.main.object(forInfoDictionaryKey: "SUPublicEDKey") as? String
-    if feedURL?.isEmpty == false && publicKey?.isEmpty == false {
+    if feedURL?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+      && publicKey?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    {
       sparkleUpdaterController = SPUStandardUpdaterController(
         startingUpdater: true,
         updaterDelegate: nil,
@@ -220,6 +222,10 @@ class AppDelegate: FlutterAppDelegate {
     }
 
     sparkleChannel?.setMethodCallHandler { [weak self] call, result in
+      if call.method == "isConfigured" {
+        result(self?.sparkleUpdaterController != nil)
+        return
+      }
       guard call.method == "checkForUpdates" else {
         result(FlutterMethodNotImplemented)
         return
@@ -360,6 +366,18 @@ class AppDelegate: FlutterAppDelegate {
     appMenuChannel?.invokeMethod("showAbout", arguments: nil)
   }
 
+  @IBAction func openDocumentation(_ sender: Any?) {
+    if let url = URL(string: "https://github.com/korvect/nauterm#readme") {
+      NSWorkspace.shared.open(url)
+    }
+  }
+
+  @IBAction func reportIssue(_ sender: Any?) {
+    if let url = URL(string: "https://github.com/korvect/nauterm/issues") {
+      NSWorkspace.shared.open(url)
+    }
+  }
+
   @IBAction func newLocalTerminal(_ sender: Any?) {
     appMenuChannel?.invokeMethod("newLocalTerminal", arguments: nil)
   }
@@ -413,11 +431,7 @@ class AppDelegate: FlutterAppDelegate {
 
   @IBAction func checkForUpdates(_ sender: Any?) {
     guard let updaterController = sparkleUpdaterController else {
-      let alert = NSAlert()
-      alert.alertStyle = .warning
-      alert.messageText = "Updates are not configured"
-      alert.informativeText = "This build does not include a Sparkle update feed and public key."
-      alert.runModal()
+      showAbout(sender)
       return
     }
     updaterController.checkForUpdates(sender)
@@ -475,7 +489,7 @@ class AppDelegate: FlutterAppDelegate {
     guard let frameworksPath = Bundle.main.privateFrameworksPath else {
       return
     }
-    let libraryPath = "\(frameworksPath)/libnauterm_ffi.dylib"
+    let libraryPath = "\(frameworksPath)/libnauterm_core.dylib"
     guard let handle = dlopen(libraryPath, RTLD_NOW | RTLD_LOCAL) else {
       return
     }

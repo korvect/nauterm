@@ -298,7 +298,7 @@ class _ContextMenuRow extends StatelessWidget {
                   SizedBox(width: 14),
                   Expanded(
                     child: Text(
-                      row.localizedLabel,
+                      row.localizedLabel(context),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(

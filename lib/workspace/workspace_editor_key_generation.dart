@@ -152,7 +152,7 @@ class _GenerateKeyEditorContentState extends State<_GenerateKeyEditorContent>
         ? _nameController.text.trim()
         : _suggestedName();
     if (name.isEmpty) {
-      setState(() => _error = 'Name is required.');
+      setState(() => _error = tr('common.validation.nameRequired'));
       return;
     }
 
@@ -207,7 +207,7 @@ class _GenerateKeyEditorContentState extends State<_GenerateKeyEditorContent>
         'workspace.keys.generateAndSave',
         fallback: 'Generate & save',
       ),
-      savingLabel: tr('workspace.keys.generating', fallback: 'Generating...'),
+      savingLabel: tr('workspace.keys.generating', fallback: 'Generating…'),
       children: [
         _WorkspaceFormSection(
           title: tr('common.label.key', fallback: 'Key'),
@@ -777,10 +777,17 @@ class _KeyEditorContentState extends State<_KeyEditorContent>
     }
     final XFile? file;
     try {
-      file = await openFile(
-        initialDirectory: _defaultSshKeyDirectoryPath(),
-        confirmButtonText: 'Import',
-      );
+      file = await openFile(initialDirectory: _defaultSshKeyDirectoryPath());
+    } on Object {
+      if (mounted) {
+        setState(() {
+          _error = tr(
+            'workspace.keys.import.pickerFailed',
+            fallback: 'Could not open the key import picker.',
+          );
+        });
+      }
+      return;
     } finally {
       _pickerLaunchPending = false;
     }
@@ -818,7 +825,11 @@ class _KeyEditorContentState extends State<_KeyEditorContent>
       }
       setState(() {
         _importing = false;
-        _error = 'Unable to import private key: $error';
+        _error = tr(
+          'workspace.keys.import.failure',
+          fallback: 'Unable to import key: {error}',
+          args: {'error': error is FormatException ? error.message : error},
+        );
       });
     }
   }
@@ -832,7 +843,7 @@ class _KeyEditorContentState extends State<_KeyEditorContent>
         ? _nameController.text.trim()
         : _suggestedName();
     if (name.isEmpty) {
-      setState(() => _error = 'Name is required.');
+      setState(() => _error = tr('common.validation.nameRequired'));
       return;
     }
     if (_privateController.text.trim().isEmpty) {
@@ -877,7 +888,7 @@ class _KeyEditorContentState extends State<_KeyEditorContent>
         ? _nameController.text.trim()
         : _suggestedName();
     if (name.isEmpty) {
-      setState(() => _error = 'Name is required.');
+      setState(() => _error = tr('common.validation.nameRequired'));
       return;
     }
 
@@ -1040,8 +1051,8 @@ class _KeyEditorContentState extends State<_KeyEditorContent>
           ? tr('workspace.keys.generateAndSave', fallback: 'Generate & save')
           : tr('common.action.save', fallback: 'Save'),
       savingLabel: _isGenerating
-          ? tr('workspace.keys.generating', fallback: 'Generating...')
-          : tr('common.label.saving', fallback: 'Saving...'),
+          ? tr('workspace.keys.generating', fallback: 'Generating…')
+          : tr('common.label.saving', fallback: 'Saving…'),
       headerActions: initial?.id == null || _saving || _generating
           ? const []
           : [
@@ -1350,7 +1361,7 @@ class _KeyFileImportPanel extends StatelessWidget {
         SizedBox(height: _workspaceFormFieldGap),
         _WorkspaceButton(
           label: importing
-              ? tr('workspace.keys.import.importing', fallback: 'Importing...')
+              ? tr('workspace.keys.import.importing', fallback: 'Importing…')
               : tr(
                   'workspace.keys.import.fromFile',
                   fallback: 'Import from key file',
@@ -1404,16 +1415,23 @@ Future<_ImportedSshKeyFile> _readSshKeyFile(io.File file) async {
   final String? certificate;
   if (selectedCertificate) {
     if (!file.path.endsWith('-cert.pub')) {
-      throw const FormatException(
-        'The certificate filename must end with -cert.pub so its private key can be found.',
+      throw FormatException(
+        tr(
+          'workspace.keys.import.certificateFilenameRequired',
+          fallback: 'The certificate filename must end with -cert.pub so its private key can be found.',
+        ),
       );
     }
     privateFile = io.File(
       file.path.substring(0, file.path.length - '-cert.pub'.length),
     );
     if (!await privateFile.exists()) {
-      throw const FormatException(
-        'The matching private key was not found next to the certificate.',
+      throw FormatException(
+        tr(
+          'workspace.keys.import.missingPrivateKey',
+          fallback:
+              'The matching private key was not found next to the certificate.',
+        ),
       );
     }
     certificate = selectedValue;
@@ -1441,10 +1459,20 @@ Future<_ImportedSshKeyFile> _readSshKeyFile(io.File file) async {
       : selectedText;
   final normalized = privateKey.trim();
   if (_looksLikeSshPublicKey(normalized)) {
-    throw const FormatException('Select a private key file, not a public key.');
+    throw FormatException(
+      tr(
+        'workspace.keys.import.privateKeyExpected',
+        fallback: 'Select a private key file, not a public key.',
+      ),
+    );
   }
   if (!_looksLikeSshPrivateKey(normalized)) {
-    throw const FormatException('The selected file is not a private key.');
+    throw FormatException(
+      tr(
+        'workspace.keys.import.invalidPrivateKey',
+        fallback: 'The selected file is not a private key.',
+      ),
+    );
   }
 
   String? publicKey;
@@ -1473,14 +1501,29 @@ Future<String> _readSshCredentialFile(
 }) async {
   final size = await file.length();
   if (size <= 0) {
-    throw const FormatException('The selected file is empty.');
+    throw FormatException(
+      tr(
+        'workspace.keys.import.emptyFile',
+        fallback: 'The selected file is empty.',
+      ),
+    );
   }
   if (size > maximumBytes) {
-    throw const FormatException('The selected file is too large.');
+    throw FormatException(
+      tr(
+        'workspace.keys.import.fileTooLarge',
+        fallback: 'The selected file is too large.',
+      ),
+    );
   }
   final value = await file.readAsString();
   if (value.trim().isEmpty) {
-    throw const FormatException('The selected file is empty.');
+    throw FormatException(
+      tr(
+        'workspace.keys.import.emptyFile',
+        fallback: 'The selected file is empty.',
+      ),
+    );
   }
   return value;
 }

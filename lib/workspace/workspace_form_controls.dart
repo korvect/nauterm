@@ -7,22 +7,16 @@ const double _workspaceInputAffixGap = 4;
 const double _workspaceSelectAffixGap = 4;
 const double _workspaceTextareaScrollbarThickness = 6;
 const double _workspaceBaseControlFontSize = 14;
-const double _workspaceSelectOptionHorizontalPadding = 12;
 
 enum _WorkspaceControlSize {
-  tiny(24, 32, 8),
-  small(24, 32, 9),
-  medium(32, 32, 12),
-  large(40, 32, 14);
+  tiny(24, 8),
+  small(24, 9),
+  medium(32, 12),
+  large(40, 14);
 
-  const _WorkspaceControlSize(
-    this.fieldHeight,
-    this.optionHeight,
-    this.horizontalPadding,
-  );
+  const _WorkspaceControlSize(this.fieldHeight, this.horizontalPadding);
 
   final double fieldHeight;
-  final double optionHeight;
   final double horizontalPadding;
 
   double get inputHeight => switch (this) {
@@ -508,9 +502,9 @@ class _DashedShapeBorderPainter extends CustomPainter {
 }
 
 class _WorkspaceFormSection extends StatelessWidget {
-  const _WorkspaceFormSection({required this.title, required this.children});
+  const _WorkspaceFormSection({this.title, required this.children});
 
-  final String title;
+  final String? title;
   final List<Widget> children;
 
   @override
@@ -525,16 +519,18 @@ class _WorkspaceFormSection extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              tr(title),
-              style: TextStyle(
-                color: _text,
-                fontSize: NautermFontSizes.labelLarge,
-                fontWeight: NautermFontWeights.semibold,
-                letterSpacing: 0,
+            if (title case final heading?) ...[
+              Text(
+                tr(heading),
+                style: TextStyle(
+                  color: _text,
+                  fontSize: NautermFontSizes.labelLarge,
+                  fontWeight: NautermFontWeights.semibold,
+                  letterSpacing: 0,
+                ),
               ),
-            ),
-            SizedBox(height: 12),
+              const SizedBox(height: 12),
+            ],
             ...children,
           ],
         ),
@@ -788,7 +784,10 @@ class _WorkspaceInputFieldState extends State<_WorkspaceInputField> {
                       child: _WorkspaceAffixVisibility(
                         visible: showClear,
                         child: _WorkspaceClearButton(
-                          tooltip: tr('Clear ${widget.label}'),
+                          tooltip: context.tr(
+                            'common.action.clearField',
+                            args: {'field': context.tr(widget.label)},
+                          ),
                           onPressed: () {
                             _focusNode.requestFocus();
                             widget.controller.clear();
@@ -813,7 +812,10 @@ class _WorkspaceInputFieldState extends State<_WorkspaceInputField> {
                   child: _WorkspaceAffixVisibility(
                     visible: showClear,
                     child: _WorkspaceClearButton(
-                      tooltip: tr('Clear ${widget.label}'),
+                      tooltip: context.tr(
+                        'common.action.clearField',
+                        args: {'field': context.tr(widget.label)},
+                      ),
                       onPressed: () {
                         _focusNode.requestFocus();
                         widget.controller.clear();
@@ -938,6 +940,8 @@ class _WorkspaceSelect<T> extends StatefulWidget {
     this.colors,
     this.errorText,
     this.activationToken = 0,
+    this.optionsTooltipKey = 'common.action.showOptions',
+    this.clearTooltipKey,
   }) : assert((!filterable && !clearable) || editable),
        assert((createLabel == null) == (onCreate == null)),
        assert(createLabel == null || filterable);
@@ -962,6 +966,8 @@ class _WorkspaceSelect<T> extends StatefulWidget {
   final Iterable<String> createConflictLabels;
   final _AiAssistantColors? colors;
   final String? errorText;
+  final String optionsTooltipKey;
+  final String? clearTooltipKey;
 
   /// Increment this to focus and open an editable select after it appears.
   final int activationToken;
@@ -983,6 +989,7 @@ class _WorkspaceSelectState<T> extends State<_WorkspaceSelect<T>> {
   bool _hovered = false;
   bool _rebuildScheduled = false;
   bool _scrollRebuildScheduled = false;
+  bool _restoringSelectedText = false;
 
   bool get _open => _overlayEntry != null;
   TextEditingController get _inputController =>
@@ -1018,7 +1025,11 @@ class _WorkspaceSelectState<T> extends State<_WorkspaceSelect<T>> {
         widget.activationToken != oldWidget.activationToken) {
       _scheduleActivation();
     }
-    _markMenuNeedsBuild();
+    if (_open && !_shouldOpenPanel) {
+      _scheduleMenuClose();
+    } else {
+      _markMenuNeedsBuild();
+    }
   }
 
   @override
@@ -1111,6 +1122,9 @@ class _WorkspaceSelectState<T> extends State<_WorkspaceSelect<T>> {
   }
 
   void _handleInputTextChanged() {
+    if (_restoringSelectedText) {
+      return;
+    }
     _scheduleRebuild();
     if (!widget.filterable) {
       return;
@@ -1215,10 +1229,15 @@ class _WorkspaceSelectState<T> extends State<_WorkspaceSelect<T>> {
     if (_inputController.text == selectedText) {
       return;
     }
-    _inputController.value = TextEditingValue(
-      text: selectedText,
-      selection: TextSelection.collapsed(offset: selectedText.length),
-    );
+    _restoringSelectedText = true;
+    try {
+      _inputController.value = TextEditingValue(
+        text: selectedText,
+        selection: TextSelection.collapsed(offset: selectedText.length),
+      );
+    } finally {
+      _restoringSelectedText = false;
+    }
   }
 
   List<DropdownMenuItem<T>> get _visibleItems {
@@ -1255,7 +1274,7 @@ class _WorkspaceSelectState<T> extends State<_WorkspaceSelect<T>> {
   }
 
   String get _createOptionLabel =>
-      '${widget.createLabel!} ${_inputController.text.trim()}';
+      '${context.tr(widget.createLabel!)} ${_inputController.text.trim()}';
 
   // Whether the dropdown panel should be shown. For a filterable field the
   // panel is pointless while the input is empty and there are no candidate
@@ -1406,25 +1425,34 @@ class _WorkspaceSelectState<T> extends State<_WorkspaceSelect<T>> {
     final fieldBottom = fieldBottomLeft.dy;
     final visibleItems = _visibleItems;
     final showCreateOption = _showCreateOption;
+    final style = colors == null ? null : _terminalSftpMenuStyle(colors);
     final rows = <Widget>[
       if (showCreateOption)
-        _WorkspaceSelectCreateRow(
-          label: _createOptionLabel,
-          size: _effectiveSize,
-          colors: colors,
-          onCreate: () {
+        NautermDropdownRow(
+          style: style,
+          onTap: () {
             final query = _inputController.text.trim();
             _inputFocusNode.unfocus();
             _closeMenu();
             widget.onCreate!(query);
           },
+          child: NautermDropdownItemContent(
+            style: style,
+            leading: Icon(
+              Icons.add_rounded,
+              size: 16,
+              color: style?.foreground ?? context.nautermPalette.text,
+            ),
+            child: _WorkspaceOverflowTooltipText(
+              text: Text(_createOptionLabel),
+            ),
+          ),
         ),
       for (final item in visibleItems)
         _WorkspaceSelectMenuRow<T>(
           item: item,
           selected: item.value == widget.value,
-          size: _effectiveSize,
-          colors: colors,
+          style: style,
           onSelected: () {
             widget.onChanged(item.value);
             if (widget.editable && widget.inputController == null) {
@@ -1434,21 +1462,38 @@ class _WorkspaceSelectState<T> extends State<_WorkspaceSelect<T>> {
           },
         ),
       if (visibleItems.isEmpty && !showCreateOption)
-        _WorkspaceSelectEmptyRow(size: _effectiveSize, colors: colors),
+        SizedBox(
+          height: nautermContextMenuRowHeight,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                context.tr('workspace.label.noMatches'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: style?.mutedForeground ?? _mutedText,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ),
+        ),
     ];
     final overlaySize = overlayBox.size;
     final safePadding = MediaQuery.paddingOf(context);
     const menuGap = 4.0;
     const overlayMargin = 8.0;
-    const menuVerticalPadding = _workspaceMenuVerticalInset * 2;
-    const rowVerticalMargin = 2.0;
-    const maxMenuHeight = 238.0;
-    final rowCount = visibleItems.length + (showCreateOption ? 1 : 0);
+    const menuVerticalPadding = nautermContextMenuVerticalPadding * 2;
     final contentHeight =
-        math.max(1, rowCount) *
-            (_effectiveSize.optionHeight + rowVerticalMargin) +
-        menuVerticalPadding;
-    final preferredHeight = math.min(maxMenuHeight, contentHeight);
+        rows.length * nautermContextMenuRowHeight + menuVerticalPadding;
+    final preferredHeight = math.min(
+      nautermDropdownMenuMaxVisibleRows * nautermContextMenuRowHeight +
+          menuVerticalPadding,
+      contentHeight,
+    );
     final availableBelow = math.max(
       0.0,
       overlaySize.height -
@@ -1466,7 +1511,7 @@ class _WorkspaceSelectState<T> extends State<_WorkspaceSelect<T>> {
     final availableHeight = showAbove ? availableAbove : availableBelow;
     final menuHeight = math.min(
       preferredHeight,
-      math.max(_effectiveSize.optionHeight, availableHeight),
+      math.max(nautermContextMenuRowHeight, availableHeight),
     );
     final needsScroll = contentHeight > menuHeight;
 
@@ -1487,24 +1532,12 @@ class _WorkspaceSelectState<T> extends State<_WorkspaceSelect<T>> {
               key: ValueKey('workspace-select-menu:${widget.label}'),
               color: Colors.transparent,
               child: NautermDropdownSurface(
-                style: colors == null ? null : _terminalSftpMenuStyle(colors),
-                child: needsScroll
-                    ? ListView(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: _workspaceMenuVerticalInset,
-                        ),
-                        shrinkWrap: true,
-                        children: rows,
-                      )
-                    : Padding(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: _workspaceMenuVerticalInset,
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: rows,
-                        ),
-                      ),
+                style: style,
+                child: NautermDropdownList(
+                  rows: rows,
+                  scrollable: needsScroll,
+                  showScrollbarOnHover: true,
+                ),
               ),
             ),
           ),
@@ -1601,6 +1634,7 @@ class _WorkspaceSelectState<T> extends State<_WorkspaceSelect<T>> {
                           visible: !showClear,
                           child: _WorkspaceSelectSuffixButton(
                             icon: Icons.keyboard_arrow_down_rounded,
+                            tooltip: context.tr(widget.optionsTooltipKey),
                             expanded: _open,
                             width: _workspaceFieldAffixWidth,
                             onPressed: widget.editable
@@ -1613,7 +1647,13 @@ class _WorkspaceSelectState<T> extends State<_WorkspaceSelect<T>> {
                           _WorkspaceAffixVisibility(
                             visible: showClear,
                             child: _WorkspaceClearButton(
-                              tooltip: tr('Clear ${widget.label}'),
+                              tooltip: widget.clearTooltipKey == null
+                                  ? context.tr(
+                                      'common.action.clearField',
+                                      fallback: 'Clear {field}',
+                                      args: {'field': context.tr(widget.label)},
+                                    )
+                                  : context.tr(widget.clearTooltipKey!),
                               onPressed: _clearInput,
                             ),
                           ),
@@ -2121,70 +2161,6 @@ class _WorkspaceFieldFrame extends StatelessWidget {
   }
 }
 
-class _WorkspaceMenuRowFrame extends StatefulWidget {
-  const _WorkspaceMenuRowFrame({
-    required this.child,
-    this.enabled = true,
-    this.selected = false,
-    this.onTap,
-    this.height,
-    this.horizontalPadding,
-    this.colors,
-  });
-
-  final Widget child;
-  final bool enabled;
-  final bool selected;
-  final VoidCallback? onTap;
-  final double? height;
-  final double? horizontalPadding;
-  final _AiAssistantColors? colors;
-
-  @override
-  State<_WorkspaceMenuRowFrame> createState() => _WorkspaceMenuRowFrameState();
-}
-
-class _WorkspaceMenuRowFrameState extends State<_WorkspaceMenuRowFrame> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final active = widget.enabled && (_hovered || widget.selected);
-    final hover = widget.colors?.inputBackground ?? _workspaceMenuHover;
-    final pressed = widget.colors?.border ?? _workspaceMenuPressed;
-    return MouseRegion(
-      onEnter: widget.enabled ? (_) => setState(() => _hovered = true) : null,
-      onExit: widget.enabled ? (_) => setState(() => _hovered = false) : null,
-      cursor: widget.enabled && widget.onTap != null
-          ? SystemMouseCursors.click
-          : MouseCursor.defer,
-      child: Material(
-        color: active ? hover : Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(8),
-          hoverColor: Colors.transparent,
-          splashColor: pressed,
-          highlightColor: pressed,
-          onTap: widget.enabled ? widget.onTap : null,
-          child: SizedBox(
-            height: widget.height ?? _workspacePopupMenuRowHeight,
-            child: Padding(
-              padding: EdgeInsets.symmetric(
-                horizontal: widget.horizontalPadding ?? 10,
-              ),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: widget.child,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 String? _plainTextFor(Widget? widget) {
   if (widget is Text) {
     return widget.data;
@@ -2240,16 +2216,14 @@ class _WorkspaceSelectMenuRow<T> extends StatelessWidget {
   const _WorkspaceSelectMenuRow({
     required this.item,
     required this.selected,
-    required this.size,
     required this.onSelected,
-    this.colors,
+    this.style,
   });
 
   final DropdownMenuItem<T> item;
   final bool selected;
-  final _WorkspaceControlSize size;
   final VoidCallback onSelected;
-  final _AiAssistantColors? colors;
+  final NautermContextMenuStyle? style;
 
   @override
   Widget build(BuildContext context) {
@@ -2273,116 +2247,17 @@ class _WorkspaceSelectMenuRow<T> extends StatelessWidget {
             selectionColor: itemChild.selectionColor,
           )
         : itemChild;
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: _workspaceMenuHorizontalInset,
-        vertical: 1,
-      ),
-      child: _WorkspaceMenuRowFrame(
+    return NautermDropdownRow(
+      enabled: item.enabled,
+      selected: selected,
+      style: style,
+      onTap: onSelected,
+      child: NautermDropdownItemContent(
         selected: selected,
-        onTap: onSelected,
-        height: size.optionHeight,
-        horizontalPadding: _workspaceSelectOptionHorizontalPadding,
-        colors: colors,
-        child: DefaultTextStyle.merge(
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: colors?.foreground ?? _text,
-            fontSize: _workspaceBaseControlFontSize,
-            fontWeight: NautermFontWeights.regular,
-            letterSpacing: 0,
-          ),
-          child: localizedChild is Text
-              ? _WorkspaceOverflowTooltipText(text: localizedChild)
-              : localizedChild,
-        ),
-      ),
-    );
-  }
-}
-
-class _WorkspaceSelectCreateRow extends StatelessWidget {
-  const _WorkspaceSelectCreateRow({
-    required this.label,
-    required this.size,
-    required this.onCreate,
-    this.colors,
-  });
-
-  final String label;
-  final _WorkspaceControlSize size;
-  final VoidCallback onCreate;
-  final _AiAssistantColors? colors;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: _workspaceMenuHorizontalInset,
-        vertical: 1,
-      ),
-      child: _WorkspaceMenuRowFrame(
-        onTap: onCreate,
-        height: size.optionHeight,
-        horizontalPadding: _workspaceSelectOptionHorizontalPadding,
-        colors: colors,
-        child: Row(
-          children: [
-            Icon(
-              Icons.add_rounded,
-              size: 16,
-              color: colors?.muted ?? _mutedText,
-            ),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                tr(label),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: colors?.foreground ?? _text,
-                  fontSize: _workspaceBaseControlFontSize,
-                  fontWeight: NautermFontWeights.regular,
-                  letterSpacing: 0,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _WorkspaceSelectEmptyRow extends StatelessWidget {
-  const _WorkspaceSelectEmptyRow({required this.size, this.colors});
-
-  final _WorkspaceControlSize size;
-  final _AiAssistantColors? colors;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: size.optionHeight,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: _workspaceSelectOptionHorizontalPadding,
-        ),
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: Text(
-            tr('workspace.label.noMatches', fallback: 'No matches'),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: colors?.muted ?? _mutedText,
-              fontSize: _workspaceBaseControlFontSize,
-              fontWeight: NautermFontWeights.regular,
-              letterSpacing: 0,
-            ),
-          ),
-        ),
+        style: style,
+        child: localizedChild is Text
+            ? _WorkspaceOverflowTooltipText(text: localizedChild)
+            : localizedChild,
       ),
     );
   }

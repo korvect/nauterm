@@ -341,11 +341,15 @@ List<_SftpMenuEntry> _sftpActionMenuEntries({
   if (remote) {
     return [
       if (!selectionIsFile || selectionCanOpenWithSystemDefault)
-        _sftpMenuItem(_SftpAction.open, 'Open', enabled: hasSelection),
+        _sftpMenuItem(
+          _SftpAction.open,
+          'common.action.open',
+          enabled: hasSelection,
+        ),
       if (sshEditorAvailable)
         _sftpMenuItem(
           _SftpAction.openWithSshEditor,
-          'Open with SSH Editor',
+          'sftp.action.openWithSshEditor',
           enabled: hasSelection,
         ),
       ..._sftpClipboardMenuEntries(enabled: hasSelection),
@@ -355,7 +359,11 @@ List<_SftpMenuEntry> _sftpActionMenuEntries({
         enabled: hasSelection,
       ),
       _sftpMenuItem(_SftpAction.uploadFiles, 'sftp.action.upload'),
-      _sftpMenuItem(_SftpAction.rename, 'Rename', enabled: hasSelection),
+      _sftpMenuItem(
+        _SftpAction.rename,
+        'common.action.rename',
+        enabled: hasSelection,
+      ),
       _sftpMenuItem(
         _SftpAction.moveTo,
         'sftp.action.moveTo',
@@ -368,7 +376,7 @@ List<_SftpMenuEntry> _sftpActionMenuEntries({
       ),
       _sftpMenuItem(
         _SftpAction.delete,
-        'Delete',
+        'common.action.delete',
         enabled: hasSelection,
         destructive: true,
       ),
@@ -376,11 +384,15 @@ List<_SftpMenuEntry> _sftpActionMenuEntries({
       _sftpMenuItem(_SftpAction.newFolder, 'sftp.action.newFolder'),
       _sudoSftpMenu(
         children: [
-          _sftpMenuItem(_SftpAction.sudoOpen, 'Open', enabled: hasSelection),
+          _sftpMenuItem(
+            _SftpAction.sudoOpen,
+            'common.action.open',
+            enabled: hasSelection,
+          ),
           if (sshEditorAvailable)
             _sftpMenuItem(
               _SftpAction.sudoOpenWithSshEditor,
-              'Open with SSH Editor',
+              'sftp.action.openWithSshEditor',
               enabled: hasSelection,
             ),
           _sftpMenuItem(
@@ -391,7 +403,7 @@ List<_SftpMenuEntry> _sftpActionMenuEntries({
           _sftpMenuItem(_SftpAction.sudoUpload, 'sftp.action.upload'),
           _sftpMenuItem(
             _SftpAction.sudoRename,
-            'Rename',
+            'common.action.rename',
             enabled: hasSelection,
           ),
           _sftpMenuItem(
@@ -406,7 +418,7 @@ List<_SftpMenuEntry> _sftpActionMenuEntries({
           ),
           _sftpMenuItem(
             _SftpAction.sudoDelete,
-            'Delete',
+            'common.action.delete',
             enabled: hasSelection,
             destructive: true,
           ),
@@ -425,7 +437,11 @@ List<_SftpMenuEntry> _sftpActionMenuEntries({
 
   return [
     if (!selectionIsFile || selectionCanOpenWithSystemDefault)
-      _sftpMenuItem(_SftpAction.open, 'Open', enabled: hasSelection),
+      _sftpMenuItem(
+        _SftpAction.open,
+        'common.action.open',
+        enabled: hasSelection,
+      ),
     ..._sftpClipboardMenuEntries(enabled: hasSelection),
     _sftpMenuItem(_SftpAction.refresh, 'Refresh'),
     _sftpMenuItem(_SftpAction.newFolder, 'sftp.action.newFolder'),
@@ -454,12 +470,20 @@ List<_SftpMenuEntry> _sftpRowMenuEntries(
   if (remote) {
     return [
       if (!canOpenFile || canOpenWithSystemDefault)
-        _sftpMenuItem(_SftpAction.open, 'Open', enabled: !entry.isParent),
-      _sftpMenuItem(_SftpAction.openWith, 'Open With', enabled: canOpenFile),
+        _sftpMenuItem(
+          _SftpAction.open,
+          'common.action.open',
+          enabled: !entry.isParent,
+        ),
+      _sftpMenuItem(
+        _SftpAction.openWith,
+        'sftp.action.openWith',
+        enabled: canOpenFile,
+      ),
       if (sshEditorAvailable)
         _sftpMenuItem(
           _SftpAction.openWithSshEditor,
-          'Open with SSH Editor',
+          'sftp.action.openWithSshEditor',
           enabled: canOpenFile,
         ),
       ..._sftpClipboardMenuEntries(enabled: !entry.isParent),
@@ -469,7 +493,11 @@ List<_SftpMenuEntry> _sftpRowMenuEntries(
         enabled: !entry.isParent,
       ),
       _sftpMenuItem(_SftpAction.uploadFiles, 'sftp.action.upload'),
-      _sftpMenuItem(_SftpAction.rename, 'Rename', enabled: !entry.isParent),
+      _sftpMenuItem(
+        _SftpAction.rename,
+        'common.action.rename',
+        enabled: !entry.isParent,
+      ),
       _sftpMenuItem(
         _SftpAction.moveTo,
         'sftp.action.moveTo',
@@ -482,7 +510,7 @@ List<_SftpMenuEntry> _sftpRowMenuEntries(
       ),
       _sftpMenuItem(
         _SftpAction.delete,
-        'Delete',
+        'common.action.delete',
         enabled: !entry.isParent,
         destructive: true,
       ),
@@ -490,24 +518,28 @@ List<_SftpMenuEntry> _sftpRowMenuEntries(
       _sftpMenuItem(_SftpAction.newFolder, 'sftp.action.newFolder'),
       _sudoSftpMenu(
         children: [
-          _sftpMenuItem(_SftpAction.sudoOpen, 'Open'),
+          _sftpMenuItem(_SftpAction.sudoOpen, 'common.action.open'),
           _sftpMenuItem(
             _SftpAction.sudoOpenWith,
-            'Open With',
+            'sftp.action.openWith',
             enabled: canOpenFile,
           ),
           if (sshEditorAvailable)
             _sftpMenuItem(
               _SftpAction.sudoOpenWithSshEditor,
-              'Open with SSH Editor',
+              'sftp.action.openWithSshEditor',
               enabled: canOpenFile,
             ),
           _sftpMenuItem(_SftpAction.sudoDownload, 'sftp.action.download'),
           _sftpMenuItem(_SftpAction.sudoUpload, 'sftp.action.upload'),
-          _sftpMenuItem(_SftpAction.sudoRename, 'Rename'),
+          _sftpMenuItem(_SftpAction.sudoRename, 'common.action.rename'),
           _sftpMenuItem(_SftpAction.sudoMoveTo, 'sftp.action.moveTo'),
           _sftpMenuItem(_SftpAction.sudoCopyTo, 'sftp.action.copyTo'),
-          _sftpMenuItem(_SftpAction.sudoDelete, 'Delete', destructive: true),
+          _sftpMenuItem(
+            _SftpAction.sudoDelete,
+            'common.action.delete',
+            destructive: true,
+          ),
           _sftpMenuItem(_SftpAction.sudoNewFolder, 'sftp.action.newFolder'),
         ],
       ),
@@ -516,8 +548,16 @@ List<_SftpMenuEntry> _sftpRowMenuEntries(
 
   return [
     if (!canOpenFile || canOpenWithSystemDefault)
-      _sftpMenuItem(_SftpAction.open, 'Open', enabled: !entry.isParent),
-    _sftpMenuItem(_SftpAction.openWith, 'Open With', enabled: canOpenFile),
+      _sftpMenuItem(
+        _SftpAction.open,
+        'common.action.open',
+        enabled: !entry.isParent,
+      ),
+    _sftpMenuItem(
+      _SftpAction.openWith,
+      'sftp.action.openWith',
+      enabled: canOpenFile,
+    ),
     ..._sftpClipboardMenuEntries(enabled: !entry.isParent),
     _sftpMenuItem(_SftpAction.refresh, 'Refresh'),
     _sftpMenuItem(_SftpAction.newFolder, 'sftp.action.newFolder'),
@@ -568,6 +608,16 @@ class _SftpMenuCommand {
   final _SftpAction action;
   final SftpExternalEditorCommand? application;
   final bool withSudo;
+
+  @override
+  bool operator ==(Object other) =>
+      other is _SftpMenuCommand &&
+      other.action == action &&
+      other.application?.id == application?.id &&
+      other.withSudo == withSudo;
+
+  @override
+  int get hashCode => Object.hash(action, application?.id, withSudo);
 }
 
 List<NautermContextMenuEntry<_SftpAction>> _sftpContextMenuEntries(
@@ -590,6 +640,7 @@ List<NautermContextMenuEntry<_SftpMenuCommand>> _sftpFileContextMenuEntries(
   required String fileName,
   required List<SystemFileApplication> applications,
   required bool sshEditorAvailable,
+  String? catalogStatus,
 }) {
   final defaultApplication = applications
       .where((application) => application.isDefault)
@@ -637,8 +688,15 @@ List<NautermContextMenuEntry<_SftpMenuCommand>> _sftpFileContextMenuEntries(
         NautermContextMenuAction<_SftpMenuCommand>(
           value: _SftpMenuCommand(_SftpAction.open, withSudo: withSudo),
           label: defaultApplication == null
-              ? 'System Default Application'
-              : '${defaultApplication.name} (default)',
+              ? tr(
+                  'sftp.action.systemDefaultApplication',
+                  fallback: 'System Default Application',
+                )
+              : tr(
+                  'sftp.action.systemDefaultApplicationName',
+                  fallback: '{name} (default)',
+                  args: {'name': defaultApplication.name},
+                ),
           icon: defaultApplication == null ? LucideIcons.externalLink : null,
           iconBytes: defaultApplication?.iconBytes,
           destructive: withSudo,
@@ -646,7 +704,8 @@ List<NautermContextMenuEntry<_SftpMenuCommand>> _sftpFileContextMenuEntries(
       if (canOpenWithSystemDefault &&
           (hasRecommendedApplication ||
               hasConfiguredEditor ||
-              canChooseOtherApplication))
+              canChooseOtherApplication ||
+              catalogStatus != null))
         const NautermContextMenuDivider<_SftpMenuCommand>(),
       if (configuredEditor != null)
         NautermContextMenuAction<_SftpMenuCommand>(
@@ -661,8 +720,16 @@ List<NautermContextMenuEntry<_SftpMenuCommand>> _sftpFileContextMenuEntries(
           destructive: withSudo,
         ),
       if (configuredEditor != null &&
-          (hasRecommendedApplication || canChooseOtherApplication))
+          (hasRecommendedApplication ||
+              canChooseOtherApplication ||
+              catalogStatus != null))
         const NautermContextMenuDivider<_SftpMenuCommand>(),
+      if (catalogStatus != null)
+        NautermContextMenuAction<_SftpMenuCommand>(
+          value: _SftpMenuCommand(_SftpAction.openWith, withSudo: withSudo),
+          label: catalogStatus,
+          enabled: false,
+        ),
       for (final application in recommendedApplications)
         NautermContextMenuAction<_SftpMenuCommand>(
           value: _SftpMenuCommand(
@@ -682,7 +749,7 @@ List<NautermContextMenuEntry<_SftpMenuCommand>> _sftpFileContextMenuEntries(
             _SftpAction.openWithOtherApplication,
             withSudo: withSudo,
           ),
-          label: 'Other...',
+          label: tr('sftp.action.otherApplication', fallback: 'Other...'),
           icon: LucideIcons.ellipsis,
           destructive: withSudo,
         ),
@@ -775,10 +842,6 @@ String _joinSftpPath(String left, String right) {
     return '$left$right';
   }
   return '$left$separator$right';
-}
-
-Future<String> _uniqueLocalSftpPath(String directory, String name) {
-  return _uniqueLocalSftpPathWithReserved(directory, name, const <String>{});
 }
 
 Future<String> _uniqueLocalSftpPathWithReserved(
@@ -1122,17 +1185,32 @@ String _formatSftpSize(int size) {
 String _sftpTaskSubtitle(_SftpTask task, {int? queuePosition}) {
   final status = switch (task.status) {
     _SftpTaskStatus.queued =>
-      queuePosition == null ? 'queued' : 'queued #$queuePosition',
+      queuePosition == null
+          ? tr('sftp.transfer.status.queued', fallback: 'Queued')
+          : tr(
+              'sftp.transfer.status.queuePosition',
+              fallback: 'Queued #{position}',
+              args: {'position': queuePosition},
+            ),
     _SftpTaskStatus.running =>
       task.pauseRequested
-          ? 'pausing'
+          ? tr('sftp.transfer.status.pausing', fallback: 'Pausing…')
           : task.cancelRequested
-          ? 'cancelling'
-          : 'running',
-    _SftpTaskStatus.paused => 'paused',
-    _SftpTaskStatus.completed => 'completed',
-    _SftpTaskStatus.failed => 'failed',
-    _SftpTaskStatus.cancelled => 'cancelled',
+          ? tr('sftp.transfer.status.cancelling', fallback: 'Cancelling…')
+          : tr('sftp.transfer.status.running', fallback: 'Running'),
+    _SftpTaskStatus.paused => tr(
+      'sftp.transfer.status.paused',
+      fallback: 'Paused',
+    ),
+    _SftpTaskStatus.completed => tr(
+      'sftp.transfer.status.completed',
+      fallback: 'Completed',
+    ),
+    _SftpTaskStatus.failed => tr('common.label.failed', fallback: 'Failed'),
+    _SftpTaskStatus.cancelled => tr(
+      'common.status.cancelled',
+      fallback: 'Cancelled',
+    ),
   };
   final timestamp = _formatSftpTaskTimestamp(task.createdAt);
   if (task.status == _SftpTaskStatus.failed) {

@@ -1,0 +1,67 @@
+[package]
+name = "nauterm-rs"
+version.workspace = true
+edition = "2024"
+publish = false
+description = "A cross-platform terminal and SSH client with SFTP file transfer, built with Rust and GPUI."
+
+[features]
+platform-diagnostics = []
+window-diagnostics = ["platform-diagnostics", "dep:gpui-profiler"]
+
+[dependencies]
+nauterm_core = { path = "../native/nauterm_core", default-features = false, features = ["terminal-ghostty"] }
+anyhow = "1"
+gpui-kit = { version = "=0.11.0", git = "https://github.com/korvect/gpui-kit", rev = "cfece14c8e4ae49378f19ccf2c20b5457fadc8d5" }
+# Enable the pinned core's profiler without selecting Kit's optional Fast backend.
+gpui-profiler = { package = "gpui-pre", version = "=0.3.14", default-features = false, features = ["profiler"], optional = true }
+serde.workspace = true
+serde_json.workspace = true
+semver = "1"
+directories = "6"
+async-channel = "2"
+smol = "2"
+base64.workspace = true
+chrono = "0.4"
+zeroize.workspace = true
+russh.workspace = true
+ssh-key = { version = "=0.7.0-rc.11", features = ["crypto", "encryption", "getrandom"] }
+rand = "0.10"
+tempfile.workspace = true
+libc.workspace = true
+notify = "=8.2.0"
+sha2.workspace = true
+url.workspace = true
+shlex = "2"
+percent-encoding = "2"
+regex = "=1.13.1"
+unicode-segmentation = "=1.13.3"
+image = { version = "=0.25.10", default-features = false, features = ["png"] }
+sys-locale = "=0.3.2"
+toml.workspace = true
+reqwest = { workspace = true, features = ["blocking", "json", "rustls"] }
+tokio = { workspace = true, features = ["rt", "net", "time", "io-util"] }
+futures-util.workspace = true
+uuid = { version = "1", features = ["v4"] }
+rfd = "=0.17.2"
+
+[build-dependencies]
+serde_json.workspace = true
+toml.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+raw-window-handle = "0.6"
+objc2 = "=0.6.5"
+block2 = "=0.6.2"
+objc2-foundation = { version = "=0.3.2", default-features = false, features = ["std", "NSArray", "NSBundle", "NSError", "NSFileManager", "NSNotification", "NSOperation", "NSString", "NSURL", "block2"] }
+objc2-core-foundation = { version = "=0.3.2", default-features = false, features = ["std", "CFData", "CFError", "CFString"] }
+objc2-core-graphics = { version = "=0.3.2", default-features = false, features = ["std", "CGDataProvider", "CGFont"] }
+objc2-core-text = { version = "=0.3.2", default-features = false, features = ["std", "CTFontManager", "CTFontManagerErrors", "objc2-core-graphics"] }
+objc2-app-kit = { version = "=0.3.2", default-features = false, features = ["std", "block2", "NSApplication", "NSButton", "NSEvent", "NSImage", "NSImageRep", "NSBitmapImageRep", "NSGraphics", "NSGraphicsContext", "objc2-core-graphics", "NSView", "NSOpenPanel", "NSPanel", "NSResponder", "NSRunningApplication", "NSSavePanel", "NSWindow", "NSWorkspace"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+gio = "0.21"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+same-file = "1"
+windows = { version = "=0.62.2", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_Storage_FileSystem", "Win32_System_Com", "Win32_System_Registry", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }

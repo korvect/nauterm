@@ -2310,6 +2310,69 @@ class NautermDataStore {
     );
   }
 
+  SyncKeyRotationReview reviewSyncKeyRotation() {
+    final review = _jsonMap(_call('review_sync_key_rotation'));
+    return (
+      stamp: review['stamp'] as String,
+      targets: [
+        for (final item in _jsonList(review['targets']))
+          (
+            scope: _jsonMap(item)['scope'] as String,
+            name: _jsonMap(item)['name'] as String,
+          ),
+      ],
+    );
+  }
+
+  SyncKeyRotationResult rotateSyncMasterKey({
+    required String reviewStamp,
+    required String currentMasterKey,
+    required String newMasterKey,
+    required int backupCount,
+    void Function(SyncKeyRotationProgress)? onProgress,
+  }) {
+    final callback = onProgress == null
+        ? null
+        : NativeCallable<_SyncKeyProgressNative>.isolateLocal((
+            Pointer<Utf8> message,
+          ) {
+            final progress = _jsonMap(jsonDecode(message.toDartString()));
+            onProgress((
+              scope: _jsonMap(progress['target'])['scope'] as String,
+              phase: SyncKeyRotationPhase.values.byName(
+                progress['phase'] as String,
+              ),
+            ));
+          });
+    try {
+      final result = _jsonMap(
+        _call('rotate_sync_master_key', {
+          'review_stamp': reviewStamp,
+          'current_master_key': currentMasterKey,
+          'new_master_key': newMasterKey,
+          'backup_count': backupCount,
+        }, callback?.nativeFunction),
+      );
+      final failed = result['failed'];
+      return (
+        completed: [
+          for (final target in _jsonList(result['completed']))
+            _jsonMap(target)['scope'] as String,
+        ],
+        failed: failed == null
+            ? null
+            : (
+                scope: _jsonMap(failed)['scope'] as String,
+                error: _jsonMap(failed)['error'] as String,
+              ),
+        retryStamp: result['retry_stamp'] as String?,
+        hasLocalKey: result['has_local_sync_key'] as bool?,
+      );
+    } finally {
+      callback?.close();
+    }
+  }
+
   List<Map<String, dynamic>> localSyncBackups() {
     return (_call('local_sync_backup_list') as List)
         .map((item) => Map<String, dynamic>.from(item as Map))
@@ -2458,6 +2521,10 @@ class NautermDataStore {
     return _callInt('delete_port_forward', {'id': id});
   }
 
+  int deletePortForwards(List<int> ids) {
+    return _callInt('delete_port_forwards', {'ids': ids});
+  }
+
   int saveProxy(ProxyEntry proxy) {
     return _callInt('save_proxy', {'proxy': proxy.toJson()});
   }
@@ -2596,6 +2663,11 @@ class NautermDataStore {
     }).map(TerminalLogEntry.fromJson).toList();
   }
 
+  TerminalLogEntry? getTerminalLog(String logId) {
+    final value = _call('get_terminal_log', {'log_id': logId});
+    return value == null ? null : TerminalLogEntry.fromJson(value);
+  }
+
   List<TerminalLogEvent> listTerminalLogEvents(String logId) {
     return _callList('list_terminal_log_events', {
       'log_id': logId,
@@ -2606,6 +2678,11 @@ class NautermDataStore {
     final value = _call('delete_terminal_log', {'log_id': logId});
     return value as String?;
   }
+
+  List<String> deleteTerminalLogs(Iterable<String> logIds) => _callList(
+    'delete_terminal_logs',
+    {'log_ids': logIds.toList(growable: false)},
+  ).cast<String>();
 
   List<String> clearTerminalLogs() {
     return _callList('clear_terminal_logs').cast<String>();
@@ -2666,7 +2743,11 @@ class NautermDataStore {
     return _callInt('delete_ai_conversation', {'uuid': uuid});
   }
 
-  Object? _call(String operation, [Map<String, Object?> payload = const {}]) {
+  Object? _call(
+    String operation, [
+    Map<String, Object?> payload = const {},
+    Pointer<NativeFunction<_SyncKeyProgressNative>>? progress,
+  ]) {
     if (_handle == nullptr) {
       throw const NautermDataException('Database is closed.');
     }
@@ -2676,7 +2757,13 @@ class NautermDataStore {
     Pointer<Utf8> responsePointer = nullptr;
 
     try {
-      responsePointer = _bindings.call(_handle, requestPointer);
+      responsePointer = progress == null
+          ? _bindings.call(_handle, requestPointer)
+          : _bindings.callWithSyncKeyProgress(
+              _handle,
+              requestPointer,
+              progress,
+            );
       if (responsePointer == nullptr) {
         throw const NautermDataException('Database call returned null.');
       }
@@ -2742,6 +2829,28 @@ typedef _CallDart = Pointer<Utf8> Function(
   Pointer<Void> handle,
   Pointer<Utf8> request,
 );
+typedef _SyncKeyProgressNative = Void Function(Pointer<Utf8> message);
+typedef _CallWithSyncKeyProgress = Pointer<Utf8> Function(
+  Pointer<Void> handle,
+  Pointer<Utf8> request,
+  Pointer<NativeFunction<_SyncKeyProgressNative>> progress,
+);
+
+typedef SyncKeyRotationTarget = ({String scope, String name});
+typedef SyncKeyRotationReview = ({
+  String stamp,
+  List<SyncKeyRotationTarget> targets,
+});
+
+enum SyncKeyRotationPhase { updating, updated, failed }
+
+typedef SyncKeyRotationProgress = ({String scope, SyncKeyRotationPhase phase});
+typedef SyncKeyRotationResult = ({
+  List<String> completed,
+  ({String scope, String error})? failed,
+  String? retryStamp,
+  bool? hasLocalKey,
+});
 
 typedef _DefaultPathNative = Pointer<Utf8> Function();
 typedef _DefaultPathDart = Pointer<Utf8> Function();
@@ -2800,11 +2909,15 @@ class _NautermDataBindings {
     );
 
     throw NautermDataException(
-      'Unable to load nauterm_ffi native library.\n${errors.join('\n')}',
+      'Unable to load nauterm_core native library.\n${errors.join('\n')}',
     );
   }
 
   final DynamicLibrary library;
+  late final callWithSyncKeyProgress = library
+      .lookupFunction<_CallWithSyncKeyProgress, _CallWithSyncKeyProgress>(
+        'nauterm_database_call_with_sync_key_progress',
+      );
   static bool _loadLogged = false;
   final _OpenDefaultDart openDefault;
   final _OpenPathDart openPath;
@@ -2941,10 +3054,13 @@ List<String> _libraryCandidates() {
   final separator = Platform.pathSeparator;
   final root = Directory.current.path;
   final executableDirectory = File(Platform.resolvedExecutable).parent.path;
+  final bundledLibrary = '$executableDirectory$separator$name';
   final candidates = <String>[
-    [root, 'native', 'nauterm_ffi', 'target', 'debug', name].join(separator),
-    [root, 'native', 'nauterm_ffi', 'target', 'release', name].join(separator),
-    '$executableDirectory$separator$name',
+    // Loading the Cargo artifact locks it against rebuilds on Windows.
+    if (Platform.isWindows) bundledLibrary,
+    [root, 'target', 'debug', name].join(separator),
+    [root, 'target', 'release', name].join(separator),
+    if (!Platform.isWindows) bundledLibrary,
     [executableDirectory, 'lib', name].join(separator),
     if (Platform.isMacOS)
       [executableDirectory, '..', 'Frameworks', name].join(separator),
@@ -2956,10 +3072,10 @@ List<String> _libraryCandidates() {
 
 String _libraryName() {
   if (Platform.isMacOS) {
-    return 'libnauterm_ffi.dylib';
+    return 'libnauterm_core.dylib';
   }
   if (Platform.isWindows) {
-    return 'nauterm_ffi.dll';
+    return 'nauterm_core.dll';
   }
-  return 'libnauterm_ffi.so';
+  return 'libnauterm_core.so';
 }

@@ -3,13 +3,13 @@ part of 'nauterm_workspace.dart';
 enum _WorkspaceSortOrder {
   nameAscending(
     'A-z',
-    'Name A-z',
+    'Name A–Z',
     'workspace.sort.nameAscending',
     LucideIcons.arrowDownAZ,
   ),
   nameDescending(
     'Z-a',
-    'Name Z-a',
+    'Name Z–A',
     'workspace.sort.nameDescending',
     LucideIcons.arrowDownZA,
   ),

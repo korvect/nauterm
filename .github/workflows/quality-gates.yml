@@ -3,6 +3,10 @@ name: Quality Gates
 on:
   workflow_call:
     inputs:
+      client:
+        description: Client to check
+        type: string
+        default: all
       integration:
         description: Run desktop integration tests on all supported operating systems
         required: false
@@ -10,6 +14,14 @@ on:
         default: false
   workflow_dispatch:
     inputs:
+      client:
+        description: Client to check
+        type: choice
+        default: all
+        options:
+          - all
+          - flutter
+          - rust
       integration:
         description: Run desktop integration tests on Linux, macOS, and Windows
         required: true
@@ -51,6 +63,7 @@ jobs:
           bash scripts/ci/check_mosh_abi.sh third_party/nauterm_mosh_ffi/linux-x86_64/libnauterm_mosh_ffi.so
 
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        if: inputs.client != 'rust'
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
@@ -61,13 +74,16 @@ jobs:
           rustup default "$RUST_TOOLCHAIN"
 
       - name: Resolve Flutter dependencies
+        if: inputs.client != 'rust'
         run: flutter pub get
 
       - name: Check Dart formatting
+        if: inputs.client != 'rust'
         continue-on-error: true
         run: dart format --output=none --set-exit-if-changed lib test test_integration
 
       - name: Analyze Flutter
+        if: inputs.client != 'rust'
         continue-on-error: true
         run: flutter analyze --no-pub
 
@@ -75,26 +91,130 @@ jobs:
         run: bash scripts/ci/build_ghostty_linux.sh
 
       - name: Build native library for Flutter tests
-        run: cargo build --manifest-path native/nauterm_ffi/Cargo.toml --locked --features test-credential-store
+        if: inputs.client != 'rust'
+        run: cargo build --manifest-path native/nauterm_core/Cargo.toml --locked --features test-credential-store
 
       - name: Run Flutter unit tests
+        if: inputs.client != 'rust'
         run: flutter test --no-pub
 
       - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
         with:
-          manifest-path: native/nauterm_ffi/Cargo.toml
+          manifest-path: native/nauterm_core/Cargo.toml
           command: check licenses
           arguments: --all-features
 
-      - name: Check native Rust formatting
-        continue-on-error: true
-        run: cargo fmt --manifest-path native/nauterm_ffi/Cargo.toml --all -- --check
+      - name: Check Rust workspace formatting
+        run: cargo fmt --all -- --check
 
       - name: Run native Rust Clippy
-        run: cargo clippy --manifest-path native/nauterm_ffi/Cargo.toml --all-targets --locked -- -D warnings
+        run: cargo clippy -p nauterm_core --all-targets --locked -- -D warnings
 
       - name: Run native Rust unit tests
-        run: cargo test --manifest-path native/nauterm_ffi/Cargo.toml --locked --features test-credential-store
+        run: cargo test -p nauterm_core --locked --features test-credential-store
+
+  gpui:
+    name: GPUI (${{ matrix.os }}, ${{ matrix.arch }})
+    if: inputs.client != 'flutter'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      CARGO_BUILD_TARGET: ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04, arch: x86_64, target: x86_64-unknown-linux-gnu }
+          - { os: ubuntu-24.04-arm, arch: arm64, target: aarch64-unknown-linux-gnu }
+          - { os: xcode-27, arch: arm64, target: aarch64-apple-darwin }
+          - { os: macos-26-intel, arch: x86_64, target: x86_64-apple-darwin }
+          - { os: windows-2025, arch: x86_64, target: x86_64-pc-windows-msvc }
+          - { os: windows-11-arm, arch: arm64, target: aarch64-pc-windows-msvc }
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+        if: runner.os == 'Linux'
+        with:
+          version: ${{ env.ZIG_VERSION }}
+          use-cache: false
+
+      - name: Build libghostty-vt from release sources
+        if: runner.os == 'Linux'
+        run: bash scripts/ci/build_ghostty_linux.sh ${{ matrix.arch }}
+
+      - name: Install prebuilt libghostty-vt
+        if: runner.os == 'macOS'
+        run: bash scripts/ci/install_ghostty_macos.sh
+
+      - name: Install prebuilt libghostty-vt
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/ci/install_ghostty_windows.ps1 -Arch '${{ matrix.arch }}'
+
+      - uses: ilammy/msvc-dev-cmd@7defe9254715b088f12dddd9942945a3d75cdad5 # v1.9.0
+        if: runner.os == 'Windows'
+        with:
+          arch: ${{ matrix.arch == 'arm64' && 'arm64' || 'amd64' }}
+
+      - name: Install GPUI Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake libasound2-dev libclang-dev \
+            libdbus-1-dev libdecor-0-0 libdecor-0-plugin-1-gtk \
+            libfontconfig1-dev libfreetype6-dev libgtk-3-dev \
+            libpipewire-0.3-dev libssl-dev libudev-dev libvulkan-dev \
+            libwayland-dev libxcb1-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev pkg-config
+
+      - name: Install and configure Windows OpenSSL
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/ci/setup_windows_openssl.ps1 -Arch "${{ matrix.arch }}"
+
+      - name: Verify Windows runtime architecture selection
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/tests/check_windows_runtime.ps1
+
+      - name: Install pinned Rust toolchain
+        shell: bash
+        run: |
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --component clippy
+          rustup default "$RUST_TOOLCHAIN"
+          rustup target add "$CARGO_BUILD_TARGET"
+
+      - name: Check the GPUI client and shared Rust core
+        run: cargo clippy -p nauterm-rs -p nauterm_cmd_integration --all-targets --locked -- -D warnings
+
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
+        if: runner.os == 'Linux' && matrix.arch == 'x86_64'
+        with:
+          manifest-path: nauterm-rs/Cargo.toml
+          command: check licenses
+          arguments: --all-features
+
+      - name: Verify GPUI license notice inventory for every supported target
+        if: runner.os == 'Linux' && matrix.arch == 'x86_64'
+        run: python3 scripts/ci/verify_rs_licenses.py
+
+      - name: Run GPUI model and isolated-file unit tests
+        run: cargo test -p nauterm-rs --locked
+
+      - name: Run native CMD protocol tests
+        run: cargo test -p nauterm_cmd_integration --locked
+
+      - name: Build the GPUI executable
+        run: cargo build -p nauterm-rs --locked
+
+      - name: Exercise Windows shell protocols on real ConPTY
+        if: runner.os == 'Windows'
+        run: python scripts/tests/check_windows_shell_protocol.py --build-cmd --all-powershell
+
+      - name: Assemble the macOS GPUI bundle
+        if: runner.os == 'macOS'
+        run: bash nauterm-rs/scripts/bundle-macos.sh debug
 
   integration:
     name: Integration (${{ matrix.os }})
@@ -125,6 +245,7 @@ jobs:
           arch: amd64
 
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        if: inputs.client != 'rust'
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
@@ -150,6 +271,7 @@ jobs:
         run: ./scripts/ci/setup_windows_openssl.ps1
 
       - name: Resolve Flutter dependencies
+        if: inputs.client != 'rust'
         run: flutter pub get
 
       - name: Build libghostty-vt from release sources
@@ -157,10 +279,12 @@ jobs:
         run: bash scripts/ci/build_ghostty_linux.sh
 
       - name: Run native integration tests
-        run: cargo test --manifest-path native/nauterm_ffi/Cargo.toml --locked --features integration-tests,test-credential-store -- --test-threads=1
+        run: cargo test --manifest-path native/nauterm_core/Cargo.toml --locked --features integration-tests,test-credential-store -- --test-threads=1
 
       - name: Build the native test library
-        run: cargo build --manifest-path native/nauterm_ffi/Cargo.toml --locked --features test-credential-store
+        if: inputs.client != 'rust'
+        run: cargo build --manifest-path native/nauterm_core/Cargo.toml --locked --features test-credential-store
 
       - name: Run Flutter integration tests
+        if: inputs.client != 'rust'
         run: flutter test --no-pub test_integration

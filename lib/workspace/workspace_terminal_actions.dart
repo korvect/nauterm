@@ -41,11 +41,9 @@ extension _NautermWorkspaceTerminalActions on _NautermWorkspaceState {
     _showWorkspaceDialog<bool>(
       builder: (context) {
         return _WorkspaceConfirmDialog(
-          title: Text(
-            tr('workspace.label.closeTerminal', fallback: 'Close Terminal'),
-          ),
-          message: 'Are you sure you want to close this terminal?',
-          confirmLabel: 'Close',
+          title: Text(context.tr('workspace.dialog.closeTerminal')),
+          message: 'workspace.dialog.areYouSureYouWantToCloseThisTerminal',
+          confirmLabel: 'common.action.close',
         );
       },
     ).then((confirmed) {
@@ -159,8 +157,9 @@ extension _NautermWorkspaceTerminalActions on _NautermWorkspaceState {
         return;
       }
 
-      // Check if the current view has an SSH connection to reuse.
-      final sshProfile = view.activeTab.controller.sshProfile;
+      final activeController = view.activeTab.controller;
+      final sshProfile = activeController.sshProfile;
+      final shellPath = _resolvedLocalShellPath(activeController.shellPath);
 
       final id = _nextTerminalId++;
       late final TerminalController controller;
@@ -207,14 +206,14 @@ extension _NautermWorkspaceTerminalActions on _NautermWorkspaceState {
             : 'Local Terminal ${view.tabs.length + 1}';
         controller = TerminalController(
           config: currentTerminalConfig(),
-          shellPath: _resolvedLocalShellPath(null),
+          shellPath: shellPath,
           environment: _terminalEnvironmentForTheme(view.theme),
           theme: view.theme,
           recorder: _createTerminalRecorder(
             title: title,
             username: _localShellUsername(),
             sourceHostUuid: view.activeTab.sourceHostUuid,
-            shellPath: _resolvedLocalShellPath(null),
+            shellPath: shellPath,
           ),
           onExit: () =>
               _closeTerminalViewTab(terminalSessionId, terminalViewId, id),
@@ -393,8 +392,9 @@ extension _NautermWorkspaceTerminalActions on _NautermWorkspaceState {
     final targetView = currentLayout.viewFor(targetViewId) ?? tab.primaryView;
     final viewId = _nextTerminalId++;
 
-    // Check if the target view has an SSH connection to reuse.
-    final sshProfile = targetView.activeTab.controller.sshProfile;
+    final activeController = targetView.activeTab.controller;
+    final sshProfile = activeController.sshProfile;
+    final shellPath = _resolvedLocalShellPath(activeController.shellPath);
 
     late final TerminalController controller;
     late final String title;
@@ -438,14 +438,14 @@ extension _NautermWorkspaceTerminalActions on _NautermWorkspaceState {
       title = 'Local Terminal';
       controller = TerminalController(
         config: currentTerminalConfig(),
-        shellPath: _resolvedLocalShellPath(null),
+        shellPath: shellPath,
         environment: _terminalEnvironmentForTheme(targetView.theme),
         theme: targetView.theme,
         recorder: _createTerminalRecorder(
           title: title,
           username: _localShellUsername(),
           sourceHostUuid: targetView.activeTab.sourceHostUuid,
-          shellPath: _resolvedLocalShellPath(null),
+          shellPath: shellPath,
         ),
         onExit: () => _closeTerminalViewTab(tab.id, viewId, viewId),
       );
@@ -658,60 +658,73 @@ extension _NautermWorkspaceTerminalActions on _NautermWorkspaceState {
   Future<bool> _confirmApplicationExit({required bool closeWindow}) async {
     final tabCount = _allTerminalTabs.length;
     final forwardCount = _runningPortForwardIds.length;
-    if (tabCount == 0 && forwardCount == 0) {
+    final hasSftpWork = _workspaceSftpPanes.any((pane) => pane._hasPendingWork);
+    final hasExternalEdits = _workspaceSftpPanes.any(
+      (pane) => pane._externalEditSessions.isNotEmpty,
+    );
+    final exportingKey = _workspaceKeyExportsInProgress.isNotEmpty;
+    if (tabCount == 0 &&
+        forwardCount == 0 &&
+        !hasSftpWork &&
+        !hasExternalEdits &&
+        !exportingKey) {
       _restoreOnShutdown = false;
       return true;
     }
 
-    final message = switch ((tabCount, forwardCount)) {
-      (0, final forwards) => context.tr(
-        closeWindow
-            ? 'workspace.closeWindow.activeForwards'
-            : 'workspace.quit.activeForwards',
-        fallback: closeWindow
-            ? 'There are still {count} active port forwards. Close this window anyway?'
-            : 'There are still {count} active port forwards. Quit anyway?',
-        args: {'count': forwards},
-      ),
-      (final tabs, 0) => context.tr(
-        closeWindow
-            ? 'workspace.closeWindow.openTabs'
-            : 'workspace.quit.openTabs',
-        fallback: closeWindow
-            ? tabs == 1
-                  ? 'There is still 1 terminal tab open. Close this window anyway?'
-                  : 'There are still {count} terminal tabs open. Close this window anyway?'
-            : tabs == 1
-            ? 'There is still 1 terminal tab open. Quit anyway?'
-            : 'There are still {count} terminal tabs open. Quit anyway?',
-        args: {'count': tabs},
-      ),
-      (final tabs, final forwards) => context.tr(
-        closeWindow
-            ? 'workspace.closeWindow.openTabsAndForwards'
-            : 'workspace.quit.openTabsAndForwards',
-        fallback: closeWindow
-            ? 'There are still {tabs} terminal tabs and {forwards} active port forwards. Close this window anyway?'
-            : 'There are still {tabs} terminal tabs and {forwards} active port forwards. Quit anyway?',
-        args: {'tabs': tabs, 'forwards': forwards},
-      ),
+    final scope = closeWindow ? 'workspace.closeWindow' : 'workspace.quit';
+    final messageKey = switch ((tabCount, forwardCount)) {
+      (0, 0) => null,
+      (0, _) => 'activeForwards',
+      (1, 0) => 'openTab',
+      (_, 0) => 'openTabs',
+      _ => 'openTabsAndForwards',
     };
+    final hasRemoteSessions = _allTerminalTabs.any(
+      (tab) => tab.controllers.any(
+        (terminal) =>
+            terminal.connectionStatus.phase ==
+                TerminalConnectionPhase.connected &&
+            (terminal.sshProfile != null || terminal.telnetProfile != null),
+      ),
+    );
+    final message = [
+      if (messageKey != null)
+        context.tr(
+          '$scope.$messageKey',
+          args: {
+            'count': tabCount == 0 ? forwardCount : tabCount,
+            'tabs': tabCount,
+            'forwards': forwardCount,
+          },
+        ),
+      if (hasRemoteSessions)
+        context.tr('workspace.closeWindow.remoteSessions.description'),
+      if (hasSftpWork) context.tr('workspace.closeWindow.sftpInProgress'),
+      if (exportingKey)
+        context.tr('workspace.closeWindow.keyExport.description'),
+      if (hasExternalEdits)
+        context.tr('workspace.closeWindow.externalEdits.description'),
+    ].join('\n\n');
     final result = await _showWorkspaceDialog<bool>(
       builder: (context) => _WorkspaceConfirmDialog(
         title: Text(
           context.tr(
             closeWindow
                 ? 'workspace.dialog.closeWindow'
-                : 'workspace.dialog.quitNauterm',
-            fallback: closeWindow ? 'Close window?' : 'Quit Nauterm?',
+                : 'workspace.dialog.quit',
+            args: const {'app': 'Nauterm'},
           ),
         ),
         message: message,
-        confirmLabel: closeWindow ? 'Close' : 'Quit',
+        confirmLabel: closeWindow
+            ? 'common.action.close'
+            : 'common.action.quit',
       ),
     );
     if (result != true) return false;
     _restoreOnShutdown =
+        tabCount + forwardCount > 0 &&
         workspaceRestoreBehavior != WorkspaceRestoreBehavior.never;
     return true;
   }
@@ -719,7 +732,9 @@ extension _NautermWorkspaceTerminalActions on _NautermWorkspaceState {
   Future<bool> _confirmDelete({
     required String title,
     required String message,
-    String confirmLabel = 'Delete',
+    String? details,
+    Map<String, Object?> messageArgs = const {},
+    String confirmLabel = 'common.action.delete',
     _AiAssistantColors? colors,
   }) async {
     if (!mounted) {
@@ -728,8 +743,10 @@ extension _NautermWorkspaceTerminalActions on _NautermWorkspaceState {
     final result = await _showWorkspaceDialog<bool>(
       builder: (context) {
         final dialog = _WorkspaceConfirmDialog(
-          title: Text(tr(title)),
+          title: Text(context.tr(title)),
           message: message,
+          details: details,
+          messageArgs: messageArgs,
           confirmLabel: confirmLabel,
         );
         return colors == null
@@ -744,6 +761,7 @@ extension _NautermWorkspaceTerminalActions on _NautermWorkspaceState {
   Future<T?> _showWorkspaceDialog<T>({
     required WidgetBuilder builder,
     bool barrierDismissible = true,
+    Future<void>? dismissWhen,
   }) async {
     _overlayController.dismissTransientOverlays();
     FocusManager.instance.primaryFocus?.unfocus();
@@ -751,6 +769,7 @@ extension _NautermWorkspaceTerminalActions on _NautermWorkspaceState {
     final result = await showNautermDialog<T>(
       context: context,
       barrierDismissible: barrierDismissible,
+      dismissWhen: dismissWhen,
       builder: builder,
     );
     if (mounted) {

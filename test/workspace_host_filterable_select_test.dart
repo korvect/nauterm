@@ -851,6 +851,7 @@ void main() {
     );
     expect(environmentEditor, findsOneWidget);
     expect(find.text('Environment Variables'), findsOneWidget);
+    expect(find.textContaining('AcceptEnv'), findsOneWidget);
 
     final addVariable = find.text('Add variable');
     final addVariableButton = find

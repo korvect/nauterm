@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../terminal/terminal_recording.dart';
+import '../terminal/terminal_ffi.dart' show TerminalRecordingLease;
+import 'nauterm_data_store.dart';
 import 'terminal_recording_store.dart';
 
 typedef TerminalCaptureWriterFactory =
@@ -50,9 +52,11 @@ class RecordingService {
   final List<TerminalSessionRecorder> recorders = [];
   final Map<String, _TerminalCaptureSink> _captureSinks = {};
   final Set<String> _ignoredIds = {};
+  final Set<String> _finalizedIds = {};
   final Set<String> _pendingIds = {};
   final Set<String> _captureReferences = {};
   final Map<String, TerminalLogContext> _contexts = {};
+  final Map<String, TerminalRecordingLease> _leases = {};
   Timer? _saveTimer;
   Future<void> _saveQueue = Future<void>.value();
 
@@ -60,7 +64,13 @@ class RecordingService {
     TerminalSessionRecorder recorder, {
     required TerminalLogContext context,
     required bool pending,
+    TerminalLogCaptureStore? captureStore,
   }) {
+    if (captureStore != null) {
+      final lease = captureStore.tryAcquireLease(recorder.id);
+      if (lease == null) throw StateError('This recording is already in use.');
+      _leases[recorder.id] = lease;
+    }
     recorders.add(recorder);
     _contexts[recorder.id] = context;
     if (pending) _pendingIds.add(recorder.id);
@@ -138,25 +148,128 @@ class RecordingService {
   }
 
   void removeRecording(String recordingId) {
+    releaseLease(recordingId);
+    _finalizedIds.remove(recordingId);
     recorders.removeWhere((entry) => entry.id == recordingId);
     _contexts.remove(recordingId);
     _pendingIds.remove(recordingId);
     _captureReferences.remove(recordingId);
   }
 
-  void stopAllRecordings() {
-    _ignoredIds.addAll(recorders.map((entry) => entry.id));
-    _pendingIds.clear();
-    _captureReferences.clear();
+  ({List<TerminalLogEntry> finished, bool hasActive}) prepareLogDeletion(
+    NautermDataStore dataStore,
+    TerminalLogCaptureStore captureStore, {
+    TerminalLogEntry? only,
+  }) {
+    final logs = only == null ? _allTerminalLogs(dataStore) : [only];
+    final finished = <TerminalLogEntry>[];
+    for (final log in logs) {
+      if (leaseFor(log.id) != null) continue;
+      if (log.endedAt == null) {
+        final probe = captureStore.tryAcquireLease(log.id, existingOnly: true);
+        if (probe == null) continue;
+        probe.close();
+      }
+      finished.add(log);
+    }
+    return (finished: finished, hasActive: finished.length < logs.length);
   }
 
-  void clearRecordings() {
-    recorders.clear();
-    _contexts.clear();
+  List<TerminalLogEntry> _allTerminalLogs(NautermDataStore store) {
+    const pageSize = 500;
+    final logs = <TerminalLogEntry>[];
+    while (true) {
+      final page = store.listTerminalLogs(limit: pageSize, offset: logs.length);
+      logs.addAll(page);
+      if (page.length < pageSize) return logs;
+    }
+  }
+
+  Future<({Set<String> deleted, Object? cleanupError})> deleteFinishedLogs(
+    NautermDataStore dataStore,
+    TerminalLogCaptureStore captureStore,
+    List<TerminalLogEntry> logs, {
+    required bool Function() isCurrent,
+  }) async {
+    final deleted = <String>{};
+    Object? cleanupError;
+    await enqueueSave(() async {
+      if (!isCurrent()) return;
+      final leases = <TerminalRecordingLease>[];
+      try {
+        for (final expected in logs) {
+          if (leaseFor(expected.id) != null) {
+            throw const NautermDataException(
+              'Close the selected sessions before deleting their logs.',
+            );
+          }
+          final lease = captureStore.tryAcquireLease(
+            expected.id,
+            existingOnly: expected.endedAt == null,
+          );
+          if (lease == null) {
+            throw const NautermDataException(
+              'A selected recording is in use in another window.',
+            );
+          }
+          leases.add(lease);
+          final current = dataStore.getTerminalLog(expected.id);
+          if (current == null ||
+              current.endedAt != expected.endedAt ||
+              current.captureFile != expected.captureFile ||
+              current.captureSha256 != expected.captureSha256) {
+            throw const NautermDataException(
+              'The recording changed. Refresh and try again.',
+            );
+          }
+        }
+
+        final files = dataStore.deleteTerminalLogs(
+          logs.map((entry) => entry.id),
+        );
+        for (final log in logs) {
+          deleted.add(log.id);
+          removeRecording(log.id);
+        }
+        for (final file in files) {
+          if (file.isEmpty) continue;
+          try {
+            await captureStore.deleteCapture(file);
+          } on Object catch (error) {
+            cleanupError ??= error;
+          }
+        }
+      } finally {
+        for (final lease in leases) {
+          lease.close();
+        }
+      }
+    });
+    return (deleted: deleted, cleanupError: cleanupError);
   }
 
   void ignoreAllRecorders() {
     _ignoredIds.addAll(recorders.map((entry) => entry.id));
+  }
+
+  bool isFinalized(String id) => _finalizedIds.contains(id);
+
+  /// The final metadata is committed. Keep in-memory replay frames, but later
+  /// save batches must not recreate a log another client deleted/compacted.
+  void markFinalized(String id) {
+    _finalizedIds.add(id);
+    releaseLease(id);
+  }
+
+  TerminalRecordingLease? leaseFor(String id) => _leases[id];
+
+  void releaseLease(String id) => _leases.remove(id)?.close();
+
+  void releaseAllLeases() {
+    for (final lease in _leases.values) {
+      lease.close();
+    }
+    _leases.clear();
   }
 
   void scheduleSave(Future<void> Function() save) {
@@ -165,7 +278,12 @@ class RecordingService {
 
   Future<void> enqueueSave(Future<void> Function() save) {
     final queued = _saveQueue.then((_) => save());
-    _saveQueue = queued;
+    // Report this operation's error to its caller without poisoning later
+    // saves/deletions queued by the same recording service.
+    _saveQueue = queued.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
     return queued;
   }
 
@@ -180,9 +298,11 @@ class RecordingService {
       sink.abort();
     }
     _captureSinks.clear();
+    releaseAllLeases();
     _pendingIds.clear();
     _captureReferences.clear();
     _contexts.clear();
+    _finalizedIds.clear();
     recorders.clear();
   }
 }

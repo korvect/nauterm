@@ -5,7 +5,7 @@
 <h1 align="center">Nauterm</h1>
 
 <p align="center">
-  使用 Flutter 与 Rust 构建的现代跨平台终端和远程访问工作空间。
+  跨平台终端与 SSH 客户端，支持 SFTP 文件传输。
 </p>
 
 <p align="center">
@@ -18,9 +18,9 @@
   <a href="README.md">English</a> · 简体中文
 </p>
 
-Nauterm 将本地终端、远程连接、文件传输、端口转发、可复用命令和加密同步整合到一个桌面应用中。界面使用 Flutter 编写，对延迟敏感的终端、传输、数据库和密码学操作则由原生 Rust 层负责。
+Nauterm 将本地终端、远程连接、文件传输、端口转发、可复用命令和加密同步整合到一个桌面应用中。它提供两个仅在技术栈上不同的客户端：基于 Flutter（由 Rust 服务支持）的版本，以及基于 Rust 和 GPUI 的原生版本；
 
-Nauterm 受到 Termius 精致远程访问体验的启发，目标是为重视透明本地存储、数据和同步服务控制权、原生高性能核心以及源码访问的开发者打造更好的工具。Nauterm 是独立项目，与 Termius 不存在关联，也未获得其认可或背书。
+Nauterm 是一个独立项目，面向希望掌控连接、本地数据和同步服务的开发者，并致力于清晰呈现数据的存储和使用方式。
 
 > [!IMPORTANT]
 > Nauterm 仍处于积极开发阶段。`0.x` 系列可能会引入配置或存储方面的不兼容变更。在重要工作站上升级前，请先阅读版本说明。当前路线图优先改进现有功能；新增功能会谨慎评估，并重点考虑用户价值、维护成本和复杂度影响。
@@ -151,11 +151,11 @@ Nauterm 的设计目标是避免以明文保存凭据和同步数据：
 
 ## 最小化使用分析
 
-官方构建会向 PostHog 发送少量启动事件，用于统计首次启动以及每日或每周活跃安装量：
+Flutter 和 Rust 官方构建向同一个 PostHog 项目发送少量启动事件，用于统计首次启动以及每日或每周活跃安装量。可以按事件的 `$app_namespace` 属性区分两版。
 
 - `first_open` 仅发送一次，包含首次启动时间。
 - Nauterm 启动时发送 `$screen` 和 `app_started`。
-- 事件包含 Nauterm 随机生成并持久保存的安装标识符、操作系统、应用名称与标识符、版本号、构建号和事件时间。
+- 事件包含 Nauterm 随机生成并持久保存的安装标识符、操作系统、应用名称与标识符、版本号、构建号和事件时间。两版各自保存安装标识符。
 
 该安装标识符不是硬件标识符、账户名或电子邮件地址。Nauterm 不会将主机地址、用户名、终端内容、命令、文件、凭据、同步负载、AI 对话或应用日志作为分析数据发送。所有事件都会禁用 PostHog GeoIP 丰富，因此不会根据请求 IP 推导城市、经纬度、邮编或时区。未配置 `NAUTERM_POSTHOG_API_KEY` 的构建不会发送这些事件。
 
@@ -183,28 +183,16 @@ cd nauterm
 flutter pub get
 ```
 
-仓库包含固定版本的预编译 Mosh 库。运行应用前，请选择当前平台对应的目录。
-
-macOS：
+在仓库根目录运行 Flutter 版。启动命令会自动选择当前平台对应的预编译 Mosh 库。可设置 `NAUTERM_MOSH_LIB_DIR` 来使用其他预编译库。
 
 ```sh
-export NAUTERM_MOSH_LIB_DIR="$PWD/third_party/nauterm_mosh_ffi/macos-$(uname -m)"
-make run
+make flutter-run
 ```
-
-Linux x86_64：
-
-```sh
-export NAUTERM_MOSH_LIB_DIR="$PWD/third_party/nauterm_mosh_ffi/linux-x86_64"
-make run
-```
-
-参与 Mosh 本身开发时，可以将 `nauterm-mosh` 工作空间放在本仓库同级目录，或显式设置 `NAUTERM_MOSH_REPO_DIR`。
 
 需要隔离的测试环境时，可以设置 `NAUTERM_DATA_DIR`。数据库、配置、工作区状态、日志等应用文件都会使用该目录：
 
 ```sh
-NAUTERM_DATA_DIR=/tmp/nauterm-test make run
+NAUTERM_DATA_DIR=/tmp/nauterm-test make flutter-run
 ```
 
 ### 本地构建配置
@@ -239,23 +227,27 @@ GitHub 标签构建需要在仓库 Actions Variables 中配置同名的 PostHog 
 
 ### 常用命令
 
+运行 `make help` 查看完整命令和选项。
+
 ```sh
 # 运行桌面应用
-make run
+make flutter-run
 
 # 显式构建 Rust 库
-make native-debug
-make native-release
+make flutter-build-native
+make flutter-build-native PROFILE=release
 
 # 为当前平台构建软件包
-make package-current
+make flutter-package
 
 # 编辑规范图标源后重新生成平台图标
-make generate-icons
-make verify-icons
+make icons-generate
+make icons-verify
 ```
 
-原生编译已经集成到 macOS Xcode、Linux CMake 和 Windows 打包流程中。显式原生构建目标主要用于直接开发 Rust 层。
+[Nauterm RS 客户端](nauterm-rs/README.md) 与 Flutter 共用 Cargo 工作区和 Rust 底层。在仓库根目录运行 `make rs-run`、`make rs-build` 或 `make rs-check`；开发、打包及数据目录说明见其 README。两端的本地数据库、配置、系统凭据及工作区状态完全独立，但使用相同的同步格式和默认远端文件名，可通过同一远端目标同步资源。
+
+原生编译已经集成到 macOS Xcode、Linux CMake 和 Windows 打包流程中。显式原生构建目标主要用于直接开发 Rust 层。要用 `make flutter-build-native` 从源码构建 Mosh，可将 `nauterm-mosh` 工作空间放在本仓库同级目录，或通过 `NAUTERM_MOSH_REPO_DIR` 指定路径。
 
 ## 测试与质量检查
 
@@ -266,16 +258,15 @@ dart format --output=none --set-exit-if-changed lib test test_integration
 flutter analyze
 flutter test
 
-cargo fmt --manifest-path native/nauterm_ffi/Cargo.toml --all -- --check
+cargo fmt --all -- --check
 cargo clippy \
-  --manifest-path native/nauterm_ffi/Cargo.toml \
-  --all-targets --locked -- -D warnings
+  -p nauterm_core -p nauterm-rs --all-targets --locked -- -D warnings
 cargo test \
-  --manifest-path native/nauterm_ffi/Cargo.toml \
+  --manifest-path native/nauterm_core/Cargo.toml \
   --locked --features test-credential-store
 ```
 
-也可以从 GitHub Actions 手动启动 **Quality Gates** 工作流。标准运行会在 Linux 上检查 Flutter、Rust、发布元数据、生成资源、许可证和 Mosh ABI。启用可选集成检查后，还会在 Linux、macOS 和 Windows 上运行桌面集成测试。
+也可以从 GitHub Actions 手动启动 **Quality Gates** 工作流。标准运行会在 Linux 上检查 Flutter、Rust、发布元数据、生成资源、许可证和 Mosh ABI；另在 Linux、macOS、Windows 上编译 GPUI 客户端并执行模型／隔离文件检查，macOS 还会构建 app bundle，均不启动应用做 UI 验证。界面仍手动检查。启用可选集成检查后，还会在 Linux、macOS 和 Windows 上运行桌面集成测试。
 
 普通推送到 `main` 不会自动消耗 CI 分钟数。匹配 `v*` 的标签会运行质量检查、构建发布包、生成校验和并发布 GitHub Release。
 
@@ -284,7 +275,9 @@ cargo test \
 | 路径 | 职责 |
 | --- | --- |
 | `lib/` | Flutter 应用、设置、工作空间、终端 UI 和 FFI 绑定 |
-| `native/nauterm_ffi/` | Rust 数据库、密码学、终端、SSH、串口、同步和传输实现 |
+| `nauterm-rs/` | GPUI 桌面客户端，通过 Rust API 共用原生底层 |
+| `Cargo.toml`、`Cargo.lock` | 共享 Rust 工作区、发布版本及依赖锁文件 |
+| `native/nauterm_core/` | Rust 数据库、密码学、终端、SSH、串口、同步和传输实现 |
 | `assets/` | 本地化、主题、图标、预设和第三方声明 |
 | `macos/`、`linux/`、`windows/` | 桌面 Runner 和平台构建集成 |
 | `scripts/` | 本地开发、资源生成、打包和 CI 工具 |

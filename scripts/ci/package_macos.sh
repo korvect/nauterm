@@ -121,33 +121,5 @@ if [ ! -d "$APP_PATH" ]; then
   exit 1
 fi
 
-ditto -c -k --sequesterRsrc --keepParent \
-  "$APP_PATH" \
-  "$DIST_DIR/${APP_NAME}-${VERSION}-macos-${ARCH}.app.zip"
-
-DMG_PATH="$DIST_DIR/${APP_NAME}-${VERSION}-macos-${ARCH}.dmg"
-DMG_STAGE_PARENT="$(mktemp -d "${TMPDIR:-/tmp}/${APP_NAME}.dmg.XXXXXX")"
-DMG_STAGE="$DMG_STAGE_PARENT/$DMG_VOLUME_NAME"
-cleanup_dmg_stage() {
-  rm -rf "$DMG_STAGE_PARENT"
-}
-trap cleanup_dmg_stage EXIT
-
-mkdir -p "$DMG_STAGE"
-ditto "$APP_PATH" "$DMG_STAGE/${APP_NAME}.app"
-# The mounted path is part of macOS' Finder/LaunchServices icon cache key. Give
-# the copied bundle a fresh container timestamp so rebuilding the same version
-# does not keep showing an icon cached for an older DMG payload.
-touch "$DMG_STAGE/${APP_NAME}.app"
-ln -s /Applications "$DMG_STAGE/Applications"
-rm -f "$DMG_PATH"
-
-if ! diskutil image create from --format UDZO "$DMG_STAGE" "$DMG_PATH"; then
-  echo "diskutil image create failed; falling back to hdiutil create." >&2
-  hdiutil create \
-    -volname "$DMG_VOLUME_NAME" \
-    -srcfolder "$DMG_STAGE" \
-    -ov \
-    -format UDZO \
-    "$DMG_PATH"
-fi
+bash scripts/ci/package_macos_bundle.sh \
+  "$APP_PATH" "$DIST_DIR/${APP_NAME}-${VERSION}-macos-${ARCH}" "$DMG_VOLUME_NAME"

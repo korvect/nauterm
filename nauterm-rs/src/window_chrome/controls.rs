@@ -1,0 +1,139 @@
+//! Product titlebar controls, with platform hit testing for Windows Snap Layouts.
+use gpui_kit::{assets::IconName, component::Icon, prelude::*, *};
+
+pub fn has_controls(window: &Window) -> bool {
+    if cfg!(target_os = "linux") {
+        // A compositor may grant server decorations despite our request. In
+        // that case it already supplies the buttons; never draw a second set.
+        matches!(window.window_decorations(), Decorations::Client { .. })
+    } else {
+        cfg!(target_os = "windows")
+    }
+}
+
+pub fn window_controls(
+    foreground: Rgba,
+    window: &Window,
+    cx: &App,
+    on_close: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+) -> impl IntoElement {
+    let supported = window.window_controls();
+    let maximized = window.is_maximized();
+    div()
+        .id("window-controls")
+        .flex()
+        .h_full()
+        .flex_shrink_0()
+        .when(has_controls(window), |controls| {
+            controls
+                .pr(px(6.))
+                .when(supported.minimize, |controls| {
+                    controls.child(control(
+                        "window-minimize",
+                        IconName::WindowMinimize,
+                        WindowControlArea::Min,
+                        foreground,
+                        crate::localization::text(cx, "common.label.minimize"),
+                        |_, window, _| window.minimize_window(),
+                    ))
+                })
+                .when(supported.maximize, |controls| {
+                    controls.child(control(
+                        "window-maximize",
+                        if maximized {
+                            IconName::WindowRestore
+                        } else {
+                            IconName::WindowMaximize
+                        },
+                        WindowControlArea::Max,
+                        foreground,
+                        crate::localization::text(
+                            cx,
+                            if maximized {
+                                "common.action.restore"
+                            } else {
+                                "common.action.maximize"
+                            },
+                        ),
+                        |_, window, _| window.zoom_window(),
+                    ))
+                })
+                .child(control(
+                    "window-close",
+                    IconName::WindowClose,
+                    WindowControlArea::Close,
+                    foreground,
+                    crate::localization::text(cx, "common.action.close"),
+                    on_close,
+                ))
+        })
+}
+
+fn control(
+    id: &'static str,
+    icon: IconName,
+    area: WindowControlArea,
+    foreground: Rgba,
+    label: SharedString,
+    action: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+) -> impl IntoElement {
+    let hover = if area == WindowControlArea::Close {
+        rgb(0xe05545)
+    } else {
+        foreground.alpha(0.10)
+    };
+    let glyph = match icon {
+        IconName::WindowMinimize => Icon::new(IconName::Minus).size(px(15.)),
+        IconName::WindowMaximize => Icon::new(IconName::Square).size(px(13.)),
+        IconName::WindowRestore => Icon::default()
+            .path("nauterm/window-restore.svg")
+            .size(px(15.)),
+        _ => Icon::new(IconName::X).size(px(15.)),
+    };
+    div()
+        .id(id)
+        .group(id)
+        .role(Role::Button)
+        .aria_label(label)
+        .w(px(34.))
+        .h_full()
+        .flex_shrink_0()
+        .flex()
+        .items_center()
+        .justify_center()
+        .cursor(CursorStyle::PointingHand)
+        .text_color(foreground)
+        .when(cfg!(target_os = "windows"), |button| {
+            // GPUI checks native areas in paint order, with the parent's Drag
+            // area first. Exclude that ancestor from hit testing at the button
+            // so Windows receives Min/Max/Close instead of a caption click.
+            button.window_control_area(area).occlude()
+        })
+        .when(
+            !cfg!(target_os = "windows") || area == WindowControlArea::Close,
+            |button| {
+                // Windows owns Min/Max non-client clicks (including restore and
+                // Snap Layouts). Only Close needs our exit confirmation. Linux's
+                // client-side controls own all three actions.
+                button
+                    .on_mouse_down(MouseButton::Left, |_, window, cx| {
+                        window.prevent_default();
+                        cx.stop_propagation();
+                    })
+                    .on_click(move |event, window, cx| {
+                        cx.stop_propagation();
+                        action(event, window, cx);
+                    })
+            },
+        )
+        .child(
+            div()
+                .size(px(26.))
+                .rounded(px(7.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .group_hover(id, move |style| style.bg(hover))
+                .child(glyph),
+        )
+}

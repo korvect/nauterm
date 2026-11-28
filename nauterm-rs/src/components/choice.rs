@@ -1,0 +1,291 @@
+//! Product-owned choice controls, composed only from GPUI and our Button.
+use super::{
+    Button,
+    motion::{self, Transition},
+};
+use crate::typography::FontWeights;
+use gpui_kit::{
+    component::{ActiveTheme, Disableable, Icon, Sizable},
+    prelude::*,
+    *,
+};
+use std::{rc::Rc, time::Instant};
+type Handler<V> = Rc<dyn Fn(&V, &mut Window, &mut App)>;
+
+fn animated_check(id: ElementId, value: bool, window: &mut Window, cx: &mut App) -> f32 {
+    let state = window.use_keyed_state(id, cx, |_, _| Transition::new(f32::from(value)));
+    let reduced = cx.reduce_motion();
+    let (value, moving) = state.update(cx, |s, _| {
+        s.set(f32::from(value), Instant::now(), motion::SELECTION, reduced)
+    });
+    if moving {
+        window.request_animation_frame();
+    }
+    value
+}
+pub(super) fn next_radio(key: &str, current: usize, len: usize) -> Option<usize> {
+    if len == 0 {
+        return None;
+    }
+    match key {
+        "left" | "up" => Some((current + len - 1) % len),
+        "right" | "down" => Some((current + 1) % len),
+        "home" => Some(0),
+        "end" => Some(len - 1),
+        _ => None,
+    }
+}
+
+#[derive(IntoElement)]
+pub struct Checkbox {
+    id: ElementId,
+    label: SharedString,
+    checked: bool,
+    disabled: bool,
+    on_change: Option<Handler<bool>>,
+    description: Option<SharedString>,
+    list_row: bool,
+}
+impl Checkbox {
+    pub fn new(id: impl Into<ElementId>, label: impl Into<SharedString>, checked: bool) -> Self {
+        Self {
+            id: id.into(),
+            label: label.into(),
+            checked,
+            disabled: false,
+            on_change: None,
+            description: None,
+            list_row: false,
+        }
+    }
+    pub fn on_change(mut self, f: impl Fn(&bool, &mut Window, &mut App) + 'static) -> Self {
+        self.on_change = Some(Rc::new(f));
+        self
+    }
+    pub fn description(mut self, text: impl Into<SharedString>) -> Self {
+        self.description = Some(text.into());
+        self
+    }
+    pub fn list_row(mut self) -> Self {
+        self.list_row = true;
+        self
+    }
+}
+impl Disableable for Checkbox {
+    fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+}
+impl RenderOnce for Checkbox {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let label = crate::localization::label(cx, &self.label);
+        let description = self
+            .description
+            .map(|description| crate::localization::text(cx, &description));
+        let amount = animated_check(self.id.clone(), self.checked, window, cx);
+        let accent: Rgba = cx.theme().primary.into();
+        let border = cx.theme().input;
+        Button::new(self.id)
+            .disabled(self.disabled)
+            .ghost()
+            .content_start()
+            .px_0()
+            .when(self.list_row, |button| {
+                button
+                    .w_full()
+                    .h_auto()
+                    .min_h(px(44.))
+                    .px(px(8.))
+                    .py(px(6.))
+                    .rounded(px(0.))
+            })
+            .role(Role::CheckBox)
+            .checked(self.checked)
+            .accessibility_label(label.clone())
+            .child(
+                div()
+                    .size(px(15.))
+                    .flex_shrink_0()
+                    .rounded(px(3.))
+                    .border_1()
+                    .border_color(border)
+                    .bg(motion::mix(rgba(0), accent, amount))
+                    .child(
+                        Icon::new(gpui_kit::assets::IconName::Check)
+                            .with_size(px(13.))
+                            .text_color(rgb(0xffffff))
+                            .opacity(amount),
+                    ),
+            )
+            .child(
+                div()
+                    .min_w_0()
+                    .when(self.list_row, |view| view.flex_1())
+                    .flex()
+                    .flex_col()
+                    .items_start()
+                    .gap(px(2.))
+                    .child(
+                        div()
+                            .max_w_full()
+                            .text_size(px(13.))
+                            .font_weight(if self.list_row {
+                                FontWeights::MEDIUM
+                            } else {
+                                FontWeight::NORMAL
+                            })
+                            .when(self.list_row, |view| view.truncate())
+                            .child(label),
+                    )
+                    .when_some(description, |view, description| {
+                        view.child(
+                            div()
+                                .max_w_full()
+                                .text_size(px(11.))
+                                .text_color(cx.theme().muted_foreground)
+                                .truncate()
+                                .child(description),
+                        )
+                    }),
+            )
+            .on_click(move |_, w, cx| {
+                if let Some(f) = &self.on_change {
+                    f(&!self.checked, w, cx);
+                }
+            })
+    }
+}
+#[derive(IntoElement)]
+pub struct Toggle<const SETTINGS: bool> {
+    id: ElementId,
+    label: SharedString,
+    checked: bool,
+    disabled: bool,
+    on_change: Option<Handler<bool>>,
+}
+pub type Switch = Toggle<true>;
+impl<const SETTINGS: bool> Toggle<SETTINGS> {
+    pub fn new(id: impl Into<ElementId>, label: &'static str, checked: bool) -> Self {
+        Self {
+            id: id.into(),
+            label: label.into(),
+            checked,
+            disabled: false,
+            on_change: None,
+        }
+    }
+    pub fn on_change(mut self, f: impl Fn(&bool, &mut Window, &mut App) + 'static) -> Self {
+        self.on_change = Some(Rc::new(f));
+        self
+    }
+}
+impl<const SETTINGS: bool> Disableable for Toggle<SETTINGS> {
+    fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+}
+impl<const SETTINGS: bool> RenderOnce for Toggle<SETTINGS> {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        const TRACK_WIDTH: f32 = 42.;
+        const TRACK_HEIGHT: f32 = 25.5;
+        const THUMB_DIAMETER: f32 = 23.;
+        const THUMB_EXTENSION: f32 = 5.75;
+        const INSET: f32 = (TRACK_HEIGHT - THUMB_DIAMETER) / 2.;
+
+        let label = crate::localization::label(cx, &self.label);
+        let amount = animated_check(self.id.clone(), self.checked, window, cx);
+        let dark = cx.theme().is_dark();
+        let track = motion::mix(
+            if dark { rgb(0x28323d) } else { rgb(0xe5e7eb) },
+            if dark { rgb(0x238c68) } else { rgb(0x10b981) },
+            amount,
+        );
+        super::button::Button::<SETTINGS>::new(self.id)
+            .ghost()
+            .disabled(self.disabled)
+            .w(px(TRACK_WIDTH))
+            .h(px(TRACK_HEIGHT))
+            .p_0()
+            .rounded_full()
+            .role(Role::Switch)
+            .checked(self.checked)
+            .accessibility_label(label)
+            .ink_ripple(false)
+            .press_content(move |press| {
+                // Ease the shape change in both directions so a quick release
+                // can reverse mid-animation without a visible step.
+                let press = press * press * (3. - 2. * press);
+                let width = THUMB_DIAMETER + THUMB_EXTENSION * press;
+                let travel = TRACK_WIDTH - 2. * INSET - width;
+                div()
+                    .relative()
+                    .w_full()
+                    .h_full()
+                    .rounded_full()
+                    .bg(track)
+                    .child(
+                        div()
+                            .absolute()
+                            .inset_0()
+                            .rounded_full()
+                            .border_1()
+                            .border_color(motion::mix(
+                                rgb(0x000000).opacity(0.06),
+                                rgba(0),
+                                amount,
+                            )),
+                    )
+                    .child(
+                        div()
+                            .absolute()
+                            .left(px(INSET + travel * amount))
+                            .right(px(INSET + travel * (1. - amount)))
+                            .top(px(INSET))
+                            .h(px(THUMB_DIAMETER))
+                            .rounded_full()
+                            .shadow(vec![
+                                gpui_kit::base::box_shadow(
+                                    px(0.),
+                                    px(1.),
+                                    px(2.),
+                                    px(0.),
+                                    rgb(0x000000).opacity(0.16).into(),
+                                ),
+                                gpui_kit::base::box_shadow(
+                                    px(0.),
+                                    px(2.),
+                                    px(5.),
+                                    px(0.),
+                                    rgb(0x000000).opacity(0.14).into(),
+                                ),
+                            ])
+                            .bg(if dark {
+                                motion::mix(rgb(0x9aa8b3), rgb(0xffffff), amount)
+                            } else {
+                                rgb(0xffffff)
+                            }),
+                    )
+                    .into_any_element()
+            })
+            .on_click(move |_, w, cx| {
+                if let Some(f) = &self.on_change {
+                    f(&!self.checked, w, cx);
+                }
+            })
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::next_radio;
+    #[test]
+    fn radio_arrows_wrap_and_home_end_are_bounded() {
+        assert_eq!(next_radio("left", 0, 3), Some(2));
+        assert_eq!(next_radio("right", 2, 3), Some(0));
+        assert_eq!(next_radio("home", 1, 3), Some(0));
+        assert_eq!(next_radio("end", 0, 3), Some(2));
+        assert_eq!(next_radio("right", 0, 0), None);
+        assert_eq!(next_radio("a", 0, 3), None);
+    }
+}

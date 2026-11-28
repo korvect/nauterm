@@ -144,7 +144,9 @@ Widget _buildSettingsThemeEditor(_SettingsPanelState state) {
                       SizedBox(height: 16),
                       Divider(height: 1, color: _softOutline),
                       SizedBox(height: 16),
-                      _colorSectionLabel('ANSI COLORS'),
+                      _colorSectionLabel(
+                        tr('settings.terminal.theme.ansiColors.label'),
+                      ),
                       SizedBox(height: 12),
                       _AnsiColorEditor(
                         label: 'Normal',
@@ -346,7 +348,10 @@ class _ApplicationThemeOption extends StatelessWidget {
   Widget build(BuildContext context) {
     return Semantics(
       key: ValueKey('application-theme-${mode.name}'),
-      label: '${_label(context)} application theme',
+      label: context.tr(
+        'settings.general.applicationTheme.accessibility',
+        args: {'theme': _label(context)},
+      ),
       button: true,
       selected: selected,
       child: Material(
@@ -983,30 +988,36 @@ class _ColorPickerOverlayState extends State<_ColorPickerOverlay> {
                                   ),
                                   SizedBox(width: 2),
                                   Expanded(
-                                    child: TextField(
-                                      controller: _hexController,
-                                      style: TextStyle(
-                                        color: _text,
-                                        fontSize: 10,
-                                        fontFamily: 'monospace',
+                                    child: Semantics(
+                                      label: context.tr(
+                                        'settings.terminal.theme.hexColor.label',
+                                        fallback: 'Hex color',
                                       ),
-                                      decoration: InputDecoration(
-                                        isCollapsed: true,
-                                        contentPadding: EdgeInsets.zero,
-                                        border: InputBorder.none,
+                                      child: TextField(
+                                        controller: _hexController,
+                                        style: TextStyle(
+                                          color: _text,
+                                          fontSize: 10,
+                                          fontFamily: 'monospace',
+                                        ),
+                                        decoration: InputDecoration(
+                                          isCollapsed: true,
+                                          contentPadding: EdgeInsets.zero,
+                                          border: InputBorder.none,
+                                        ),
+                                        onChanged: (text) {
+                                          final hex = text.trim();
+                                          if (hex.length == 6) {
+                                            _hsv = HSVColor.fromColor(
+                                              Color(
+                                                int.parse('ff$hex', radix: 16),
+                                              ),
+                                            );
+                                            _applyColor();
+                                            setState(() {});
+                                          }
+                                        },
                                       ),
-                                      onChanged: (text) {
-                                        final hex = text.trim();
-                                        if (hex.length == 6) {
-                                          _hsv = HSVColor.fromColor(
-                                            Color(
-                                              int.parse('ff$hex', radix: 16),
-                                            ),
-                                          );
-                                          _applyColor();
-                                          setState(() {});
-                                        }
-                                      },
                                     ),
                                   ),
                                 ],
@@ -1216,16 +1227,22 @@ class _TerminalPaddingControlState extends State<_TerminalPaddingControl> {
   }
 
   static String _formatPadding(EdgeInsets p) {
+    String format(double value) {
+      if (value == 0) return '0';
+      final text = value.toString();
+      return text.endsWith('.0') ? text.substring(0, text.length - 2) : text;
+    }
+
     if (p.left == p.top && p.top == p.right && p.right == p.bottom) {
-      return '${p.left.round()}';
+      return format(p.left);
     }
     if (p.top == p.bottom && p.left == p.right) {
-      return '${p.top.round()}, ${p.left.round()}';
+      return '${format(p.top)}, ${format(p.left)}';
     }
     if (p.left == p.right) {
-      return '${p.top.round()}, ${p.right.round()}, ${p.bottom.round()}';
+      return [p.top, p.right, p.bottom].map(format).join(', ');
     }
-    return '${p.top.round()}, ${p.right.round()}, ${p.bottom.round()}, ${p.left.round()}';
+    return [p.top, p.right, p.bottom, p.left].map(format).join(', ');
   }
 
   static EdgeInsets? _parsePadding(String text) {
@@ -1233,7 +1250,7 @@ class _TerminalPaddingControlState extends State<_TerminalPaddingControl> {
         .split(',')
         .map((s) => double.tryParse(s.trim()))
         .toList();
-    if (parts.any((p) => p == null || p < 0)) {
+    if (parts.any((p) => p == null || !p.isFinite || p < 0)) {
       return null;
     }
     return switch (parts) {
@@ -1263,8 +1280,12 @@ class _TerminalPaddingControlState extends State<_TerminalPaddingControl> {
   @override
   Widget build(BuildContext context) {
     return _SettingsTextField(
+      key: const ValueKey('settings-terminal-padding'),
       controller: _controller,
-      hint: 'all · top/bottom left/right · top right bottom left',
+      hint: context.tr(
+        'settings.terminal.padding.hint',
+        fallback: 'all · vertical, horizontal · top, right, bottom, left',
+      ),
       onChanged: (_) {},
       onSubmitted: _handleSubmitted,
       onFocusLost: _handleSubmitted,

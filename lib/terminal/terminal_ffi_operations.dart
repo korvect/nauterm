@@ -1,5 +1,62 @@
 part of 'terminal_ffi.dart';
 
+/// Liveness/maintenance ownership for one recording. Independent of output
+/// capture, so metadata-only sessions are protected too. Never serialize it.
+abstract interface class TerminalRecordingLease {
+  String get recordingId;
+  void close();
+}
+
+class FfiTerminalRecordingLease implements TerminalRecordingLease {
+  FfiTerminalRecordingLease._(this.recordingId, this._bindings, this._handle);
+
+  @override
+  final String recordingId;
+  final _TerminalBindings _bindings;
+  int _handle;
+
+  static FfiTerminalRecordingLease? tryAcquire({
+    required String directory,
+    required String recordingId,
+    bool existingOnly = false,
+  }) {
+    final bindings = _TerminalBindings.open();
+    final nativeDirectory = directory.toNativeUtf8();
+    final nativeId = recordingId.toNativeUtf8();
+    try {
+      final acquire = existingOnly
+          ? bindings.recordingLeaseTryAcquireExisting
+          : bindings.recordingLeaseTryAcquire;
+      final pointer = acquire(nativeDirectory, nativeId);
+      if (pointer == nullptr) {
+        throw StateError('Recording lease is unavailable.');
+      }
+      try {
+        final value =
+            jsonDecode(pointer.toDartString()) as Map<String, dynamic>;
+        if (value['error'] case final String error) {
+          throw FileSystemException(error, directory);
+        }
+        if (value['busy'] == true) return null;
+        final handle = (value['handle'] as num).toInt();
+        return FfiTerminalRecordingLease._(recordingId, bindings, handle);
+      } finally {
+        bindings.freeString(pointer);
+      }
+    } finally {
+      malloc.free(nativeDirectory);
+      malloc.free(nativeId);
+    }
+  }
+
+  @override
+  void close() {
+    final handle = _handle;
+    _handle = 0;
+    if (handle != 0) _bindings.recordingLeaseRelease(handle);
+  }
+}
+
 void prepareNativeTerminalCaptureDirectory(String path) {
   final bindings = _TerminalBindings.open();
   final nativePath = path.toNativeUtf8();
@@ -54,6 +111,47 @@ FfiTerminalCaptureFinalized recoverNativeTerminalCapture({
   } finally {
     malloc.free(nativePath);
     malloc.free(nativeId);
+  }
+}
+
+Future<FfiTerminalCaptureFinalized> writeNativeTerminalCaptureTail({
+  required String source,
+  required String destination,
+  required String recordingId,
+  required int maxBytes,
+  required String expectedSha256,
+}) async {
+  final value = await compute(_writeNativeCaptureTailRequest, {
+    'source': source,
+    'destination': destination,
+    'recording_id': recordingId,
+    'max_bytes': maxBytes,
+    'expected_sha256': expectedSha256,
+  });
+  return FfiTerminalCaptureFinalized.fromJson(value);
+}
+
+Map<String, dynamic> _writeNativeCaptureTailRequest(
+  Map<String, Object> request,
+) {
+  final bindings = _TerminalBindings.open();
+  final encoded = jsonEncode(request).toNativeUtf8();
+  try {
+    final pointer = bindings.captureWriteTail(encoded);
+    if (pointer == nullptr) {
+      throw const FileSystemException('Unable to compact encrypted capture.');
+    }
+    try {
+      final value = jsonDecode(pointer.toDartString()) as Map<String, dynamic>;
+      if (value['error'] case final String error) {
+        throw FileSystemException(error, request['source'] as String);
+      }
+      return value;
+    } finally {
+      bindings.freeString(pointer);
+    }
+  } finally {
+    malloc.free(encoded);
   }
 }
 
@@ -1508,6 +1606,8 @@ class FfiSftpDirectoryEntryListing {
     TerminalProxyConfig? proxy,
     SshHostKeyTrustMode hostKeyTrustMode = SshHostKeyTrustMode.strict,
     bool sshCompatibilityMode = false,
+    String? sudoSessionId,
+    String? sudoPassword,
   }) {
     final bindings = _TerminalBindings.open();
     final nativeHost = host.toNativeUtf8();
@@ -1525,23 +1625,43 @@ class FfiSftpDirectoryEntryListing {
         ? nullptr
         : passphrase.toNativeUtf8();
     final nativeProxy = _proxyConfigToNative(proxy);
+    final nativeSudoSessionId = sudoSessionId?.toNativeUtf8() ?? nullptr;
+    final nativeSudoPassword = sudoPassword?.toNativeUtf8() ?? nullptr;
     Pointer<Utf8> resultPointer = nullptr;
     try {
-      resultPointer = bindings.sftpListDirectoryEntries(
-        requestId,
-        nativeHost,
-        port,
-        nativeUsername,
-        nativePassword,
-        nativePrivateKey,
-        nativeCertificate,
-        nativePassphrase,
-        nativeKnownHostsPath,
-        nativeDirectory,
-        hostKeyTrustMode.wireValue,
-        nativeProxy,
-        sshCompatibilityMode,
-      );
+      resultPointer = sudoSessionId == null
+          ? bindings.sftpListDirectoryEntries(
+              requestId,
+              nativeHost,
+              port,
+              nativeUsername,
+              nativePassword,
+              nativePrivateKey,
+              nativeCertificate,
+              nativePassphrase,
+              nativeKnownHostsPath,
+              nativeDirectory,
+              hostKeyTrustMode.wireValue,
+              nativeProxy,
+              sshCompatibilityMode,
+            )
+          : bindings.sftpListDirectoryEntriesWithSudo(
+              requestId,
+              nativeHost,
+              port,
+              nativeUsername,
+              nativePassword,
+              nativePrivateKey,
+              nativeCertificate,
+              nativePassphrase,
+              nativeKnownHostsPath,
+              nativeDirectory,
+              hostKeyTrustMode.wireValue,
+              nativeProxy,
+              sshCompatibilityMode,
+              nativeSudoSessionId,
+              nativeSudoPassword,
+            );
       if (resultPointer == nullptr) {
         return const FfiSshDirectoryEntryListingResult(
           entries: [],
@@ -1573,6 +1693,14 @@ class FfiSftpDirectoryEntryListing {
       }
       if (nativeProxy != nullptr) {
         malloc.free(nativeProxy);
+      }
+      if (nativeSudoSessionId != nullptr) malloc.free(nativeSudoSessionId);
+      if (nativeSudoPassword != nullptr) {
+        final bytes = nativeSudoPassword.cast<Uint8>().asTypedList(
+          nativeSudoPassword.length,
+        );
+        bytes.fillRange(0, bytes.length, 0);
+        malloc.free(nativeSudoPassword);
       }
       if (resultPointer != nullptr) {
         bindings.freeString(resultPointer);

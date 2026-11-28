@@ -340,12 +340,14 @@ class _TerminalReplayLoadingOverlay extends StatelessWidget {
 class _KnownHostsPane extends StatefulWidget {
   const _KnownHostsPane({
     required this.text,
+    required this.loading,
     required this.onImport,
     required this.onContextAction,
     required this.onContextActions,
   });
 
   final String text;
+  final bool loading;
   final VoidCallback onImport;
   final _WorkspaceContextAction<_KnownHostItem> onContextAction;
   final _WorkspaceContextActions<_KnownHostItem> onContextActions;
@@ -376,6 +378,7 @@ class _KnownHostsPaneState extends State<_KnownHostsPane> {
       ordinal: (host) => host.lineIndex,
     );
 
+    final isSearching = _searchQuery.trim().isNotEmpty;
     return ColoredBox(
       color: _surface,
       child: Column(
@@ -392,29 +395,50 @@ class _KnownHostsPaneState extends State<_KnownHostsPane> {
             onViewModeChanged: (value) => setState(() => _viewMode = value),
           ),
           Expanded(
-            child: _WorkspaceItemScrollView(
-              padding: _workspacePanePadding,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const _SectionTitle('Known Hosts'),
-                  SizedBox(height: 12),
-                  if (knownHosts.isEmpty)
-                    _WorkspaceInlineMessage(
-                      _searchQuery.trim().isEmpty
-                          ? 'No known hosts yet.'
-                          : 'No known hosts found.',
-                    )
-                  else
-                    _WorkspaceItemCollection(
-                      items: knownHosts,
-                      viewMode: _viewMode,
-                      onContextAction: widget.onContextAction,
-                      onContextActions: widget.onContextActions,
+            child: knownHosts.isEmpty
+                ? LayoutBuilder(
+                    builder: (context, constraints) => _WorkspaceItemScrollView(
+                      padding: EdgeInsets.zero,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          minHeight: constraints.maxHeight,
+                        ),
+                        child: _WorkspaceEmptyState(
+                          icon: LucideIcons.fingerprint,
+                          title: widget.loading
+                              ? 'workspace.knownHosts.load.loading'
+                              : isSearching
+                              ? 'workspace.label.noKnownHostsFound'
+                              : 'workspace.label.noKnownHostsYet',
+                          description: widget.loading || isSearching
+                              ? null
+                              : 'workspace.description.knownHosts',
+                          actionLabel: widget.loading || isSearching
+                              ? null
+                              : 'workspace.action.importKnownHosts',
+                          onAction: widget.loading || isSearching
+                              ? null
+                              : widget.onImport,
+                        ),
+                      ),
                     ),
-                ],
-              ),
-            ),
+                  )
+                : _WorkspaceItemScrollView(
+                    padding: _workspacePanePadding,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const _SectionTitle('Known Hosts'),
+                        SizedBox(height: 12),
+                        _WorkspaceItemCollection(
+                          items: knownHosts,
+                          viewMode: _viewMode,
+                          onContextAction: widget.onContextAction,
+                          onContextActions: widget.onContextActions,
+                        ),
+                      ],
+                    ),
+                  ),
           ),
         ],
       ),
@@ -446,7 +470,10 @@ class _KnownHostsToolbar extends StatelessWidget {
     return _WorkspaceToolbarFrame(
       children: [
         _WorkspaceButton(
-          label: 'Import',
+          label: context.tr(
+            'workspace.action.importKnownHosts',
+            fallback: 'Import known hosts',
+          ),
           size: _WorkspaceControlSize.tiny,
           variant: _WorkspaceButtonVariant.filled,
           height: _workspaceToolbarControlExtent,
@@ -474,6 +501,7 @@ class _SnippetsPane extends StatefulWidget {
   const _SnippetsPane({
     required this.packages,
     required this.snippets,
+    required this.loading,
     required this.onCreateSnippet,
     required this.onCreatePackage,
     required this.onShowShellHistory,
@@ -486,6 +514,7 @@ class _SnippetsPane extends StatefulWidget {
 
   final List<_SnippetPackageItem> packages;
   final List<_SnippetItem> snippets;
+  final bool loading;
   final ValueChanged<int?> onCreateSnippet;
   final VoidCallback onCreatePackage;
   final VoidCallback onShowShellHistory;
@@ -514,11 +543,13 @@ class _SnippetsPaneState extends State<_SnippetsPane> {
               .firstOrNull;
     final currentPackageId = selectedPackage?.id;
 
-    final packages = _sortWorkspaceItems(
-      _filterWorkspaceItems(widget.packages, _searchQuery),
-      _sortOrder,
-      ordinal: (package) => package.id,
-    );
+    final packages = selectedPackage == null
+        ? _sortWorkspaceItems(
+            _filterWorkspaceItems(widget.packages, _searchQuery),
+            _sortOrder,
+            ordinal: (package) => package.id,
+          )
+        : const <_SnippetPackageItem>[];
     final scopedSnippets = currentPackageId == null
         ? widget.snippets
         : widget.snippets.where(
@@ -543,9 +574,14 @@ class _SnippetsPaneState extends State<_SnippetsPane> {
     final sharedGridItemCount = showingPackage
         ? snippets.length
         : math.max(packages.length, snippets.length);
-    final hasStoredItems =
-        widget.packages.isNotEmpty || widget.snippets.isNotEmpty;
-    final showEmptyState = !hasStoredItems && _searchQuery.trim().isEmpty;
+    final searching = _searchQuery.trim().isNotEmpty;
+    final empty = packages.isEmpty && snippets.isEmpty;
+    final emptyTitle = searching
+        ? 'workspace.label.noSnippetsFound'
+        : 'workspace.label.noSnippetsYet';
+    final emptyDescription = searching
+        ? 'workspace.description.tryAnotherSearch'
+        : 'workspace.empty.snippets.description';
 
     return ColoredBox(
       color: _surface,
@@ -565,13 +601,19 @@ class _SnippetsPaneState extends State<_SnippetsPane> {
             onViewModeChanged: (value) => setState(() => _viewMode = value),
           ),
           Expanded(
-            child: showEmptyState
+            child: empty && !showingPackage
                 ? _WorkspaceEmptyState(
                     icon: LucideIcons.code,
-                    title: 'No snippets yet',
-                    description: 'Save frequently used commands as snippets so they are ready in every terminal.',
-                    actionLabel: 'Add snippet',
-                    onAction: () => widget.onCreateSnippet(currentPackageId),
+                    title: widget.loading
+                        ? 'workspace.snippets.load.loading'
+                        : emptyTitle,
+                    description: widget.loading ? null : emptyDescription,
+                    actionLabel: widget.loading || searching
+                        ? null
+                        : 'workspace.label.addSnippet',
+                    onAction: widget.loading || searching
+                        ? null
+                        : () => widget.onCreateSnippet(currentPackageId),
                   )
                 : _WorkspaceItemScrollView(
                     padding: _workspacePanePadding,
@@ -586,14 +628,14 @@ class _SnippetsPaneState extends State<_SnippetsPane> {
                           SizedBox(height: 18),
                         ],
                         if (!showingPackage && packages.isNotEmpty) ...[
-                          const _SectionTitle('Packages'),
+                          const _SectionTitle('common.label.packages'),
                           SizedBox(height: 14),
                           _WorkspaceItemCollection(
                             items: packages,
                             viewMode: _viewMode,
                             maxColumns: 2,
                             layoutItemCount: sharedGridItemCount,
-                            onItemTap: _openPackage,
+                            onItemDoubleTap: _openPackage,
                             onContextAction: _handlePackageContextAction,
                             onContextActions: widget.onPackageContextActions,
                           ),
@@ -603,7 +645,7 @@ class _SnippetsPaneState extends State<_SnippetsPane> {
                             snippets.isNotEmpty)
                           SizedBox(height: 30),
                         if (snippets.isNotEmpty) ...[
-                          const _SectionTitle('Snippets'),
+                          const _SectionTitle('common.label.snippets'),
                           SizedBox(height: 14),
                           _WorkspaceItemCollection(
                             items: snippets,
@@ -615,8 +657,12 @@ class _SnippetsPaneState extends State<_SnippetsPane> {
                             onContextActions: widget.onSnippetContextActions,
                           ),
                         ],
-                        if (packages.isEmpty && snippets.isEmpty)
-                          const _WorkspaceInlineMessage('No snippets found.'),
+                        if (empty)
+                          _WorkspaceScopedEmptyState(
+                            icon: LucideIcons.code,
+                            title: emptyTitle,
+                            description: emptyDescription,
+                          ),
                       ],
                     ),
                   ),
@@ -662,7 +708,7 @@ class _SnippetPackageBreadcrumb extends StatelessWidget {
       child: Row(
         children: [
           _GroupBreadcrumbButton(
-            label: 'Snippets',
+            label: context.tr('common.label.snippets'),
             current: false,
             onPressed: onRootSelected,
           ),
@@ -691,12 +737,14 @@ class _PortForwardingPane extends StatefulWidget {
     required this.onCreateForward,
     required this.onEditForward,
     required this.onToggleForward,
+    required this.onDeleteForwards,
   });
 
   final List<_PortForwardItem> forwards;
   final ValueChanged<String> onCreateForward;
   final ValueChanged<_PortForwardItem> onEditForward;
   final void Function(_PortForwardItem item, bool enabled) onToggleForward;
+  final ValueChanged<List<_PortForwardItem>> onDeleteForwards;
 
   @override
   State<_PortForwardingPane> createState() => _PortForwardingPaneState();
@@ -726,8 +774,7 @@ class _PortForwardingPaneState extends State<_PortForwardingPane> {
       _sortOrder,
       ordinal: (forward) => forward.id,
     );
-    final showEmptyState =
-        widget.forwards.isEmpty && _searchQuery.trim().isEmpty;
+    final searching = _searchQuery.trim().isNotEmpty;
 
     return ColoredBox(
       color: _surface,
@@ -743,42 +790,57 @@ class _PortForwardingPaneState extends State<_PortForwardingPane> {
                 setState(() => _searchQuery = value),
           ),
           Expanded(
-            child: showEmptyState
+            child: forwards.isEmpty
                 ? _WorkspaceEmptyState(
                     icon: LucideIcons.arrowRightLeft,
-                    title: 'No forwarding rules yet',
-                    description: 'Add a forwarding rule to route local, remote, or dynamic traffic through SSH.',
-                    actionLabel: 'Add forwarding',
-                    onAction: () => widget.onCreateForward('local'),
+                    title: searching
+                        ? 'workspace.label.noForwardingRulesFound'
+                        : 'workspace.label.noForwardingRulesYet',
+                    description: searching
+                        ? 'workspace.description.tryAnotherSearch'
+                        : 'workspace.empty.forwarding.description',
+                    actionLabel: searching
+                        ? null
+                        : 'workspace.label.addForwarding',
+                    onAction: searching
+                        ? null
+                        : () => widget.onCreateForward('local'),
                   )
                 : _WorkspaceItemScrollView(
                     padding: _workspacePanePadding,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        if (forwards.isEmpty)
-                          const _WorkspaceInlineMessage(
-                            'No forwarding rules found.',
-                          )
-                        else ...[
-                          const _SectionTitle('Port Forwarding'),
-                          SizedBox(height: 14),
-                          Column(
-                            children: [
-                              for (final forward in forwards) ...[
-                                _PortForwardCard(
-                                  forward: forward,
-                                  onEdit: () => widget.onEditForward(forward),
-                                  onToggle: () => widget.onToggleForward(
-                                    forward,
-                                    !forward.enabled,
-                                  ),
-                                ),
-                                SizedBox(height: 12),
-                              ],
-                            ],
+                        const _SectionTitle('workspace.label.portForwarding'),
+                        SizedBox(height: 14),
+                        _WorkspaceItemList<_PortForwardItem>(
+                          items: forwards,
+                          spacing: 12,
+                          rowBorder: (forward) => BorderSide(
+                            color: forward.enabled ? _blue : _sidebarDivider,
                           ),
-                        ],
+                          rowContent: (forward) => _PortForwardCardContent(
+                            forward: forward,
+                            onEdit: () => widget.onEditForward(forward),
+                            onToggle: () => widget.onToggleForward(
+                              forward,
+                              !forward.enabled,
+                            ),
+                          ),
+                          onItemDoubleTap: widget.onEditForward,
+                          onContextAction: (forward, action) {
+                            if (action == _ContextMenuActionId.edit) {
+                              widget.onEditForward(forward);
+                            } else if (action == _ContextMenuActionId.delete) {
+                              widget.onDeleteForwards([forward]);
+                            }
+                          },
+                          onContextActions: (items, action) {
+                            if (action == _ContextMenuActionId.delete) {
+                              widget.onDeleteForwards(items);
+                            }
+                          },
+                        ),
                       ],
                     ),
                   ),
@@ -792,6 +854,7 @@ class _PortForwardingPaneState extends State<_PortForwardingPane> {
 class _ProxiesPane extends StatefulWidget {
   const _ProxiesPane({
     required this.proxies,
+    required this.loading,
     required this.onCreateProxy,
     required this.onEditProxy,
     required this.onContextAction,
@@ -799,6 +862,7 @@ class _ProxiesPane extends StatefulWidget {
   });
 
   final List<_ProxyItem> proxies;
+  final bool loading;
   final VoidCallback onCreateProxy;
   final ValueChanged<_ProxyItem> onEditProxy;
   final _WorkspaceContextAction<_ProxyItem> onContextAction;
@@ -830,8 +894,7 @@ class _ProxiesPaneState extends State<_ProxiesPane> {
       _sortOrder,
       ordinal: (proxy) => proxy.id,
     );
-    final showEmptyState =
-        widget.proxies.isEmpty && _searchQuery.trim().isEmpty;
+    final searching = _searchQuery.trim().isNotEmpty;
 
     return ColoredBox(
       color: _surface,
@@ -849,13 +912,23 @@ class _ProxiesPaneState extends State<_ProxiesPane> {
             onViewModeChanged: (value) => setState(() => _viewMode = value),
           ),
           Expanded(
-            child: showEmptyState
+            child: proxies.isEmpty
                 ? _WorkspaceEmptyState(
                     icon: LucideIcons.network,
-                    title: 'No proxies yet',
-                    description: 'Add a proxy once and reuse it across hosts that share the same route.',
-                    actionLabel: 'Add proxy',
-                    onAction: widget.onCreateProxy,
+                    title: widget.loading
+                        ? 'workspace.proxies.load.loading'
+                        : searching
+                        ? 'workspace.label.noProxiesFound'
+                        : 'workspace.label.noProxiesYet',
+                    description: widget.loading
+                        ? null
+                        : 'workspace.empty.proxies.description',
+                    actionLabel: widget.loading || searching
+                        ? null
+                        : 'Add proxy',
+                    onAction: widget.loading || searching
+                        ? null
+                        : widget.onCreateProxy,
                   )
                 : _WorkspaceItemScrollView(
                     padding: _workspacePanePadding,
@@ -864,16 +937,13 @@ class _ProxiesPaneState extends State<_ProxiesPane> {
                       children: [
                         const _SectionTitle('Proxies'),
                         SizedBox(height: 12),
-                        if (proxies.isEmpty)
-                          const _WorkspaceInlineMessage('No proxies found.')
-                        else
-                          _WorkspaceItemCollection<_ProxyItem>(
-                            items: proxies,
-                            viewMode: _viewMode,
-                            onItemDoubleTap: widget.onEditProxy,
-                            onContextAction: widget.onContextAction,
-                            onContextActions: widget.onContextActions,
-                          ),
+                        _WorkspaceItemCollection<_ProxyItem>(
+                          items: proxies,
+                          viewMode: _viewMode,
+                          onItemDoubleTap: widget.onEditProxy,
+                          onContextAction: widget.onContextAction,
+                          onContextActions: widget.onContextActions,
+                        ),
                       ],
                     ),
                   ),
@@ -993,8 +1063,8 @@ class _PortForwardingToolbar extends StatelessWidget {
   }
 }
 
-class _PortForwardCard extends StatelessWidget {
-  const _PortForwardCard({
+class _PortForwardCardContent extends StatelessWidget {
+  const _PortForwardCardContent({
     required this.forward,
     required this.onEdit,
     required this.onToggle,
@@ -1022,14 +1092,8 @@ class _PortForwardCard extends StatelessWidget {
         : forward.enabled
         ? tr('common.label.enabled', fallback: 'Enabled')
         : tr('common.label.stopped', fallback: 'Stopped');
-    return Container(
-      width: double.infinity,
+    return Padding(
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: forward.enabled ? _blue : _sidebarDivider),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1189,7 +1253,7 @@ class _PortForwardCard extends StatelessWidget {
               ),
               SizedBox(width: 8),
               _WorkspaceButton(
-                label: 'Edit',
+                label: 'common.action.edit',
                 size: _WorkspaceControlSize.tiny,
                 variant: _WorkspaceButtonVariant.text,
                 onPressed: onEdit,
@@ -1296,7 +1360,7 @@ class _SnippetsToolbar extends StatelessWidget {
         SizedBox(width: 10),
         _ModeButton(
           icon: Icons.history_rounded,
-          label: 'Shell History',
+          label: 'workspace.label.shellHistory',
           onTap: onShowShellHistory,
         ),
         Expanded(
@@ -1326,8 +1390,10 @@ typedef _TerminalLogExportCallback = void Function(
 class _LogsPane extends StatefulWidget {
   const _LogsPane({
     required this.terminalLogs,
+    required this.loading,
     required this.hasMore,
     required this.loadingMore,
+    required this.loadError,
     required this.captureDiskUsage,
     required this.shellHistory,
     required this.selectedLogId,
@@ -1337,12 +1403,15 @@ class _LogsPane extends StatefulWidget {
     required this.onLogExport,
     required this.onClearLogs,
     required this.onLoadMore,
+    required this.onRetry,
     this.dataStore,
   });
 
   final List<TerminalLogEntry> terminalLogs;
+  final bool loading;
   final bool hasMore;
   final bool loadingMore;
+  final String? loadError;
   final int captureDiskUsage;
   final List<ShellHistoryEntry> shellHistory;
   final String? selectedLogId;
@@ -1352,6 +1421,7 @@ class _LogsPane extends StatefulWidget {
   final _TerminalLogExportCallback onLogExport;
   final VoidCallback onClearLogs;
   final VoidCallback onLoadMore;
+  final VoidCallback onRetry;
   final NautermDataStore? dataStore;
 
   @override
@@ -1396,6 +1466,7 @@ class _LogsPaneState extends State<_LogsPane> {
               Expanded(
                 child: _LogsTableCard(
                   terminalLogs: sortedLogs,
+                  loading: widget.loading,
                   selectedLogId: widget.selectedLogId,
                   onLogReplay: widget.onLogReplay,
                   onLogSelected: widget.onLogSelected,
@@ -1403,7 +1474,9 @@ class _LogsPaneState extends State<_LogsPane> {
                   onLogExport: widget.onLogExport,
                   hasMore: widget.hasMore,
                   loadingMore: widget.loadingMore,
+                  loadError: widget.loadError,
                   onLoadMore: widget.onLoadMore,
+                  onRetry: widget.onRetry,
                   dataStore: widget.dataStore,
                 ),
               ),
@@ -1431,7 +1504,10 @@ class _LogsFooter extends StatelessWidget {
           Icon(LucideIcons.hardDrive, size: 14, color: _mutedText),
           SizedBox(width: 7),
           Text(
-            tr('Capture storage  ${_formatStorageBytes(captureDiskUsage)}'),
+            context.tr(
+              'workspace.logs.storage.size',
+              args: {'size': _formatStorageBytes(captureDiskUsage)},
+            ),
             style: TextStyle(
               color: _mutedText,
               fontSize: NautermFontSizes.labelSmall,
@@ -1444,6 +1520,8 @@ class _LogsFooter extends StatelessWidget {
     );
   }
 }
+
+const _logsDateColumnWidth = 136.0;
 
 class _LogsTableHeader extends StatelessWidget {
   const _LogsTableHeader({
@@ -1465,7 +1543,7 @@ class _LogsTableHeader extends StatelessWidget {
       child: Row(
         children: [
           SizedBox(
-            width: 112,
+            width: _logsDateColumnWidth,
             child: _LogsHeaderCell(
               label: tr('common.label.date', fallback: 'Date'),
               icon: newestFirst
@@ -1498,10 +1576,7 @@ class _LogsTableHeader extends StatelessWidget {
                 _LogsActionButton(
                   onPressed: canClear ? onClearLogs : null,
                   icon: LucideIcons.trash2,
-                  tooltip: tr(
-                    'workspace.label.deleteAllTerminalHistoryAndCaptures',
-                    fallback: 'Delete all terminal history and captures',
-                  ),
+                  tooltip: tr('workspace.logs.delete.action'),
                   dimension: 24,
                 ),
               ],
@@ -1565,6 +1640,7 @@ class _LogsHeaderCell extends StatelessWidget {
 class _LogsTableCard extends StatelessWidget {
   const _LogsTableCard({
     required this.terminalLogs,
+    required this.loading,
     required this.selectedLogId,
     required this.onLogReplay,
     required this.onLogSelected,
@@ -1572,11 +1648,14 @@ class _LogsTableCard extends StatelessWidget {
     required this.onLogExport,
     required this.hasMore,
     required this.loadingMore,
+    required this.loadError,
     required this.onLoadMore,
+    required this.onRetry,
     this.dataStore,
   });
 
   final List<TerminalLogEntry> terminalLogs;
+  final bool loading;
   final String? selectedLogId;
   final ValueChanged<TerminalLogEntry> onLogReplay;
   final ValueChanged<TerminalLogEntry> onLogSelected;
@@ -1584,11 +1663,21 @@ class _LogsTableCard extends StatelessWidget {
   final _TerminalLogExportCallback onLogExport;
   final bool hasMore;
   final bool loadingMore;
+  final String? loadError;
   final VoidCallback onLoadMore;
+  final VoidCallback onRetry;
   final NautermDataStore? dataStore;
 
   @override
   Widget build(BuildContext context) {
+    final error = loadError;
+    final Widget? footer = error != null
+        ? _LogsLoadFailure(error: error, onRetry: onRetry)
+        : loadingMore
+        ? const _WorkspaceLoadingLine(
+            semanticsLabelKey: 'workspace.logs.load.loading',
+          )
+        : null;
     return ClipRRect(
       key: const ValueKey('logs-table-body'),
       borderRadius: BorderRadius.circular(7),
@@ -1601,15 +1690,22 @@ class _LogsTableCard extends StatelessWidget {
         child: Material(
           type: MaterialType.transparency,
           child: terminalLogs.isEmpty
-              ? const _WorkspaceEmptyState(
-                  key: ValueKey('logs-table-empty-state'),
-                  icon: LucideIcons.clock,
-                  title: 'workspace.label.noTerminalSessionsRecorded',
+              ? Center(
+                  child:
+                      footer ??
+                      _WorkspaceEmptyState(
+                        key: const ValueKey('logs-table-empty-state'),
+                        icon: LucideIcons.clock,
+                        title: loading
+                            ? 'workspace.logs.load.loading'
+                            : 'workspace.label.noTerminalSessionsRecorded',
+                      ),
                 )
               : NotificationListener<ScrollNotification>(
                   onNotification: (notification) {
                     if (hasMore &&
                         !loadingMore &&
+                        error == null &&
                         notification.metrics.extentAfter < 240) {
                       onLoadMore();
                     }
@@ -1617,12 +1713,12 @@ class _LogsTableCard extends StatelessWidget {
                   },
                   child: ListView.separated(
                     padding: EdgeInsets.zero,
-                    itemCount: terminalLogs.length + (loadingMore ? 1 : 0),
+                    itemCount: terminalLogs.length + (footer == null ? 0 : 1),
                     separatorBuilder: (context, index) =>
                         Divider(height: 1, color: _sidebarDivider),
                     itemBuilder: (context, index) {
                       if (index == terminalLogs.length) {
-                        return const _WorkspaceLoadingLine();
+                        return footer!;
                       }
                       final log = terminalLogs[index];
                       return _LogsTableRow(
@@ -1647,6 +1743,48 @@ class _LogsTableCard extends StatelessWidget {
   }
 }
 
+class _LogsLoadFailure extends StatelessWidget {
+  const _LogsLoadFailure({required this.error, required this.onRetry});
+
+  final String error;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            context.tr('workspace.logs.load.unavailable'),
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: _text,
+              fontSize: 12,
+              fontWeight: NautermFontWeights.medium,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            error,
+            textAlign: TextAlign.center,
+            style: TextStyle(color: _mutedText, fontSize: 12),
+          ),
+          const SizedBox(height: 8),
+          _WorkspaceButton(
+            label: 'workspace.logs.load.retry',
+            size: _WorkspaceControlSize.tiny,
+            onPressed: onRetry,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+enum _LogRowAction { replay, export, readableText, rawAnsi, details, delete }
+
 class _LogsTableRow extends StatelessWidget {
   const _LogsTableRow({
     super.key,
@@ -1667,6 +1805,83 @@ class _LogsTableRow extends StatelessWidget {
   final ValueChanged<_TerminalLogExportFormat> onExport;
   final NautermDataStore? dataStore;
 
+  bool get _finished => log.endedAt != null;
+
+  bool get _canRead =>
+      _finished && log.captureFile.isNotEmpty && log.captureSha256 != null;
+
+  static const _exportOptions = [
+    NautermContextMenuAction(
+      value: _LogRowAction.readableText,
+      label: 'workspace.label.readableTextTxt',
+      icon: LucideIcons.fileText,
+    ),
+    NautermContextMenuAction(
+      value: _LogRowAction.rawAnsi,
+      label: 'workspace.label.rawTerminalStreamAnsi',
+      icon: LucideIcons.fileCode2,
+    ),
+  ];
+
+  void _export(_LogRowAction action) => onExport(
+    action == _LogRowAction.readableText
+        ? _TerminalLogExportFormat.readableText
+        : _TerminalLogExportFormat.rawAnsi,
+  );
+
+  Future<void> _openMenu(BuildContext context, Offset position) async {
+    onTap();
+    final action = await showNautermContextMenu<_LogRowAction>(
+      context: context,
+      position: position,
+      width: 232,
+      entries: [
+        NautermContextMenuAction(
+          value: _LogRowAction.replay,
+          label: 'common.action.replay',
+          icon: LucideIcons.play,
+          enabled: _canRead,
+        ),
+        NautermContextMenuAction(
+          value: _LogRowAction.export,
+          label: 'workspace.label.exportTerminalCapture',
+          icon: LucideIcons.download,
+          enabled: _canRead,
+          children: _exportOptions,
+        ),
+        const NautermContextMenuAction(
+          value: _LogRowAction.details,
+          label: 'workspace.logs.action.sessionDetails',
+          icon: LucideIcons.info,
+        ),
+        const NautermContextMenuDivider(),
+        NautermContextMenuAction(
+          value: _LogRowAction.delete,
+          label: 'workspace.label.deleteLogAndCapture',
+          icon: LucideIcons.trash2,
+          destructive: true,
+          enabled: _finished,
+        ),
+      ],
+    );
+    if (action == null || !context.mounted) return;
+    switch (action) {
+      case _LogRowAction.replay:
+        onReplay();
+      case _LogRowAction.readableText || _LogRowAction.rawAnsi:
+        _export(action);
+      case _LogRowAction.details:
+        await showNautermDialog<void>(
+          context: context,
+          builder: (_) => _LogDetailsDialog(log: log, dataStore: dataStore),
+        );
+      case _LogRowAction.delete:
+        onDelete();
+      case _LogRowAction.export:
+        break;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final account = _logAccountInfo(log);
@@ -1674,116 +1889,242 @@ class _LogsTableRow extends StatelessWidget {
         ? null
         : dataStore?.getHost(log.hostId!);
     final host = _logHostInfo(log, linkedHost);
-    return Stack(
-      children: [
-        Material(
-          color: selected
-              ? _blend(_card, _blue, _workspaceDark ? 0.1 : 0.055)
-              : _card,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 60),
-            child: _LogsRowInteraction(
-              onSelect: onTap,
-              onDoubleTap: onReplay,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 26),
-                child: Row(
-                  children: [
-                    SizedBox(width: 112, child: _LogsDateCell(log: log)),
-                    Expanded(
-                      flex: 3,
-                      child: _LogsIdentityCell(
-                        leading: Icon(
-                          LucideIcons.userRound,
-                          size: 16,
-                          color: _mutedText,
+    return GestureDetector(
+      onSecondaryTapDown: (details) =>
+          unawaited(_openMenu(context, details.globalPosition)),
+      child: Stack(
+        children: [
+          Material(
+            color: selected
+                ? _blend(_card, _blue, _workspaceDark ? 0.1 : 0.055)
+                : _card,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 60),
+              child: _LogsRowInteraction(
+                label: context.tr(
+                  'workspace.logs.row.accessibility',
+                  args: {'name': log.title},
+                ),
+                onSelect: onTap,
+                onDoubleTap: _canRead ? onReplay : null,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 26),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: _logsDateColumnWidth,
+                        child: _LogsDateCell(log: log),
+                      ),
+                      Expanded(
+                        flex: 3,
+                        child: _LogsIdentityCell(
+                          leading: Icon(
+                            LucideIcons.userRound,
+                            size: 16,
+                            color: _mutedText,
+                          ),
+                          foregroundColor: _text,
+                          title: account.title,
+                          subtitle: account.subtitle,
                         ),
-                        foregroundColor: _text,
-                        title: account.title,
-                        subtitle: account.subtitle,
                       ),
-                    ),
-                    Expanded(
-                      flex: 4,
-                      child: _LogsIdentityCell(
-                        leading: _LogsHostIcon(info: host),
-                        foregroundColor: _text,
-                        title: host.title,
-                        subtitle: host.subtitle,
+                      Expanded(
+                        flex: 4,
+                        child: _LogsIdentityCell(
+                          leading: _LogsHostIcon(info: host),
+                          foregroundColor: _text,
+                          title: host.title,
+                          subtitle: host.subtitle,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 96),
-                  ],
+                      const SizedBox(width: 96),
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-        Positioned(
-          right: 26,
-          top: 0,
-          bottom: 0,
-          width: 96,
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: Row(
-              children: [
-                _LogsActionButton(
-                  tooltip: tr('common.action.replay', fallback: 'Replay'),
-                  icon: LucideIcons.play,
-                  onPressed: onReplay,
-                ),
-                SizedBox(width: 2),
-                _WorkspaceDropdown<_TerminalLogExportFormat>(
-                  width: 232,
-                  entries: const [
-                    NautermContextMenuAction(
-                      value: _TerminalLogExportFormat.readableText,
-                      label: 'Readable text (.txt)',
-                      icon: LucideIcons.fileText,
+          Positioned(
+            right: 26,
+            top: 0,
+            bottom: 0,
+            width: 96,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Row(
+                children: [
+                  _LogsActionButton(
+                    tooltip: tr('common.action.replay', fallback: 'Replay'),
+                    icon: LucideIcons.play,
+                    onPressed: _canRead ? onReplay : null,
+                  ),
+                  SizedBox(width: 2),
+                  _WorkspaceDropdown<_LogRowAction>(
+                    width: 232,
+                    entries: _exportOptions,
+                    onSelected: _export,
+                    triggerBuilder: (openMenu) => _LogsActionButton(
+                      tooltip: tr(
+                        'workspace.label.exportTerminalCapture',
+                        fallback: 'Export terminal capture',
+                      ),
+                      icon: LucideIcons.download,
+                      onPressed: _canRead ? openMenu : null,
                     ),
-                    NautermContextMenuAction(
-                      value: _TerminalLogExportFormat.rawAnsi,
-                      label: 'Raw terminal stream (.ansi)',
-                      icon: LucideIcons.fileCode2,
-                    ),
-                  ],
-                  onSelected: onExport,
-                  triggerBuilder: (openMenu) => _LogsActionButton(
+                  ),
+                  SizedBox(width: 2),
+                  _LogsActionButton(
                     tooltip: tr(
-                      'workspace.label.exportTerminalCapture',
-                      fallback: 'Export terminal capture',
+                      'workspace.label.deleteLogAndCapture',
+                      fallback: 'Delete log and capture',
                     ),
-                    icon: LucideIcons.download,
-                    onPressed: openMenu,
+                    icon: LucideIcons.trash2,
+                    onPressed: _finished ? onDelete : null,
                   ),
+                ],
+              ),
+            ),
+          ),
+          if (selected)
+            Positioned(
+              left: 0,
+              top: 12,
+              bottom: 12,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: _blue,
+                  borderRadius: BorderRadius.circular(1),
                 ),
-                SizedBox(width: 2),
-                _LogsActionButton(
-                  tooltip: tr(
-                    'workspace.label.deleteLogAndCapture',
-                    fallback: 'Delete log and capture',
+                child: const SizedBox(width: 2),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LogDetailsDialog extends StatefulWidget {
+  const _LogDetailsDialog({required this.log, required this.dataStore});
+
+  final TerminalLogEntry log;
+  final NautermDataStore? dataStore;
+
+  @override
+  State<_LogDetailsDialog> createState() => _LogDetailsDialogState();
+}
+
+class _LogDetailsDialogState extends State<_LogDetailsDialog> {
+  late final _events = Future(
+    () =>
+        widget.dataStore?.listTerminalLogEvents(widget.log.id) ??
+        const <TerminalLogEvent>[],
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final log = widget.log;
+    final endedAt = log.endedAt;
+    final cwd = log.cwd;
+    final endpoint = log.host;
+    final user = log.username;
+    final port = log.port;
+    final address =
+        endpoint != null && endpoint.contains(':') && !endpoint.startsWith('[')
+        ? '[$endpoint]'
+        : endpoint;
+    return _WorkspaceDialogFrame(
+      width: 560,
+      title: Text(context.tr('workspace.logs.action.sessionDetails')),
+      content: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.6,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                log.title,
+                style: TextStyle(fontWeight: NautermFontWeights.semibold),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                address == null
+                    ? context.tr('workspace.logs.details.localTerminal')
+                    : '${user == null || user.isEmpty ? '' : '$user@'}$address${port == null ? '' : ':$port'}',
+              ),
+              const SizedBox(height: 10),
+              Text(
+                context.tr(
+                  'workspace.logs.details.started',
+                  args: {'time': _formatLogTimestamp(log.startedAt)},
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                endedAt == null
+                    ? context.tr('workspace.logs.details.live')
+                    : context.tr(
+                        'workspace.logs.details.ended',
+                        args: {'time': _formatLogTimestamp(endedAt)},
+                      ),
+              ),
+              if (cwd != null) ...[
+                const SizedBox(height: 10),
+                Text(
+                  context.tr(
+                    'workspace.logs.details.directory',
+                    args: {'cwd': cwd},
                   ),
-                  icon: LucideIcons.trash2,
-                  onPressed: onDelete,
                 ),
               ],
-            ),
+              FutureBuilder<List<TerminalLogEvent>>(
+                future: _events,
+                builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: Text(
+                        context.tr(
+                          'workspace.logs.details.eventsError',
+                          args: {'error': snapshot.error},
+                        ),
+                      ),
+                    );
+                  }
+                  if (!snapshot.hasData) {
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: Text(
+                        context.tr('workspace.logs.details.loadingEvents'),
+                      ),
+                    );
+                  }
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (final event in snapshot.requireData) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          _formatLogTimestamp(event.timestamp),
+                          style: TextStyle(color: _mutedText),
+                        ),
+                        Text(event.message),
+                      ],
+                    ],
+                  );
+                },
+              ),
+            ],
           ),
         ),
-        if (selected)
-          Positioned(
-            left: 0,
-            top: 12,
-            bottom: 12,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: _blue,
-                borderRadius: BorderRadius.circular(1),
-              ),
-              child: const SizedBox(width: 2),
-            ),
-          ),
+      ),
+      actions: [
+        _WorkspaceButton(
+          label: 'common.action.done',
+          onPressed: () => Navigator.of(context).pop(),
+        ),
       ],
     );
   }
@@ -1791,13 +2132,15 @@ class _LogsTableRow extends StatelessWidget {
 
 class _LogsRowInteraction extends StatefulWidget {
   const _LogsRowInteraction({
+    required this.label,
     required this.onSelect,
     required this.onDoubleTap,
     required this.child,
   });
 
+  final String label;
   final VoidCallback onSelect;
-  final VoidCallback onDoubleTap;
+  final VoidCallback? onDoubleTap;
   final Widget child;
 
   @override
@@ -1822,7 +2165,7 @@ class _LogsRowInteractionState extends State<_LogsRowInteraction> {
     if (isDoubleTap) {
       _lastPrimaryDownTime = null;
       _lastPrimaryDownPosition = null;
-      widget.onDoubleTap();
+      widget.onDoubleTap?.call();
       return;
     }
     _lastPrimaryDownTime = event.timeStamp;
@@ -1831,15 +2174,18 @@ class _LogsRowInteractionState extends State<_LogsRowInteraction> {
 
   @override
   Widget build(BuildContext context) {
-    return Listener(
-      onPointerDown: _handlePointerDown,
-      child: InkWell(
-        splashFactory: InkRipple.splashFactory,
-        onTap: widget.onSelect,
-        hoverColor: _cardHover,
-        highlightColor: _blue.withValues(alpha: _workspaceDark ? 0.10 : 0.06),
-        splashColor: _blue.withValues(alpha: _workspaceDark ? 0.18 : 0.12),
-        child: widget.child,
+    return Semantics(
+      label: widget.label,
+      child: Listener(
+        onPointerDown: _handlePointerDown,
+        child: InkWell(
+          splashFactory: InkRipple.splashFactory,
+          onTap: widget.onSelect,
+          hoverColor: _cardHover,
+          highlightColor: _blue.withValues(alpha: _workspaceDark ? 0.10 : 0.06),
+          splashColor: _blue.withValues(alpha: _workspaceDark ? 0.18 : 0.12),
+          child: widget.child,
+        ),
       ),
     );
   }
@@ -1909,6 +2255,12 @@ class _LogsDateCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final rangeStyle = TextStyle(
+      color: _mutedText,
+      fontSize: NautermFontSizes.labelSmall,
+      fontWeight: NautermFontWeights.medium,
+      letterSpacing: 0,
+    );
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Column(
@@ -1916,7 +2268,7 @@ class _LogsDateCell extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            _formatLogDate(log.startedAt),
+            _formatLogDate(context, log.startedAt),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
@@ -1928,15 +2280,10 @@ class _LogsDateCell extends StatelessWidget {
           ),
           SizedBox(height: 4),
           Text(
-            _formatLogTimeRange(log),
+            _formatLogTimeRange(context, log),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: _mutedText,
-              fontSize: NautermFontSizes.labelSmall,
-              fontWeight: NautermFontWeights.medium,
-              letterSpacing: 0,
-            ),
+            style: rangeStyle,
           ),
         ],
       ),
@@ -2235,7 +2582,7 @@ bool _isSerialTerminalLog(TerminalLogEntry log) {
   return title.startsWith(r'\\.\COM');
 }
 
-String _formatLogDate(DateTime timestamp) {
+String _formatLogDate(BuildContext context, DateTime timestamp) {
   final local = timestamp.toLocal();
   const months = [
     'Jan',
@@ -2251,19 +2598,42 @@ String _formatLogDate(DateTime timestamp) {
     'Nov',
     'Dec',
   ];
-  return '${months[local.month - 1]} ${local.day}, ${local.year}';
+  return context.tr(
+    'workspace.logs.date.label',
+    fallback: '{monthName} {day}, {year}',
+    args: {
+      'year': local.year,
+      'month': local.month,
+      'monthName': months[local.month - 1],
+      'day': local.day,
+    },
+  );
 }
 
-String _formatLogTimeRange(TerminalLogEntry log) {
+String _formatLogTimeRange(BuildContext context, TerminalLogEntry log) {
   final start = log.startedAt.toLocal();
   final end = (log.endedAt ?? DateTime.now()).toLocal();
-  final suffixDays = DateTime(
+  final suffixDays = DateTime.utc(
     end.year,
     end.month,
     end.day,
-  ).difference(DateTime(start.year, start.month, start.day)).inDays;
-  final suffix = suffixDays > 0 ? ' (+${suffixDays}d)' : '';
-  return '${_formatLogTime(start)} - ${_formatLogTime(end)}$suffix';
+  ).difference(DateTime.utc(start.year, start.month, start.day)).inDays;
+  final range = '${_formatLogTime(start)} - ${_formatLogTime(end)}';
+  if (suffixDays <= 0) return range;
+  final offset = context.tr(
+    'workspace.logs.date.dayOffset',
+    fallback: '(+{days}d)',
+    args: {'days': suffixDays},
+  );
+  return '$range $offset';
+}
+
+String _formatLogTimestamp(DateTime timestamp) {
+  final time = timestamp.toLocal();
+  return '${time.year.toString().padLeft(4, '0')}-'
+      '${time.month.toString().padLeft(2, '0')}-'
+      '${time.day.toString().padLeft(2, '0')} '
+      '${_formatLogTime(time)}:${time.second.toString().padLeft(2, '0')}';
 }
 
 String _formatLogTime(DateTime timestamp) {

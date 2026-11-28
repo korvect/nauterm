@@ -61,20 +61,18 @@ void main() {
         '浅色',
       );
       expect(
-        chinese.tr('settings.terminal.fontWeight.light', fallback: 'Light'),
-        'Light',
-      );
-      expect(
-        chinese.messages.containsKey('settings.terminal.fontWeight.light'),
-        isFalse,
+        chinese.tr(
+          'workspace.host.protocol.portLabel',
+          args: const {'protocol': 'SSH', 'port': 22},
+        ),
+        'SSH 使用 22 端口',
       );
       expect(
         chinese.tr(
           'settings.terminal.padding.description',
-          fallback:
-              'Inner spacing around terminal content. Supports 1 to 4 values.',
+          fallback: 'Inner spacing around terminal content. Enter 1 to 4 comma-separated values.',
         ),
-        '终端内容周围的内边距。支持 1 到 4 个值。',
+        '终端内容四周的内边距。可输入 1 至 4 个以逗号分隔的值。',
       );
       expect(
         chinese.tr('missing.namespaced.key', fallback: 'Readable fallback'),
@@ -118,7 +116,7 @@ void main() {
       expect(chinese.tr('workspace.label.newKey'), '新建密钥');
       expect(chinese.tr('common.label.privateKey'), '私钥');
       expect(chinese.tr('common.label.remote'), '远程');
-      expect(chinese.tr('workspace.import.title'), '导入到保险库');
+      expect(chinese.tr('workspace.import.title'), '导入到 Vaults');
       expect(chinese.tr('workspace.keys.import.fromFile'), '从密钥文件导入');
       expect(chinese.tr('workspace.keys.field.type'), '密钥类型');
       expect(
@@ -131,10 +129,9 @@ void main() {
       expect(chinese.tr('terminal.action.hideComposer'), '隐藏命令编辑器');
       expect(chinese.tr('settings.update.action.check'), '检查更新');
       expect(chinese.tr('settings.ai.provider.maxTokens.label'), '最大 Token 数');
-      expect(chinese.tr('settings.sync.status.ready'), '同步已就绪');
+      expect(chinese.tr('settings.sync.status.upToDate'), '已是最新');
       expect(chinese.tr('settings.sync.provider.status.connected'), '已连接');
       expect(chinese.tr('settings.sync.provider.status.ready'), '就绪');
-      expect(chinese.tr('settings.sync.provider.status.notConfigured'), '未配置');
       expect(chinese.tr('common.label.showAll'), '显示全部');
       expect(chinese.tr('common.label.showLess'), '收起');
       expect(chinese.tr('common.label.home'), '主目录');
@@ -155,14 +152,23 @@ void main() {
       );
       expect(
         chinese.tr(
-          'settings.sync.status.connectedProviders',
-          args: const {'count': 3},
+          'settings.sync.status.viaProvider',
+          args: const {'provider': 'S3'},
         ),
-        '已连接 3 个提供商',
+        '通过 S3',
       );
       expect(chinese.tr('settings.sync.mergeStrategy.smartMerge'), '智能合并');
       expect(chinese.tr('settings.sync.mergeStrategy.label'), '合并策略');
       expect(chinese.tr('settings.sync.automatic.unit'), '分钟');
+      expect(
+        chinese.tr('settings.search.noMatches', args: const {'query': 'SSH'}),
+        '没有与“SSH”匹配的设置。',
+      );
+      expect(chinese.tr('settings.search.singleResult'), '1 个结果');
+      expect(
+        chinese.tr('settings.search.resultCount', args: const {'count': 3}),
+        '3 个结果',
+      );
       expect(
         chinese.tr('settings.sync.key.localAvailable.label'),
         '同步 DEK 已在本地可用',
@@ -190,7 +196,7 @@ void main() {
         chinese.tr('Search host:, group:, username:, tag:, or user@host'),
         '搜索 host:、group:、username:、tag: 或 user@host',
       );
-      expect(chinese.tr('Saving...'), '正在保存…');
+      expect(chinese.tr('Saving…'), '正在保存…');
       expect(
         chinese.tr('Untranslated future text'),
         'Untranslated future text',
@@ -204,6 +210,67 @@ void main() {
       expect(AppLanguage.fromString(language.configValue), language);
     }
   });
+
+  test(
+    'application messages use the default name without changing values',
+    () async {
+      final english = await NautermLocalizations.load(const Locale('en'));
+      final chinese = await NautermLocalizations.load(const Locale('zh', 'CN'));
+      expect(
+        english.tr(
+          'settings.general.defaultUrlHandler.isDefault',
+          args: {'scheme': 'SSH'},
+        ),
+        'Nauterm is the default application for SSH.',
+      );
+      expect(
+        chinese.tr('workspace.restore.unexpectedExit.title'),
+        'Nauterm 意外关闭',
+      );
+      expect(
+        english.tr(
+          'update.startup.downloading',
+          fallback: 'Downloading {appName} {version}...',
+          args: {'version': '0.3.13'},
+        ),
+        'Downloading Nauterm 0.3.13...',
+      );
+      expect(
+        english.tr(
+          'settings.sync.error.oauthClientRequired',
+          args: {'provider': 'Local {appName}'},
+        ),
+        'Local {appName} authorization requires a Nauterm OAuth client ID before sign-in can be enabled.',
+      );
+      expect(chinese.tr('Diagnostic {appName}'), 'Diagnostic {appName}');
+    },
+  );
+
+  test(
+    'About and Sparkle use the same keys for both application names',
+    () async {
+      final english = await NautermLocalizations.load(const Locale('en'));
+      final chinese = await NautermLocalizations.load(const Locale('zh', 'CN'));
+      for (final appName in ['Nauterm', 'Nauterm RS']) {
+        expect(
+          english.tr('settings.pages.about.title', args: {'appName': appName}),
+          'About $appName',
+        );
+        expect(
+          chinese.tr('settings.pages.about.title', args: {'appName': appName}),
+          '关于 $appName',
+        );
+      }
+      expect(
+        english.tr('settings.update.sparkle.managed'),
+        'Updates are managed by Sparkle.',
+      );
+      expect(
+        chinese.tr('settings.update.sparkle.notConfigured'),
+        isNot('settings.update.sparkle.notConfigured'),
+      );
+    },
+  );
 
   test(
     'English and Chinese resource files contain the same message keys',
@@ -265,10 +332,7 @@ void main() {
             'VS Code',
             'https://s3.example.com',
             'github_pat_...',
-            'Extra Bold',
             'sel',
-            'Normal',
-            'Bright',
           }.contains(entry.value),
         ),
         isEmpty,
@@ -280,6 +344,63 @@ void main() {
       }
     },
   );
+
+  test('export and bulk deletion use the shared bilingual messages', () async {
+    final english = await NautermLocalizations.load(const Locale('en'));
+    final chinese = await NautermLocalizations.load(const Locale('zh', 'CN'));
+    expect(english.tr('workspace.action.exportCsv'), 'Export CSV…');
+    expect(chinese.tr('workspace.action.exportCsv'), '导出 CSV…');
+    expect(chinese.tr('workspace.label.exportToFile'), '导出到文件');
+    for (final (kind, label) in [
+      ('Hosts', '主机'),
+      ('Keys', '密钥'),
+      ('Identities', '身份'),
+    ]) {
+      final key = 'workspace.dialog.delete$kind';
+      expect(english.tr(key), 'Delete $kind?');
+      expect(chinese.tr(key), '删除$label？');
+      expect(
+        chinese.tr('$key.description', args: {'count': 3}),
+        '删除 3 个$label？此操作无法撤销。',
+      );
+    }
+    expect(
+      chinese.tr(
+        'workspace.keys.export.filesSuccess',
+        args: {'count': 2, 'path': '/tmp/Key & Cert'},
+      ),
+      '已将 2 个密钥文件导出到 /tmp/Key & Cert。',
+    );
+  });
+
+  test('known hosts import uses shared action and result messages', () async {
+    final english = await NautermLocalizations.load(const Locale('en'));
+    final chinese = await NautermLocalizations.load(const Locale('zh', 'CN'));
+    expect(
+      english.tr('workspace.action.importKnownHosts'),
+      'Import known hosts',
+    );
+    expect(chinese.tr('workspace.action.importKnownHosts'), '导入已知主机');
+    expect(
+      english.tr('workspace.knownHosts.import.successOne'),
+      'Imported 1 known host.',
+    );
+    expect(
+      english.tr('workspace.knownHosts.import.success', args: {'count': 2}),
+      'Imported 2 known hosts.',
+    );
+    expect(
+      chinese.tr('workspace.knownHosts.import.success', args: {'count': 2}),
+      '已导入 2 个已知主机。',
+    );
+    expect(
+      chinese.tr(
+        'workspace.knownHosts.import.failure',
+        args: {'error': chinese.tr('workspace.knownHosts.import.fileRequired')},
+      ),
+      '导入已知主机失败：请选择普通 known_hosts 文件。',
+    );
+  });
 
   test('language names use autonyms in every interface language', () async {
     final english = await NautermLocalizations.load(const Locale('en'));

@@ -141,6 +141,7 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
         terminalLogs: _visibleTerminalLogs(),
         terminalLogsHasMore: _terminalLogsHasMore,
         terminalLogsLoading: _terminalLogsLoading,
+        terminalLogsLoadError: _terminalLogsLoadError,
         terminalCaptureDiskUsage: _terminalCaptureDiskUsage,
         shellHistory: _shellHistory,
         selectedLogId: _selectedLogId,
@@ -165,6 +166,7 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
         onCreatePortForward: _createPortForward,
         onPortForwardEdit: _editPortForward,
         onPortForwardToggle: _togglePortForward,
+        onPortForwardDelete: _deleteSelectedPortForwards,
         onCreateProxy: _createProxy,
         onProxyEdit: _editProxy,
         onProxyContextAction: _handleProxyContextAction,
@@ -189,6 +191,7 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
         onLogExport: _exportTerminalLog,
         onClearLogs: _clearTerminalLogs,
         onLoadMoreLogs: _loadMoreTerminalLogs,
+        onRetryLogs: _retryTerminalLogs,
         onImportKnownHosts: _importKnownHosts,
         onKnownHostContextAction: _handleKnownHostContextAction,
         onKnownHostContextActions: _handleKnownHostContextActions,
@@ -565,6 +568,7 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
                                   onCreateSnippetFromShellHistory:
                                       _createSnippetFromShellHistory,
                                   onClearShellHistory: _clearShellHistory,
+                                  onReloadShellHistory: _reloadShellHistory,
                                 ),
                               ),
                             ),
@@ -1279,7 +1283,7 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
                   aiConversation.clear();
                 } else {
                   _showWorkspaceMessage(
-                    'Unable to save the current AI conversation.',
+                    context.tr('ai.error.saveConversation'),
                   );
                 }
               },
@@ -1453,18 +1457,30 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
     int availableSlots,
   ) async {
     if (availableSlots <= 0) {
-      return const _AiAttachmentPickerResult(
-        errors: ['Attach up to 5 files per message.'],
+      return _AiAttachmentPickerResult(
+        errors: [
+          context.tr(
+            'ai.attachment.error.limit',
+            args: {'count': AiAttachment.maximumCount},
+          ),
+        ],
       );
     }
     final files = await _runExclusiveFilePicker(openFiles);
     if (files == null || files.isEmpty) {
       return const _AiAttachmentPickerResult();
     }
+    if (!mounted) return const _AiAttachmentPickerResult();
+    final l10n = context.l10n;
     final attachments = <AiAttachment>[];
     final errors = <String>[];
     if (files.length > availableSlots) {
-      errors.add('Only the first $availableSlots selected files were added.');
+      errors.add(
+        l10n.tr(
+          'ai.attachment.selectionTruncated',
+          args: {'count': availableSlots},
+        ),
+      );
     }
     for (final file in files.take(availableSlots)) {
       try {
@@ -1472,7 +1488,9 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
       } on AiAttachmentException catch (error) {
         errors.add(error.message);
       } on Object {
-        errors.add('Unable to read ${file.name}.');
+        errors.add(
+          l10n.tr('ai.attachment.error.read', args: {'name': file.name}),
+        );
       }
     }
     return _AiAttachmentPickerResult(attachments: attachments, errors: errors);
@@ -1583,9 +1601,9 @@ extension _NautermWorkspaceRendering on _NautermWorkspaceState {
       return false;
     }
     final confirmed = await _confirmDelete(
-      title: 'Delete Conversation?',
-      message: 'Delete "${entry.title}" from conversation history?',
-      confirmLabel: 'Delete',
+      title: 'workspace.dialog.deleteConversation',
+      message: 'ai.dialog.deleteConversation.description',
+      messageArgs: {'name': entry.title},
       colors: _workspaceOverviewActive
           ? null
           : _aiAssistantColors(_selectedTerminalTab),

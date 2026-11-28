@@ -1011,6 +1011,9 @@ class _WorkspaceItemGridState<T extends _WorkspaceItemData>
 class _WorkspaceItemList<T extends _WorkspaceItemData> extends StatefulWidget {
   const _WorkspaceItemList({
     required this.items,
+    this.rowContent,
+    this.rowBorder,
+    this.spacing = 7,
     this.onItemTap,
     this.onItemDoubleTap,
     this.onContextAction,
@@ -1022,6 +1025,9 @@ class _WorkspaceItemList<T extends _WorkspaceItemData> extends StatefulWidget {
   });
 
   final List<T> items;
+  final Widget Function(T)? rowContent;
+  final BorderSide Function(T)? rowBorder;
+  final double spacing;
   final ValueChanged<T>? onItemTap;
   final ValueChanged<T>? onItemDoubleTap;
   final _WorkspaceContextAction<T>? onContextAction;
@@ -1294,12 +1300,14 @@ class _WorkspaceItemListState<T extends _WorkspaceItemData>
       child: Column(
         children: [
           for (var index = 0; index < widget.items.length; index++) ...[
-            if (index > 0) SizedBox(height: 7),
+            if (index > 0) SizedBox(height: widget.spacing),
             _WorkspaceItemListRow<T>(
               key: ValueKey(
                 'workspace-item-row:${_workspaceItemIdentity(widget.items[index])}',
               ),
               item: widget.items[index],
+              content: widget.rowContent?.call(widget.items[index]),
+              border: widget.rowBorder?.call(widget.items[index]),
               selected:
                   _isSelected(index) ||
                   _sharedSelection?.editingIdentity ==
@@ -1449,7 +1457,8 @@ class _WorkspaceItemCardState<T extends _WorkspaceItemData>
   @override
   void didUpdateWidget(covariant _WorkspaceItemCard<T> oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.item, widget.item)) {
+    if (_workspaceItemIdentity(oldWidget.item) !=
+        _workspaceItemIdentity(widget.item)) {
       _tapTracker.reset();
     }
   }
@@ -1685,6 +1694,8 @@ class _WorkspaceItemListRow<T extends _WorkspaceItemData>
     required this.selected,
     required this.contextItems,
     required this.onSelectForContextMenu,
+    this.content,
+    this.border,
     this.onTap,
     this.onDoubleTap,
     this.onContextAction,
@@ -1695,6 +1706,8 @@ class _WorkspaceItemListRow<T extends _WorkspaceItemData>
   final T item;
   final bool selected;
   final List<T> contextItems;
+  final Widget? content;
+  final BorderSide? border;
   final VoidCallback? onTap;
   final VoidCallback? onDoubleTap;
   final ValueChanged<_ContextMenuActionId>? onContextAction;
@@ -1727,7 +1740,8 @@ class _WorkspaceItemListRowState<T extends _WorkspaceItemData>
   @override
   void didUpdateWidget(covariant _WorkspaceItemListRow<T> oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.item, widget.item)) {
+    if (_workspaceItemIdentity(oldWidget.item) !=
+        _workspaceItemIdentity(widget.item)) {
       _tapTracker.reset();
     }
   }
@@ -1786,7 +1800,7 @@ class _WorkspaceItemListRowState<T extends _WorkspaceItemData>
             borderRadius: BorderRadius.circular(8),
             side: widget.selected
                 ? BorderSide(color: _blue, width: 1.5)
-                : BorderSide.none,
+                : widget.border ?? BorderSide.none,
           ),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
@@ -1802,45 +1816,49 @@ class _WorkspaceItemListRowState<T extends _WorkspaceItemData>
             onTap: widget.onTap == null && widget.onDoubleTap == null
                 ? null
                 : _handleTap,
-            child: SizedBox(
-              height: 52,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 11),
-                child: Row(
-                  children: [
-                    _BrandIcon(
-                      icon: widget.item.icon,
-                      color: widget.item.color,
-                      name: widget.item is _HostItem ? widget.item.name : null,
-                      os: widget.item is _HostItem
-                          ? (widget.item as _HostItem).os
-                          : null,
-                      distro: widget.item is _HostItem
-                          ? (widget.item as _HostItem).distro
-                          : null,
-                      customIcon: widget.item is _HostItem
-                          ? (widget.item as _HostItem).customIcon
-                          : null,
+            child:
+                widget.content ??
+                SizedBox(
+                  height: 52,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 11),
+                    child: Row(
+                      children: [
+                        _BrandIcon(
+                          icon: widget.item.icon,
+                          color: widget.item.color,
+                          name: widget.item is _HostItem
+                              ? widget.item.name
+                              : null,
+                          os: widget.item is _HostItem
+                              ? (widget.item as _HostItem).os
+                              : null,
+                          distro: widget.item is _HostItem
+                              ? (widget.item as _HostItem).distro
+                              : null,
+                          customIcon: widget.item is _HostItem
+                              ? (widget.item as _HostItem).customIcon
+                              : null,
+                        ),
+                        SizedBox(width: 11),
+                        Expanded(
+                          child: _CardText(
+                            title: widget.item.name,
+                            subtitle: widget.item.subtitle,
+                          ),
+                        ),
+                        SizedBox(width: 12),
+                        Icon(
+                          Icons.more_horiz_rounded,
+                          size: 18,
+                          color: _hovered
+                              ? const Color(0xff71848c)
+                              : const Color(0xffb0c0c6),
+                        ),
+                      ],
                     ),
-                    SizedBox(width: 11),
-                    Expanded(
-                      child: _CardText(
-                        title: widget.item.name,
-                        subtitle: widget.item.subtitle,
-                      ),
-                    ),
-                    SizedBox(width: 12),
-                    Icon(
-                      Icons.more_horiz_rounded,
-                      size: 18,
-                      color: _hovered
-                          ? const Color(0xff71848c)
-                          : const Color(0xffb0c0c6),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
           ),
         ),
       ),

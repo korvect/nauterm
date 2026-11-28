@@ -56,12 +56,12 @@ class _HostsToolbar extends StatelessWidget {
                   ),
                   const NautermContextMenuAction<_HostCreateAction>(
                     value: _HostCreateAction.import,
-                    label: 'Import…',
+                    label: 'workspace.label.import',
                     icon: Icons.file_download_outlined,
                   ),
                   const NautermContextMenuAction<_HostCreateAction>(
                     value: _HostCreateAction.export,
-                    label: 'Export…',
+                    label: 'workspace.action.exportCsv',
                     icon: Icons.file_upload_outlined,
                   ),
                 ],
@@ -367,7 +367,7 @@ class _HostTagFilterButtonState extends State<_HostTagFilterButton> {
           children: [
             _WorkspaceInput(
               controller: controller,
-              label: 'Name',
+              label: tr('common.label.name', fallback: 'Name'),
               autofocus: true,
             ),
           ],
@@ -656,8 +656,9 @@ class _WorkspaceToolbarFrame extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ExcludeFocus(
+    return FocusTraversalGroup(
       key: const ValueKey('workspace-toolbar-tab-exclusion'),
+      descendantsAreTraversable: false,
       child: Container(
         height: _workspaceToolbarHeight,
         decoration: BoxDecoration(
@@ -699,7 +700,11 @@ class _ToolbarSplitButton extends StatelessWidget {
         ),
         SizedBox(width: 2),
         Tooltip(
-          message: tr('$label actions'),
+          message: context.tr(
+            'workspace.action.creationOptions',
+            fallback: '{action} actions',
+            args: {'action': context.tr(label)},
+          ),
           child: Builder(
             builder: (buttonContext) => _WorkspaceButton(
               icon: Icons.keyboard_arrow_down_rounded,
@@ -948,6 +953,7 @@ class _WorkspaceToolbarSearchState extends State<_WorkspaceToolbarSearch> {
       width: 180,
       height: _workspaceToolbarControlExtent,
       child: TextField(
+        key: const ValueKey('workspace-toolbar-search-field'),
         controller: _controller,
         focusNode: _focusNode,
         autofocus: true,
@@ -974,6 +980,10 @@ class _WorkspaceToolbarSearchState extends State<_WorkspaceToolbarSearch> {
             minHeight: 28,
           ),
           suffixIcon: IconButton(
+            tooltip: context.tr(
+              'common.action.closeSearch',
+              fallback: 'Close search',
+            ),
             icon: Icon(Icons.close_rounded, size: 15),
             color: _mutedText,
             padding: EdgeInsets.zero,

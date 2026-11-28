@@ -2,11 +2,75 @@ part of 'nauterm_workspace.dart';
 
 enum _Fido2EditorStep { device, pin, options }
 
-class _Fido2KeyEditorContent extends StatefulWidget {
-  const _Fido2KeyEditorContent({required this.onClose, required this.onSave});
+typedef _GenerateFido2Key = Future<Fido2GeneratedKey> Function({
+  required String deviceId,
+  required String label,
+  required String keyType,
+  required String pin,
+  required bool requireUserPresence,
+  required bool requireUserVerification,
+  required String passphrase,
+  required String cipher,
+  required int rounds,
+});
 
+@visibleForTesting
+Widget buildFido2KeyEditorForTesting({
+  required Future<List<Fido2DeviceInfo>> Function() listDevices,
+  required Future<Fido2GeneratedKey> Function() generateKey,
+  required Future<void> Function(KeyEntry) onSave,
+  required VoidCallback onClose,
+}) => _Fido2KeyEditorContent(
+  generation: _Fido2KeyDraft(),
+  listDevices: listDevices,
+  generateKey: ({
+    required deviceId,
+    required label,
+    required keyType,
+    required pin,
+    required requireUserPresence,
+    required requireUserVerification,
+    required passphrase,
+    required cipher,
+    required rounds,
+  }) => generateKey(),
+  onSave: onSave,
+  onClose: onClose,
+);
+
+class _Fido2KeyDraft extends ChangeNotifier {
+  KeyEntry? pending;
+  String? error;
+  bool busy = false;
+
+  void start() {
+    busy = true;
+    error = null;
+    notifyListeners();
+  }
+
+  void finish({required KeyEntry? key, String? failure}) {
+    pending = key;
+    error = failure;
+    busy = false;
+    notifyListeners();
+  }
+}
+
+class _Fido2KeyEditorContent extends StatefulWidget {
+  const _Fido2KeyEditorContent({
+    required this.generation,
+    required this.onClose,
+    required this.onSave,
+    this.listDevices = listFido2Devices,
+    this.generateKey = generateFido2Key,
+  });
+
+  final _Fido2KeyDraft generation;
   final VoidCallback onClose;
   final _SaveGeneratedKey onSave;
+  final Future<List<Fido2DeviceInfo>> Function() listDevices;
+  final _GenerateFido2Key generateKey;
 
   @override
   State<_Fido2KeyEditorContent> createState() => _Fido2KeyEditorContentState();
@@ -47,8 +111,9 @@ class _Fido2KeyEditorContentState extends State<_Fido2KeyEditorContent>
   var _step = _Fido2EditorStep.device;
   var _devices = const <Fido2DeviceInfo>[];
   Fido2DeviceInfo? _device;
-  var _loading = true;
-  var _working = false;
+  var _loading = false;
+  var _verifyingPin = false;
+  bool get _working => _verifyingPin || widget.generation.busy;
   var _keyType = 'ecdsa';
   var _requireUserPresence = true;
   var _requirePin = false;
@@ -66,8 +131,21 @@ class _Fido2KeyEditorContentState extends State<_Fido2KeyEditorContent>
     _pinController.addListener(_handlePinChanged);
     _requirePinController.addListener(_handleRequirePinChanged);
     _passphraseController.addListener(_handlePassphraseChanged);
-    _refreshDevices();
+    widget.generation.addListener(_generationChanged);
+    if (widget.generation.pending == null && !widget.generation.busy) {
+      _refreshDevices();
+    }
   }
+
+  @override
+  void didUpdateWidget(covariant _Fido2KeyEditorContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (identical(oldWidget.generation, widget.generation)) return;
+    oldWidget.generation.removeListener(_generationChanged);
+    widget.generation.addListener(_generationChanged);
+  }
+
+  void _generationChanged() => setState(() {});
 
   void _handlePinChanged() {
     if (mounted && _step == _Fido2EditorStep.pin) {
@@ -97,6 +175,7 @@ class _Fido2KeyEditorContentState extends State<_Fido2KeyEditorContent>
 
   @override
   void dispose() {
+    widget.generation.removeListener(_generationChanged);
     _labelController.dispose();
     _pinController.removeListener(_handlePinChanged);
     _pinController.dispose();
@@ -112,9 +191,10 @@ class _Fido2KeyEditorContentState extends State<_Fido2KeyEditorContent>
     setState(() {
       _loading = true;
       _error = null;
+      widget.generation.error = null;
     });
     try {
-      final devices = await listFido2Devices();
+      final devices = await widget.listDevices();
       if (!mounted) return;
       setState(() {
         _devices = devices;
@@ -131,6 +211,11 @@ class _Fido2KeyEditorContentState extends State<_Fido2KeyEditorContent>
   }
 
   Future<void> _primaryAction() async {
+    if (_working) return;
+    if (widget.generation.pending != null) {
+      await _savePendingKey();
+      return;
+    }
     switch (_step) {
       case _Fido2EditorStep.device:
         if (_device == null) return;
@@ -149,11 +234,11 @@ class _Fido2KeyEditorContentState extends State<_Fido2KeyEditorContent>
 
   Future<void> _verifyPin() async {
     if (_pinController.text.isEmpty) {
-      setState(() => _error = 'Enter the security key PIN.');
+      setState(() => _error = tr('workspace.keys.fido2.pinRequired'));
       return;
     }
     setState(() {
-      _working = true;
+      _verifyingPin = true;
       _error = null;
     });
     try {
@@ -161,77 +246,92 @@ class _Fido2KeyEditorContentState extends State<_Fido2KeyEditorContent>
       if (!mounted) return;
       _pinController.clear();
       setState(() {
-        _working = false;
+        _verifyingPin = false;
         _step = _Fido2EditorStep.options;
       });
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
-        _working = false;
+        _verifyingPin = false;
         _error = '$error'.replaceFirst('Bad state: ', '');
       });
     }
   }
 
   Future<void> _generate() async {
+    if (_working || widget.generation.pending != null) return;
     final label = _labelController.text.trim();
     if (label.isEmpty) {
-      setState(() => _error = 'Label is required.');
+      setState(
+        () => _error = tr('workspace.keys.fido2.validation.labelRequired'),
+      );
       return;
     }
     if (_requirePin && _requirePinController.text.isEmpty) {
-      setState(() => _error = 'Enter the security key PIN.');
+      setState(() => _error = tr('workspace.keys.fido2.pinRequired'));
       return;
     }
     final passphrase = _passphraseController.text;
     final rounds = int.tryParse(_roundsController.text);
     if (passphrase.isNotEmpty &&
         (rounds == null || rounds < 1 || rounds > 1000000)) {
-      setState(() => _error = 'Rounds must be between 1 and 1000000.');
+      setState(() => _error = tr('workspace.keys.fido2.roundsRange'));
       return;
     }
-    setState(() {
-      _working = true;
-      _error = null;
-    });
+    final savePassphrase = _savePassphrase;
+    final generation = widget.generation;
+    _error = null;
+    generation.start();
     try {
-      final generated = await generateFido2Key(
+      final generated = await widget.generateKey(
         deviceId: _device!.id,
         label: label,
         keyType: _keyType,
         pin: _requirePin ? _requirePinController.text : '',
         requireUserPresence: _requireUserPresence,
         requireUserVerification: _requirePin,
-        resident: false,
         passphrase: passphrase,
         cipher: _cipher,
         rounds: rounds ?? 100,
       );
-      if (!mounted) return;
-      _pinController.clear();
-      _requirePinController.clear();
-      await widget.onSave(
-        KeyEntry(
+      generation.finish(
+        key: KeyEntry(
           name: label,
           privateKey: generated.privateKey,
           publicKey: generated.publicKey,
-          passphrase: _savePassphrase && passphrase.isNotEmpty
+          passphrase: savePassphrase && passphrase.isNotEmpty
               ? passphrase
               : null,
         ),
       );
     } on Object catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _working = false;
-        _error = '$error'.replaceFirst('Bad state: ', '');
-      });
+      generation.finish(key: null, failure: error.toString());
+      return;
+    }
+    if (!mounted) return;
+    _pinController.clear();
+    _requirePinController.clear();
+    _passphraseController.clear();
+    await _savePendingKey();
+  }
+
+  Future<void> _savePendingKey() async {
+    final generation = widget.generation;
+    final key = generation.pending;
+    if (key == null || generation.busy) return;
+    generation.start();
+    try {
+      await widget.onSave(key);
+      generation.finish(key: null);
+    } on Object catch (error) {
+      generation.finish(key: key, failure: error.toString());
     }
   }
 
   void _back() {
     setState(() {
       _error = null;
+      widget.generation.error = null;
       _step = switch (_step) {
         _Fido2EditorStep.device => _Fido2EditorStep.device,
         _Fido2EditorStep.pin => _Fido2EditorStep.device,
@@ -245,13 +345,30 @@ class _Fido2KeyEditorContentState extends State<_Fido2KeyEditorContent>
 
   @override
   Widget build(BuildContext context) {
-    final canContinue = switch (_step) {
-      _Fido2EditorStep.device => _device != null && !_loading,
-      _Fido2EditorStep.pin => _pinController.text.isNotEmpty && !_working,
-      _Fido2EditorStep.options =>
-        !_working && (!_requirePin || _requirePinController.text.isNotEmpty),
-    };
-    final showFooter = _step != _Fido2EditorStep.device || _devices.isNotEmpty;
+    final generation = widget.generation;
+    final pending = generation.pending != null;
+    final canContinue =
+        !_working &&
+        (pending ||
+            switch (_step) {
+              _Fido2EditorStep.device => _device != null && !_loading,
+              _Fido2EditorStep.pin => _pinController.text.isNotEmpty,
+              _Fido2EditorStep.options =>
+                !_requirePin || _requirePinController.text.isNotEmpty,
+            });
+    final showFooter =
+        pending ||
+        generation.busy ||
+        _step != _Fido2EditorStep.device ||
+        _devices.isNotEmpty;
+    final error = generation.error == null
+        ? _error
+        : !pending
+        ? generation.error
+        : context.tr(
+            'workspace.keys.fido2.pending.saveError',
+            args: {'error': generation.error},
+          );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -261,18 +378,37 @@ class _Fido2KeyEditorContentState extends State<_Fido2KeyEditorContent>
             size: _WorkspaceControlSize.large,
             child:
                 _step == _Fido2EditorStep.device &&
+                    !pending &&
+                    !generation.busy &&
                     !_loading &&
                     _devices.isEmpty
-                ? _emptyDeviceStep()
+                ? _emptyDeviceStep(error)
                 : ListView(
                     padding: const EdgeInsets.all(16),
                     children: [
-                      switch (_step) {
-                        _Fido2EditorStep.device => _deviceStep(),
-                        _Fido2EditorStep.pin => _pinStep(),
-                        _Fido2EditorStep.options => _optionsStep(),
-                      },
-                      if (_error != null) ...[
+                      if (pending)
+                        _WorkspaceFormSection(
+                          title: context.tr(
+                            'workspace.keys.fido2.pending.title',
+                          ),
+                          children: [
+                            if (!generation.busy)
+                              Text(
+                                context.tr(
+                                  'workspace.keys.fido2.pending.description',
+                                ),
+                              ),
+                          ],
+                        )
+                      else if (generation.busy)
+                        Text(context.tr('workspace.keys.fido2.confirmDevice'))
+                      else
+                        switch (_step) {
+                          _Fido2EditorStep.device => _deviceStep(),
+                          _Fido2EditorStep.pin => _pinStep(),
+                          _Fido2EditorStep.options => _optionsStep(),
+                        },
+                      if (error != null) ...[
                         const SizedBox(height: 12),
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -285,7 +421,7 @@ class _Fido2KeyEditorContentState extends State<_Fido2KeyEditorContent>
                             const SizedBox(width: 7),
                             Expanded(
                               child: Text(
-                                _error!,
+                                error,
                                 style: const TextStyle(
                                   color: Color(0xffe5453d),
                                   fontSize: NautermFontSizes.labelMedium,
@@ -308,7 +444,7 @@ class _Fido2KeyEditorContentState extends State<_Fido2KeyEditorContent>
             ),
             child: Row(
               children: [
-                if (_step != _Fido2EditorStep.device) ...[
+                if (_step != _Fido2EditorStep.device && !pending) ...[
                   Expanded(
                     key: const ValueKey('fido2-editor-back'),
                     child: _WorkspaceButton(
@@ -323,15 +459,21 @@ class _Fido2KeyEditorContentState extends State<_Fido2KeyEditorContent>
                 Expanded(
                   key: const ValueKey('fido2-editor-primary'),
                   child: _WorkspaceButton(
-                    label: _working
-                        ? (_step == _Fido2EditorStep.pin
-                              ? 'Unlocking...'
-                              : 'Waiting for security key...')
-                        : switch (_step) {
-                            _Fido2EditorStep.device => 'Continue',
-                            _Fido2EditorStep.pin => 'Continue',
-                            _Fido2EditorStep.options => 'Generate',
-                          },
+                    label: context.tr(switch ((
+                      pending,
+                      generation.busy,
+                      _verifyingPin,
+                      _step,
+                    )) {
+                      (true, true, _, _) => 'common.label.saving',
+                      (true, false, _, _) => 'common.action.retrySave',
+                      (_, true, _, _) =>
+                        'workspace.keys.fido2.waitingForDevice',
+                      (_, _, true, _) => 'workspace.keys.fido2.unlocking',
+                      (_, _, _, _Fido2EditorStep.options) =>
+                        'workspace.keys.generate',
+                      _ => 'common.action.continue',
+                    }),
                     type: _WorkspaceButtonType.primary,
                     variant: _WorkspaceButtonVariant.solid,
                     fullWidth: true,
@@ -356,21 +498,17 @@ class _Fido2KeyEditorContentState extends State<_Fido2KeyEditorContent>
       ),
       child: Row(
         children: [
-          const Expanded(
-            child: _WorkspaceDrawerHeaderTitle(title: 'Generate FIDO2 key'),
-          ),
-          if (_WorkspaceEditorDraftScope.maybeOf(context) case final scope?)
-            _WorkspaceDrawerHeaderButton(
-              icon: Icons.undo_rounded,
-              tooltip: tr(
-                'workspace.action.discardChanges',
-                fallback: 'Discard changes',
+          Expanded(
+            child: _WorkspaceDrawerHeaderTitle(
+              title: tr(
+                'workspace.keys.fido2.generate',
+                fallback: 'Generate FIDO2 key',
               ),
-              onPressed: _working ? null : scope.onDiscard,
             ),
+          ),
           _WorkspaceDrawerHeaderButton(
             icon: Icons.keyboard_tab_rounded,
-            tooltip: 'Close',
+            tooltip: tr('common.action.close'),
             onPressed: _working ? null : widget.onClose,
           ),
         ],
@@ -383,7 +521,7 @@ class _Fido2KeyEditorContentState extends State<_Fido2KeyEditorContent>
       title: 'Security key',
       children: [
         Text(
-          'Select the FIDO2 authenticator that will hold this key.',
+          context.tr('workspace.keys.fido2.selectAuthenticator'),
           style: TextStyle(
             color: _mutedText,
             fontSize: NautermFontSizes.labelMedium,
@@ -391,10 +529,15 @@ class _Fido2KeyEditorContentState extends State<_Fido2KeyEditorContent>
         ),
         const SizedBox(height: 12),
         if (_loading)
-          const Center(
+          Center(
             child: Padding(
-              padding: EdgeInsets.all(24),
-              child: CircularProgressIndicator(strokeWidth: 2),
+              padding: const EdgeInsets.all(24),
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                semanticsLabel: context.tr(
+                  'workspace.keys.fido2.scanningDevices',
+                ),
+              ),
             ),
           )
         else
@@ -414,7 +557,7 @@ class _Fido2KeyEditorContentState extends State<_Fido2KeyEditorContent>
     );
   }
 
-  Widget _emptyDeviceStep() {
+  Widget _emptyDeviceStep(String? error) {
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(28),
@@ -433,7 +576,7 @@ class _Fido2KeyEditorContentState extends State<_Fido2KeyEditorContent>
             ),
             const SizedBox(height: 28),
             Text(
-              'Insert FIDO2 device',
+              context.tr('workspace.keys.fido2.insertDevice'),
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: _text,
@@ -443,17 +586,17 @@ class _Fido2KeyEditorContentState extends State<_Fido2KeyEditorContent>
             ),
             const SizedBox(height: 10),
             Text(
-              'Connect your FIDO2 device to show here.',
+              context.tr('workspace.keys.fido2.empty.description'),
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: _mutedText,
                 fontSize: NautermFontSizes.labelMedium,
               ),
             ),
-            if (_error != null) ...[
+            if (error != null) ...[
               const SizedBox(height: 12),
               Text(
-                _error!,
+                error,
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   color: Color(0xffe5453d),
@@ -475,10 +618,14 @@ class _Fido2KeyEditorContentState extends State<_Fido2KeyEditorContent>
 
   Widget _pinStep() {
     return _WorkspaceFormSection(
-      title: 'Security key PIN',
+      title: 'connection.auth.securityKeyPin.title',
       children: [
         Text(
-          'Enter the PIN to unlock ${_device!.name}.',
+          context.tr(
+            'workspace.keys.fido2.unlockDevice.description',
+            fallback: 'Enter the PIN to unlock {device}.',
+            args: {'device': _device!.name},
+          ),
           style: TextStyle(
             color: _mutedText,
             fontSize: NautermFontSizes.labelMedium,
@@ -515,11 +662,11 @@ class _Fido2KeyEditorContentState extends State<_Fido2KeyEditorContent>
     return Column(
       children: [
         _WorkspaceFormSection(
-          title: 'Key',
+          title: 'common.label.key',
           children: [
             _WorkspaceInput(
               controller: _labelController,
-              label: 'Label',
+              label: 'workspace.keys.fido2.field.label',
               isRequired: true,
               autofocus: true,
             ),
@@ -536,11 +683,15 @@ class _Fido2KeyEditorContentState extends State<_Fido2KeyEditorContent>
         ),
         const SizedBox(height: 14),
         _WorkspaceFormSection(
-          title: 'Security',
+          title: 'workspace.keys.section.security',
           children: [
             _WorkspaceToggleRow(
-              label: 'Require user presence',
-              description: 'Touch the security key for every SSH signature.',
+              label: tr(
+                'workspace.keys.fido2.requireUserPresence',
+                fallback: 'Require user presence',
+              ),
+              description:
+                  'workspace.keys.fido2.requireUserPresenceDescription',
               value: _requireUserPresence,
               onChanged: (value) =>
                   setState(() => _requireUserPresence = value),
@@ -548,9 +699,11 @@ class _Fido2KeyEditorContentState extends State<_Fido2KeyEditorContent>
             const SizedBox(height: 12),
             if (_device?.hasPin == true)
               _WorkspaceToggleRow(
-                label: 'Require PIN',
-                description:
-                    'Require the authenticator PIN for every SSH signature.',
+                label: tr(
+                  'workspace.keys.fido2.requirePin',
+                  fallback: 'Require PIN',
+                ),
+                description: 'workspace.keys.fido2.requirePinDescription',
                 value: _requirePin,
                 onChanged: (value) {
                   setState(() {
@@ -591,11 +744,11 @@ class _Fido2KeyEditorContentState extends State<_Fido2KeyEditorContent>
         ),
         const SizedBox(height: 14),
         _WorkspaceFormSection(
-          title: 'Private key protection',
+          title: 'workspace.keys.fido2.privateKeyProtection',
           children: [
             _WorkspaceInput(
               controller: _passphraseController,
-              label: 'Passphrase',
+              label: tr('common.label.passphrase', fallback: 'Passphrase'),
               obscureText: !_passphraseVisible,
               trailing: _WorkspaceButton(
                 icon: _passphraseVisible
@@ -614,7 +767,7 @@ class _Fido2KeyEditorContentState extends State<_Fido2KeyEditorContent>
             ),
             if (_passphraseController.text.isNotEmpty) ...[
               const SizedBox(height: 14),
-              const _GenerateKeyFieldLabel('Cipher'),
+              _GenerateKeyFieldLabel(tr('workspace.keys.fido2.cipher.label')),
               const SizedBox(height: 8),
               _GenerateKeySegmentedControl<String>(
                 value: _cipher,
@@ -634,7 +787,9 @@ class _Fido2KeyEditorContentState extends State<_Fido2KeyEditorContent>
               ),
               const SizedBox(height: 8),
               Text(
-                'Higher values protect the private key more strongly but take longer to unlock.',
+                context.tr(
+                  'workspace.keys.fido2.privateKeyProtectionDescription',
+                ),
                 style: TextStyle(
                   color: _mutedText,
                   fontSize: NautermFontSizes.labelSmall,
@@ -642,7 +797,10 @@ class _Fido2KeyEditorContentState extends State<_Fido2KeyEditorContent>
               ),
               const SizedBox(height: 12),
               _WorkspaceToggleRow(
-                label: 'Save passphrase',
+                label: tr(
+                  'workspace.keys.label.savePassphrase',
+                  fallback: 'Save passphrase',
+                ),
                 value: _savePassphrase,
                 onChanged: (value) => setState(() => _savePassphrase = value),
               ),

@@ -1,0 +1,323 @@
+//! Keep the two action groups together, wrapping groups in narrow panes like
+//! Flutter's OverflowBar. This is independent of single-row management toolbars.
+use super::*;
+use crate::components::{management::ButtonGroup, menu::MenuItem};
+
+#[derive(Clone, Copy)]
+pub(crate) enum HostAction {
+    Edit,
+    Retry,
+}
+impl EventEmitter<HostAction> for Connection {}
+
+pub(crate) struct PreviousAttempt {
+    logs: Vec<crate::connection_state::LogEntry>,
+    history: crate::connection_state::ProgressHistory,
+    pipeline: progress::Pipeline,
+}
+impl PreviousAttempt {
+    fn apply(mut self, state: &mut ConnectionState) -> progress::Pipeline {
+        self.logs.append(&mut state.logs);
+        if self.logs.len() > 2000 {
+            self.logs.drain(..self.logs.len() - 2000);
+        }
+        for (sequence, log) in self.logs.iter_mut().enumerate() {
+            log.sequence = sequence as u64;
+        }
+        state.logs = self.logs;
+        state.progress = self.history;
+        self.pipeline
+    }
+}
+impl Connection {
+    fn continue_host_key(&mut self, save: bool, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(options) = self.target.ssh_mut() {
+            options.trust = if save {
+                HostTrust::AcceptAndSave
+            } else {
+                HostTrust::AcceptOnce
+            };
+        }
+        self.auth.save = Some(save);
+        self.start(window, cx);
+    }
+
+    pub(crate) fn previous_attempt(&self) -> PreviousAttempt {
+        PreviousAttempt {
+            logs: self.state.logs.clone(),
+            history: self.state.progress.clone(),
+            pipeline: self.pipeline.clone(),
+        }
+    }
+    pub(crate) fn inherit_previous_attempt(&mut self, previous: PreviousAttempt) {
+        self.pipeline = previous.apply(&mut self.state);
+    }
+    pub(crate) fn begin_saved_reload(&mut self, cx: &mut Context<Self>) {
+        self._output = None;
+        self._reveal = None;
+        self.session = None;
+        self.auth.invalidate();
+        self.reloading = true;
+        self.error = None;
+        self.show_logs = false;
+        self.state.begin_attempt();
+        cx.notify();
+    }
+    pub(crate) fn saved_reload_failed(&mut self, message: String, cx: &mut Context<Self>) {
+        self.reloading = false;
+        self.state.fail(message);
+        cx.notify();
+    }
+    pub(crate) fn allow_host_actions(&mut self, allowed: bool, cx: &mut Context<Self>) {
+        if self.host_actions != allowed {
+            self.host_actions = allowed;
+            cx.notify();
+        }
+    }
+    fn can_start_over(&self) -> bool {
+        !self.reloading
+            && (self.state.phase == Phase::Failed
+                || self.show_logs
+                    && self.state.phase == Phase::Connecting
+                    && self.target.ssh().is_some())
+    }
+    fn start_over(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.can_start_over() || self.auth.busy {
+            return;
+        }
+        if self.host_actions {
+            // The owning saved-Host session reloads current catalog settings,
+            // rather than reconnecting an options snapshot from before editing.
+            cx.emit(HostAction::Retry);
+        } else {
+            self.start(window, cx);
+        }
+    }
+    pub(super) fn footer(&self, cx: &mut Context<Self>) -> AnyElement {
+        let failed = self.state.phase == Phase::Failed;
+        let choosing = matches!(self.target, Target::Choice(_));
+        let mut secondary = vec![
+            self.action("cancel-connection", "common.action.close", false)
+                .disabled(self.auth.busy)
+                .on_click(cx.listener(|this, _, _, cx| {
+                    if !this.auth.busy {
+                        cx.emit(ConnectionEvent::Close);
+                    }
+                }))
+                .into_any_element(),
+        ];
+        if self.state.phase == Phase::Authentication
+            && self.state.challenge.is_none()
+            && self.auth_step() == Intervention::PublicKey
+        {
+            secondary.push(
+                self.action("add-authentication-key", "workspace.label.addKey", false)
+                    .disabled(
+                        self.auth.busy || self.auth.vault.is_none() || self.auth.keychain.is_none(),
+                    )
+                    .on_click(
+                        cx.listener(|this, _, window, cx| this.add_authentication_key(window, cx)),
+                    )
+                    .into_any_element(),
+            );
+        }
+        if failed && self.host_actions {
+            secondary.push(
+                self.action("edit-connection-host", "workspace.label.editHost", false)
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        if this.state.phase == Phase::Failed {
+                            cx.emit(HostAction::Edit);
+                        }
+                    }))
+                    .into_any_element(),
+            );
+        }
+        let mut primary = vec![];
+        if choosing {
+            primary.push(
+                self.action("connect-selected-protocol", "common.action.connect", true)
+                    .disabled(self.confirming_protocol())
+                    .on_click(cx.listener(|this, _, _, cx| this.confirm_protocol(cx)))
+                    .into_any_element(),
+            );
+        } else if self.state.phase == Phase::HostKey {
+            let save = self.auth.save.unwrap_or(false) && self.can_save_connection();
+            let label = if save {
+                "workspace.label.continueSave"
+            } else {
+                "common.action.continue"
+            };
+            let confirm = self.action("trust-once", label, true).on_click(
+                cx.listener(move |this, _, window, cx| this.continue_host_key(save, window, cx)),
+            );
+            if self.can_save_connection() && self.auth.save.is_none() {
+                let owner = cx.weak_entity();
+                primary.push(
+                    ButtonGroup::new()
+                        .controls()
+                        .button(confirm)
+                        .dropdown(
+                            self.action("trust-menu", "", true)
+                                .w(px(if self.compact_controls() { 24. } else { 30. }))
+                                .px_0()
+                                .icon(IconName::ChevronDown),
+                            move |menu, _, _| {
+                                let owner = owner.clone();
+                                menu.item(
+                                    MenuItem::localized("workspace.label.continueSave").on_click(
+                                        move |_, window, cx| {
+                                            let _ = owner.update(cx, |this, cx| {
+                                                this.continue_host_key(true, window, cx)
+                                            });
+                                        },
+                                    ),
+                                )
+                            },
+                        )
+                        .into_any_element(),
+                );
+            } else {
+                primary.push(confirm.into_any_element());
+            }
+        } else if self.state.phase == Phase::Authentication {
+            primary.push(self.authentication_footer(cx));
+        } else if self.can_start_over() {
+            // Retrying a changed key still goes through native verification;
+            // the user may have corrected known_hosts since the failure.
+            primary.push(
+                self.action("retry-connection", "workspace.label.startOver", true)
+                    .on_click(cx.listener(|this, _, window, cx| this.start_over(window, cx)))
+                    .into_any_element(),
+            );
+        }
+        let has_primary = !primary.is_empty();
+        div()
+            .id("connection-footer")
+            .w_full()
+            .flex_shrink_0()
+            .flex()
+            .flex_wrap()
+            .items_center()
+            .justify_between()
+            .gap(px(8.))
+            .child(
+                div()
+                    .flex()
+                    .flex_wrap()
+                    .items_center()
+                    .gap(px(10.))
+                    .children(secondary),
+            )
+            .when(has_primary, |view| {
+                view.child(
+                    div()
+                        .ml_auto()
+                        .flex()
+                        .flex_wrap()
+                        .items_center()
+                        .justify_end()
+                        .gap(px(10.))
+                        .children(primary),
+                )
+            })
+            .on_prepaint({
+                let owner = cx.weak_entity();
+                move |bounds, _, cx| {
+                    let _ = owner.update(cx, |this, cx| {
+                        if bounds.size.height > px(0.)
+                            && (this.footer_height - bounds.size.height).abs() > px(0.5)
+                        {
+                            this.footer_height = bounds.size.height;
+                            cx.notify();
+                        }
+                    });
+                }
+            })
+            .into_any_element()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PreviousAttempt;
+    use crate::{
+        connection_state::{ConnectionState, Intervention, Phase},
+        native::SessionEvent,
+    };
+    #[test]
+    fn retry_keeps_history_and_intervention_order_without_restoring_old_failure_state() {
+        let mut old = ConnectionState::default();
+        old.apply(SessionEvent {
+            kind: "host_key_unknown".into(),
+            message: "old trust prompt".into(),
+            ..Default::default()
+        });
+        old.observe_intervention(Intervention::HostKey, false);
+        old.apply(SessionEvent {
+            kind: "host_key_changed".into(),
+            message: "old failure".into(),
+            fingerprint: Some("old fingerprint".into()),
+            ..Default::default()
+        });
+        let previous = PreviousAttempt {
+            logs: old.logs,
+            history: old.progress,
+            pipeline: Default::default(),
+        };
+        let mut next = ConnectionState::default();
+        next.apply(SessionEvent {
+            kind: "auth_failed".into(),
+            message: "new auth prompt".into(),
+            ..Default::default()
+        });
+        let _ = previous.apply(&mut next);
+        next.observe_intervention(Intervention::Password, false);
+        assert_eq!(next.phase, Phase::Authentication);
+        assert!(!next.changed_key);
+        assert!(next.fingerprint.is_none());
+        assert_eq!(next.message, "new auth prompt");
+        assert_eq!(
+            next.progress.steps,
+            [Intervention::HostKey, Intervention::Password]
+        );
+        assert_eq!(
+            next.logs
+                .iter()
+                .map(|log| log.event.message.as_str())
+                .collect::<Vec<_>>(),
+            ["old trust prompt", "old failure", "new auth prompt"]
+        );
+        assert_eq!(
+            next.logs.iter().map(|log| log.sequence).collect::<Vec<_>>(),
+            [0, 1, 2]
+        );
+    }
+    #[test]
+    fn retry_history_remains_bounded_and_keeps_the_latest_native_event() {
+        let mut old = ConnectionState::default();
+        for index in 0..2000 {
+            old.apply(SessionEvent {
+                kind: "connect_start".into(),
+                message: index.to_string(),
+                ..Default::default()
+            });
+        }
+        let previous = PreviousAttempt {
+            logs: old.logs,
+            history: old.progress,
+            pipeline: Default::default(),
+        };
+        let mut next = ConnectionState::default();
+        next.apply(SessionEvent {
+            kind: "connected".into(),
+            message: "latest".into(),
+            ..Default::default()
+        });
+        let _ = previous.apply(&mut next);
+        assert_eq!(next.logs.len(), 2000);
+        assert_eq!(next.logs.first().unwrap().event.message, "1");
+        assert_eq!(next.logs.last().unwrap().event.message, "latest");
+        assert_eq!(next.logs.last().unwrap().sequence, 1999);
+        assert_eq!(next.phase, Phase::Completing);
+    }
+}

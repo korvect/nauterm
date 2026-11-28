@@ -6,12 +6,45 @@ DEB_ARCH="${2:?deb architecture is required}"
 RPM_ARCH="${3:?rpm architecture is required}"
 APPIMAGE_ARCH="${4:?AppImage architecture is required}"
 
+CLIENT="${5:-flutter}"
 APP_NAME="Nauterm"
 APP_ID="com.korvect.nauterm"
 BINARY_NAME="nauterm"
+APP_DESCRIPTION_BASE="A cross-platform terminal and SSH client with SFTP file transfer"
+ICON_SOURCE="linux/runner/resources/nauterm.png"
+case "$CLIENT" in
+  flutter) APP_LABEL="Nauterm"; APP_DESCRIPTION="$APP_DESCRIPTION_BASE, built with Flutter." ;;
+  rs)
+    PROJECT_ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
+    mapfile -t RS_APP_IDENTITY < <(python3 - "$PROJECT_ROOT/nauterm-rs/application.json" <<'PY'
+import json
+import sys
+
+metadata = json.load(open(sys.argv[1], encoding="utf-8"))
+for key in ("id", "name", "description"):
+    print(metadata[key])
+PY
+)
+    mapfile -t RS_APP_METADATA < <(python3 - "$PROJECT_ROOT/nauterm-rs/linux/application.json" <<'PY'
+import json
+import sys
+
+metadata = json.load(open(sys.argv[1], encoding="utf-8"))
+for key in ("package_name", "binary_name", "icon"):
+    print(metadata[key])
+PY
+)
+    APP_ID="${RS_APP_IDENTITY[0]}"
+    APP_LABEL="${RS_APP_IDENTITY[1]}"
+    APP_DESCRIPTION="${RS_APP_IDENTITY[2]}"
+    APP_NAME="${RS_APP_METADATA[0]}"
+    BINARY_NAME="${RS_APP_METADATA[1]}"
+    ICON_SOURCE="$PROJECT_ROOT/${RS_APP_METADATA[2]}"
+    ;;
+  *) echo 'Client must be flutter or rs.' >&2; exit 2 ;;
+esac
 DIST_DIR="${DIST_DIR:-dist}"
 CLEAN_DIST="${CLEAN_DIST:-1}"
-ICON_SOURCE="linux/runner/resources/nauterm.png"
 ICON_GENERATED_PNG_DIR="assets/icons/generated/png"
 
 PUBSPEC_VERSION="$(awk '/^version: / { print $2; exit }' pubspec.yaml)"
@@ -46,91 +79,102 @@ case "$DIST_DIR" in
 esac
 
 bash scripts/ci/verify_app_icons.sh --generated-only
-install -Dm644 "assets/icons/generated/png/app_icon_512.png" "linux/runner/resources/nauterm.png"
+install -Dm644 "assets/icons/generated/png/app_icon_1024.png" "linux/runner/resources/nauterm.png"
 
 if [ "$CLEAN_DIST" = "1" ]; then
   rm -rf "$DIST_DIR"
 fi
 mkdir -p "$DIST_DIR"
 
-flutter config --enable-linux-desktop
-if [ "${NAUTERM_SKIP_PUB_GET:-0}" != "1" ]; then
-  flutter pub get
-fi
-
-if [ -z "${NAUTERM_MOSH_LIB_DIR:-}" ]; then
-  case "$ARCH" in
-    x86_64) NAUTERM_MOSH_LIB_DIR="third_party/nauterm_mosh_ffi/linux-x86_64" ;;
-    arm64)  NAUTERM_MOSH_LIB_DIR="third_party/nauterm_mosh_ffi/linux-arm64" ;;
-  esac
-fi
-NAUTERM_MOSH_LIB_DIR="$(cd "$NAUTERM_MOSH_LIB_DIR" && pwd)"
-export NAUTERM_MOSH_LIB_DIR
-
-if [ -n "${NAUTERM_MOSH_LIB_DIR:-}" ]; then
-  MOSH_LIBRARY="$NAUTERM_MOSH_LIB_DIR/libnauterm_mosh_ffi.so"
-  if [ ! -f "$MOSH_LIBRARY" ]; then
-    echo "Missing prebuilt Mosh library: $MOSH_LIBRARY" >&2
-    exit 1
+if [ "$CLIENT" = rs ]; then
+  RS_BUILD_LOG="$DIST_DIR/rs-build-$ARCH.jsonl"
+  RS_EXECUTABLE="$(NAUTERM_RS_BUILD_LOG="$RS_BUILD_LOG" bash nauterm-rs/scripts/build.sh --release | tail -n 1)"
+  BUNDLE_DIR="$DIST_DIR/rs-bundle-$ARCH"
+  mkdir -p "$BUNDLE_DIR"
+  install -m755 "$RS_EXECUTABLE" "$BUNDLE_DIR/$BINARY_NAME"
+  python3 scripts/stage_rs_mosh.py --project . --executable "$RS_EXECUTABLE" --destination "$BUNDLE_DIR"
+  python3 scripts/package_rs_notices.py --project . --build-log "$RS_BUILD_LOG" --destination "$BUNDLE_DIR/licenses" --include-noto
+  cp LICENSE "$BUNDLE_DIR/LICENSE"
+  rm "$RS_BUILD_LOG"
+else
+  flutter config --enable-linux-desktop
+  if [ "${NAUTERM_SKIP_PUB_GET:-0}" != "1" ]; then
+    flutter pub get
   fi
-  case "$ARCH" in
-    x86_64) EXPECTED_FILE_PATTERN='x86-64|x86_64' ;;
-    arm64) EXPECTED_FILE_PATTERN='ARM aarch64|aarch64' ;;
-    *)
-      echo "Unsupported Linux architecture: $ARCH" >&2
+
+  if [ -z "${NAUTERM_MOSH_LIB_DIR:-}" ]; then
+    case "$ARCH" in
+      x86_64) NAUTERM_MOSH_LIB_DIR="third_party/nauterm_mosh_ffi/linux-x86_64" ;;
+      arm64)  NAUTERM_MOSH_LIB_DIR="third_party/nauterm_mosh_ffi/linux-arm64" ;;
+    esac
+  fi
+  NAUTERM_MOSH_LIB_DIR="$(cd "$NAUTERM_MOSH_LIB_DIR" && pwd)"
+  export NAUTERM_MOSH_LIB_DIR
+
+  if [ -n "${NAUTERM_MOSH_LIB_DIR:-}" ]; then
+    MOSH_LIBRARY="$NAUTERM_MOSH_LIB_DIR/libnauterm_mosh_ffi.so"
+    if [ ! -f "$MOSH_LIBRARY" ]; then
+      echo "Missing prebuilt Mosh library: $MOSH_LIBRARY" >&2
       exit 1
-      ;;
-  esac
-  if ! file "$MOSH_LIBRARY" | grep -Eq "$EXPECTED_FILE_PATTERN"; then
-    echo "Prebuilt Mosh library does not match the expected $ARCH architecture: $MOSH_LIBRARY" >&2
-    file "$MOSH_LIBRARY" >&2
+    fi
+    case "$ARCH" in
+      x86_64) EXPECTED_FILE_PATTERN='x86-64|x86_64' ;;
+      arm64) EXPECTED_FILE_PATTERN='ARM aarch64|aarch64' ;;
+      *)
+        echo "Unsupported Linux architecture: $ARCH" >&2
+        exit 1
+        ;;
+    esac
+    if ! file "$MOSH_LIBRARY" | grep -Eq "$EXPECTED_FILE_PATTERN"; then
+      echo "Prebuilt Mosh library does not match the expected $ARCH architecture: $MOSH_LIBRARY" >&2
+      file "$MOSH_LIBRARY" >&2
+      exit 1
+    fi
+  fi
+
+  dart_define_args=()
+  for name in \
+    NAUTERM_UPDATE_REPOSITORY \
+    NAUTERM_POSTHOG_API_KEY \
+    NAUTERM_POSTHOG_HOST \
+    NAUTERM_GITHUB_CLIENT_ID \
+    NAUTERM_GOOGLE_CLIENT_ID \
+    NAUTERM_GOOGLE_CLIENT_SECRET \
+    NAUTERM_ONEDRIVE_CLIENT_ID \
+    NAUTERM_DROPBOX_CLIENT_ID; do
+    if [ -n "${!name:-}" ]; then
+      dart_define_args+=("--dart-define=${name}=${!name}")
+    fi
+  done
+  flutter build linux \
+    --release \
+    --no-pub \
+    --build-name="$VERSION" \
+    --build-number="$BUILD_NUMBER" \
+    "${dart_define_args[@]}"
+
+  BUNDLE_DIR="$(find build/linux -path '*/release/bundle' -type d | head -n 1)"
+  if [ -z "$BUNDLE_DIR" ] || [ ! -d "$BUNDLE_DIR" ]; then
+    echo "Linux release bundle not found." >&2
     exit 1
   fi
-fi
 
-dart_define_args=()
-for name in \
-  NAUTERM_UPDATE_REPOSITORY \
-  NAUTERM_POSTHOG_API_KEY \
-  NAUTERM_POSTHOG_HOST \
-  NAUTERM_GITHUB_CLIENT_ID \
-  NAUTERM_GOOGLE_CLIENT_ID \
-  NAUTERM_GOOGLE_CLIENT_SECRET \
-  NAUTERM_ONEDRIVE_CLIENT_ID \
-  NAUTERM_DROPBOX_CLIENT_ID; do
-  if [ -n "${!name:-}" ]; then
-    dart_define_args+=("--dart-define=${name}=${!name}")
-  fi
-done
-flutter build linux \
-  --release \
-  --no-pub \
-  --build-name="$VERSION" \
-  --build-number="$BUILD_NUMBER" \
-  "${dart_define_args[@]}"
-
-BUNDLE_DIR="$(find build/linux -path '*/release/bundle' -type d | head -n 1)"
-if [ -z "$BUNDLE_DIR" ] || [ ! -d "$BUNDLE_DIR" ]; then
-  echo "Linux release bundle not found." >&2
-  exit 1
 fi
 
 create_desktop_file() {
   local path="$1"
+  local icon_value="${2:-$APP_ID}"
   cat > "$path" <<EOF
 [Desktop Entry]
 Type=Application
-Name=$APP_NAME
-Comment=A modern, cross-platform terminal and remote access workspace built for greater control, transparency, and performance.
+Name=$APP_LABEL
+Comment=$APP_DESCRIPTION
 Exec=$BINARY_NAME %U
 MimeType=x-scheme-handler/ssh;x-scheme-handler/sftp;x-scheme-handler/telnet;
-Icon=$APP_ID
+Icon=$icon_value
 Categories=Network;RemoteAccess;TerminalEmulator;
 Terminal=false
-# Must match the WM_CLASS the running window actually reports. GTK sets it to
-# the value passed to g_set_prgname(), which in this app is APPLICATION_ID
-# (com.korvect.nauterm). If it does not match, GNOME shows the running window
-# as an unrelated entry with the default icon and the process name.
+# Must match the application ID set by the Flutter or GPUI Linux client.
 StartupWMClass=$APP_ID
 EOF
 }
@@ -138,7 +182,7 @@ EOF
 install_icon() {
   local root="$1"
   local size png installed=0
-  for size in 16 24 32 48 64 128 256 512; do
+  for size in 16 24 32 48 64 128 256 512 1024; do
     png="$ICON_GENERATED_PNG_DIR/app_icon_$size.png"
     [ -f "$png" ] || continue
     install -Dm644 "$png" \
@@ -160,14 +204,14 @@ if [ "${NAUTERM_APPIMAGE_ONLY:-0}" != "1" ]; then
     "$PKG_ROOT/usr/share/applications"
   cp -a "$BUNDLE_DIR/." "$PKG_ROOT/opt/$BINARY_NAME/"
   ln -s "/opt/$BINARY_NAME/$BINARY_NAME" "$PKG_ROOT/usr/bin/$BINARY_NAME"
-  create_desktop_file "$PKG_ROOT/usr/share/applications/$APP_ID.desktop"
+  create_desktop_file "$PKG_ROOT/usr/share/applications/$APP_ID.desktop" "/usr/share/pixmaps/$APP_ID.png"
   install_icon "$PKG_ROOT"
 
   COMMON_FPM_ARGS=(
     --name "$BINARY_NAME"
     --version "$VERSION"
     --iteration "$BUILD_NUMBER"
-    --description "A modern, cross-platform terminal and remote access workspace built for greater control, transparency, and performance."
+    --description "$APP_DESCRIPTION"
     --license "Proprietary"
     --maintainer "Nauterm"
     --category "net"
@@ -186,7 +230,12 @@ if [ "${NAUTERM_APPIMAGE_ONLY:-0}" != "1" ]; then
     "usr/share/pixmaps"
   )
 
-  fpm "${COMMON_FPM_ARGS[@]}" \
+  RS_DEB_DEPS=(); RS_RPM_DEPS=()
+  if [ "$CLIENT" = rs ]; then
+    for dependency in 'libasound2 | libasound2t64' libdbus-1-3 libdecor-0-0 libdecor-0-plugin-1-gtk libfontconfig1 libfreetype6 'libssl3 | libssl3t64' libvulkan1 libwayland-client0 libxcb1 libxcb-shape0 libxcb-xfixes0 libxkbcommon0 libxkbcommon-x11-0; do RS_DEB_DEPS+=(--depends "$dependency"); done
+    for dependency in alsa-lib dbus-libs libdecor fontconfig freetype openssl-libs vulkan-loader wayland-libs libxcb libxkbcommon libxkbcommon-x11; do RS_RPM_DEPS+=(--depends "$dependency"); done
+  fi
+  fpm "${COMMON_FPM_ARGS[@]}" "${RS_DEB_DEPS[@]}" \
     -t deb \
     --architecture "$DEB_ARCH" \
     --depends "libgtk-3-0" \
@@ -196,7 +245,7 @@ if [ "${NAUTERM_APPIMAGE_ONLY:-0}" != "1" ]; then
     --package "$DIST_DIR/${BINARY_NAME}_${VERSION}-${BUILD_NUMBER}_linux-${ARCH}.deb" \
     "${FPM_PACKAGE_PATHS[@]}"
 
-  fpm "${COMMON_FPM_ARGS[@]}" \
+  fpm "${COMMON_FPM_ARGS[@]}" "${RS_RPM_DEPS[@]}" \
     -t rpm \
     --architecture "$RPM_ARCH" \
     --depends "gtk3" \
@@ -213,6 +262,11 @@ cp -a "$BUNDLE_DIR/." "$APPDIR/usr/lib/$BINARY_NAME/"
 create_desktop_file "$APPDIR/$APP_ID.desktop"
 cp "$APPDIR/$APP_ID.desktop" "$APPDIR/usr/share/applications/$APP_ID.desktop"
 install_icon "$APPDIR"
+RS_DECOR_ENV=""
+if [ "$CLIENT" = rs ]; then
+  python3 scripts/ci/stage_rs_libdecor.py "$APPDIR"
+  RS_DECOR_ENV='export LIBDECOR_PLUGIN_DIR="$HERE/usr/lib/libdecor/plugins-1"'
+fi
 # Intentionally do NOT inject a top-level icon or .DirIcon: an unintegrated
 # AppImage is expected to show the default file-manager icon. The icon for the
 # integrated desktop entry is supplied below via --icon-file.
@@ -220,6 +274,7 @@ install_icon "$APPDIR"
 cat > "$APPDIR/AppRun" <<EOF
 #!/usr/bin/env sh
 HERE="\$(dirname "\$(readlink -f "\$0")")"
+$RS_DECOR_ENV
 # Let GNOME/KDE find the icons and desktop entry bundled inside the AppImage.
 export XDG_DATA_DIRS="\$HERE/usr/share:\${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
 # Hint for BAMF (Ubuntu/GNOME dock) so the running window is matched to the
@@ -279,3 +334,5 @@ rm -f "$APPIMAGE_ARCHIVE"
 tar -C "$DIST_DIR" -czf "$APPIMAGE_ARCHIVE" "$APPIMAGE_NAME"
 
 rm -rf "${PKG_ROOT:-}" "$APPDIR" "$LINUXDEPLOY"
+
+if [ "$CLIENT" = rs ]; then rm -rf "$BUNDLE_DIR"; fi

@@ -1,9 +1,44 @@
 {
   "ai.action.configureProviders": "配置服务商…",
+  "ai.action.copyCommand": "复制命令",
+  "ai.action.copyMessage": "复制消息",
+  "ai.action.removeCommandBlock": "移除命令块",
+  "ai.action.removeRecentOutput": "移除近期输出",
+  "ai.action.removeSelection": "移除所选内容",
+  "ai.action.stopGenerating": "停止生成",
+  "ai.attachment.loading": "正在加载附件…",
+  "ai.attachment.redacted": "{name}（已隐藏）",
+  "ai.attachment.remove": "移除 {name}",
+  "ai.attachment.selectionTruncated": "仅添加了所选文件中的前 {count} 个。",
+  "ai.attachment.error.limit": "每条消息最多可添加 {count} 个附件。",
+  "ai.attachment.error.open": "无法打开附件。",
+  "ai.attachment.error.pickerFailed": "系统附件选择器出错：{error}",
+  "ai.attachment.error.pickerUnavailable": "附件选择器不可用。请重启应用后重试。",
+  "ai.attachment.error.read": "无法读取 {name}。",
+  "ai.attachment.error.regularFileRequired": "请选择普通图片或文本文件。",
+  "ai.commands.belongsToAnotherSession": "命令属于另一个会话",
+  "ai.commands.exited": "已退出（{code}）",
+  "ai.commands.running": "命令正在运行",
+  "ai.commands.skippedByUser": "用户已跳过。",
+  "ai.commands.stoppedByUser": "用户已停止。",
+  "ai.commands.submitted": "已提交 · 不追踪执行结果",
+  "ai.dialog.deleteConversation.description": "从对话历史中删除“{name}”？",
+  "ai.error.conversationClosed": "对话已关闭。",
+  "ai.error.noActiveTerminal": "没有活动终端",
+  "ai.error.providerAndModelRequired": "请先选择服务商和模型。",
+  "ai.error.saveConversation": "无法保存当前 AI 对话。",
+  "ai.error.terminalClosed": "终端会话已关闭。",
+  "ai.error.terminalClosedBeforeCommandFinished": "命令完成前终端会话已关闭。",
+  "ai.history.error.delete": "无法删除此对话。",
+  "ai.history.error.load": "无法加载对话历史。",
+  "ai.history.error.open": "无法打开此对话。",
   "ai.label.aiProviderAndModel": "AI 服务商和模型",
   "ai.label.cancelEditing": "取消编辑",
+  "ai.label.defaultModel": "默认模型",
   "ai.label.deleteConversation": "删除对话",
   "ai.label.editMessage": "编辑消息",
+  "ai.label.image": "图片",
+  "ai.label.message": "AI 消息",
   "ai.label.noConversationHistory": "暂无对话历史",
   "ai.label.noMatchingConversations": "没有匹配的对话",
   "ai.label.recentOutput": "最近输出",
@@ -11,37 +46,59 @@
   "ai.label.scrollToBottom": "回到底部",
   "ai.label.searchConversations": "搜索对话",
   "ai.label.selectProvider": "选择服务商",
+  "ai.label.selection": "所选内容",
   "ai.label.thinking": "思考中",
+  "ai.label.unavailableProvider": "提供商不可用",
+  "ai.prompt.reviewCommands": "审核终端命令后继续",
+  "ai.prompt.terminal": "询问有关此终端的问题…",
+  "ai.prompt.workspace": "询问有关此工作区的问题…",
+  "applications.catalog.error": "无法加载应用",
+  "applications.catalog.loading": "正在加载应用…",
   "common.action.activate": "启用",
   "common.action.authenticate": "认证",
   "common.action.back": "返回",
   "common.action.browse": "浏览",
   "common.action.cancel": "取消",
   "common.action.clear": "清除",
+  "common.action.clearField": "清除{field}",
   "common.action.close": "关闭",
+  "common.action.closeSearch": "关闭搜索",
+  "common.action.collapse": "折叠",
   "common.action.connect": "连接",
   "common.action.continue": "继续",
   "common.action.copy": "复制",
+  "common.action.copyCode": "复制代码",
+  "common.action.cut": "剪切",
   "common.action.delete": "删除",
+  "common.action.discard": "放弃",
   "common.action.disconnect": "断开连接",
   "common.action.dismiss": "关闭",
   "common.action.done": "完成",
   "common.action.edit": "编辑",
+  "common.action.expand": "展开",
+  "common.action.export": "导出",
+  "common.action.hidePassword": "隐藏密码",
   "common.action.import": "导入",
+  "common.action.maximize": "最大化",
   "common.action.next": "下一个",
   "common.action.open": "打开",
   "common.action.pause": "暂停",
   "common.action.previous": "上一个",
+  "common.action.quit": "退出",
   "common.action.refresh": "刷新",
   "common.action.rename": "重命名",
   "common.action.replay": "回放",
   "common.action.reset": "重置",
+  "common.action.restart": "重启",
   "common.action.restore": "恢复",
   "common.action.retry": "重试",
+  "common.action.retrySave": "重试保存",
   "common.action.run": "运行",
   "common.action.save": "保存",
   "common.action.search": "搜索",
   "common.action.send": "发送",
+  "common.action.showOptions": "显示选项",
+  "common.action.showPassword": "显示密码",
   "common.action.skip": "跳过",
   "common.action.start": "启动",
   "common.action.stop": "停止",
@@ -49,14 +106,14 @@
   "common.description.connectionLost": "连接已断开。",
   "common.description.serialSessionClosed": "串口会话已关闭。",
   "common.description.sshSessionExited": "SSH 会话已退出。",
-  "common.description.tryADifferentSearchTerm": "请尝试其他搜索词。",
+  "common.duration.days": "{count} 天",
+  "common.error.unknown": "未知错误",
   "common.label.about": "关于",
   "common.label.action": "操作",
   "common.label.actions": "操作",
   "common.label.addAndContinue": "添加并继续",
   "common.label.address": "地址",
   "common.label.aiAssistant": "AI 助手",
-  "common.label.aiAssistantSettings": "AI 助手设置",
   "common.label.appearance": "外观",
   "common.label.application": "应用",
   "common.label.authentication": "认证",
@@ -65,12 +122,14 @@
   "common.label.changeHost": "更换主机",
   "common.label.checkingHostAuthenticity": "正在检查主机真实性",
   "common.label.command": "命令",
+  "common.label.configured": "已配置",
   "common.label.connected": "已连接",
   "common.label.connecting": "正在连接",
   "common.label.connectionFailed": "连接失败",
   "common.label.container": "容器",
   "common.label.cursor": "光标",
   "common.label.date": "日期",
+  "common.label.default": "默认",
   "common.label.description": "描述",
   "common.label.destination": "目标",
   "common.label.disabled": "已禁用",
@@ -103,7 +162,6 @@
   "common.label.identities": "身份",
   "common.label.identity": "身份",
   "common.label.idle": "空闲",
-  "common.label.interaction": "交互",
   "common.label.key": "密钥",
   "common.label.keys": "密钥",
   "common.label.kind": "类型",
@@ -122,7 +180,6 @@
   "common.label.newConversation": "新建对话",
   "common.label.noFavoritePaths": "暂无收藏路径",
   "common.label.noMatchingHosts": "没有匹配的主机",
-  "common.label.noSettingsFound": "未找到设置",
   "common.label.noTasks": "暂无任务",
   "common.label.none": "无",
   "common.label.odd": "奇校验",
@@ -147,10 +204,7 @@
   "common.label.region": "区域",
   "common.label.remote": "远程",
   "common.label.repository": "仓库",
-  "common.label.reservedNotEnforced": "预留 · 尚未实施",
-  "common.label.resetPage": "重置当前页面",
   "common.label.restoring": "正在恢复…",
-  "common.label.retentionPolicy": "保留策略",
   "common.label.rule": "规则",
   "common.label.run": "运行",
   "common.label.saving": "正在保存…",
@@ -162,11 +216,10 @@
   "common.label.selectAll": "全选",
   "common.label.selectHost": "选择主机",
   "common.label.serial": "串口",
+  "common.label.sessions": "会话",
   "common.label.settings": "设置",
-  "common.label.sftpSettings": "SFTP 设置",
   "common.label.shells": "Shell",
   "common.label.shortcut": "快捷键",
-  "common.label.shortcutSettings": "快捷键设置",
   "common.label.shortcuts": "快捷键",
   "common.label.showAll": "显示全部",
   "common.label.showLess": "收起",
@@ -185,6 +238,7 @@
   "common.label.theme": "主题",
   "common.label.themes": "主题",
   "common.label.type": "类型",
+  "common.label.unknownDate": "日期未知",
   "common.label.user": "用户",
   "common.label.username": "用户名",
   "common.label.value": "值",
@@ -194,27 +248,58 @@
   "common.label.view": "查看",
   "common.label.window": "窗口",
   "common.label.workspace": "工作区",
+  "common.status.authenticating": "正在验证…",
+  "common.status.cancelled": "已取消",
+  "common.status.completed": "已完成",
+  "common.status.copied": "已复制",
+  "common.status.deleting": "正在删除…",
+  "common.status.loading": "正在加载…",
+  "common.status.opening": "正在打开…",
+  "common.status.paused": "已暂停",
+  "common.status.queued": "排队中",
+  "common.status.running": "运行中",
+  "common.status.skipped": "已跳过",
+  "common.status.starting": "正在启动…",
+  "common.status.stopping": "正在停止…",
+  "common.status.working": "正在处理…",
+  "common.validation.nameRequired": "名称为必填项。",
+  "common.validation.regularFileRequired": "请选择普通文件。",
+  "common.validation.regularLocalFileRequired": "请选择普通本地文件。",
+  "connection.action.copyLogs": "复制日志",
+  "connection.action.hideLogs": "隐藏日志",
+  "connection.action.showLogs": "显示日志",
+  "connection.auth.interactiveRetry": "身份验证失败，请重试。",
+  "connection.auth.securityKeyPin.title": "解锁 FIDO2 安全密钥",
+  "connection.auth.securityKeyPin.description": "请输入设备 PIN 以继续 SSH 身份验证。",
+  "connection.protocol.select": "选择 {protocol}",
+  "connection.ssh.portRange": "SSH 端口必须介于 1 和 65535 之间。",
+  "connection.telnet.disabled": "此主机未启用 Telnet。",
+  "connection.telnet.portRange": "Telnet 端口必须介于 1 和 65535 之间。",
   "connection.uri.invalid": "无法打开此连接链接。请使用不包含查询参数或片段的 SSH、SFTP 或 Telnet 链接。",
+  "connection.validation.portRange": "端口必须介于 1 和 65535 之间。",
   "language.english.autonym": "English",
   "language.simplifiedChinese.autonym": "简体中文",
-  "settings.about.application.description": "应用信息、版本和更新。",
   "settings.about.license.help": "完整条款请参阅 LICENSE。",
   "settings.about.licenses.description": "捆绑的 Flutter、Dart、Rust 和原生组件许可证。",
+  "settings.about.licenses.bundledPackages": "{appName} {version} · 所有受支持平台的依赖组件。",
+  "settings.about.licenses.loading": "正在加载许可证…",
   "settings.about.licenses.noMatches": "没有匹配的软件包。",
-  "settings.about.licenses.selectPrompt": "选择一个软件包以查看其许可证。",
+  "settings.about.licenses.rustDescription": "内置的 Rust、Mosh、终端及图标组件。",
+  "settings.about.licenses.selectPrompt": "选择软件包以查看其许可证。",
+  "settings.about.licenses.text.label": "第三方许可证文本",
   "settings.ai.provider.active": "当前",
   "settings.ai.provider.defaultName": "自定义服务商",
   "settings.ai.provider.delete": "删除服务商",
-  "settings.ai.provider.deleteConfirmation": "删除 {name}？",
+  "settings.ai.provider.deleteConfirmation": "删除“{name}”及其保存的 API Key？",
   "settings.ai.provider.deleteTitle": "删除服务商",
   "settings.ai.provider.edit": "编辑服务商",
   "settings.ai.provider.editTitle": "编辑服务商",
   "settings.ai.provider.unsaved": "有未保存的更改",
   "settings.ai.provider.use": "使用",
   "settings.ai.provider.apiKey.label": "API 密钥",
-  "settings.ai.provider.apiKey.description": "此服务商的凭据；本地 Ollama 可留空。",
   "settings.ai.provider.baseUrl.label": "基础 URL",
-  "settings.ai.provider.baseUrl.description": "此服务商的 API 端点。",
+  "settings.ai.provider.deletion.activeProvider": "另一个服务商将设为当前服务商。",
+  "settings.ai.provider.deletion.lastProvider": "这是唯一的服务商。添加其他服务商之前，AI 助手将不可用。",
   "settings.ai.provider.error.baseUrl": "请输入有效的 HTTP 或 HTTPS API 地址。",
   "settings.ai.provider.error.delete": "无法删除 AI 服务商。",
   "settings.ai.provider.error.maxTokens": "最大 Token 数须为正整数，或留空。",
@@ -222,30 +307,30 @@
   "settings.ai.provider.error.save": "无法保存 AI 服务商。",
   "settings.ai.provider.error.temperature": "Temperature 须在 0 到 1 之间，或留空。",
   "settings.ai.provider.maxTokens.label": "最大 Token 数",
-  "settings.ai.provider.maxTokens.description": "单次响应最多生成的 Token 数。留空时使用服务商默认值（Anthropic 以 4096 兜底）。",
   "settings.ai.provider.maxTokens.hint": "留空使用服务商默认值。",
   "settings.ai.provider.models.label": "模型",
-  "settings.ai.provider.models.description": "以逗号分隔的模型标识符（例如 gpt-5.6-sol,gpt-5.6-terra）。",
   "settings.ai.provider.models.hint": "使用英文逗号分隔，第一个模型为默认模型。",
   "settings.ai.provider.name.label": "名称",
-  "settings.ai.provider.name.description": "此服务商的显示名称。",
   "settings.ai.provider.protocol.label": "协议",
-  "settings.ai.provider.protocol.description": "此服务商使用的 API 协议。",
   "settings.ai.provider.temperature.label": "温度",
-  "settings.ai.provider.temperature.description": "控制采样随机性，范围为 0 到 1；留空时使用服务商默认值。",
   "settings.ai.provider.temperature.hint": "取值范围为 0 到 1。",
   "settings.ai.providerPreset.description": "选择服务商预设或创建空白服务商。",
   "settings.ai.providerPreset.noMatches": "没有匹配的预设。",
-  "settings.ai.providers.summary": "服务商、端点、模型和 API 密钥。",
+  "settings.ai.providerPreset.updated": "已加载 {count} 个预设。",
+  "settings.ai.providers.summary": "协议、端点、模型、API 密钥和生成参数。",
   "settings.ai.providers.empty": "尚无 AI 服务商，添加后即可使用助手。",
+  "settings.ai.providers.loading": "正在加载服务商…",
   "settings.ai.recentOutput.label": "最近输出",
   "settings.ai.recentOutput.description": "包含活动终端的最近输出。",
   "settings.ai.terminalContext.summary": "包含选中内容和最近的终端输出。",
   "settings.ai.terminalSelection.label": "终端选中内容",
   "settings.ai.terminalSelection.description": "在 AI 助手中包含选中的终端文本。",
+  "settings.exit.continueMainWindow": "请在主窗口中继续。",
+  "settings.exit.finishing": "正在完成设置",
   "settings.general.applicationTheme.title": "应用主题",
   "settings.general.applicationTheme.description": "选择浅色、深色或跟随系统。",
   "settings.general.applicationTheme.summary": "浅色、深色或跟随系统外观。",
+  "settings.general.applicationTheme.accessibility": "应用主题：{theme}",
   "settings.general.applicationTheme.dark": "深色",
   "settings.general.applicationTheme.light": "浅色",
   "settings.general.applicationTheme.system": "跟随系统",
@@ -253,19 +338,21 @@
   "settings.general.confirmOnClose.description": "关闭终端标签页前请求确认。",
   "settings.general.confirmOnClose.summary": "关闭已连接的终端标签页前询问。",
   "settings.general.defaultUrlHandler.title": "默认 URL 处理程序",
-  "settings.general.defaultUrlHandler.description": "使用 Nauterm 作为 SSH、SFTP 和 Telnet 链接的默认处理程序。",
+  "settings.general.defaultUrlHandler.description": "使用 {appName} 作为 SSH、SFTP 和 Telnet 链接的默认处理程序。",
   "settings.general.defaultUrlHandler.checking": "正在检查默认应用…",
-  "settings.general.defaultUrlHandler.isDefault": "Nauterm 已是 {scheme} 的默认打开应用。",
-  "settings.general.defaultUrlHandler.notRegistered": "请先安装 Nauterm 或将其集成到桌面，再设置为默认应用。",
+  "settings.general.defaultUrlHandler.isDefault": "{appName} 已是 {scheme} 的默认打开应用。",
+  "settings.general.defaultUrlHandler.notRegistered": "请先安装 {appName} 或将其集成到桌面，再设置为默认应用。",
   "settings.general.defaultUrlHandler.openSettings": "打开 {scheme} 的系统默认应用设置。",
   "settings.general.defaultUrlHandler.queryFailed": "无法检查默认应用。",
-  "settings.general.defaultUrlHandler.setDefault": "将 Nauterm 设为 {scheme} 的默认打开应用。",
-  "settings.general.defaultUrlHandler.setFailed": "无法将 Nauterm 设为默认应用。",
+  "settings.general.defaultUrlHandler.setDefault": "将 {appName} 设为 {scheme} 的默认打开应用。",
+  "settings.general.defaultUrlHandler.setFailed": "无法将 {appName} 设为默认应用。",
   "settings.general.hostIcon.label": "主机图标",
   "settings.general.hostIcon.description": "选择工作区中主机图标的显示方式。",
   "settings.general.hostIcon.summary": "默认主机图标、系统徽标或系统图标。",
+  "settings.general.hostIcon.mode.osBadge": "带操作系统角标",
+  "settings.general.hostIcon.mode.osIcon": "操作系统图标",
   "settings.general.language.label": "语言",
-  "settings.general.language.description": "选择 Nauterm 使用的界面语言。",
+  "settings.general.language.description": "选择 {appName} 使用的界面语言。",
   "settings.general.language.system": "跟随系统",
   "settings.general.window.summary": "默认窗口宽度和高度。",
   "settings.general.window.height.label": "高度",
@@ -284,7 +371,6 @@
   "settings.label.accessKey": "访问密钥",
   "settings.label.accessKeyId": "访问密钥 ID",
   "settings.label.accessToken": "访问令牌",
-  "settings.label.accountId": "账户 ID",
   "settings.label.accountKey": "账户密钥",
   "settings.label.accountName": "账户名称",
   "settings.label.addAiProvider": "添加 AI 服务商",
@@ -296,14 +382,13 @@
   "settings.label.branch": "分支",
   "settings.label.bucket": "存储桶",
   "settings.label.changeMasterKey": "更改主密钥",
-  "settings.label.cloudflareAccountId": "Cloudflare 账户 ID",
   "settings.label.confirmMasterKey": "确认主密钥",
   "settings.label.confirmNewMasterKey": "确认新主密钥",
   "settings.label.connectToGithub": "连接到 GitHub",
   "settings.label.createAutomatically": "自动创建",
   "settings.label.createBlankProvider": "创建空白服务商",
   "settings.label.currentMasterKey": "当前主密钥",
-  "settings.label.currentOperatingSystem": "当前操作系统",
+  "settings.label.currentPlatformArchitecture": "当前操作系统和架构",
   "settings.label.disableShortcut": "禁用快捷键",
   "settings.label.displayName": "显示名称",
   "settings.label.fontSize": "字体大小",
@@ -313,18 +398,15 @@
   "settings.label.githubAuthorization": "GitHub 授权",
   "settings.label.githubConnected": "GitHub 已连接",
   "settings.label.keyBindings": "按键绑定",
-  "settings.label.keyDetails": "密钥详情",
   "settings.label.keyboardBehavior": "键盘行为",
   "settings.label.localBackups": "本地备份",
-  "settings.label.localVersion": "本地版本",
   "settings.label.masterKeyIsNotStored": "主密钥不会被存储",
   "settings.label.newMasterKey": "新主密钥",
   "settings.label.openGithub": "打开 GitHub",
   "settings.label.releaseChannelStable": "发布渠道：稳定版",
   "settings.label.releaseNotes": "发行说明",
   "settings.label.remotePath": "远程路径",
-  "settings.label.remoteVersion": "远程版本",
-  "settings.label.removeFromNauterm": "从 Nauterm 中移除",
+  "settings.label.removeFromApplication": "从 {appName} 中移除",
   "settings.label.repeatMasterKey": "再次输入主密钥",
   "settings.label.repositoryUrl": "仓库 URL",
   "settings.label.resetAll": "全部重置",
@@ -356,13 +438,11 @@
   "settings.label.tryAgain": "重试",
   "settings.label.unlockSync": "解锁同步",
   "settings.label.updatePresets": "更新预设",
-  "settings.label.value10Copies": "10 个副本",
-  "settings.label.value60Minutes": "60 分钟",
   "settings.label.waitingForAuthorization": "正在等待授权…",
   "settings.label.webdavConnection": "WebDAV 连接",
   "settings.label.windowSize": "窗口大小",
-  "settings.pages.about.title": "关于 Nauterm",
-  "settings.pages.about.description": "应用信息、发布详情和更新。",
+  "settings.pages.about.title": "关于 {appName}",
+  "settings.pages.about.description": "版本、构建、平台、许可证和更新。",
   "settings.pages.ai.title": "AI 助手 (Alpha Preview)",
   "settings.pages.ai.description": "配置 AI 服务商和终端上下文。",
   "settings.pages.general.title": "常规设置",
@@ -370,15 +450,19 @@
   "settings.pages.sftp.title": "SFTP",
   "settings.pages.sftp.description": "配置文件传输和编辑器行为。",
   "settings.pages.shortcuts.title": "快捷键",
-  "settings.pages.shortcuts.description": "配置终端键盘行为并查看当前按键绑定。",
+  "settings.pages.shortcuts.description": "自定义工作区和终端的键盘快捷键。",
   "settings.pages.shortcuts.summary": "配置应用键盘快捷键。",
   "settings.pages.sync.title": "同步与备份",
-  "settings.pages.sync.description": "配置备份提供商、冲突处理和自动化。",
+  "settings.pages.sync.description": "配置加密备份、自动同步和冲突处理。",
   "settings.pages.terminal.title": "终端",
   "settings.pages.terminal.description": "配置终端显示和文本交互默认值。",
   "settings.reset.all.success": "所有设置已恢复默认值。",
   "settings.reset.page.success": "当前页面已恢复默认值。",
-  "settings.search.packages.hint": "搜索依赖包…",
+  "settings.reset.page.action": "重置当前页面",
+  "settings.search.noMatches": "没有与“{query}”匹配的设置。",
+  "settings.search.resultCount": "{count} 个结果",
+  "settings.search.singleResult": "1 个结果",
+  "settings.search.packages.hint": "搜索软件包…",
   "settings.search.providers.hint": "搜索服务商…",
   "settings.search.settings.hint": "搜索设置…",
   "settings.search.themes.hint": "搜索主题…",
@@ -388,7 +472,8 @@
   "settings.sftp.defaultDirectory.description": "打开 SFTP 时的初始本地目录。",
   "settings.sftp.editors.summary": "SSH 编辑器、外部编辑器和文本扩展名。",
   "settings.sftp.externalEditor.label": "外部编辑器",
-  "settings.sftp.externalEditor.description": "为配置的文本文件扩展名显示的编辑器。",
+  "settings.sftp.externalEditor.description": "用于指定文本文件扩展名的编辑器。",
+  "settings.sftp.externalEditor.noRecommendations": "未找到推荐的文本打开应用",
   "settings.sftp.files.summary": "默认目录和隐藏文件。",
   "settings.sftp.showHiddenFiles.label": "显示隐藏文件",
   "settings.sftp.showHiddenFiles.description": "默认在文件列表中显示隐藏文件。",
@@ -399,10 +484,11 @@
   "settings.sftp.transferConcurrency.label": "传输并发数",
   "settings.sftp.transferConcurrency.description": "每个传输任务内并行处理的 SFTP 请求或文件数量。",
   "settings.sftp.transfers.label": "传输",
+  "settings.sftp.transfers.summary": "并发任务数及每个传输任务的并行请求数。",
   "settings.sftp.workspaceTab.label": "SFTP 标签页",
   "settings.sftp.workspaceTab.description": "在工作区栏中显示专用 SFTP 标签页。",
   "settings.sftp.workspaceTab.summary": "在工作区中显示 SFTP 标签页。",
-  "settings.shortcuts.summary": "终端和工作区键盘快捷键。",
+  "settings.shortcuts.changeShortcut": "更改{label}快捷键",
   "settings.shortcuts.action.closeTab": "关闭标签页",
   "settings.shortcuts.action.commandPalette": "命令面板",
   "settings.shortcuts.action.copy": "复制",
@@ -421,9 +507,11 @@
   "settings.shortcuts.action.splitRight": "向右拆分",
   "settings.shortcuts.action.switchToSftp": "切换到 SFTP",
   "settings.shortcuts.action.switchToSsh": "切换到 SSH",
+  "settings.shortcuts.altAsMeta.label": "将 Alt 用作 Meta 键",
   "settings.shortcuts.optionAsMeta.label": "将 Option 用作 Meta 键",
-  "settings.shortcuts.optionAsMeta.description": "发送带 Escape 前缀的 Option 组合键。",
-  "settings.shortcuts.recording.prompt": "请按快捷键…",
+  "settings.shortcuts.optionAsMeta.description": "发送 Option/Alt 组合键时添加 Escape 前缀。",
+  "settings.shortcuts.recording.hint": "单击以录制快捷键。按 Escape 取消录制。",
+  "settings.shortcuts.recording.prompt": "请按下快捷键…",
   "settings.shortcuts.scope.tabs": "标签页",
   "settings.sidebar.about.label": "关于",
   "settings.sidebar.aiAssistant.label": "AI 助手",
@@ -432,42 +520,110 @@
   "settings.sidebar.shortcuts.label": "快捷键",
   "settings.sidebar.syncBackup.label": "同步与备份",
   "settings.sidebar.terminal.label": "终端",
+  "settings.sync.action.configureProvider": "配置",
+  "settings.sync.action.refreshStatus": "刷新状态",
+  "settings.sync.action.saveSettings": "保存设置",
+  "settings.sync.action.syncNow": "立即同步",
+  "settings.sync.action.versionHistory": "版本历史",
+  "settings.sync.authorization.action.cancel": "取消登录",
+  "settings.sync.authorization.action.openBrowser": "打开浏览器",
+  "settings.sync.authorization.browser.description": "请在浏览器中完成登录。",
+  "settings.sync.authorization.pending.description": "授权已完成，请保存设置。",
+  "settings.sync.authorization.required.description": "登录以连接此存储服务。",
+  "settings.sync.authorization.saved.description": "授权已保存在此设备上。",
+  "settings.sync.authorization.status.exchanging": "正在完成授权…",
+  "settings.sync.authorization.status.starting": "正在开始登录…",
+  "settings.sync.authorization.status.waitingForBrowser": "正在等待浏览器登录…",
+  "settings.sync.authorization.validation.required": "此提供商需要授权。",
   "settings.sync.automatic.label": "自动同步",
   "settings.sync.automatic.description": "按选定间隔同步活动提供商。",
   "settings.sync.automatic.unit": "分钟",
+  "settings.sync.automatic.interval.label": "同步间隔（分钟）",
   "settings.sync.azure.accountName.description": "Azure Storage 账户名称。",
   "settings.sync.azure.container.description": "包含加密备份的 Blob 容器。",
   "settings.sync.azure.endpoint.description": "Azure Blob 服务端点。",
+  "settings.sync.backup.restore.success": "本地备份已恢复。",
+  "settings.sync.cloudHistory.restore.title": "恢复云端版本",
+  "settings.sync.cloudHistory.restore.description": "从 {provider} 恢复版本 {version}？这会将其设为云端当前版本并替换本地同步数据。",
+  "settings.sync.cloudHistory.restore.backupDisabled": "本地备份已在设置中禁用。",
+  "settings.sync.cloudHistory.restore.backupNotice": "恢复前将创建本地备份。",
   "settings.sync.credentials.localOnly": "仅存储在加密的本地数据库中。",
   "settings.sync.credentials.storageDescription": "存储在加密的本地数据库中。",
+  "settings.sync.error.automatic": "自动同步失败：{error}",
+  "settings.sync.error.gistConnectionRequired": "请先连接 GitHub Gist。",
+  "settings.sync.error.githubTokenMissing": "请先保存 GitHub 令牌。",
+  "settings.sync.error.githubTokenRequired": "请输入要保存的 GitHub PAT。",
+  "settings.sync.error.oauthClientRequired": "登录前需要为 {provider} 配置 {appName} OAuth 客户端 ID。",
+  "settings.sync.error.refreshStatus": "无法刷新同步状态：{error}",
+  "settings.sync.error.repositoryMissing": "请先配置仓库。",
+  "settings.sync.error.repositoryUrlRequired": "请输入仓库 URL。",
+  "settings.sync.error.s3BucketRequired": "请输入 S3 存储桶。",
+  "settings.sync.error.s3ConnectionRequired": "请先连接 S3 兼容存储。",
+  "settings.sync.error.s3CredentialsRequired": "请输入 S3 Access Key ID 和 Secret Access Key。",
+  "settings.sync.error.s3EndpointRequired": "请输入 S3 端点。",
+  "settings.sync.error.storageUnavailable": "同步存储不可用。",
+  "settings.sync.forgetKey.title": "忘记主密钥？",
+  "settings.sync.forgetKey.description": "下次同步时需要重新输入主密钥。提供商凭据、本地数据和云端文件会保留。",
+  "settings.sync.forgetKey.summary": "清除此设备缓存的同步密钥。",
   "settings.sync.gcs.bucket.description": "包含加密备份的 GCS 存储桶。",
   "settings.sync.gist.filename.description": "Gist 内的加密同步负载。",
   "settings.sync.gist.id.description": "留空将在首次同步时创建新的私有 Gist。",
   "settings.sync.git.branch.description": "存储加密版本历史的分支。",
   "settings.sync.git.path.description": "仓库内的文件路径。",
   "settings.sync.git.repository.description": "HTTPS 或 SSH Git 仓库 URL。",
-  "settings.sync.github.deviceCode.description": "复制此代码，然后在 GitHub 中输入以授权 Nauterm。",
+  "settings.sync.github.authorized": "已授权为 @{account}。",
+  "settings.sync.github.deviceCode.description": "请在 GitHub 上输入此代码。代码将在 {minutes} 分钟后过期。",
+  "settings.sync.github.error.noAccount": "GitHub 未返回授权账号。",
+  "settings.sync.github.repository.label": "GitHub 仓库",
   "settings.sync.github.token.description": "需要仓库 Contents 的读写权限。凭据存储在加密的本地数据库中。",
-  "settings.sync.history.description": "浏览存储在 GitHub 中的加密版本。",
-  "settings.sync.history.empty": "尚未找到加密版本。",
+  "settings.sync.history.description": "服务商保留的加密版本。最多显示最近 100 个版本。",
+  "settings.sync.history.empty": "暂无加密版本。",
+  "settings.sync.history.bucketVersioningHint": "请在存储服务商处启用存储桶版本控制，以保留历史记录。",
+  "settings.sync.history.current": "当前",
+  "settings.sync.history.loading": "正在加载历史记录…",
+  "settings.sync.history.objectVersionsHint": "同步文件更新后会出现历史版本。",
+  "settings.sync.history.providerTitle": "{provider} 历史记录",
+  "settings.sync.history.syncRequired": "恢复云端历史记录前，请先在此设备上完成一次同步。",
   "settings.sync.key.description": "此设备保护加密同步数据的方式。",
+  "settings.sync.key.connectedProviders": "已连接的提供商 · {count}",
+  "settings.sync.key.noConnectedProviders": "没有已连接的服务商。",
   "settings.sync.key.localAvailable.label": "同步 DEK 已在本地可用",
   "settings.sync.key.localAvailable.description": "此设备无需再次询问主密钥即可同步。",
   "settings.sync.key.localMissing.label": "同步 DEK 尚未存储",
   "settings.sync.key.localMissing.description": "首次成功同步后，同步 DEK 将存储在本地。",
   "settings.sync.key.masterKeyNotStored.description": "主密钥仅用于封装或解封随机同步 DEK。",
-  "settings.sync.keyRotation.description": "为每个已连接的提供商重新封装同步 DEK。",
+  "settings.sync.keyRotation.description": "为每个已连接的同步服务商更改主密钥。",
+  "settings.sync.keyRotation.success": "所有已连接服务商的主密钥均已更新。",
   "settings.sync.keyRotation.warning": "在所有提供商更新完成前保留当前密钥。加密记录和本地捕获不会重新加密。",
-  "settings.sync.localBackups.description": "每次同步前创建加密备份。",
+  "settings.sync.keyRotation.backupDisabled": "本地备份已禁用，将逐个更新提供商。",
+  "settings.sync.keyRotation.backupFirst": "先创建本地备份，再逐个更新提供商。",
+  "settings.sync.keyRotation.failure": "未能完成主密钥更改。",
+  "settings.sync.keyRotation.loading": "正在加载密钥详情…",
+  "settings.sync.keyRotation.pending": "待处理",
+  "settings.sync.keyRotation.retryWithSameKeys": "请保留两把密钥，直到所有服务商都已更新。使用同一密钥对重试；即使上传失败，服务商也可能已收到密钥。",
+  "settings.sync.keyRotation.updated": "已更新",
+  "settings.sync.keyRotation.updating": "正在更新…",
+  "settings.sync.localBackups.description": "同步前保留加密的本地备份。设为 0 可关闭自动备份。",
   "settings.sync.localBackups.empty": "暂无本地备份。",
   "settings.sync.localBackups.listDescription": "同步前创建的加密数据库快照。",
-  "settings.sync.masterKey.description": "在每台设备上使用相同的主密钥。Nauterm 仅用它封装或解封随机同步 DEK，绝不会存储主密钥。",
+  "settings.sync.localBackups.unit": "份",
+  "settings.sync.localBackups.restore.title": "恢复本地备份",
+  "settings.sync.localBackups.restore.description": "恢复 {date} 的本地备份？这将替换此设备上已保存的数据。{appName} 会先备份当前数据。",
+  "settings.sync.localBackups.retention.label": "保留的本地备份数量",
+  "settings.sync.masterKey.description": "在每台设备上使用相同的主密钥。{appName} 仅用它封装或解封随机同步 DEK，绝不会存储主密钥。",
   "settings.sync.masterKey.hint": "至少 12 个字符",
   "settings.sync.masterKey.requirements": "至少 12 个字符，并满足以下 4 类字符中的至少 3 类。",
   "settings.sync.masterKey.confirm.description": "再次输入相同的主密钥。",
+  "settings.sync.masterKey.confirmation.matches": "主密钥一致。",
   "settings.sync.masterKey.error.characterClasses": "{subject}必须满足以下至少 3 类字符：大写字母、小写字母、数字和符号。",
   "settings.sync.masterKey.error.characters": "{subject}包含不支持的字符。",
+  "settings.sync.masterKey.error.confirmationRequired": "请确认主密钥。",
   "settings.sync.masterKey.error.length": "{subject}必须至少包含 12 个字符。",
+  "settings.sync.masterKey.error.mismatch": "两次输入的主密钥不一致。",
+  "settings.sync.masterKey.error.newKeyMismatch": "两次输入的新主密钥不一致。",
+  "settings.sync.masterKey.error.noProvider": "请先连接同步提供商，再更改主密钥。",
+  "settings.sync.masterKey.error.required": "请输入主密钥。",
+  "settings.sync.masterKey.error.unchanged": "新主密钥必须与当前密钥不同。",
   "settings.sync.masterKey.requirement.length": "至少 12 个字符",
   "settings.sync.masterKey.requirement.lowercase": "小写字母",
   "settings.sync.masterKey.requirement.number": "数字",
@@ -483,14 +639,16 @@
   "settings.sync.mergeStrategy.localWins": "本地覆盖云端",
   "settings.sync.mergeStrategy.remoteWins": "云端覆盖本地",
   "settings.sync.mergeStrategy.smartMerge": "智能合并",
-  "settings.sync.objectHistory.description": "存储提供商保留的加密对象版本。",
-  "settings.sync.objectHistory.empty": "未找到对象版本。",
-  "settings.sync.provider.description": "选择 Nauterm 存储加密同步库的位置。",
+  "settings.sync.provider.description": "选择 {appName} 存储加密同步库的位置。",
+  "settings.sync.provider.delete.title": "删除同步服务商",
+  "settings.sync.provider.delete.description": "删除 {name}？已保存的连接和本地凭据将被移除，远程备份将保留。",
+  "settings.sync.provider.disconnect.title": "断开同步服务商",
+  "settings.sync.provider.disconnect.description": "断开 {name} 的连接？已保存的连接设置和远程备份将保留，本地凭据将被移除。",
   "settings.sync.provider.displayName.description": "在“同步与备份”页面显示的名称。",
   "settings.sync.provider.status.connected": "已连接",
-  "settings.sync.provider.status.notConfigured": "未配置",
+  "settings.sync.provider.status.credentialsRequired": "{provider} · 需要凭据",
   "settings.sync.provider.status.ready": "就绪",
-  "settings.sync.providers.description": "保留一个活动的加密备份提供商，并控制更改的合并方式。",
+  "settings.sync.providers.empty": "尚未添加同步服务。",
   "settings.sync.providers.azure.description": "将备份存储在 Azure Blob 容器中。",
   "settings.sync.providers.dropbox.description": "将加密备份存储在 Dropbox 中。",
   "settings.sync.providers.gcs.description": "将备份存储在 GCS 存储桶中。",
@@ -499,6 +657,13 @@
   "settings.sync.providers.oneDrive.description": "将加密备份存储在 OneDrive 中。",
   "settings.sync.providers.s3Compatible.description": "连接任何提供兼容 S3 API 的服务。",
   "settings.sync.providers.webdav.description": "连接 WebDAV 服务器或兼容的云盘。",
+  "settings.sync.result.summary": "{status} · 修订 {revision} · 导入 {imported} 条 · 共 {total} 条记录。",
+  "settings.sync.result.automaticComplete": "自动同步完成",
+  "settings.sync.result.cloudRestored": "云端版本已恢复",
+  "settings.sync.result.commit": "提交 {commit}",
+  "settings.sync.result.complete": "同步完成",
+  "settings.sync.result.etag": "ETag {etag}",
+  "settings.sync.result.remoteRevision": "远端修订 {revision}",
   "settings.sync.s3.accessKey.description": "S3 API 凭据。",
   "settings.sync.s3.bucket.description": "包含加密同步对象的存储桶。",
   "settings.sync.s3.compatibility.description": "支持 Amazon S3、Cloudflare R2、Backblaze B2、DigitalOcean Spaces、Wasabi、阿里云 OSS、腾讯云 COS，以及其他提供 S3 兼容 API 的服务。MinIO 也可通过独立的提供商预设进行配置。",
@@ -506,11 +671,15 @@
   "settings.sync.s3.folder.description": "存储桶内的可选文件夹路径。",
   "settings.sync.s3.objectBucket.description": "包含加密对象的存储桶。",
   "settings.sync.s3.region.description": "提供商可发现区域时使用 auto。",
-  "settings.sync.status.connectedProvider": "已连接 {count} 个提供商",
-  "settings.sync.status.connectedProviders": "已连接 {count} 个提供商",
-  "settings.sync.status.ready": "同步已就绪",
-  "settings.sync.status.unlocked": "同步已解锁",
-  "settings.sync.storage.bucket.description": "包含加密备份的存储桶。",
+  "settings.sync.status.addOrActivateProvider": "在下方添加或启用提供商",
+  "settings.sync.status.attentionNeeded": "需要处理",
+  "settings.sync.status.changesPending": "有待同步的更改",
+  "settings.sync.status.keyNotSaved": "同步密钥未保存在此设备上",
+  "settings.sync.status.keySaved": "同步密钥已保存在此设备上",
+  "settings.sync.status.noActiveProvider": "没有活动服务商",
+  "settings.sync.status.syncing": "正在同步…",
+  "settings.sync.status.upToDate": "已是最新",
+  "settings.sync.status.viaProvider": "通过 {provider}",
   "settings.sync.storage.filename.description": "前缀内的加密备份文件名。",
   "settings.sync.storage.folder.description": "加密备份的可选文件夹路径。",
   "settings.sync.storage.region.description": "存储区域。服务可自动发现时使用 auto。",
@@ -523,7 +692,6 @@
   "settings.terminal.darkTheme": "暗色主题",
   "settings.terminal.lightTheme": "浅色主题",
   "settings.terminal.autocomplete.label": "自动补全",
-  "settings.terminal.autocomplete.description": "使用命令编辑器时建议命令和路径。",
   "settings.terminal.bell.title": "终端响铃",
   "settings.terminal.bell.summary": "配置声音、视觉反馈和后台标签页提示。",
   "settings.terminal.bell.sound.label": "声音",
@@ -532,10 +700,9 @@
   "settings.terminal.bell.tabIndicator.description": "后台标签页响铃后保留提示，直到该标签页被选中。",
   "settings.terminal.bell.visual.label": "视觉响铃",
   "settings.terminal.bell.visual.description": "收到终端响铃时短暂闪烁终端。",
-  "settings.terminal.boldWeight.label": "粗体字重",
   "settings.terminal.boldWeight.description": "粗体文本的字重。",
   "settings.terminal.cjkFont.label": "CJK 字体",
-  "settings.terminal.cjkFont.description": "用于中日韩文字的回退字体。选择「自动」时，系统根据应用语言选择回退字体。",
+  "settings.terminal.cjkFont.description": "为中文、日文和韩文文本设置后备字体。",
   "settings.terminal.cjkFont.auto": "自动",
   "settings.terminal.composer.label": "命令编辑器",
   "settings.terminal.composer.description": "在新终端窗格中默认显示命令输入栏。",
@@ -543,6 +710,10 @@
   "settings.terminal.copyOnSelect.description": "自动将选中文本复制到剪贴板。",
   "settings.terminal.copyOnSelect.summary": "自动复制选中的终端文本。",
   "settings.terminal.cursor.summary": "光标形状和闪烁行为。",
+  "settings.terminal.cursor.shape.beam": "竖线",
+  "settings.terminal.cursor.shape.block": "实心方块",
+  "settings.terminal.cursor.shape.hollowBlock": "空心方块",
+  "settings.terminal.cursor.shape.underline": "下划线",
   "settings.terminal.cursorBlink.label": "闪烁",
   "settings.terminal.cursorBlink.description": "光标按固定间隔闪烁。",
   "settings.terminal.cursorShape.label": "形状",
@@ -551,17 +722,15 @@
   "settings.terminal.emulation.description": "设置新终端会话的 TERM 值。",
   "settings.terminal.emulator.label": "仿真引擎",
   "settings.terminal.emulator.description": "选择新终端会话使用的仿真引擎。",
+  "settings.terminal.emulator.summary": "新会话的仿真引擎和 TERM 类型。",
   "settings.terminal.followTheme.title": "自动切换主题",
   "settings.terminal.followTheme.description": "根据应用的浅色或暗色模式，使用对应的终端主题。",
-  "settings.terminal.font.summary": "主字体与 CJK 字体、大小、字重和连字。",
-  "settings.terminal.general.summary": "TERM 仿真和回滚设置。",
+  "settings.terminal.font.summary": "字体系列、字号、字重、行高、字间距和连字。",
   "settings.terminal.input.title": "输入",
-  "settings.terminal.input.summary": "配置终端应用接收输入的方式。",
   "settings.terminal.input.navigationKeysScroll.label": "使用导航键滚动",
-  "settings.terminal.input.navigationKeysScroll.description": "使用导航键滚动终端。",
+  "settings.terminal.input.navigationKeysScroll.description": "使用 Page Up/Down 和 Home/End 滚动终端历史。",
   "settings.terminal.input.reportMouseEvents.label": "报告鼠标事件",
   "settings.terminal.input.reportMouseEvents.description": "向请求鼠标输入的终端应用发送鼠标事件。",
-  "settings.terminal.interaction.summary": "选择、命令块、命令编辑器和多标签页。",
   "settings.terminal.letterSpacing.label": "字符间距",
   "settings.terminal.letterSpacing.description": "字符之间的额外间距（像素）。",
   "settings.terminal.ligatures.label": "连字",
@@ -571,10 +740,10 @@
   "settings.terminal.multipleTabs.label": "多个标签页",
   "settings.terminal.multipleTabs.description": "允许在同一窗格中使用多个终端会话。",
   "settings.terminal.padding.label": "内边距",
-  "settings.terminal.padding.description": "终端内容周围的内边距。支持 1 到 4 个值。",
+  "settings.terminal.padding.description": "终端内容四周的内边距。可输入 1 至 4 个以逗号分隔的值。",
   "settings.terminal.padding.summary": "终端内容周围的内边距。",
+  "settings.terminal.padding.hint": "全部 · 垂直、水平 · 上、右、下、左",
   "settings.terminal.pointer.title": "指针",
-  "settings.terminal.pointer.summary": "配置链接、文件和光标的修饰键单击操作。",
   "settings.terminal.pointer.altClickMovesCursor.label": "按住 Alt 单击移动光标",
   "settings.terminal.pointer.clickMovesCursor.title": "单击移动光标",
   "settings.terminal.pointer.commandClickOpensTarget.label": "按住 Command 单击打开链接或文件",
@@ -588,6 +757,7 @@
   "settings.terminal.recording.history.label": "终端历史",
   "settings.terminal.recording.history.description": "在本机保存连接历史。",
   "settings.terminal.recording.location.label": "位置",
+  "settings.terminal.recording.location.accessibility": "打开录制位置 {path}",
   "settings.terminal.recording.location.open": "打开位置",
   "settings.terminal.recording.location.openError": "无法打开位置。",
   "settings.terminal.recording.rawOutput.label": "录制终端会话",
@@ -596,10 +766,12 @@
   "settings.terminal.recording.retention.description": "到期后删除已结束的会话。",
   "settings.terminal.recording.sessionLimit.label": "单会话上限",
   "settings.terminal.recording.sessionLimit.description": "超过上限时保留最新输出。",
+  "settings.terminal.recording.storage.title": "录制存储",
+  "settings.terminal.recording.storage.description": "保留期限、单会话上限和总存储上限。",
   "settings.terminal.recording.storageLimit.label": "总存储上限",
   "settings.terminal.recording.storageLimit.description": "空间不足时删除最早结束的会话。",
   "settings.terminal.scrollback.label": "回滚行数",
-  "settings.terminal.scrollback.description": "滚动缓冲区保留的最大行数。",
+  "settings.terminal.scrollback.description": "滚动缓冲区保留的最大行数。设为 0 可禁用回滚。",
   "settings.terminal.scrollbar.label": "滚动条",
   "settings.terminal.scrollbar.description": "有回滚历史时显示滚动条。",
   "settings.terminal.selectCommandBlockOnClick.label": "单击选择命令块",
@@ -617,56 +789,116 @@
   "settings.terminal.sshPrediction.always": "始终开启",
   "settings.terminal.sshPrediction.never": "关闭",
   "settings.terminal.theme.summary": "终端颜色和自定义主题。",
-  "settings.terminal.weight.label": "字重",
+  "settings.terminal.theme.ansiColors.label": "ANSI 颜色",
+  "settings.terminal.theme.hexColor.label": "十六进制颜色",
   "settings.terminal.weight.description": "普通文本的字重。",
   "settings.terminal.wordBoundaries.label": "选词边界字符",
   "settings.terminal.wordBoundaries.description": "双击选词时的分隔字符。用 \\t 表示 Tab，用 \\\\ 表示反斜杠。",
+  "settings.update.action.cancelDownload": "取消下载",
   "settings.update.action.check": "检查更新",
-  "settings.update.action.checking": "正在检查…",
+  "settings.update.action.checking": "正在检查更新…",
+  "settings.update.action.discardDownload": "丢弃下载",
   "settings.update.action.download": "下载更新",
+  "settings.update.action.downloadInBrowser": "在浏览器中下载",
   "settings.update.action.downloading": "正在下载…",
   "settings.update.action.install": "安装更新",
   "settings.update.action.installing": "正在安装…",
   "settings.update.action.later": "稍后",
-  "settings.update.action.restart": "重启 Nauterm",
+  "settings.update.action.openVerifiedPackage": "打开已验证的安装包",
+  "settings.update.action.releaseDetails": "版本详情",
+  "settings.update.action.restart": "重启 {appName}",
   "settings.update.dialog.installed.title": "更新完成",
-  "settings.update.dialog.installed.description": "Nauterm {version} 已成功安装。立即重启以使用新版本。",
+  "settings.update.dialog.installed.description": "{appName} {version} 已成功安装。立即重启以使用新版本。",
   "settings.update.dialog.installed.subtitle": "更新已经可以使用。",
   "settings.update.dialog.ready.title": "更新已就绪",
-  "settings.update.dialog.ready.description": "Nauterm {version} 已就绪。立即重启以替换当前 AppImage 并启动新版本。",
+  "settings.update.dialog.ready.description": "{appName} {version} 已就绪。立即重启以替换当前 AppImage 并启动新版本。",
   "settings.update.dialog.ready.subtitle": "重启以完成更新。",
-  "settings.update.status.installed": "更新安装成功。重启 Nauterm 以使用新版本。",
+  "settings.update.error.failed": "更新失败：{error}",
+  "settings.update.error.versionUnavailable": "无法读取已安装应用的版本。",
+  "settings.update.sparkle.managed": "更新由 Sparkle 管理。",
+  "settings.update.sparkle.notConfigured": "此构建未包含 Sparkle 更新源和公钥。",
+  "settings.update.status.available": "{appName} {version} 已发布。",
+  "settings.update.status.browserOnly": "可在浏览器中下载此版本。应用内下载需要 SHA-256 校验清单。",
+  "settings.update.status.cancelled": "下载已取消。",
+  "settings.update.status.checkingChecksums": "正在检查发行校验和…",
+  "settings.update.status.current": "当前已是最新版本。",
+  "settings.update.status.downloadVerified": "下载完成，SHA-256 验证通过。",
+  "settings.update.status.installed": "更新安装成功。重启 {appName} 以使用新版本。",
   "settings.update.status.installerLaunched": "安装程序已打开，请按照提示完成更新。",
   "settings.update.status.installing": "正在安装更新…",
-  "settings.update.status.readyToRestart": "更新已就绪。重启 Nauterm 以完成更新。",
+  "settings.update.status.noPackage": "{version} 版本没有适用于此平台的 {appName} 安装包。",
+  "settings.update.status.preparingDownload": "正在准备下载…",
+  "settings.update.status.readyToRestart": "更新已就绪。重启 {appName} 以完成更新。",
+  "settings.update.status.verifyingChecksum": "正在验证 SHA-256…",
+  "sftp.action.cancelPathEditing": "取消路径编辑",
   "sftp.action.copyAbsolutePath": "复制绝对路径",
   "sftp.action.copyName": "复制名称",
   "sftp.action.copyTo": "复制到…",
   "sftp.action.download": "下载",
+  "sftp.action.downloadHere": "下载到此处",
+  "sftp.action.editPath": "编辑路径",
   "sftp.action.followSshDirectory": "跟随 SSH 当前目录",
   "sftp.action.goToSshDirectory": "跳转到 SSH 当前目录",
   "sftp.action.moveTo": "移动到…",
   "sftp.action.newFolder": "新建文件夹",
-  "sftp.action.openInSystemDefaultApplication": "使用系统默认应用打开",
   "sftp.action.openWith": "打开方式",
   "sftp.action.openWithSshEditor": "使用 SSH 编辑器打开",
   "sftp.action.otherApplication": "其他…",
+  "sftp.action.showTerminal": "显示终端",
   "sftp.action.stopFollowingSshDirectory": "停止跟随 SSH 当前目录",
   "sftp.action.systemDefaultApplication": "系统默认应用",
+  "sftp.action.systemDefaultApplicationName": "{name}（默认）",
   "sftp.action.upload": "上传…",
+  "sftp.action.uploadHere": "上传到这里",
   "sftp.action.withSudo": "使用 sudo…",
-  "sftp.conflict.itemExists.description": "目标位置已存在名为“$name”的项目。",
+  "sftp.conflict.destinationExists.title": "目标已存在",
+  "sftp.conflict.itemExists.description": "目标位置已存在名为“{name}”的项目。",
+  "sftp.conflict.keepBoth.path": "保留两者：{path}",
+  "sftp.conflict.replacement.description": "可为两个项目分别命名并同时保留，也可替换现有目标。替换后无法撤销。",
+  "sftp.connection.closed": "SFTP 连接已关闭",
+  "sftp.delete.selectedCount": "{count} 个远程项目",
+  "sftp.delete.confirmation.description": "这会永久删除选中的远程文件或文件夹，且无法撤销。",
+  "sftp.delete.dialog.title": "删除远程项目？",
   "sftp.description.sftpConnectionFailed": "SFTP 连接失败。",
-  "sftp.dialog.deleteRemoteItem": "删除远程项目？",
+  "sftp.edit.conflict.changed.description": "开始编辑后，服务器上的文件已被修改。",
+  "sftp.edit.conflict.localCopy.description": "本地编辑会保留，直到你选择如何处理。",
+  "sftp.edit.conflict.removed.description": "开始编辑后，服务器上的文件已被删除。",
+  "sftp.edit.downloading.description": "正在下载私有副本以供编辑…",
+  "sftp.edit.notice.localCopy": "{error}\n本地副本：{path}",
+  "sftp.edit.openCancelled.description": "打开远程文件的操作已取消。",
+  "sftp.edit.opened.description": "已打开用于编辑的私有副本。",
+  "sftp.edit.opening.description": "正在打开远程文件…",
+  "sftp.edit.selectionChanged.description": "所选文件已更改，打开操作已取消。",
+  "sftp.edit.status.localChangesKept": "本地更改会保留。",
+  "sftp.edit.status.savePaused": "保存已暂停 · {host}",
   "sftp.empty.description": "先连接到已保存的主机，\n再使用 SFTP 管理文件。",
-  "sftp.knownHosts.authenticity.description": "Nauterm 的 known_hosts 中还没有 $target 的身份信息。可以仅为本次 SFTP 连接信任它，或保存指纹后重新连接。",
+  "sftp.error.checkBeforeUpload": "上传前无法检查 {name}：{error}",
+  "sftp.error.chooseFiles": "无法选择文件：{error}",
+  "sftp.error.download": "无法下载：{error}",
+  "sftp.error.fileMissing": "文件已不存在：{path}",
+  "sftp.error.keepRemoteVersion": "无法保留远程版本：{error}",
+  "sftp.error.openFile": "无法打开 {path}：{error}",
+  "sftp.error.prepareDownloadsDirectory": "无法准备系统下载目录。",
+  "sftp.error.protectEditDirectory": "无法保护临时编辑目录：{error}",
+  "sftp.error.protectEditFile": "无法保护临时编辑文件：{error}",
+  "sftp.error.protectTransferData": "无法保护临时传输数据：{error}",
+  "sftp.error.remoteFileMissing": "远程文件已不存在。",
+  "sftp.error.resolveDownloadsDirectory": "无法确定系统下载目录。",
+  "sftp.error.saveFile": "无法保存 {name}：{error}",
+  "sftp.error.unrepresentableLocalName": "有文件或文件夹的名称无法在路径编辑器中表示。",
+  "sftp.error.uploadFile": "无法上传 {name}：{error}",
+  "sftp.error.useDownloadsDirectory": "无法使用系统下载目录。",
+  "sftp.error.verifyAfterSave": "已保存 {name}，但验证失败：{error}",
+  "sftp.error.verifyFile": "无法验证 {name}：{error}",
+  "sftp.favorites.loading": "正在加载收藏…",
+  "sftp.field.destinationPath": "目标路径",
   "sftp.label.cancelTask": "取消任务",
   "sftp.label.clearTasks": "清除任务",
   "sftp.label.connectToHost": "连接到主机",
   "sftp.label.copyTo": "复制到",
   "sftp.label.dateModified": "修改日期",
   "sftp.label.deleteRecord": "删除记录",
-  "sftp.label.destinationPath": "目标路径",
+  "sftp.label.destinationPath": "到：{path}",
   "sftp.label.hideFavoritePaths": "隐藏收藏路径",
   "sftp.label.hideTasks": "隐藏任务",
   "sftp.label.keepBoth": "两者都保留",
@@ -681,12 +913,20 @@
   "sftp.label.selectHost": "选择主机",
   "sftp.label.showFavoritePaths": "显示收藏路径",
   "sftp.label.showTasks": "显示任务",
+  "sftp.label.sourcePath": "从：{path}",
+  "sftp.message.keptRemoteVersion": "已保留 {name} 的远程版本。",
+  "sftp.message.savedEditedFile": "已将编辑后的文件保存为 {name}。",
   "sftp.message.sshDirectoryUnavailable": "暂时无法获取 SSH 当前目录。",
-  "sftp.sudo.explicit.action.authenticate": "认证",
+  "sftp.message.uploadPaused": "上传已暂停，远程文件保持原样。",
+  "sftp.sudo.action.title": "使用 sudo 执行{action}",
+  "sftp.sudo.edit.action.authenticateAndSave": "认证并保存",
+  "sftp.sudo.edit.dialog.description": "输入 sudo 密码以保存待处理的编辑。上传前会再次检查远程版本，取消会保留本地更改。",
+  "sftp.sudo.error.paneChanged": "窗格已更改，sudo 操作已取消。",
   "sftp.sudo.explicit.dialog.description": "请输入 sudo 密码，以授权当前操作；之后 15 分钟内的“使用 sudo”操作可复用该认证通道。",
+  "sftp.sudo.explicit.dialog.target": "此操作在 {user}@{host} 上以 sudo 执行。",
   "sftp.sudo.explicit.dialog.title": "使用 sudo 认证",
   "sftp.sudo.permissionDenied.action.retry": "使用 sudo 重试",
-  "sftp.sudo.permissionDenied.dialog.description": "服务器拒绝了此操作。请输入 sudo 密码，仅以管理员权限重试当前任务。",
+  "sftp.sudo.permissionDenied.dialog.description": "服务器拒绝了此操作。请输入 sudo 密码以重试原任务一次。任务可能已部分完成。",
   "sftp.sudo.permissionDenied.dialog.title": "权限不足",
   "sftp.task.copy": "复制",
   "sftp.task.delete": "删除",
@@ -696,34 +936,93 @@
   "sftp.task.upload": "上传",
   "sftp.tooltip.favoriteCurrentPath": "收藏当前路径",
   "sftp.tooltip.removePathFavorite": "取消收藏当前路径",
+  "sftp.tooltip.sort": "按{column}排序",
+  "sftp.transfer.action.retry": "重试传输",
+  "sftp.transfer.checkingDestination.description": "正在检查目标位置…",
+  "sftp.transfer.destinationChanged.description": "目标已更改，上传已取消。",
+  "sftp.transfer.scopeChanged.description": "窗格或所选项目已更改，传输已取消。",
+  "sftp.transfer.sourceChanged.description": "源已更改，下载已取消。",
+  "sftp.transfer.status.cancelling": "正在取消…",
+  "sftp.transfer.status.completed": "已完成",
+  "sftp.transfer.status.paused": "已暂停",
+  "sftp.transfer.status.pausing": "正在暂停…",
+  "sftp.transfer.status.queuePosition": "已排队 #{position}",
+  "sftp.transfer.status.queued": "已排队",
+  "sftp.transfer.status.running": "传输中",
+  "sftp.validation.remoteFileRequired": "请选择远程文件。",
+  "terminal.action.collapseComposer": "收起命令输入框",
+  "terminal.action.expandComposer": "展开命令输入框",
+  "terminal.action.hideAiAssistant": "隐藏 AI 助手",
   "terminal.action.hideComposer": "隐藏命令编辑器",
+  "terminal.action.hideTools": "隐藏终端工具",
+  "terminal.action.showAiAssistant": "显示 AI 助手",
   "terminal.action.showComposer": "显示命令编辑器",
+  "terminal.action.showTools": "显示终端工具",
+  "terminal.composer.send.hint": "发送 · Shift+Enter 换行",
+  "terminal.composer.suggestions.label": "命令建议",
   "terminal.description.localTerminalIsReady": "本地终端已就绪。",
   "terminal.description.moshSessionExited": "Mosh 会话已退出。",
   "terminal.description.sessionEnded": "会话已结束。",
   "terminal.description.telnetSessionClosed": "Telnet 会话已关闭。",
   "terminal.label.closeTab": "关闭标签页",
+  "terminal.label.commandBlock": "命令区块",
   "terminal.label.newTab": "新建标签页",
   "terminal.label.openSftp": "打开 SFTP",
   "terminal.label.searchTerminal": "搜索终端",
   "terminal.label.splitDown": "向下拆分",
   "terminal.label.splitRight": "向右拆分",
-  "update.startup.title": "Nauterm 有可用更新",
-  "update.startup.downloading": "正在下载 Nauterm {version}…",
-  "update.startup.error": "无法更新 Nauterm {version}。",
-  "update.startup.installerLaunched": "Nauterm {version} 安装程序已打开。",
-  "update.startup.installing": "正在安装 Nauterm {version}…",
-  "update.startup.restartRequired": "Nauterm {version} 已就绪，重启以完成更新。",
+  "terminal.mosh.status.interrupted": "连接中断 · 输入已排队",
+  "terminal.mosh.status.restored": "连接已恢复",
+  "terminal.mosh.status.switching": "正在切换网络…",
+  "terminal.reconnect.title": "正在重新连接",
+  "terminal.reconnect.countdown": "将在 {seconds} 秒后重新连接…",
+  "terminal.reconnect.disconnected": "连接已断开",
+  "terminal.reconnect.pending": "正在重新连接…",
+  "terminal.search.label": "终端搜索",
+  "terminal.search.empty": "无结果",
+  "terminal.search.found": "已找到",
+  "terminal.search.action.close": "关闭搜索 · Escape",
+  "terminal.search.action.next": "下一个匹配项 · Enter",
+  "terminal.search.action.previous": "上一个匹配项 · Shift+Enter",
+  "terminal.search.error.accessibility": "搜索出错：{error}",
+  "terminal.search.status.accessibility": "搜索结果：{status}",
+  "terminal.systemInfo.cpu.cores": "{count} 核",
+  "terminal.systemInfo.cpu.load": "负载 {load}",
+  "terminal.systemInfo.disk.free": "剩余 {free} / {total}",
+  "update.startup.title": "{appName} 有可用更新",
+  "update.startup.downloading": "正在下载 {appName} {version}…",
+  "update.startup.error": "无法更新 {appName} {version}。",
+  "update.startup.installerLaunched": "{appName} {version} 安装程序已打开。",
+  "update.startup.installing": "正在安装 {appName} {version}…",
+  "update.startup.restartRequired": "{appName} {version} 已就绪，重启以完成更新。",
   "update.startup.action.skip": "跳过此版本",
   "update.startup.action.update": "更新",
-  "update.startup.available.description": "Nauterm {version} 现已可用。",
+  "update.startup.available.description": "{appName} {version} 现已可用。",
   "workspace.action.changeIcon": "更换图标",
+  "workspace.action.createGroup": "创建分组",
+  "workspace.action.createProxy": "创建代理",
+  "workspace.action.createSnippet": "创建命令片段",
+  "workspace.action.createSnippetPackage": "创建命令包",
+  "workspace.action.creationOptions": "{action}选项",
   "workspace.action.discardChanges": "丢弃修改",
   "workspace.action.duplicate": "创建副本",
+  "workspace.action.exportCsv": "导出 CSV…",
+  "workspace.action.importKnownHosts": "导入已知主机",
+  "workspace.action.selectTerminalTheme": "选择终端主题",
   "workspace.action.useAutomaticIcon": "使用自动图标",
   "workspace.closeWindow.activeForwards": "仍有 {count} 个端口转发正在运行。仍要关闭此窗口吗？",
+  "workspace.closeWindow.openTab": "仍有 1 个终端标签页打开。仍要关闭此窗口吗？",
   "workspace.closeWindow.openTabs": "仍有 {count} 个终端标签页打开。仍要关闭此窗口吗？",
   "workspace.closeWindow.openTabsAndForwards": "仍有 {tabs} 个终端标签页和 {forwards} 个端口转发正在运行。仍要关闭此窗口吗？",
+  "workspace.closeWindow.sftpInProgress": "SFTP 操作将停止。暂停的传输在下次启动时不会恢复，服务器上可能留有未传完的文件。",
+  "workspace.closeWindow.externalEdits.description": "外部编辑会话将关闭。仅在安全时上传已稳定的待保存内容，未发送的编辑会保留在私有本地文件夹中。",
+  "workspace.closeWindow.keyExport.description": "密钥导出可能已部分完成，重试前请检查远程文件。",
+  "workspace.closeWindow.remoteSessions.description": "运行中的会话将断开，其进程可能仍在远程运行。",
+  "workspace.closeWorkspace.empty": "关闭“{name}”？",
+  "workspace.closeWorkspace.session": "关闭“{name}”并断开其中的会话？",
+  "workspace.closeWorkspace.sessions": "关闭“{name}”并断开其中的 {count} 个会话？",
+  "workspace.connection.preparation.loadingCredentials": "正在加载已保存的凭据…",
+  "workspace.connection.preparation.retryFromHosts": "处理错误后，请从主机列表重试。",
   "workspace.contextMenu.host.connectionMethods": "连接方式",
   "workspace.contextMenu.host.openInWorkspace": "在 {workspace} 工作区中打开",
   "workspace.credentials.createCertificate": "创建证书",
@@ -732,73 +1031,189 @@
   "workspace.description.connectionFailed": "连接失败。",
   "workspace.description.createAConnectFromAHost": "从主机创建连接。",
   "workspace.description.diagnosticsCopied": "诊断信息已复制。",
+  "workspace.description.knownHosts": "已保存的主机密钥用于验证所连接的 SSH 服务器的身份。",
   "workspace.description.noMatchingThemes": "没有匹配的主题。",
   "workspace.description.noPublicKeysAvailable": "没有可用的公钥。",
   "workspace.description.noShellHistoryRecordedYet": "尚未记录 Shell 历史。",
   "workspace.description.runOrSkipEachCommandBeforeContinuing": "继续前运行或跳过每条命令。",
+  "workspace.description.tryAnotherSearch": "请尝试其他搜索条件。",
+  "workspace.description.tryAnotherSearchOrClearTags": "请尝试其他搜索条件，或清除标签筛选。",
   "workspace.description.waitingForConnectionEvents": "正在等待连接事件。",
   "workspace.dialog.areYouSureYouWantToCloseThisTerminal": "确定要关闭此终端吗？",
-  "workspace.dialog.clearAllTerminalHistory": "清除全部终端历史记录？",
   "workspace.dialog.clearShellHistory": "清除 Shell 历史记录？",
+  "workspace.dialog.closeTerminal": "关闭终端？",
   "workspace.dialog.closeWindow": "关闭窗口？",
   "workspace.dialog.closeWorkspace": "关闭工作区？",
   "workspace.dialog.deleteConversation": "删除对话？",
+  "workspace.dialog.deleteFinishedLogs": "删除已结束的日志？",
   "workspace.dialog.deleteForward": "删除端口转发？",
+  "workspace.dialog.deleteForwards": "删除端口转发？",
   "workspace.dialog.deleteGroup": "删除分组？",
+  "workspace.dialog.deleteGroups": "删除分组？",
   "workspace.dialog.deleteHost": "删除主机？",
+  "workspace.dialog.deleteHosts": "删除主机？",
+  "workspace.dialog.deleteIdentities": "删除身份？",
   "workspace.dialog.deleteIdentity": "删除身份？",
   "workspace.dialog.deleteKey": "删除密钥？",
+  "workspace.dialog.deleteKeys": "删除密钥？",
   "workspace.dialog.deleteKnownHost": "删除已知主机？",
+  "workspace.dialog.deleteKnownHosts": "删除已知主机？",
+  "workspace.dialog.deleteProxies": "删除代理？",
   "workspace.dialog.deleteProxy": "删除代理？",
   "workspace.dialog.deleteSnippet": "删除代码片段？",
   "workspace.dialog.deleteSnippetPackage": "删除代码片段包？",
+  "workspace.dialog.deleteSnippetPackages": "删除代码片段包？",
+  "workspace.dialog.deleteSnippets": "删除代码片段？",
   "workspace.dialog.deleteTerminalHistory": "删除终端历史记录？",
-  "workspace.dialog.quitNauterm": "退出 Nauterm？",
+  "workspace.dialog.quit": "退出 {app}？",
+  "workspace.dialog.deleteCredential.description": "已保存的凭据引用将被清除。当前会话会保持连接。",
+  "workspace.dialog.deleteFinishedLogs.description": "永久删除所选的会话历史和录制输出（共 {count} 条）。当前会话会保留。",
+  "workspace.dialog.deleteForward.description": "此操作会停止这条转发规则并删除其配置。",
+  "workspace.dialog.deleteForwards.description": "删除 {count} 条端口转发规则？此操作会停止这些规则并删除其配置。",
+  "workspace.dialog.deleteGroup.description": "此分组中的主机将移出分组。",
+  "workspace.dialog.deleteGroups.description": "删除 {count} 个分组？这些分组中的主机将移出分组。",
+  "workspace.dialog.deleteHosts.description": "删除 {count} 个主机？此操作无法撤销。",
+  "workspace.dialog.deleteIdentities.description": "删除 {count} 个身份？此操作无法撤销。",
+  "workspace.dialog.deleteItem.description": "此操作会删除保存的配置。当前连接需单独管理。",
+  "workspace.dialog.deleteKeys.description": "删除 {count} 个密钥？此操作无法撤销。",
+  "workspace.dialog.deleteKnownHost.description": "下次连接时需要重新验证此主机密钥。",
+  "workspace.dialog.deleteKnownHosts.description": "从已知主机中删除 {count} 条记录？下次连接时需要重新验证这些主机密钥。",
+  "workspace.dialog.deleteProxies.description": "删除 {count} 个代理？此操作无法撤销。",
+  "workspace.dialog.deleteProxy.description": "此操作会删除保存的代理及其认证信息。",
+  "workspace.dialog.deleteSnippet.description": "此操作无法撤销。",
+  "workspace.dialog.deleteSnippetPackage.description": "其中的代码片段将保留并移出片段包。",
+  "workspace.dialog.deleteSnippetPackages.description": "删除 {count} 个代码片段包？其中的代码片段将保留并移出片段包。",
+  "workspace.dialog.deleteSnippets.description": "删除 {count} 个代码片段？此操作无法撤销。",
   "workspace.empty.forwarding.description": "添加转发规则，通过 SSH 转发本地、远程或动态流量。",
   "workspace.empty.hosts.description": "添加主机以保存连接信息，并快速打开远程会话。",
   "workspace.empty.keychain.description": "添加一次密钥和身份，即可在保存的主机之间重复使用。",
   "workspace.empty.proxies.description": "添加一次代理，即可在使用相同路由的主机之间重复使用。",
   "workspace.empty.snippets.description": "将常用命令保存为代码片段，以便在每个终端中使用。",
-  "workspace.history.clearAll.description": "这将永久删除所有会话元数据和加密捕获",
-  "workspace.history.clearShell.description": "这会清除 Nauterm 保存的所有 Shell 历史，但不会修改",
-  "workspace.history.deleteSession.description": "这将永久删除会话元数据及其加密内容",
+  "workspace.exit.waitingForBackgroundWork": "正在等待后台任务完成…",
+  "workspace.export.hosts.empty": "没有可导出的主机。",
+  "workspace.export.hosts.success": "已将 {count} 个主机导出为 CSV。",
+  "workspace.export.hosts.failure": "导出主机失败：{error}",
+  "workspace.group.validation.depth": "分组最多只能嵌套两层。",
+  "workspace.history.loading": "正在加载命令历史…",
+  "workspace.history.clearShell.description": "这会清除应用保存的命令历史记录。本机和远程 Shell 的历史文件会保留。",
+  "workspace.history.error.recordingChanged": "录屏已更改，请刷新后重试。",
   "workspace.host.darkTheme": "暗色主题",
   "workspace.host.lightTheme": "浅色主题",
-  "workspace.host.environment.description": "某些 SSH 服务器默认只允许带指定前缀的变量：",
+  "workspace.host.credentials.clearSavedPassword": "清除已保存的密码",
+  "workspace.host.credentials.loading": "正在加载密码…",
+  "workspace.host.environment.description": "部分 SSH 服务器仅接受其 AcceptEnv 配置允许的环境变量。",
+  "workspace.host.environment.edit.description": "为 {host} 设置环境变量。",
+  "workspace.host.environment.validation.duplicateName": "环境变量名称不能重复。",
+  "workspace.host.error.unavailable": "主机不可用。",
   "workspace.host.protocol.add": "添加协议",
+  "workspace.host.protocol.portLabel": "{protocol} 使用 {port} 端口",
   "workspace.host.protocol.remove": "移除协议",
   "workspace.host.protocol.showMore": "显示更多",
+  "workspace.host.protocol.telnetActions": "Telnet 操作",
   "workspace.host.ssh.compatibilityMode.label": "兼容模式",
   "workspace.host.ssh.compatibilityMode.description": "跳过 Shell 探测，并使用兼容的 SSH 算法。",
-  "workspace.import.title": "导入到保险库",
+  "workspace.import.title": "导入到 Vaults",
   "workspace.import.empty": "未找到支持的主机或密钥。",
   "workspace.import.chooseAgain": "重新选择",
+  "workspace.import.filePickerFailed": "无法打开导入文件选择器。",
+  "workspace.import.filesSkipped": "已跳过 {count} 个无法读取或过大的文件。",
   "workspace.import.fromTitle": "从 {source} 导入",
+  "workspace.import.importing": "正在导入…",
+  "workspace.import.loading": "正在加载导入数据…",
+  "workspace.import.noMatchingEntries": "没有匹配的主机或密钥。",
   "workspace.import.noMatchingKeys": "没有匹配的密钥",
   "workspace.import.selectedCount": "导入 {count} 项",
+  "workspace.import.preview.description": "已有条目将被复用或跳过。选择匹配的密钥以关联到主机。机密信息保存在加密数据库中。",
+  "workspace.import.result.added": "导入完成。新增主机（{hosts}）· 新增密钥（{keys}）。",
+  "workspace.import.result.reusedKeys": "已复用密钥（{count}）。",
+  "workspace.import.result.skipped": "已跳过（{count}）。",
+  "workspace.import.result.unconfiguredHostKeys": "未配置密钥的主机（{count}）。",
   "workspace.import.source.description": "选择来源。保存前可以检查主机和密钥。",
   "workspace.import.source.csv.label": "CSV 文件",
   "workspace.import.source.csv.description": "主机、分组、标签和凭据",
+  "workspace.import.source.mobaXterm.description": "来自 .mxtsessions 或 .ini 文件的会话",
   "workspace.import.source.openSsh.description": "从完整的 SSH 目录导入主机和密钥",
+  "workspace.import.source.openSsh.folderRequired": "请选择 SSH 文件夹。",
   "workspace.import.source.putty.description": "从导出的 .reg 文件导入会话",
   "workspace.import.source.secureCrt.description": "从 SecureCRT 文件夹导入会话",
   "workspace.keys.generate": "生成",
   "workspace.keys.generateAndSave": "生成并保存",
   "workspace.keys.generating": "正在生成…",
+  "workspace.keys.action.copyPublicKey": "复制公钥",
   "workspace.keys.action.hidePassphrase": "隐藏密码短语",
   "workspace.keys.action.showPassphrase": "显示密码短语",
-  "workspace.keys.export.description": "将公钥导出到 UNIX 主机。目标目录",
+  "workspace.keys.export.description": "将公钥导出到 UNIX 主机。目标目录和文件会以安全权限创建。",
+  "workspace.keys.export.empty": "没有可导出的密钥内容。",
+  "workspace.keys.export.checkRemoteFile": "重试前请检查远程文件。命令可能已部分执行。",
+  "workspace.keys.export.failedTitle": "密钥导出失败",
+  "workspace.keys.export.failure": "导出密钥失败：{error}",
+  "workspace.keys.export.fileSuccess": "已将 1 个密钥文件导出到 {path}。",
+  "workspace.keys.export.filesSuccess": "已将 {count} 个密钥文件导出到 {path}。",
+  "workspace.keys.export.hostSuccess": "密钥导出成功。",
+  "workspace.keys.export.inProgress": "正在导出…",
+  "workspace.keys.export.inProgressTitle": "正在导出密钥…",
+  "workspace.keys.export.invalidFilename": "请输入有效的文件名。",
+  "workspace.keys.export.locationRequired": "位置为必填项。",
+  "workspace.keys.export.publicKeyRequired": "需要有效的公钥。",
+  "workspace.keys.export.scriptHelp": "使用 $1 表示位置、$2 表示文件名、$3 表示公钥。",
+  "workspace.keys.export.field.filename": "文件名（$2）",
+  "workspace.keys.export.field.location": "位置（$1）",
+  "workspace.keys.export.validation.hostRequired": "请选择主机。",
+  "workspace.keys.fido2.label": "FIDO2 密钥",
+  "workspace.keys.fido2.confirmDevice": "触摸或确认 FIDO2 设备以完成密钥生成。",
+  "workspace.keys.fido2.generate": "生成 FIDO2 密钥",
+  "workspace.keys.fido2.insertDevice": "插入 FIDO2 设备",
+  "workspace.keys.fido2.pinRequired": "请输入安全密钥 PIN。",
+  "workspace.keys.fido2.privateKeyProtection": "私钥保护",
+  "workspace.keys.fido2.privateKeyProtectionDescription": "数值越大，私钥保护越强，但解锁所需时间也越长。",
+  "workspace.keys.fido2.requirePin": "要求 PIN",
+  "workspace.keys.fido2.requirePinDescription": "每次 SSH 签名时都需要验证器 PIN。",
+  "workspace.keys.fido2.requireUserPresence": "要求用户在场",
+  "workspace.keys.fido2.requireUserPresenceDescription": "每次 SSH 签名时都需要触摸安全密钥。",
+  "workspace.keys.fido2.roundsRange": "轮数必须介于 1 和 1000000 之间。",
+  "workspace.keys.fido2.scanningDevices": "正在扫描 FIDO2 设备…",
+  "workspace.keys.fido2.selectAuthenticator": "选择用于存储此密钥的 FIDO2 验证器。",
+  "workspace.keys.fido2.unlocking": "正在解锁…",
+  "workspace.keys.fido2.waitingForDevice": "正在等待安全密钥…",
+  "workspace.keys.fido2.cipher.label": "加密算法",
+  "workspace.keys.fido2.discard.title": "丢弃已生成的密钥？",
+  "workspace.keys.fido2.discard.description": "此密钥已在验证器上生成，但尚未保存。丢弃后，本应用将失去对此密钥的访问句柄。",
+  "workspace.keys.fido2.discard.keep": "保留密钥",
+  "workspace.keys.fido2.empty.description": "连接 FIDO2 设备后，会在此处显示。",
+  "workspace.keys.fido2.field.label": "标签",
+  "workspace.keys.fido2.pending.title": "已生成的密钥",
+  "workspace.keys.fido2.pending.description": "此密钥尚未保存。请重试保存同一密钥。",
+  "workspace.keys.fido2.pending.saveError": "密钥已生成，但无法保存：{error}",
+  "workspace.keys.fido2.unlockDevice.description": "输入 PIN 以解锁 {device}。",
+  "workspace.keys.fido2.validation.labelRequired": "标签为必填项。",
   "workspace.keys.field.curveSize": "椭圆曲线大小（位）",
   "workspace.keys.field.size": "密钥大小（位）",
   "workspace.keys.field.type": "密钥类型",
+  "workspace.keys.import.certificateFilenameRequired": "证书文件名必须以 -cert.pub 结尾，才能找到对应私钥。",
   "workspace.keys.import.drag": "拖放私钥文件",
   "workspace.keys.import.drop": "松开以导入私钥",
+  "workspace.keys.import.emptyFile": "所选文件为空。",
+  "workspace.keys.import.failure": "无法导入密钥：{error}",
+  "workspace.keys.import.fileTooLarge": "所选文件过大。",
   "workspace.keys.import.fromFile": "从密钥文件导入",
   "workspace.keys.import.importing": "正在导入…",
+  "workspace.keys.import.invalidPrivateKey": "所选文件不是私钥。",
+  "workspace.keys.import.missingPrivateKey": "证书所在目录中找不到对应的私钥。",
+  "workspace.keys.import.pickerFailed": "无法打开密钥导入选择器。",
+  "workspace.keys.import.privateKeyExpected": "请选择私钥文件，而不是公钥文件。",
+  "workspace.keys.label.publicAndPrivateKey": "公钥和私钥",
   "workspace.keys.label.savePassphrase": "保存密码短语",
   "workspace.keys.section.security": "安全",
   "workspace.keys.validation.privateKeyRequired": "请输入私钥。",
-  "workspace.knownHosts.authenticity.description": "Nauterm 的 known_hosts 中还没有 $host 的身份信息。可以仅为本次连接信任它，或保存指纹后重新连接。",
+  "workspace.knownHosts.authenticity.description": "{appName} 的 known_hosts 中尚无 {host} 的身份信息。你可以仅在本次连接中信任它，也可以保存指纹后重新连接。",
+  "workspace.knownHosts.delete.success": "已删除已知主机。",
+  "workspace.knownHosts.import.empty": "没有可导入的新已知主机。",
+  "workspace.knownHosts.import.success": "已导入 {count} 个已知主机。",
+  "workspace.knownHosts.import.failure": "导入已知主机失败：{error}",
+  "workspace.knownHosts.import.fileRequired": "请选择普通 known_hosts 文件。",
+  "workspace.knownHosts.import.successOne": "已导入 1 个已知主机。",
+  "workspace.knownHosts.invalidLines.description": "文件中已保留 {count} 行无法识别的内容。",
+  "workspace.knownHosts.load.loading": "正在加载已知主机…",
   "workspace.label.addForwarding": "添加端口转发",
   "workspace.label.addHost": "添加主机",
   "workspace.label.addKey": "添加密钥",
@@ -821,6 +1236,7 @@
   "workspace.label.connectSave": "连接并保存",
   "workspace.label.connectWithMosh": "使用 Mosh 连接",
   "workspace.label.connectWithSftp": "使用 SFTP 连接",
+  "workspace.label.connectWithSsh": "通过 SSH 连接",
   "workspace.label.connectWithTelnet": "使用 Telnet 连接",
   "workspace.label.connectionDiagnostics": "连接诊断",
   "workspace.label.connectionFailedWithConnectionLog": "连接失败，连接日志：",
@@ -833,17 +1249,13 @@
   "workspace.label.cpu": "CPU",
   "workspace.label.createIdentity": "创建身份",
   "workspace.label.dataBits": "数据位",
-  "workspace.label.deleteAllTerminalHistoryAndCaptures": "删除全部终端历史和捕获记录",
-  "workspace.label.deleteForward": "删除端口转发",
   "workspace.label.deleteGroup": "删除分组",
   "workspace.label.deleteHost": "删除主机",
   "workspace.label.deleteIdentity": "删除身份",
   "workspace.label.deleteKey": "删除密钥",
   "workspace.label.deleteLogAndCapture": "删除日志和捕获记录",
   "workspace.label.deleteProxy": "删除代理",
-  "workspace.label.deleteSnippet": "删除代码片段",
   "workspace.label.deleteTag": "删除标签",
-  "workspace.label.destinationHost": "目标主机",
   "workspace.label.dismissReconnectStatus": "关闭重连状态",
   "workspace.label.duplicateGroup": "创建分组副本",
   "workspace.label.editForward": "编辑端口转发",
@@ -853,13 +1265,12 @@
   "workspace.label.editKey": "编辑密钥",
   "workspace.label.editProxy": "编辑代理",
   "workspace.label.editSnippet": "编辑代码片段",
-  "workspace.label.enableMosh": "启用 Mosh",
-  "workspace.label.enableTelnet": "启用 Telnet",
   "workspace.label.enterKeyPassphrase": "请输入密钥口令",
   "workspace.label.enterUsername": "请输入用户名",
   "workspace.label.environmentVariables": "环境变量",
   "workspace.label.exportKey": "导出密钥",
   "workspace.label.exportTerminalCapture": "导出终端捕获记录",
+  "workspace.label.exportToFile": "导出到文件",
   "workspace.label.exportToHost": "导出到主机",
   "workspace.label.favoritePaths": "收藏路径",
   "workspace.label.filesystems": "文件系统",
@@ -869,9 +1280,6 @@
   "workspace.label.generateKey": "生成密钥",
   "workspace.label.hostIcon": "主机图标",
   "workspace.label.import": "导入…",
-  "workspace.label.importHostsFromCsv": "从 CSV 导入主机",
-  "workspace.label.importMobaxtermSessions": "导入 MobaXterm 会话",
-  "workspace.label.importPuttySessions": "导入 PuTTY 会话",
   "workspace.label.includeTerminalContext": "包含终端上下文",
   "workspace.label.live": "在线",
   "workspace.label.more": "更多",
@@ -887,20 +1295,22 @@
   "workspace.label.newSnippet": "新建代码片段",
   "workspace.label.newSnippetPackage": "新建代码片段包",
   "workspace.label.newWorkspace": "新建工作区",
-  "workspace.label.noForwardingRulesFound": "未找到端口转发规则。",
+  "workspace.label.noForwardingRulesFound": "没有匹配的转发规则",
   "workspace.label.noForwardingRulesYet": "暂无端口转发规则",
   "workspace.label.noGroup": "无分组",
+  "workspace.label.noGroups": "暂无分组",
+  "workspace.label.noHosts": "暂无主机",
   "workspace.label.noHostsFound": "未找到主机。",
   "workspace.label.noHostsInGroup": "此分组中没有主机。",
   "workspace.label.noHostsYet": "暂无主机",
   "workspace.label.noKeychainItemsFound": "未找到密钥链项目。",
   "workspace.label.noKeychainItemsYet": "密钥链中暂无项目",
-  "workspace.label.noKnownHostsFound": "未找到已知主机。",
+  "workspace.label.noKnownHostsFound": "没有匹配的已知主机。",
   "workspace.label.noKnownHostsYet": "暂无已知主机。",
   "workspace.label.noMatches": "无匹配项",
   "workspace.label.noMatchingIcons": "没有匹配的图标",
   "workspace.label.noMatchingSshHosts": "没有匹配的 SSH 主机",
-  "workspace.label.noProxiesFound": "未找到代理。",
+  "workspace.label.noProxiesFound": "没有匹配的代理",
   "workspace.label.noProxiesYet": "暂无代理",
   "workspace.label.noSnippetsFound": "未找到代码片段。",
   "workspace.label.noSnippetsYet": "暂无代码片段",
@@ -921,11 +1331,13 @@
   "workspace.label.refreshSerialDevices": "刷新串口设备",
   "workspace.label.refreshSystemInformation": "刷新系统信息",
   "workspace.label.removeVariable": "移除变量",
+  "workspace.label.renameSnippetPackage": "重命名代码片段包",
   "workspace.label.renameTag": "重命名标签",
   "workspace.label.renameWorkspace": "重命名工作区",
   "workspace.label.ruleName": "规则名称",
   "workspace.label.save": "保存",
   "workspace.label.savePassphrase": "保存密码短语",
+  "workspace.label.searchHostsOrTags": "搜索主机或标签",
   "workspace.label.searchIcons": "搜索图标",
   "workspace.label.searchTags": "搜索标签",
   "workspace.label.security": "安全",
@@ -954,6 +1366,30 @@
   "workspace.label.withSsh": "使用 SSH",
   "workspace.label.withTelnet": "使用 Telnet",
   "workspace.label.workDir": "工作目录",
+  "workspace.logs.action.deleteFinished": "删除选中的已结束日志",
+  "workspace.logs.action.sessionDetails": "会话详情",
+  "workspace.logs.date.label": "{year}年{month}月{day}日",
+  "workspace.logs.date.dayOffset": "（+{days} 天）",
+  "workspace.logs.delete.action": "删除已结束的会话日志和录制",
+  "workspace.logs.delete.closeSessionsFirst": "没有可删除的已结束会话日志。请先关闭会话，再删除其日志。",
+  "workspace.logs.delete.noneFinished": "没有可删除的已结束会话日志。",
+  "workspace.logs.details.directory": "目录：{cwd}",
+  "workspace.logs.details.ended": "结束于 {time}",
+  "workspace.logs.details.eventsError": "无法加载会话事件。{error}",
+  "workspace.logs.details.live": "会话仍在运行",
+  "workspace.logs.details.loadingEvents": "正在加载事件…",
+  "workspace.logs.details.localTerminal": "本地终端",
+  "workspace.logs.details.started": "开始于 {time}",
+  "workspace.logs.export.raw.success": "已导出原始终端流。",
+  "workspace.logs.export.readable.success": "已导出可读终端记录。",
+  "workspace.logs.load.loading": "正在加载日志…",
+  "workspace.logs.load.retry": "重试加载日志",
+  "workspace.logs.load.unavailable": "会话历史不可用。",
+  "workspace.logs.replay.retryFromLogs": "解决录制错误后，请关闭此标签并从日志页重试。",
+  "workspace.logs.row.accessibility": "会话日志：{name}",
+  "workspace.logs.storage.size": "记录存储  {size}",
+  "workspace.overview.sessions.count": "{count} 个会话",
+  "workspace.overview.sessions.single": "1 个会话",
   "workspace.portForward.activeConnections": "{count} 个活动连接",
   "workspace.portForward.remoteHost": "远程主机：{host}",
   "workspace.portForward.via": "经由：{host}",
@@ -974,21 +1410,31 @@
   "workspace.portForward.validation.nameRequired": "请输入规则名称。",
   "workspace.portForward.validation.remoteHostRequired": "请选择远程主机。",
   "workspace.portForward.validation.remotePortRequired": "请输入远程端口号。",
+  "workspace.proxies.load.loading": "正在加载代理…",
   "workspace.proxy.validation.hostRequired": "请输入代理主机。",
   "workspace.proxy.validation.nameRequired": "请输入代理名称。",
   "workspace.proxy.validation.portRequired": "请输入代理端口。",
+  "workspace.quickConnect.host.accessibility": "连接到 {host}",
+  "workspace.quickConnect.shells.empty": "未找到本地 Shell。",
   "workspace.quit.activeForwards": "仍有 {count} 个端口转发正在运行。仍要退出吗？",
+  "workspace.quit.openTab": "仍有 1 个终端标签页打开。仍要退出吗？",
   "workspace.quit.openTabs": "仍有 {count} 个终端标签页打开。仍要退出吗？",
   "workspace.quit.openTabsAndForwards": "仍有 {tabs} 个终端标签页和 {forwards} 个端口转发正在运行。仍要退出吗？",
   "workspace.restore.dontAskAgain": "下次不再询问",
   "workspace.restore.restoreWorkspace": "恢复工作区",
   "workspace.restore.startFresh": "重新开始",
+  "workspace.restore.forwards.description": "恢复上次的工作区？活动端口转发将重新启动。",
+  "workspace.restore.sessions.description": "恢复上次的工作区？终端将重新连接。",
+  "workspace.restore.sessionsAndForwards.description": "要恢复之前的工作区吗？终端将重新连接，活动的端口转发也将重启。",
   "workspace.restore.startup.title": "恢复上次的工作区？",
-  "workspace.restore.unexpectedExit.title": "Nauterm 意外关闭",
-  "workspace.restore.unexpectedExit.description": "要恢复之前的工作区吗？终端将重新连接，活动的端口转发也将重启。",
+  "workspace.restore.unexpectedExit.title": "{appName} 意外关闭",
   "workspace.search.hosts.placeholder": "搜索 host:、group:、username:、tag: 或 user@host",
   "workspace.search.quickConnect.placeholder": "搜索 host:、group:、tag: 或 user@host",
+  "workspace.selection.dragCount": "{count} 项",
   "workspace.serial.invalidSettings": "请输入串口和有效的正整数波特率。",
+  "workspace.serial.scanning": "正在扫描串口设备…",
+  "workspace.serial.dialog.title": "串口连接",
+  "workspace.serial.empty.description": "未找到串口设备，请手动输入路径。",
   "workspace.sidebar.collapse.label": "收起侧边栏",
   "workspace.sidebar.expand.label": "展开侧边栏",
   "workspace.sidebar.expandUnavailable.label": "加宽窗口以展开侧边栏",
@@ -1000,10 +1446,28 @@
   "workspace.sidebar.proxies.label": "代理",
   "workspace.sidebar.settings.label": "设置",
   "workspace.sidebar.snippets.label": "代码片段",
-  "workspace.sort.nameAscending": "名称 A-z",
-  "workspace.sort.nameDescending": "名称 Z-a",
+  "workspace.snippet.untitled": "未命名命令片段",
+  "workspace.snippets.load.loading": "正在加载代码片段…",
+  "workspace.snippets.targets.availableOn": "适用于 {target}",
+  "workspace.snippets.targets.selectOriginalPane": "保存此片段前，请先选择原始终端面板。",
+  "workspace.sort.nameAscending": "名称 A–Z",
+  "workspace.sort.nameDescending": "名称 Z–A",
   "workspace.sort.newestFirst": "从新到旧",
   "workspace.sort.oldestFirst": "从旧到新",
+  "workspace.systemInfo.architecture": "架构",
+  "workspace.systemInfo.connectFirst": "通过 SSH 连接后即可查看系统信息。",
+  "workspace.systemInfo.kernel": "内核",
+  "workspace.systemInfo.loadAverage": "平均负载",
+  "workspace.systemInfo.noData": "主机未返回系统信息。",
+  "workspace.systemInfo.operatingSystem": "操作系统",
+  "workspace.systemInfo.updatesPaused": "已暂停更新",
+  "workspace.systemInfo.uptime": "运行时间",
+  "workspace.systemInfo.details.title": "系统",
+  "workspace.tags.action.createNamed": "创建标签 {name}",
+  "workspace.tags.action.remove": "移除标签 {name}",
+  "workspace.tags.action.showOptions": "显示标签选项",
+  "workspace.terminalTools.action.copyToPrompt": "复制到终端提示符",
+  "workspace.terminalTools.ai.waiting.description": "打开终端后即可使用 AI 助手。",
   "workspace.terminalTools.empty.noMatches": "没有匹配的结果。",
   "workspace.terminalTools.mode.ai": "AI",
   "workspace.terminalTools.mode.settings": "终端设置",
@@ -1013,13 +1477,13 @@
   "workspace.terminalTools.mode.systemInfo": "系统信息",
   "workspace.terminalTools.mode.settings.description": "在这里调整字体并预览终端主题。",
   "workspace.terminalTools.mode.sftp.description": "浏览当前 SSH 会话中的文件。",
-  "workspace.terminalTools.mode.shellHistory.description": "搜索并复用当前终端会话中的命令。",
   "workspace.terminalTools.mode.snippets.description": "在这里运行和管理可复用的终端代码片段。",
   "workspace.terminalTools.mode.systemInfo.description": "查看 CPU、内存、磁盘和主机详情。",
   "workspace.terminalTools.sftp.noSession.description": "连接 SSH 后即可使用 SFTP。",
   "workspace.terminalTools.shellHistory.empty": "当前终端没有 Shell 历史。",
   "workspace.terminalTools.shellHistory.run": "运行命令",
   "workspace.terminalTools.shellHistory.search": "搜索命令",
+  "workspace.terminalTools.shellHistory.waiting.description": "连接后即可查看 Shell 历史。",
   "workspace.terminalTools.snippets.empty": "暂无可用代码片段。",
   "workspace.terminalTools.snippets.currentHost": "当前主机",
   "workspace.terminalTools.snippets.run": "运行代码片段",
@@ -1029,102 +1493,933 @@
   "workspace.tooltip.gridView": "网格视图",
   "workspace.tooltip.listView": "列表视图",
   "workspace.tooltip.sort": "排序：{order}",
+  "workspace.validation.scriptRequired": "脚本为必填项。",
+  "workspace.validation.usernameRequired": "用户名为必填项。",
+  "workspace.validation.workspaceNameRequired": "工作区名称为必填项。",
   "_patterns": [
     {
-      "pattern": "^Delete \"(.+)\"\\? This cannot be undone\\.$",
-      "replacement": "删除“{1}”？此操作无法撤销。"
+      "pattern": "^Restore the local backup from ([\\s\\S]*?)\\? Saved data will be replaced and open resource editors will close\\. A backup of the current data is kept before restoring\\.$",
+      "replacement": "恢复 {1} 的本地备份？这将替换已保存的数据并关闭打开的资源编辑器，恢复前会保留当前数据的备份。"
     },
     {
-      "pattern": "^Delete \"(.+)\" from conversation history\\?$",
-      "replacement": "从对话历史中删除“{1}”？"
+      "pattern": "^([\\s\\S]*?)\n\nExternal edit sessions will close\\. Stable pending saves are uploaded only when safe; unsent edits are retained in private local folders\\.$",
+      "replacement": "{1}\n\n外部编辑会话将关闭。仅在安全时上传已稳定的待保存内容，未发送的编辑会保留在私有本地文件夹中。"
     },
     {
-      "pattern": "^Delete \"(.+)\" from known hosts\\?$",
-      "replacement": "从已知主机中删除“{1}”？"
+      "pattern": "^([\\s\\S]*?)\\. Check the destination for partial changes, then choose With sudo again to authenticate\\. This task will not be replayed automatically\\.$",
+      "replacement": "{1}。请检查目标是否已有部分更改，再次选择“以 sudo”进行认证。此任务不会自动重试。"
+    },
+    {
+      "pattern": "^Proxies were imported, but migration metadata could not be saved: ([\\s\\S]*?)\\. Original metadata is preserved; refresh to retry\\.$",
+      "replacement": "代理已导入，但无法保存迁移元数据：{1}。已保留原元数据，请刷新后重试。"
+    },
+    {
+      "pattern": "^Workspace references were updated, but deletion cleanup could not be acknowledged: ([\\s\\S]*?)\\. Refresh to retry\\.$",
+      "replacement": "工作区引用已更新，但无法确认删除清理完成：{1}。请刷新后重试。"
+    },
+    {
+      "pattern": "^([\\s\\S]*?) active port forward\\(s\\) will stop\\. Running terminal sessions and SFTP work will also be disconnected\\.$",
+      "replacement": "将停止 {1} 个活动端口转发，同时断开运行中的终端会话和 SFTP 任务。"
+    },
+    {
+      "pattern": "^Proxy deletion completed, but workspace references could not be saved: ([\\s\\S]*?)\\. Refresh to retry\\.$",
+      "replacement": "代理已删除，但无法保存工作区引用：{1}。请刷新后重试。"
+    },
+    {
+      "pattern": "^Restore version (.+) from (.+)\\? This makes it current in the cloud and replaces local synced data\\.$",
+      "replacement": "要从 {2} 恢复版本 {1} 吗？该版本将成为云端当前版本，并替换本地同步数据。"
+    },
+    {
+      "pattern": "^([\\s\\S]*?)\\. Check the task queue before submitting again; some items may already have been queued\\.$",
+      "replacement": "{1}。再次提交前请检查任务队列，部分项目可能已加入队列。"
+    },
+    {
+      "pattern": "^The transfer completed but verification failed: ([\\s\\S]*?)\\. Check the destination before retrying\\.$",
+      "replacement": "传输已完成但验证失败：{1}。重试前请检查目标。"
+    },
+    {
+      "pattern": "^([\\s\\S]*?) Check the task queue before trying again; some downloads may already have been queued\\.$",
+      "replacement": "{1} 重试前请检查任务队列，部分下载可能已加入队列。"
+    },
+    {
+      "pattern": "^The import contains ([\\s\\S]*?) invalid or unsupported known-host entries\\. Nothing was imported\\.$",
+      "replacement": "导入内容包含 {1} 条无效或不支持的已知主机记录，未导入任何内容。"
+    },
+    {
+      "pattern": "^([\\s\\S]*?)\\. Some new proxy copies could not be rolled back; refresh the list before retrying\\.$",
+      "replacement": "{1}。部分新建代理副本无法回滚，请刷新列表后再重试。"
+    },
+    {
+      "pattern": "^([\\s\\S]*?)\\. Some copies could not be rolled back; refresh the keychain before retrying\\.$",
+      "replacement": "{1}。部分副本无法回滚，请刷新密钥链后再重试。"
+    },
+    {
+      "pattern": "^Could not consume recovery: ([\\s\\S]*?)\\. Restoring the previous metadata also failed: ([\\s\\S]*?)$",
+      "replacement": "无法应用恢复状态：{1}。恢复先前的元数据也失败：{2}"
+    },
+    {
+      "pattern": "^Key export stopped after creating ([\\s\\S]*?)\\. The remaining files were not published\\.$",
+      "replacement": "创建 {1} 后密钥导出已停止，其余文件未发布。"
+    },
+    {
+      "pattern": "^Workspace recovery is unavailable; the original file was preserved: ([\\s\\S]*?)$",
+      "replacement": "工作区恢复不可用，已保留原文件：{1}"
+    },
+    {
+      "pattern": "^Imported ([0-9]+) Hosts and ([\\s\\S]*?) keys\\. ([\\s\\S]*?) duplicate Hosts skipped; ([\\s\\S]*?) keys reused\\.([\\s\\S]*?)$",
+      "replacement": "已导入 {1} 个主机和 {2} 个密钥，跳过 {2} 个重复主机，复用 {2} 个密钥。{5}"
+    },
+    {
+      "pattern": "^Settings were saved, but a running terminal could not apply them: ([\\s\\S]*?)$",
+      "replacement": "设置已保存，但某个运行中的终端无法应用：{1}"
+    },
+    {
+      "pattern": "^AI provider returned HTTP ([\\s\\S]*?)\\. Check the endpoint, model and API key\\.$",
+      "replacement": "AI 提供商返回 HTTP {1}，请检查端点、模型和 API 密钥。"
+    },
+    {
+      "pattern": "^The provider returned an invalid authorization response \\(HTTP ([\\s\\S]*?)\\)\\.$",
+      "replacement": "提供商返回了无效的授权响应（HTTP {1}）。"
+    },
+    {
+      "pattern": "^Skipped ([0-9]+) saved forwarding rule\\(s\\) that are no longer available\\.$",
+      "replacement": "已跳过 {1} 条不可用的已保存转发规则。"
+    },
+    {
+      "pattern": "^SSH keepalive must be a whole number of seconds between 0 and ([\\s\\S]*?)\\.$",
+      "replacement": "SSH 保活间隔必须是介于 0 和 {1} 之间的整数秒数。"
+    },
+    {
+      "pattern": "^([\\s\\S]*?) The previous destination is preserved in ([\\s\\S]*?) \\(restore failed: ([\\s\\S]*?)\\)\\.$",
+      "replacement": "{1} 原目标已保留在 {2}（恢复失败：{3}）。"
+    },
+    {
+      "pattern": "^Could not save settings: ([\\s\\S]*?)\\. Running sessions were not changed\\.$",
+      "replacement": "无法保存设置：{1}。运行中的会话未更改。"
+    },
+    {
+      "pattern": "^Close \"([\\s\\S]*?)\" and its ([0-9]+) ([\\s\\S]*?)\\? Running sessions will be disconnected\\.$",
+      "replacement": "关闭“{1}”及其 {2} 个{3}？运行中的会话将断开。"
+    },
+    {
+      "pattern": "^Proxy reference cleanup failed: ([\\s\\S]*?)\\. Open Proxies and retry\\.$",
+      "replacement": "代理引用清理失败：{1}。请打开代理页面后重试。"
+    },
+    {
+      "pattern": "^Recording settings were saved, but could not be applied: ([\\s\\S]*?)$",
+      "replacement": "录屏设置已保存，但无法应用：{1}"
+    },
+    {
+      "pattern": "^([\\s\\S]*?): Authentication renewed; checking changes before saving\\.$",
+      "replacement": "{1}：认证已更新，正在检查更改后再保存。"
+    },
+    {
+      "pattern": "^Settings updated; encrypted environment cleanup failed: ([\\s\\S]*?)$",
+      "replacement": "设置已更新，但清理加密环境变量失败：{1}"
+    },
+    {
+      "pattern": "^Scrollback lines must be a whole number between 0 and ([\\s\\S]*?)\\.$",
+      "replacement": "回滚行数必须是介于 0 和 {1} 之间的整数。"
+    },
+    {
+      "pattern": "^Unable to detect editors: ([\\s\\S]*?)\\. The saved editor was kept\\.$",
+      "replacement": "无法检测编辑器：{1}。已保留保存的编辑器。"
+    },
+    {
+      "pattern": "^Enter this code on GitHub\\. It expires after ([\\s\\S]*?) minutes\\.$",
+      "replacement": "请在 GitHub 上输入此代码，代码将在 {1} 分钟后过期。"
+    },
+    {
+      "pattern": "^Settings updated; encrypted password cleanup failed: ([\\s\\S]*?)$",
+      "replacement": "设置已更新，但清理加密密码失败：{1}"
+    },
+    {
+      "pattern": "^Enter this code on GitHub\\. It expires after (\\d+) minutes\\.$",
+      "replacement": "请在 GitHub 上输入此代码，代码将在 {1} 分钟后过期。"
+    },
+    {
+      "pattern": "^Sync key cache cleared\\. Could not refresh status: ([\\s\\S]*?)$",
+      "replacement": "同步密钥缓存已清除，但无法刷新状态：{1}"
+    },
+    {
+      "pattern": "^Proxy saved, but the list could not be refreshed: ([\\s\\S]*?)$",
+      "replacement": "代理已保存，但无法刷新列表：{1}"
     },
     {
       "pattern": "^Delete \"(.+)\"\\? Hosts in this group will be ungrouped\\.$",
       "replacement": "删除“{1}”？此分组中的主机将变为未分组。"
     },
     {
-      "pattern": "^Remove (.+)$",
-      "replacement": "移除{1}"
+      "pattern": "^([\\s\\S]*?) unrecognized line\\(s\\) are preserved in the file\\.$",
+      "replacement": "文件中保留了 {1} 行无法识别的内容。"
     },
     {
-      "pattern": "^Clear (.+)$",
-      "replacement": "清除{1}"
+      "pattern": "^Unable to configure nested shell integration: ([\\s\\S]*?)$",
+      "replacement": "无法配置嵌套 Shell 集成：{1}"
     },
     {
-      "pattern": "^Connecting to (.+)\\.\\.\\.$",
-      "replacement": "正在连接到 {1}…"
+      "pattern": "^Unable to read the edited file: ([\\s\\S]*?)\\. Local copy: ([\\s\\S]*?)$",
+      "replacement": "无法读取编辑后的文件：{1}。本地副本：{2}"
     },
     {
-      "pattern": "^Connected to (.+)\\.$",
-      "replacement": "已连接到 {1}。"
+      "pattern": "^Could not save the workspace before closing: ([\\s\\S]*?)$",
+      "replacement": "关闭前无法保存工作区：{1}"
     },
     {
-      "pattern": "^Opening (.+)\\.\\.\\.$",
-      "replacement": "正在打开 {1}…"
+      "pattern": "^Could not refresh data after automatic sync: ([\\s\\S]*?)$",
+      "replacement": "自动同步后无法刷新数据：{1}"
     },
     {
-      "pattern": "^Retrying (.+)\\.$",
-      "replacement": "正在重试 {1}。"
+      "pattern": "^Update check failed \\(HTTP ([\\s\\S]*?)\\)\\. Try again later\\.$",
+      "replacement": "检查更新失败（HTTP {1}），请稍后重试。"
     },
     {
-      "pattern": "^Sort by (.+)$",
-      "replacement": "按{1}排序"
+      "pattern": "^Could not open the verified update package: ([\\s\\S]*?)$",
+      "replacement": "无法打开验证通过的更新包：{1}"
     },
     {
-      "pattern": "^Sort: (.+)$",
-      "replacement": "排序：{1}"
+      "pattern": "^([\\s\\S]*?) unreadable or oversized files were skipped\\.$",
+      "replacement": "已跳过 {1} 个无法读取或过大的文件。"
     },
     {
-      "pattern": "^(.+) license notices$",
-      "replacement": "{1} 条许可声明"
+      "pattern": "^Could not save workspace recovery on exit: ([\\s\\S]*?)$",
+      "replacement": "退出时无法保存工作区恢复状态：{1}"
     },
     {
-      "pattern": "^(.+) active$",
-      "replacement": "{1} 个活动连接"
+      "pattern": "^Baud rate must be a positive number up to ([\\s\\S]*?)\\.$",
+      "replacement": "波特率必须是正数且不超过 {1}。"
     },
     {
-      "pattern": "^(.+) \\(default\\)$",
-      "replacement": "{1}（默认）"
+      "pattern": "^ ([\\s\\S]*?) Host key references remain unconfigured\\.$",
+      "replacement": " 仍有 {1} 个主机密钥引用未配置。"
     },
     {
-      "pattern": "^(.+) ms$",
-      "replacement": "{1} 毫秒"
+      "pattern": "^Some terminal themes could not be loaded: ([\\s\\S]*?)$",
+      "replacement": "部分终端主题无法加载：{1}"
     },
     {
-      "pattern": "^Import (.+)$",
-      "replacement": "导入 {1}"
+      "pattern": "^Could not initialize workspace recovery: ([\\s\\S]*?)$",
+      "replacement": "无法初始化工作区恢复：{1}"
     },
     {
-      "pattern": "^Open in (.+) Workspace$",
-      "replacement": "在 {1} 工作区中打开"
+      "pattern": "^([\\s\\S]*?) ([\\s\\S]*?)\\? ([\\s\\S]*?) Remote backup files will be retained\\.$",
+      "replacement": "{1} {2}？{3} 远程备份文件会保留。"
     },
     {
-      "pattern": "^SFTP (.+)$",
-      "replacement": "SFTP {1}"
+      "pattern": "^Could not load bundled terminal symbols: ([\\s\\S]*?)$",
+      "replacement": "无法加载内置终端符号：{1}"
     },
     {
-      "pattern": "^Available on (.+)$",
-      "replacement": "可用于 {1}"
+      "pattern": "^Operation completed, but refresh failed: ([\\s\\S]*?)$",
+      "replacement": "操作已完成，但刷新失败：{1}"
+    },
+    {
+      "pattern": "^([\\s\\S]*?) is not a supported image or text file\\.$",
+      "replacement": "{1} 不是支持的图片或文本文件。"
+    },
+    {
+      "pattern": "^([\\s\\S]*?) grew beyond its attachment size limit\\.$",
+      "replacement": "{1} 的大小增长至超过附件限制。"
+    },
+    {
+      "pattern": "^Could not finalize workspace recovery: ([\\s\\S]*?)$",
+      "replacement": "无法完成工作区恢复状态的保存：{1}"
+    },
+    {
+      "pattern": "^Unsupported workspace metadata version ([\\s\\S]*?)$",
+      "replacement": "不支持工作区元数据版本 {1}"
+    },
+    {
+      "pattern": "^([\\s\\S]*?): Unable to open external application: ([\\s\\S]*?)$",
+      "replacement": "{1}：无法打开外部应用：{2}"
+    },
+    {
+      "pattern": "^Could not prepare workspace recovery: ([\\s\\S]*?)$",
+      "replacement": "无法准备工作区恢复：{1}"
+    },
+    {
+      "pattern": "^Could not download AI presets \\(HTTP ([\\s\\S]*?)\\)\\.$",
+      "replacement": "无法下载 AI 预设（HTTP {1}）。"
+    },
+    {
+      "pattern": "^Could not save connection settings: ([\\s\\S]*?)$",
+      "replacement": "无法保存连接设置：{1}"
+    },
+    {
+      "pattern": "^Unable to snapshot the edited file: ([\\s\\S]*?)$",
+      "replacement": "无法为编辑后的文件创建快照：{1}"
+    },
+    {
+      "pattern": "^Unable to enumerate serial devices: ([\\s\\S]*?)$",
+      "replacement": "无法枚举串口设备：{1}"
+    },
+    {
+      "pattern": "^([\\s\\S]*?) · revision ([\\s\\S]*?) · imported ([\\s\\S]*?) · ([\\s\\S]*?) records\\.$",
+      "replacement": "{1} · 修订 {2} · 导入 {2} · {2} 条记录。"
+    },
+    {
+      "pattern": "^Delete \"([\\s\\S]*?)\" from conversation history\\?$",
+      "replacement": "从对话历史中删除“{1}”？"
+    },
+    {
+      "pattern": "^Delete \"(.+)\" from conversation history\\?$",
+      "replacement": "从对话历史中删除“{1}”？"
+    },
+    {
+      "pattern": "^Unable to open recording location: ([\\s\\S]*?)$",
+      "replacement": "无法打开录屏位置：{1}"
+    },
+    {
+      "pattern": "^Could not save workspace recovery: ([\\s\\S]*?)$",
+      "replacement": "无法保存工作区恢复状态：{1}"
+    },
+    {
+      "pattern": "^Forwarding rule #([\\s\\S]*?) no longer exists\\.$",
+      "replacement": "转发规则 #{1} 已不存在。"
+    },
+    {
+      "pattern": "^Could not delete forwarding rules: ([\\s\\S]*?)$",
+      "replacement": "无法删除转发规则：{1}"
+    },
+    {
+      "pattern": "^This operation runs with sudo on ([\\s\\S]*?)@([\\s\\S]*?)\\.$",
+      "replacement": "此操作在 {1}@{2} 上以 sudo 执行。"
+    },
+    {
+      "pattern": "^([\\s\\S]*?); encrypted draft cleanup failed: ([\\s\\S]*?)$",
+      "replacement": "{1}；清理加密草稿失败：{2}"
+    },
+    {
+      "pattern": "^Could not refresh terminal theme: ([\\s\\S]*?)$",
+      "replacement": "无法刷新终端主题：{1}"
+    },
+    {
+      "pattern": "^Cannot bind native menu shortcut: ([\\s\\S]*?)$",
+      "replacement": "无法绑定原生菜单快捷键：{1}"
+    },
+    {
+      "pattern": "^([\\s\\S]*?); restoring metadata also failed: ([\\s\\S]*?)$",
+      "replacement": "{1}；恢复元数据也失败：{2}"
+    },
+    {
+      "pattern": "^Could not load default settings: ([\\s\\S]*?)$",
+      "replacement": "无法加载默认设置：{1}"
+    },
+    {
+      "pattern": "^Encrypted import cleanup failed: ([\\s\\S]*?)$",
+      "replacement": "清理加密导入数据失败：{1}"
+    },
+    {
+      "pattern": "^Unable to replay this recording: ([\\s\\S]*?)$",
+      "replacement": "无法回放此录屏：{1}"
+    },
+    {
+      "pattern": "^Cannot read default window size: ([\\s\\S]*?)$",
+      "replacement": "无法读取默认窗口尺寸：{1}"
+    },
+    {
+      "pattern": "^Invalid or duplicate metadata id ([\\s\\S]*?)$",
+      "replacement": "元数据 ID {1} 无效或重复"
+    },
+    {
+      "pattern": "^Could not start session history: ([\\s\\S]*?)$",
+      "replacement": "无法启动会话历史记录：{1}"
+    },
+    {
+      "pattern": "^Unsaved remote edits retained at ([\\s\\S]*?)$",
+      "replacement": "未保存的远程编辑保留在 {1}"
+    },
+    {
+      "pattern": "^Delete \"(.+)\"\\? This cannot be undone\\.$",
+      "replacement": "删除“{1}”？此操作无法撤销。"
+    },
+    {
+      "pattern": "^Delete \"([\\s\\S]*?)\" and its saved API key\\?$",
+      "replacement": "删除“{1}”及其保存的 API 密钥？"
+    },
+    {
+      "pattern": "^([\\s\\S]*?) Could not refresh sync status: ([\\s\\S]*?)$",
+      "replacement": "{1} 无法刷新同步状态：{2}"
+    },
+    {
+      "pattern": "^Could not save forwarding rule: ([\\s\\S]*?)$",
+      "replacement": "无法保存转发规则：{1}"
+    },
+    {
+      "pattern": "^Could not save AI conversation: ([\\s\\S]*?)$",
+      "replacement": "无法保存 AI 对话：{1}"
+    },
+    {
+      "pattern": "^Could not finish shutting down ([\\s\\S]*?)\\.$",
+      "replacement": "无法完成 {1} 的关闭。"
+    },
+    {
+      "pattern": "^Skipped ([\\s\\S]*?) unavailable file paths\\.$",
+      "replacement": "已跳过 {1} 个不可用的文件路径。"
+    },
+    {
+      "pattern": "^Capture cleanup was refused \\(([\\s\\S]*?)\\): ([\\s\\S]*?)$",
+      "replacement": "清理录制被拒绝（{1}）：{2}"
+    },
+    {
+      "pattern": "^Could not refresh sync status: ([\\s\\S]*?)$",
+      "replacement": "无法刷新同步状态：{1}"
+    },
+    {
+      "pattern": "^([\\s\\S]*?) Refreshing saved data failed: ([\\s\\S]*?)$",
+      "replacement": "{1} 刷新保存的数据失败：{2}"
+    },
+    {
+      "pattern": "^Could not save terminal theme: ([\\s\\S]*?)$",
+      "replacement": "无法保存终端主题：{1}"
+    },
+    {
+      "pattern": "^Update download failed \\(HTTP ([\\s\\S]*?)\\)\\.$",
+      "replacement": "更新下载失败（HTTP {1}）。"
+    },
+    {
+      "pattern": "^([\\s\\S]*?) exceeds the 512 KB text limit\\.$",
+      "replacement": "{1} 超过文本大小上限 512 KB。"
+    },
+    {
+      "pattern": "^Set environment variables for ([\\s\\S]*?)\\.$",
+      "replacement": "为 {1} 设置环境变量。"
     },
     {
       "pattern": "^Set environment variables for (.+)\\.$",
       "replacement": "为 {1} 设置环境变量。"
     },
     {
+      "pattern": "^Could not reload key details: ([\\s\\S]*?)$",
+      "replacement": "无法重新加载密钥详情：{1}"
+    },
+    {
+      "pattern": "^Could not save terminal font: ([\\s\\S]*?)$",
+      "replacement": "无法保存终端字体：{1}"
+    },
+    {
+      "pattern": "^([\\s\\S]*?) exceeds the 5 MB image limit\\.$",
+      "replacement": "{1} 超过图片大小上限 5 MB。"
+    },
+    {
+      "pattern": "^Could not save shell history: ([\\s\\S]*?)$",
+      "replacement": "无法保存命令历史：{1}"
+    },
+    {
+      "pattern": "^Unable to save: ([\\s\\S]*?)\\. Local copy: ([\\s\\S]*?)$",
+      "replacement": "无法保存：{1}。本地副本：{2}"
+    },
+    {
+      "pattern": "^Unsaved edits are retained in ([\\s\\S]*?)$",
+      "replacement": "未保存的编辑保留在 {1}"
+    },
+    {
+      "pattern": "^Session history unavailable: ([\\s\\S]*?)$",
+      "replacement": "会话历史不可用：{1}"
+    },
+    {
+      "pattern": "^Authorization failed \\(HTTP ([\\s\\S]*?)\\)\\.$",
+      "replacement": "授权失败（HTTP {1}）。"
+    },
+    {
+      "pattern": "^Could not refresh keychain: ([\\s\\S]*?)$",
+      "replacement": "无法刷新密钥链：{1}"
+    },
+    {
+      "pattern": "^Unable to open remote file: ([\\s\\S]*?)$",
+      "replacement": "无法打开远程文件：{1}"
+    },
+    {
+      "pattern": "^Output capture unavailable: ([\\s\\S]*?)$",
+      "replacement": "输出录制不可用：{1}"
+    },
+    {
+      "pattern": "^Finalizing session history: ([\\s\\S]*?)$",
+      "replacement": "完成会话历史记录：{1}"
+    },
+    {
+      "pattern": "^Unavailable terminal theme: ([\\s\\S]*?)$",
+      "replacement": "终端主题不可用：{1}"
+    },
+    {
+      "pattern": "^Cannot initialize Sparkle: ([\\s\\S]*?)$",
+      "replacement": "无法初始化 Sparkle：{1}"
+    },
+    {
+      "pattern": "^Forwarding cleanup failed: ([\\s\\S]*?)$",
+      "replacement": "清理转发失败：{1}"
+    },
+    {
+      "pattern": "^Unable to open SSH editor: ([\\s\\S]*?)$",
+      "replacement": "无法打开 SSH 编辑器：{1}"
+    },
+    {
+      "pattern": "^Capture cleanup failed \\(([\\s\\S]*?)\\): ([\\s\\S]*?)$",
+      "replacement": "清理录制失败（{1}）：{2}"
+    },
+    {
+      "pattern": "^Delete \"(.+)\" from known hosts\\?$",
+      "replacement": "从已知主机中删除“{1}”？"
+    },
+    {
+      "pattern": "^Could not load more logs: ([\\s\\S]*?)$",
+      "replacement": "无法加载更多日志：{1}"
+    },
+    {
+      "pattern": "^Could not open settings: ([\\s\\S]*?)$",
+      "replacement": "无法打开设置：{1}"
+    },
+    {
+      "pattern": "^Delete ([\\s\\S]*?) selected item\\(s\\)\\?$",
+      "replacement": "删除所选的 {1} 个项目？"
+    },
+    {
+      "pattern": "^Recording storage usage: ([\\s\\S]*?)$",
+      "replacement": "录屏存储用量：{1}"
+    },
+    {
+      "pattern": "^Delete ([\\s\\S]*?) finished log\\(s\\)\\?$",
+      "replacement": "删除 {1} 条已结束的会话日志？"
+    },
+    {
+      "pattern": "^Open recording location ([\\s\\S]*?)$",
+      "replacement": "打开录屏位置 {1}"
+    },
+    {
+      "pattern": "^Unable to choose files: ([\\s\\S]*?)$",
+      "replacement": "无法选择文件：{1}"
+    },
+    {
+      "pattern": "^Invalid config value at ([\\s\\S]*?)$",
+      "replacement": "{1} 处的配置值无效"
+    },
+    {
+      "pattern": "^Saving session history: ([\\s\\S]*?)$",
+      "replacement": "保存会话历史：{1}"
+    },
+    {
+      "pattern": "^Automatic sync failed: ([\\s\\S]*?)$",
+      "replacement": "自动同步失败：{1}"
+    },
+    {
+      "pattern": "^([\\s\\S]*?) · Credentials required$",
+      "replacement": "{1} · 需要凭据"
+    },
+    {
+      "pattern": "^Unavailable snippet \\(#([\\s\\S]*?)\\)$",
+      "replacement": "命令片段不可用（#{1}）"
+    },
+    {
+      "pattern": "^Exported ([0-9]+) hosts to CSV\\.$",
+      "replacement": "已将 {1} 个主机导出为 CSV。"
+    },
+    {
+      "pattern": "^Cannot open directory: ([\\s\\S]*?)$",
+      "replacement": "无法打开目录：{1}"
+    },
+    {
+      "pattern": "^Cannot read directory: ([\\s\\S]*?)$",
+      "replacement": "无法读取目录：{1}"
+    },
+    {
+      "pattern": "^CONNECTED PROVIDERS · ([\\s\\S]*?)$",
+      "replacement": "已连接的提供商 · {1}"
+    },
+    {
+      "pattern": "^Unsupported protocol: ([\\s\\S]*?)$",
+      "replacement": "不支持的协议：{1}"
+    },
+    {
+      "pattern": "^Unable to import key: ([\\s\\S]*?)$",
+      "replacement": "无法导入密钥：{1}"
+    },
+    {
+      "pattern": "^Delete ([\\s\\S]*?) known host\\(s\\)\\?$",
+      "replacement": "删除 {1} 个已知主机？"
+    },
+    {
+      "pattern": "^Delete ([\\s\\S]*?) proxy/proxies\\?$",
+      "replacement": "删除 {1} 个代理？"
+    },
+    {
+      "pattern": "^Failed to export key: ([\\s\\S]*?)$",
+      "replacement": "导出密钥失败：{1}"
+    },
+    {
+      "pattern": "^Capture finalization: ([\\s\\S]*?)$",
+      "replacement": "完成录制：{1}"
+    },
+    {
+      "pattern": "^Could not duplicate: ([\\s\\S]*?)$",
+      "replacement": "无法创建副本：{1}"
+    },
+    {
+      "pattern": "^Recording retention: ([\\s\\S]*?)$",
+      "replacement": "录屏保留：{1}"
+    },
+    {
+      "pattern": "^Unable to open file: ([\\s\\S]*?)$",
+      "replacement": "无法打开文件：{1}"
+    },
+    {
+      "pattern": "^Host export failed: ([\\s\\S]*?)$",
+      "replacement": "主机导出失败：{1}"
+    },
+    {
+      "pattern": "^Invalid remote host ([\\s\\S]*?)$",
+      "replacement": "远程主机 {1} 无效"
+    },
+    {
+      "pattern": "^Recording recovery: ([\\s\\S]*?)$",
+      "replacement": "录屏恢复：{1}"
+    },
+    {
+      "pattern": "^Could not recover ([\\s\\S]*?): ([\\s\\S]*?)$",
+      "replacement": "无法恢复 {1}：{2}"
+    },
+    {
+      "pattern": "^Unable to download: ([\\s\\S]*?)$",
+      "replacement": "无法下载：{1}"
+    },
+    {
+      "pattern": "^Reconnecting in ([\\s\\S]*?)s\\.\\.\\.$",
+      "replacement": "将在 {1} 秒后重新连接…"
+    },
+    {
+      "pattern": "^Connect to ([\\s\\S]*?) with SSH$",
+      "replacement": "使用 SSH 连接到 {1}"
+    },
+    {
+      "pattern": "^Capture checkpoint: ([\\s\\S]*?)$",
+      "replacement": "保存录制检查点：{1}"
+    },
+    {
+      "pattern": "^Unavailable host \\(([\\s\\S]*?)\\)$",
+      "replacement": "主机不可用（{1}）"
+    },
+    {
+      "pattern": "^Exported ([\\s\\S]*?) key ([\\s\\S]*?) to ([\\s\\S]*?)\\.$",
+      "replacement": "已将 {1} 密钥 {2} 导出到 {3}。"
+    },
+    {
+      "pattern": "^Recording cleanup: ([\\s\\S]*?)$",
+      "replacement": "录屏清理：{1}"
+    },
+    {
+      "pattern": "^Could not delete: ([\\s\\S]*?)$",
+      "replacement": "无法删除：{1}"
+    },
+    {
+      "pattern": "^Capture storage  ([\\s\\S]*?)$",
+      "replacement": "录屏存储  {1}"
+    },
+    {
+      "pattern": "^Connecting to (.+)\\.\\.\\.$",
+      "replacement": "正在连接到 {1}…"
+    },
+    {
+      "pattern": "^([\\s\\S]*?) SSH Certificate$",
+      "replacement": "{1} SSH 证书"
+    },
+    {
+      "pattern": "^Deleted ([0-9]+) log\\(s\\)\\.$",
+      "replacement": "已删除 {1} 条日志。"
+    },
+    {
+      "pattern": "^Change ([\\s\\S]*?) shortcut$",
+      "replacement": "更改{1}快捷键"
+    },
+    {
+      "pattern": "^Could not save: ([\\s\\S]*?)$",
+      "replacement": "无法保存：{1}"
+    },
+    {
+      "pattern": "^Unavailable ([\\s\\S]*?) \\(#([\\s\\S]*?)\\)$",
+      "replacement": "{1} 不可用（#{2}）"
+    },
+    {
+      "pattern": "^Session status: ([\\s\\S]*?)$",
+      "replacement": "会话状态：{1}"
+    },
+    {
+      "pattern": "^Could not open ([\\s\\S]*?)\\.$",
+      "replacement": "无法打开 {1}。"
+    },
+    {
+      "pattern": "^Terminal theme: ([\\s\\S]*?)$",
+      "replacement": "终端主题：{1}"
+    },
+    {
+      "pattern": "^(.+) license notices$",
+      "replacement": "{1} 条许可声明"
+    },
+    {
+      "pattern": "^Authorized as @(.+)\\.$",
+      "replacement": "已授权账号：@{1}。"
+    },
+    {
+      "pattern": "^Search results: (.+)$",
+      "replacement": "搜索结果：{1}"
+    },
+    {
+      "pattern": "^Local Terminal ([\\s\\S]*?)$",
+      "replacement": "本地终端 {1}"
+    },
+    {
+      "pattern": "^Terminal pane ([\\s\\S]*?)$",
+      "replacement": "终端窗格 {1}"
+    },
+    {
+      "pattern": "^Workspace ([\\s\\S]*?) — ([0-9]+) ([\\s\\S]*?)$",
+      "replacement": "工作区 {1} — {2} {3}"
+    },
+    {
+      "pattern": "^([\\s\\S]*?) baud, ([\\s\\S]*?)([\\s\\S]*?)([\\s\\S]*?), flow ([\\s\\S]*?)$",
+      "replacement": "{1} 波特，{2}{3}{4}，流控制 {5}"
+    },
+    {
+      "pattern": "^Save paused · ([\\s\\S]*?)$",
+      "replacement": "保存已暂停 · {1}"
+    },
+    {
+      "pattern": "^Connected to (.+)\\.$",
+      "replacement": "已连接到 {1}。"
+    },
+    {
+      "pattern": "^Search error: (.+)$",
+      "replacement": "搜索错误：{1}"
+    },
+    {
+      "pattern": "^Session log: ([\\s\\S]*?)$",
+      "replacement": "会话日志：{1}"
+    },
+    {
+      "pattern": "^([\\s\\S]*?)\nLocal copy: ([\\s\\S]*?)$",
+      "replacement": "{1}\n本地副本：{2}"
+    },
+    {
+      "pattern": "^Available on ([\\s\\S]*?)$",
+      "replacement": "可用于 {1}"
+    },
+    {
+      "pattern": "^Available on (.+)$",
+      "replacement": "可用于 {1}"
+    },
+    {
+      "pattern": "^Cannot read ([\\s\\S]*?)$",
+      "replacement": "无法读取 {1}"
+    },
+    {
+      "pattern": "^Keep remote ([\\s\\S]*?)$",
+      "replacement": "保留远程 {1}"
+    },
+    {
+      "pattern": "^([\\s\\S]*?) \\(redacted\\)$",
+      "replacement": "{1}（已隐去）"
+    },
+    {
+      "pattern": "^Directory: ([\\s\\S]*?)$",
+      "replacement": "目录：{1}"
+    },
+    {
+      "pattern": "^New Folder ([0-9]+)$",
+      "replacement": "新建文件夹 {1}"
+    },
+    {
+      "pattern": "^Select Tab ([\\s\\S]*?)$",
+      "replacement": "选择标签 {1}"
+    },
+    {
+      "pattern": "^Connect to ([\\s\\S]*?)$",
+      "replacement": "连接到 {1}"
+    },
+    {
+      "pattern": "^Keep both: ([\\s\\S]*?)$",
+      "replacement": "保留两者：{1}"
+    },
+    {
+      "pattern": "^Create tag ([\\s\\S]*?)$",
+      "replacement": "创建标签 {1}"
+    },
+    {
+      "pattern": "^Opening (.+)\\.\\.\\.$",
+      "replacement": "正在打开 {1}…"
+    },
+    {
+      "pattern": "^Updated: ([\\s\\S]*?)\\.$",
+      "replacement": "已更新：{1}。"
+    },
+    {
+      "pattern": "^([\\s\\S]*?) with sudo$",
+      "replacement": "使用 sudo 的 {1}"
+    },
+    {
+      "pattern": "^Retrying (.+)\\.$",
+      "replacement": "正在重试 {1}。"
+    },
+    {
+      "pattern": "^(.+) \\(default\\)$",
+      "replacement": "{1}（默认）"
+    },
+    {
+      "pattern": "^Started: ([\\s\\S]*?)$",
+      "replacement": "开始：{1}"
+    },
+    {
+      "pattern": "^([\\s\\S]*?) Snippets$",
+      "replacement": "{1} 个命令片段"
+    },
+    {
+      "pattern": "^Close \"([\\s\\S]*?)\"\\?$",
+      "replacement": "关闭“{1}”？"
+    },
+    {
+      "pattern": "^([\\s\\S]*?) History$",
+      "replacement": "{1} 历史"
+    },
+    {
+      "pattern": "^Hosts \\(([\\s\\S]*?)\\)$",
+      "replacement": "主机（{1}）"
+    },
+    {
+      "pattern": "^Replay: ([\\s\\S]*?)$",
+      "replacement": "回放：{1}"
+    },
+    {
+      "pattern": "^Saving ([\\s\\S]*?)…$",
+      "replacement": "正在保存 {1}…"
+    },
+    {
+      "pattern": "^queued #([0-9]+)$",
+      "replacement": "已排队 #{1}"
+    },
+    {
+      "pattern": "^([\\s\\S]*?) free / ([\\s\\S]*?)$",
+      "replacement": "{1} 可用 / {2}"
+    },
+    {
+      "pattern": "^Sort by (.+)$",
+      "replacement": "按{1}排序"
+    },
+    {
       "pattern": "^(.+) actions$",
       "replacement": "{1} 操作"
+    },
+    {
+      "pattern": "^Exited ([\\s\\S]*?)$",
+      "replacement": "已退出，状态码 {1}"
+    },
+    {
+      "pattern": "^Select ([\\s\\S]*?)$",
+      "replacement": "选择 {1}"
+    },
+    {
+      "pattern": "^Ended: ([\\s\\S]*?)$",
+      "replacement": "结束：{1}"
+    },
+    {
+      "pattern": "^Window ([\\s\\S]*?)$",
+      "replacement": "窗口{1}"
+    },
+    {
+      "pattern": "^([\\s\\S]*?) ([\\s\\S]*?) color$",
+      "replacement": "{1} {2}颜色"
+    },
+    {
+      "pattern": "^Keys \\(([\\s\\S]*?)\\)$",
+      "replacement": "密钥（{1}）"
+    },
+    {
+      "pattern": "^([\\s\\S]*?) active$",
+      "replacement": "{1} 个活动连接"
+    },
+    {
+      "pattern": "^Remove (.+)$",
+      "replacement": "移除{1}"
+    },
+    {
+      "pattern": "^(.+) active$",
+      "replacement": "{1} 个活动连接"
+    },
+    {
+      "pattern": "^Import (.+)$",
+      "replacement": "导入 {1}"
+    },
+    {
+      "pattern": "^([\\s\\S]*?) items$",
+      "replacement": "{1} 项"
+    },
+    {
+      "pattern": "^([0-9]+) Hosts$",
+      "replacement": "{1} 个主机"
+    },
+    {
+      "pattern": "^Saved ([\\s\\S]*?)$",
+      "replacement": "已保存 {1}"
+    },
+    {
+      "pattern": "^From: ([\\s\\S]*?)$",
+      "replacement": "来源：{1}"
+    },
+    {
+      "pattern": "^([\\s\\S]*?) cores$",
+      "replacement": "{1} 核"
+    },
+    {
+      "pattern": "^Clear (.+)$",
+      "replacement": "清除{1}"
     },
     {
       "pattern": "^port: (.+)$",
       "replacement": "端口：{1}"
     },
     {
+      "pattern": "^([\\s\\S]*?) port$",
+      "replacement": "{1} 端口"
+    },
+    {
+      "pattern": "^([\\s\\S]*?) File$",
+      "replacement": "{1} 文件"
+    },
+    {
+      "pattern": "^Open ([\\s\\S]*?)$",
+      "replacement": "打开 {1}"
+    },
+    {
+      "pattern": "^Save ([\\s\\S]*?)$",
+      "replacement": "保存 {1}"
+    },
+    {
+      "pattern": "^load ([\\s\\S]*?)$",
+      "replacement": "负载 {1}"
+    },
+    {
+      "pattern": "^([\\s\\S]*?) days$",
+      "replacement": "{1} 天"
+    },
+    {
+      "pattern": "^([\\s\\S]*?)d ([\\s\\S]*?)h ([\\s\\S]*?)m$",
+      "replacement": "{1} 天 {2} 小时 {3} 分钟"
+    },
+    {
+      "pattern": "^SFTP (.+)$",
+      "replacement": "SFTP {1}"
+    },
+    {
       "pattern": "^(\\d+) days$",
       "replacement": "{1} 天"
+    },
+    {
+      "pattern": "^([\\s\\S]*?) key$",
+      "replacement": "{1} 密钥"
+    },
+    {
+      "pattern": "^via ([\\s\\S]*?)$",
+      "replacement": "通过 {1}"
+    },
+    {
+      "pattern": "^(.+) ms$",
+      "replacement": "{1} 毫秒"
     },
     {
       "pattern": "^(\\d+) MB$",

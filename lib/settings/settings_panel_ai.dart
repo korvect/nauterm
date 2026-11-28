@@ -7,6 +7,7 @@ const _aiProviderButtonShape = RoundedRectangleBorder(
 class _AiProvidersEditor extends StatelessWidget {
   const _AiProvidersEditor({
     required this.providers,
+    required this.providersLoading,
     required this.onProviderSelected,
     required this.onProviderAdded,
     required this.onProviderDeleted,
@@ -18,6 +19,7 @@ class _AiProvidersEditor extends StatelessWidget {
   });
 
   final List<AiProviderEntry> providers;
+  final bool providersLoading;
   final ValueChanged<int> onProviderSelected;
   final VoidCallback onProviderAdded;
   final ValueChanged<int> onProviderDeleted;
@@ -45,11 +47,15 @@ class _AiProvidersEditor extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.all(22),
                   child: Text(
-                    tr(
-                      'settings.ai.providers.empty',
-                      fallback:
-                          'No AI providers yet. Add one to use the assistant.',
-                    ),
+                    providersLoading
+                        ? context.tr(
+                            'settings.ai.providers.loading',
+                            fallback: 'Loading providers…',
+                          )
+                        : context.tr(
+                            'settings.ai.providers.empty',
+                            fallback: 'No AI providers yet. Add one to use the assistant.',
+                          ),
                     style: TextStyle(color: _mutedText, fontSize: 12),
                   ),
                 ),
@@ -70,7 +76,7 @@ class _AiProvidersEditor extends StatelessWidget {
                   children: [
                     TextButton.icon(
                       key: const ValueKey('settings-ai-add-provider'),
-                      onPressed: onProviderAdded,
+                      onPressed: providersLoading ? null : onProviderAdded,
                       icon: const Icon(LucideIcons.plus, size: 14),
                       label: Text(
                         tr(
@@ -475,7 +481,7 @@ class _AiProviderEditorState extends State<_AiProviderEditor> {
                 const SizedBox(height: 5),
                 _SettingsSelect(
                   key: const ValueKey('settings-ai-protocol-select'),
-                  label: 'Protocol',
+                  label: 'common.label.protocol',
                   showLabel: false,
                   value: _protocol.storageValue,
                   values: AiApiProtocol.values

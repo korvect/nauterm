@@ -65,9 +65,8 @@ class _KeychainPaneState extends State<_KeychainPane> {
       _sortOrder,
       ordinal: (identity) => identity.id,
     );
-    final hasStoredItems =
-        widget.keys.isNotEmpty || widget.identities.isNotEmpty;
-    final showEmptyState = !hasStoredItems && _searchQuery.trim().isEmpty;
+    final searching = _searchQuery.trim().isNotEmpty;
+    final showEmptyState = keys.isEmpty && identities.isEmpty;
     final sharedGridItemCount = math.max(keys.length, identities.length);
 
     return Column(
@@ -90,10 +89,12 @@ class _KeychainPaneState extends State<_KeychainPane> {
           child: showEmptyState
               ? _WorkspaceEmptyState(
                   icon: LucideIcons.key,
-                  title: 'No keychain items yet',
-                  description: 'Add keys and identities once, then reuse them across your saved hosts.',
-                  actionLabel: 'Add key',
-                  onAction: widget.onCreateKey,
+                  title: searching
+                      ? 'workspace.label.noKeychainItemsFound'
+                      : 'workspace.label.noKeychainItemsYet',
+                  description: 'workspace.empty.keychain.description',
+                  actionLabel: searching ? null : 'Add key',
+                  onAction: searching ? null : widget.onCreateKey,
                 )
               : _WorkspaceItemScrollView(
                   padding: _workspacePanePadding,
@@ -134,10 +135,6 @@ class _KeychainPaneState extends State<_KeychainPane> {
                           onContextActions: widget.onIdentityContextActions,
                         ),
                       ],
-                      if (keys.isEmpty && identities.isEmpty)
-                        const _WorkspaceInlineMessage(
-                          'No keychain items found.',
-                        ),
                     ],
                   ),
                 ),

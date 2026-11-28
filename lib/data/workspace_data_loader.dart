@@ -15,6 +15,32 @@ typedef WorkspaceDataLoader = Future<NautermWorkspaceData> Function(
   NautermRecordingConfig recording,
 );
 
+Future<HostEntry?> loadNautermHostDetails(String databasePath, int id) {
+  return Isolate.run(() {
+    final store = NautermDataStore.openPath(databasePath);
+    try {
+      return store.getHost(id);
+    } finally {
+      store.dispose();
+    }
+  });
+}
+
+Future<List<SftpFavoritePathEntry>> loadNautermRemoteSftpFavorites(
+  String databasePath,
+  int hostId,
+) => Isolate.run(() {
+  final store = NautermDataStore.openPath(databasePath);
+  try {
+    return store.listSftpFavoritePaths(
+      scope: SftpFavoriteScope.remote,
+      hostId: hostId,
+    );
+  } finally {
+    store.dispose();
+  }
+});
+
 /// Initial workspace data; database and capture handles remain in the worker.
 class NautermWorkspaceData {
   const NautermWorkspaceData({
@@ -66,8 +92,16 @@ Future<NautermWorkspaceData> loadNautermWorkspaceData(
     try {
       final captures = TerminalLogCaptureStore(Directory(capturesPath));
       await captures.prepare();
-      for (final log in store.listIncompleteTerminalCaptures()) {
+      for (final candidate in store.listIncompleteTerminalCaptures()) {
+        final lease = captures.tryAcquireLease(candidate.id);
+        if (lease == null) continue;
         try {
+          final log = store.getTerminalLog(candidate.id);
+          if (log == null ||
+              log.captureFile.isEmpty ||
+              log.captureSha256 != null) {
+            continue;
+          }
           if (!await captures.captureExists(log.captureFile)) {
             store.clearMissingTerminalCapture(log.id);
             continue;
@@ -89,20 +123,32 @@ Future<NautermWorkspaceData> loadNautermWorkspaceData(
             error: error,
             stackTrace: stackTrace,
           );
+        } finally {
+          lease.close();
         }
       }
-      await captures.cleanupOrphans(
-        store.listTerminalCaptureFiles().toSet(),
-        referencedStateFiles: store
-            .listIncompleteTerminalCaptures()
-            .map((log) => log.captureFile)
-            .toSet(),
-      );
+      await captures.cleanupOrphans((id) {
+        final log = store.getTerminalLog(id);
+        return log == null
+            ? null
+            : (file: log.captureFile, unfinished: log.captureSha256 == null);
+      });
       final retention = await applyTerminalRetentionPolicy(
         dataStore: store,
         captureStore: captures,
         config: recording,
       );
+      var shellHistory = const <ShellHistoryEntry>[];
+      try {
+        shellHistory = await ShellHistoryFileStore(File(historyPath)).read();
+      } on Object catch (error, stackTrace) {
+        NautermLog.warning(
+          'workspace',
+          'Unable to read shell history.',
+          error: error,
+          stackTrace: stackTrace,
+        );
+      }
       return NautermWorkspaceData(
         groups: store.listGroups(),
         hosts: store.listHosts(),
@@ -117,7 +163,7 @@ Future<NautermWorkspaceData> loadNautermWorkspaceData(
         terminalLogs: store.listTerminalLogs(
           limit: NautermWorkspaceData.logPageSize,
         ),
-        shellHistory: await ShellHistoryFileStore(File(historyPath)).read(),
+        shellHistory: shellHistory,
         knownHostsText: await KnownHostsStore(File(knownHostsPath)).readText(),
         captureDiskUsage: await captures.diskUsage(),
         deletedLogIds: retention.deletedLogIds,

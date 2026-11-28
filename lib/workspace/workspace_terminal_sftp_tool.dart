@@ -141,6 +141,7 @@ class _TerminalSftpPanelState extends ConsumerState<_TerminalSftpPanel> {
 class _TerminalSftpBrowser extends StatefulWidget {
   const _TerminalSftpBrowser({
     required this.colors,
+    this.operationBanner,
     required this.title,
     required this.path,
     required this.pathController,
@@ -163,6 +164,7 @@ class _TerminalSftpBrowser extends StatefulWidget {
     required this.taskListOpen,
     required this.favoriteListOpen,
     required this.favoritePaths,
+    this.favoritesStatus,
     required this.onHome,
     required this.onSshDirectory,
     required this.followSshDirectory,
@@ -181,6 +183,7 @@ class _TerminalSftpBrowser extends StatefulWidget {
     required this.onTaskDismiss,
     required this.onTaskCancel,
     required this.onTaskPauseToggle,
+    required this.canRetryTask,
     required this.onPanelsDismiss,
     required this.onPathFavoriteToggle,
     required this.onFavoriteListToggle,
@@ -190,6 +193,7 @@ class _TerminalSftpBrowser extends StatefulWidget {
   });
 
   final _AiAssistantColors colors;
+  final Widget? operationBanner;
   final String title;
   final String path;
   final TextEditingController pathController;
@@ -212,6 +216,7 @@ class _TerminalSftpBrowser extends StatefulWidget {
   final bool taskListOpen;
   final bool favoriteListOpen;
   final List<String> favoritePaths;
+  final Widget? favoritesStatus;
   final VoidCallback onHome;
   final VoidCallback? onSshDirectory;
   final bool followSshDirectory;
@@ -231,8 +236,9 @@ class _TerminalSftpBrowser extends StatefulWidget {
   final ValueChanged<int> onTaskDismiss;
   final ValueChanged<int> onTaskCancel;
   final ValueChanged<int> onTaskPauseToggle;
+  final bool Function(_SftpTask) canRetryTask;
   final VoidCallback onPanelsDismiss;
-  final VoidCallback onPathFavoriteToggle;
+  final VoidCallback? onPathFavoriteToggle;
   final VoidCallback onFavoriteListToggle;
   final ValueChanged<String> onFavoritePathSelected;
   final ValueChanged<_SftpSortColumn> onSortChanged;
@@ -448,7 +454,10 @@ class _TerminalSftpBrowserState extends State<_TerminalSftpBrowser> {
                     _TerminalSftpIconButton(
                       key: _sortKey,
                       tooltip: tr(
-                        'Sort by ${_terminalSftpSortLabel(widget.sortColumn)}',
+                        'sftp.tooltip.sort',
+                        args: {
+                          'column': _terminalSftpSortLabel(widget.sortColumn),
+                        },
                       ),
                       icon: widget.sortAscending
                           ? LucideIcons.arrowUpNarrowWide
@@ -495,7 +504,7 @@ class _TerminalSftpBrowserState extends State<_TerminalSftpBrowser> {
                         'sftp.action.goToSshDirectory',
                         fallback: 'Go to SSH current directory',
                       ),
-                      icon: LucideIcons.folderInput,
+                      icon: LucideIcons.locateFixed,
                       colors: colors,
                       onPressed: widget.loading ? null : widget.onSshDirectory,
                     ),
@@ -531,31 +540,60 @@ class _TerminalSftpBrowserState extends State<_TerminalSftpBrowser> {
                     Expanded(
                       child: widget.editingPath
                           ? Center(
-                              child: TextField(
-                                controller: widget.pathController,
-                                focusNode: widget.pathFocusNode,
-                                autofocus: true,
-                                maxLines: 1,
-                                textInputAction: TextInputAction.done,
-                                textAlignVertical: TextAlignVertical.center,
-                                onSubmitted: widget.onPathSubmitted,
-                                onTapOutside: (_) =>
-                                    widget.onPathEditCancelled(),
-                                style: TextStyle(
-                                  color: colors.foreground,
-                                  fontSize: 11.5,
-                                  fontFamily: 'monospace',
-                                  letterSpacing: 0,
+                              child: Semantics(
+                                label: tr(
+                                  'sftp.action.editPath',
+                                  fallback: 'Edit path',
                                 ),
-                                cursorColor: colors.accent,
-                                decoration: const InputDecoration(
-                                  isDense: true,
-                                  filled: false,
-                                  border: InputBorder.none,
-                                  enabledBorder: InputBorder.none,
-                                  focusedBorder: InputBorder.none,
-                                  contentPadding: EdgeInsets.symmetric(
-                                    vertical: 6,
+                                child: CallbackShortcuts(
+                                  bindings: {
+                                    const SingleActivator(
+                                      LogicalKeyboardKey.escape,
+                                    ): widget.onPathEditCancelled,
+                                  },
+                                  child: TextField(
+                                    key: const ValueKey('sftp-path-editor'),
+                                    controller: widget.pathController,
+                                    focusNode: widget.pathFocusNode,
+                                    autofocus: true,
+                                    maxLines: 1,
+                                    textInputAction: TextInputAction.done,
+                                    textAlignVertical: TextAlignVertical.center,
+                                    onSubmitted: widget.onPathSubmitted,
+                                    onTapOutside: (_) =>
+                                        widget.onPathEditCancelled(),
+                                    style: TextStyle(
+                                      color: colors.foreground,
+                                      fontSize: 11.5,
+                                      fontFamily: 'monospace',
+                                      letterSpacing: 0,
+                                    ),
+                                    cursorColor: colors.accent,
+                                    decoration: InputDecoration(
+                                      isDense: true,
+                                      filled: false,
+                                      border: InputBorder.none,
+                                      enabledBorder: InputBorder.none,
+                                      focusedBorder: InputBorder.none,
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                            vertical: 6,
+                                          ),
+                                      suffixIcon: _TerminalSftpIconButton(
+                                        tooltip: context.tr(
+                                          'sftp.action.cancelPathEditing',
+                                          fallback: 'Cancel path editing',
+                                        ),
+                                        icon: LucideIcons.x,
+                                        colors: colors,
+                                        onPressed: widget.onPathEditCancelled,
+                                      ),
+                                      suffixIconConstraints:
+                                          const BoxConstraints.tightFor(
+                                            width: 24,
+                                            height: 24,
+                                          ),
+                                    ),
                                   ),
                                 ),
                               ),
@@ -603,6 +641,7 @@ class _TerminalSftpBrowserState extends State<_TerminalSftpBrowser> {
                   ],
                 ),
               ),
+              ?widget.operationBanner,
               Expanded(
                 child: widget.loadError != null && widget.entries.isEmpty
                     ? _TerminalToolEmptyState(
@@ -685,6 +724,7 @@ class _TerminalSftpBrowserState extends State<_TerminalSftpBrowser> {
                 onDismiss: widget.onTaskDismiss,
                 onCancel: widget.onTaskCancel,
                 onPauseToggle: widget.onTaskPauseToggle,
+                canRetryTask: widget.canRetryTask,
               ),
             ),
           if (widget.favoriteListOpen)
@@ -695,6 +735,7 @@ class _TerminalSftpBrowserState extends State<_TerminalSftpBrowser> {
               child: _TerminalSftpFavoritesPanel(
                 colors: colors,
                 paths: widget.favoritePaths,
+                status: widget.favoritesStatus,
                 onSelected: widget.onFavoritePathSelected,
               ),
             ),
@@ -940,6 +981,7 @@ class _TerminalSftpTasksPanel extends StatelessWidget {
     required this.onDismiss,
     required this.onCancel,
     required this.onPauseToggle,
+    required this.canRetryTask,
   });
 
   final _AiAssistantColors colors;
@@ -948,6 +990,7 @@ class _TerminalSftpTasksPanel extends StatelessWidget {
   final ValueChanged<int> onDismiss;
   final ValueChanged<int> onCancel;
   final ValueChanged<int> onPauseToggle;
+  final bool Function(_SftpTask) canRetryTask;
 
   @override
   Widget build(BuildContext context) {
@@ -1011,6 +1054,10 @@ class _TerminalSftpTasksPanel extends StatelessWidget {
                     itemCount: ordered.length,
                     itemBuilder: (context, index) {
                       final task = ordered[index];
+                      final transferControl = _sftpTransferControl(
+                        task,
+                        canRetry: canRetryTask(task),
+                      );
                       final cancellable =
                           task.status == _SftpTaskStatus.queued ||
                           task.status == _SftpTaskStatus.running ||
@@ -1108,45 +1155,28 @@ class _TerminalSftpTasksPanel extends StatelessWidget {
                                   backgroundColor: colors.inputBackground,
                                 ),
                               ),
-                            if (_isPausableSftpTask(task) &&
-                                (task.status == _SftpTaskStatus.queued ||
-                                    task.status == _SftpTaskStatus.running ||
-                                    task.status == _SftpTaskStatus.paused))
+                            if (transferControl != null)
                               Positioned(
                                 right: 28,
                                 top: 8,
                                 child: _TerminalSftpIconButton(
-                                  tooltip: task.status == _SftpTaskStatus.paused
-                                      ? tr(
-                                          'common.action.continue',
-                                          fallback: 'Continue',
-                                        )
-                                      : tr(
-                                          'common.action.pause',
-                                          fallback: 'Pause',
-                                        ),
-                                  icon: task.status == _SftpTaskStatus.paused
-                                      ? LucideIcons.play
-                                      : LucideIcons.circlePause,
+                                  tooltip: transferControl.label,
+                                  icon: transferControl.icon,
                                   colors: colors,
-                                  onPressed:
-                                      task.pauseRequested ||
-                                          task.cancelRequested ||
-                                          (task.status !=
-                                                  _SftpTaskStatus.queued &&
-                                              task.status !=
-                                                  _SftpTaskStatus.running &&
-                                              task.status !=
-                                                  _SftpTaskStatus.paused)
-                                      ? null
-                                      : () => onPauseToggle(task.id),
+                                  onPressed: transferControl.enabled
+                                      ? () => onPauseToggle(task.id)
+                                      : null,
                                 ),
                               ),
                             Positioned(
                               right: 4,
                               top: 8,
                               child: _TerminalSftpIconButton(
-                                tooltip: cancellable ? 'Cancel' : 'Dismiss',
+                                tooltip: tr(
+                                  cancellable
+                                      ? 'sftp.label.cancelTask'
+                                      : 'sftp.label.deleteRecord',
+                                ),
                                 icon: LucideIcons.x,
                                 colors: colors,
                                 onPressed: cancellable && task.cancelRequested
@@ -1173,11 +1203,13 @@ class _TerminalSftpFavoritesPanel extends StatelessWidget {
     required this.colors,
     required this.paths,
     required this.onSelected,
+    this.status,
   });
 
   final _AiAssistantColors colors;
   final List<String> paths;
   final ValueChanged<String> onSelected;
+  final Widget? status;
 
   @override
   Widget build(BuildContext context) {
@@ -1210,7 +1242,9 @@ class _TerminalSftpFavoritesPanel extends StatelessWidget {
               ),
             ),
             Divider(height: 1, color: colors.border),
-            if (paths.isEmpty)
+            if (status != null)
+              Flexible(child: status!)
+            else if (paths.isEmpty)
               Padding(
                 padding: const EdgeInsets.all(18),
                 child: Text(
@@ -1313,6 +1347,7 @@ class _TerminalSftpConnectionView extends StatelessWidget {
   const _TerminalSftpConnectionView({
     required this.colors,
     required this.state,
+    required this.onClose,
     required this.onRetry,
     required this.onTrustOnceAndRetry,
     required this.onTrustAndRetry,
@@ -1321,6 +1356,7 @@ class _TerminalSftpConnectionView extends StatelessWidget {
 
   final _AiAssistantColors colors;
   final _SftpConnectionState state;
+  final VoidCallback onClose;
   final VoidCallback onRetry;
   final VoidCallback onTrustOnceAndRetry;
   final VoidCallback onTrustAndRetry;
@@ -1400,6 +1436,14 @@ class _TerminalSftpConnectionView extends StatelessWidget {
                       spacing: 8,
                       runSpacing: 8,
                       children: [
+                        _TerminalSftpTextButton(
+                          label: context.tr(
+                            'common.action.close',
+                            fallback: 'Close',
+                          ),
+                          colors: colors,
+                          onPressed: onClose,
+                        ),
                         if (failed)
                           _TerminalSftpTextButton(
                             label: 'Change host',
@@ -1681,10 +1725,13 @@ class _TerminalSftpTextButton extends StatelessWidget {
 
 String _terminalSftpSortLabel(_SftpSortColumn column) {
   return switch (column) {
-    _SftpSortColumn.name => 'Name',
-    _SftpSortColumn.modified => 'Modified',
-    _SftpSortColumn.size => 'Size',
-    _SftpSortColumn.kind => 'Kind',
+    _SftpSortColumn.name => tr('common.label.name', fallback: 'Name'),
+    _SftpSortColumn.modified => tr(
+      'sftp.label.dateModified',
+      fallback: 'Date Modified',
+    ),
+    _SftpSortColumn.size => tr('common.label.size', fallback: 'Size'),
+    _SftpSortColumn.kind => tr('common.label.kind', fallback: 'Kind'),
   };
 }
 

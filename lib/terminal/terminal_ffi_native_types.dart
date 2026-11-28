@@ -542,6 +542,8 @@ typedef _CaptureAppendNative = Bool Function(Uint64, Pointer<Uint8>, IntPtr);
 typedef _CaptureAppendDart = bool Function(int, Pointer<Uint8>, int);
 typedef _CaptureHandleBoolNative = Bool Function(Uint64);
 typedef _CaptureHandleBoolDart = bool Function(int);
+typedef _CaptureTailNative = Pointer<Utf8> Function(Pointer<Utf8>);
+typedef _CaptureTailDart = Pointer<Utf8> Function(Pointer<Utf8>);
 typedef _CaptureHandleJsonNative = Pointer<Utf8> Function(Uint64);
 typedef _CaptureHandleJsonDart = Pointer<Utf8> Function(int);
 typedef _CaptureReaderNextNative = Pointer<Utf8> Function(Uint64);
@@ -1076,6 +1078,41 @@ typedef _SftpListDirectoryEntriesDart = Pointer<Utf8> Function(
   int hostKeyTrustMode,
   Pointer<Utf8> proxyJson,
   bool sshCompatibilityMode,
+);
+
+typedef _SftpListDirectoryEntriesWithSudoNative = Pointer<Utf8> Function(
+  Uint64 requestId,
+  Pointer<Utf8> host,
+  Uint16 port,
+  Pointer<Utf8> username,
+  Pointer<Utf8> password,
+  Pointer<Utf8> privateKey,
+  Pointer<Utf8> certificate,
+  Pointer<Utf8> passphrase,
+  Pointer<Utf8> knownHostsPath,
+  Pointer<Utf8> directory,
+  Uint32 hostKeyTrustMode,
+  Pointer<Utf8> proxyJson,
+  Bool sshCompatibilityMode,
+  Pointer<Utf8> sudoSessionId,
+  Pointer<Utf8> sudoPassword,
+);
+typedef _SftpListDirectoryEntriesWithSudoDart = Pointer<Utf8> Function(
+  int requestId,
+  Pointer<Utf8> host,
+  int port,
+  Pointer<Utf8> username,
+  Pointer<Utf8> password,
+  Pointer<Utf8> privateKey,
+  Pointer<Utf8> certificate,
+  Pointer<Utf8> passphrase,
+  Pointer<Utf8> knownHostsPath,
+  Pointer<Utf8> directory,
+  int hostKeyTrustMode,
+  Pointer<Utf8> proxyJson,
+  bool sshCompatibilityMode,
+  Pointer<Utf8> sudoSessionId,
+  Pointer<Utf8> sudoPassword,
 );
 
 typedef _SftpExecuteTaskNative = Pointer<Utf8> Function(

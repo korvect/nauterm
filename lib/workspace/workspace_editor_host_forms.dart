@@ -1,5 +1,45 @@
 part of 'nauterm_workspace.dart';
 
+class _ParentGroupSelect extends StatelessWidget {
+  const _ParentGroupSelect({
+    required this.groups,
+    required this.value,
+    required this.onChanged,
+    this.choices,
+    this.onCreate,
+  });
+
+  final List<HostGroup> groups;
+  final Iterable<HostGroup>? choices;
+  final int? value;
+  final ValueChanged<int?> onChanged;
+  final ValueChanged<String>? onCreate;
+
+  @override
+  Widget build(BuildContext context) {
+    return _WorkspaceSelect<int?>(
+      label: context.tr(
+        'workspace.label.parentGroup',
+        fallback: 'Parent group',
+      ),
+      value: value,
+      editable: true,
+      filterable: true,
+      clearable: true,
+      createLabel: onCreate == null ? null : 'workspace.action.createGroup',
+      onCreate: onCreate,
+      items: [
+        for (final group in choices ?? groups)
+          DropdownMenuItem<int?>(
+            value: group.id,
+            child: Text(_hostGroupPathLabel(groups, group)),
+          ),
+      ],
+      onChanged: onChanged,
+    );
+  }
+}
+
 class _GroupEditorContent extends StatefulWidget {
   const _GroupEditorContent({
     required this.request,
@@ -9,6 +49,7 @@ class _GroupEditorContent extends StatefulWidget {
     required this.identities,
     required this.proxies,
     required this.terminalThemeCatalog,
+    required this.onCreateGroup,
     required this.onCreateCredential,
     required this.onCreateIdentity,
     required this.onCreateSnippet,
@@ -26,6 +67,7 @@ class _GroupEditorContent extends StatefulWidget {
   final List<IdentityEntry> identities;
   final List<ProxyEntry> proxies;
   final TerminalThemeCatalog? terminalThemeCatalog;
+  final _CreateRelatedGroup onCreateGroup;
   final _CreateRelatedCredential onCreateCredential;
   final _CreateRelatedEntry onCreateIdentity;
   final _CreateRelatedEntry onCreateSnippet;
@@ -465,12 +507,20 @@ class _GroupEditorContentState extends State<_GroupEditorContent>
     }
   }
 
-  void _selectParentGroup(int? parentId) {
+  void _createParentGroup(String initialName) {
+    widget.onCreateGroup(initialName, (group) {
+      if (mounted) {
+        _selectParentGroup(group.id, createdGroup: group);
+      }
+    }, rootOnly: true);
+  }
+
+  void _selectParentGroup(int? parentId, {HostGroup? createdGroup}) {
     setState(() {
       _parentId = parentId;
-      final parent = widget.groups
-          .where((group) => group.id == parentId)
-          .firstOrNull;
+      final parent =
+          createdGroup ??
+          widget.groups.where((group) => group.id == parentId).firstOrNull;
       if (parent != null) {
         _mergeSettingsFromGroup(parent);
       }
@@ -604,7 +654,7 @@ class _GroupEditorContentState extends State<_GroupEditorContent>
     final name = _nameController.text.trim();
     if (name.isEmpty) {
       setState(() {
-        _nameError = 'Name is required.';
+        _nameError = tr('common.validation.nameRequired');
         _error = null;
       });
       return;
@@ -630,7 +680,7 @@ class _GroupEditorContentState extends State<_GroupEditorContent>
         HostGroup(
           id: widget.request.initial?.id,
           name: name,
-          parentId: _parentId,
+          parentId: widget.request.rootOnly ? null : _parentId,
           startupSnippetId: _sshEnabled ? _startupSnippetId : null,
           identityId: _sshEnabled ? _identityId : null,
           proxyId: _sshEnabled ? _proxyId : null,
@@ -701,7 +751,12 @@ class _GroupEditorContentState extends State<_GroupEditorContent>
         .toList(growable: false);
 
     final editor = _EditorShell(
-      title: initial == null ? 'New Group' : 'Edit Group',
+      title: tr(
+        initial == null
+            ? 'workspace.label.newGroup'
+            : 'workspace.label.editGroup',
+        fallback: initial == null ? 'New Group' : 'Edit Group',
+      ),
       onClose: widget.onClose,
       onSave: _save,
       saving: _saving,
@@ -716,7 +771,7 @@ class _GroupEditorContentState extends State<_GroupEditorContent>
             ],
       children: [
         _WorkspaceFormSection(
-          title: 'General',
+          title: 'common.label.general',
           children: [
             LayoutBuilder(
               builder: (context, constraints) {
@@ -727,7 +782,7 @@ class _GroupEditorContentState extends State<_GroupEditorContent>
                 );
                 final input = _WorkspaceInput(
                   controller: _nameController,
-                  label: 'Name',
+                  label: tr('common.label.name', fallback: 'Name'),
                   isRequired: true,
                   errorText: _nameError,
                   autofocus: true,
@@ -754,25 +809,16 @@ class _GroupEditorContentState extends State<_GroupEditorContent>
                 );
               },
             ),
-            SizedBox(height: _workspaceFormFieldGap),
-            _WorkspaceSelect<int?>(
-              label: 'Parent group',
-              value: _parentId,
-              items: [
-                DropdownMenuItem<int?>(
-                  value: null,
-                  child: Text(
-                    tr('workspace.label.noGroup', fallback: 'No group'),
-                  ),
-                ),
-                for (final group in groups)
-                  DropdownMenuItem<int?>(
-                    value: group.id,
-                    child: Text(_hostGroupPathLabel(widget.groups, group)),
-                  ),
-              ],
-              onChanged: _selectParentGroup,
-            ),
+            if (!widget.request.rootOnly) ...[
+              SizedBox(height: _workspaceFormFieldGap),
+              _ParentGroupSelect(
+                groups: widget.groups,
+                choices: groups,
+                value: _parentId,
+                onChanged: _selectParentGroup,
+                onCreate: initial == null ? _createParentGroup : null,
+              ),
+            ],
           ],
         ),
         if (_sshEnabled) ...[
@@ -811,13 +857,17 @@ class _GroupEditorContentState extends State<_GroupEditorContent>
               if (_identityId == null) ...[
                 SizedBox(height: _workspaceFormFieldGap),
                 _WorkspaceSelect<int?>(
-                  label: 'Password',
+                  label: tr('common.label.password', fallback: 'Password'),
                   value: _identityId,
                   editable: true,
                   filterable: true,
                   clearable: true,
                   obscureText: true,
                   inputController: _passwordController,
+                  clearTooltipKey:
+                      widget.request.initial?.password?.isNotEmpty == true
+                      ? 'workspace.host.credentials.clearSavedPassword'
+                      : null,
                   items: [
                     for (final identity in widget.identities)
                       DropdownMenuItem<int?>(
@@ -856,7 +906,10 @@ class _GroupEditorContentState extends State<_GroupEditorContent>
             ),
             moreChildren: [
               _WorkspaceSelect<int?>(
-                label: 'Startup snippet',
+                label: tr(
+                  'workspace.label.startupSnippet',
+                  fallback: 'Startup snippet',
+                ),
                 value: _startupSnippetId,
                 editable: true,
                 clearable: true,
@@ -874,7 +927,7 @@ class _GroupEditorContentState extends State<_GroupEditorContent>
               ),
               SizedBox(height: _workspaceFormFieldGap),
               _WorkspaceSelect<int?>(
-                label: 'Proxy',
+                label: tr('common.label.proxy', fallback: 'Proxy'),
                 value: _proxyId,
                 editable: true,
                 clearable: true,
@@ -894,7 +947,7 @@ class _GroupEditorContentState extends State<_GroupEditorContent>
               ),
               SizedBox(height: _workspaceFormFieldGap),
               _WorkspaceSelect<String>(
-                label: 'Encoding',
+                label: tr('common.label.encoding', fallback: 'Encoding'),
                 value: _encoding,
                 items: [
                   for (final encoding in _hostEncodingOptions)
@@ -935,7 +988,10 @@ class _GroupEditorContentState extends State<_GroupEditorContent>
                 SizedBox(height: _workspaceFormFieldGap),
                 _WorkspaceInput(
                   controller: _moshCommandController,
-                  label: 'Mosh server command',
+                  label: tr(
+                    'workspace.label.moshServerCommand',
+                    fallback: 'Mosh server command',
+                  ),
                 ),
               ],
             ],
@@ -973,13 +1029,17 @@ class _GroupEditorContentState extends State<_GroupEditorContent>
               if (_telnetIdentityId == null) ...[
                 SizedBox(height: _workspaceFormFieldGap),
                 _WorkspaceSelect<int?>(
-                  label: 'Password',
+                  label: tr('common.label.password', fallback: 'Password'),
                   value: _telnetIdentityId,
                   editable: true,
                   filterable: true,
                   clearable: true,
                   obscureText: true,
                   inputController: _telnetPasswordController,
+                  clearTooltipKey:
+                      widget.request.initial?.telnetPassword?.isNotEmpty == true
+                      ? 'workspace.host.credentials.clearSavedPassword'
+                      : null,
                   items: [
                     for (final identity in widget.identities)
                       DropdownMenuItem<int?>(
@@ -992,7 +1052,7 @@ class _GroupEditorContentState extends State<_GroupEditorContent>
               ],
               SizedBox(height: _workspaceFormFieldGap),
               _WorkspaceSelect<String>(
-                label: 'Encoding',
+                label: tr('common.label.encoding', fallback: 'Encoding'),
                 value: _telnetEncoding,
                 items: [
                   for (final encoding in _hostEncodingOptions)
@@ -1132,7 +1192,7 @@ class _HostEditorContent extends StatefulWidget {
   final List<ProxyEntry> proxies;
   final TerminalThemeCatalog? terminalThemeCatalog;
   final VoidCallback onClose;
-  final _CreateRelatedEntry onCreateGroup;
+  final _CreateRelatedGroup onCreateGroup;
   final _CreateGroupFromProtocol onCreateGroupFromProtocol;
   final _CreateRelatedCredential onCreateCredential;
   final _CreateRelatedEntry onCreateIdentity;
@@ -1202,7 +1262,8 @@ class _HostTagSelectState extends State<_HostTagSelect> {
         if (tag.uuid != null && !widget.selectedUuids.contains(tag.uuid)) tag,
     ];
     return _WorkspaceSelect<String?>(
-      label: 'Tags',
+      label: tr('common.label.tags', fallback: 'Tags'),
+      optionsTooltipKey: 'workspace.tags.action.showOptions',
       value: null,
       editable: true,
       filterable: true,
@@ -1288,7 +1349,11 @@ class _HostTagChip extends StatelessWidget {
             width: 20,
             height: 20,
             child: IconButton(
-              tooltip: tr('Remove ${tag.name}'),
+              tooltip: context.tr(
+                'workspace.tags.action.remove',
+                fallback: 'Remove {name}',
+                args: {'name': tag.name},
+              ),
               padding: EdgeInsets.zero,
               visualDensity: VisualDensity.compact,
               icon: Icon(Icons.close_rounded, size: 13, color: _mutedText),
@@ -1477,6 +1542,7 @@ class _HostEditorContentState extends State<_HostEditorContent>
   late final TextEditingController _shellController;
   late final TextEditingController _workDirController;
   late final List<String> _shellOptions;
+  late final String? _systemDefaultShell = systemDefaultShellPath();
   late List<HostEnvironmentVariable> _environmentVariables;
   late NautermHostType _type;
   late bool _sshEnabled;
@@ -1801,11 +1867,11 @@ class _HostEditorContentState extends State<_HostEditorContent>
   }
 
   void _createGroup(String initialName) {
-    widget.onCreateGroup(initialName, (id) {
+    widget.onCreateGroup(initialName, (group) {
       if (mounted) {
-        _selectGroup(id);
+        _selectGroup(group.id, createdGroup: group);
       }
-    });
+    }, rootOnly: false);
   }
 
   void _mergeSettingsFromGroup(HostGroup group) {
@@ -1908,12 +1974,12 @@ class _HostEditorContentState extends State<_HostEditorContent>
     }
   }
 
-  void _selectGroup(int? groupId) {
+  void _selectGroup(int? groupId, {HostGroup? createdGroup}) {
     setState(() {
       _groupId = groupId;
-      final group = widget.groups
-          .where((entry) => entry.id == groupId)
-          .firstOrNull;
+      final group =
+          createdGroup ??
+          widget.groups.where((entry) => entry.id == groupId).firstOrNull;
       if (group != null) {
         _mergeSettingsFromGroup(group);
       }
@@ -2124,7 +2190,7 @@ class _HostEditorContentState extends State<_HostEditorContent>
         : serialConfig?.serialPort ?? _suggestedName();
     if (name.isEmpty) {
       setState(() {
-        _nameError = 'Name is required.';
+        _nameError = tr('common.validation.nameRequired');
         _error = null;
       });
       return;
@@ -2265,6 +2331,11 @@ class _HostEditorContentState extends State<_HostEditorContent>
   Widget build(BuildContext context) {
     final initial = widget.request.initial;
     final isLocal = _type == NautermHostType.local;
+    final defaultShell = isLocal ? _systemDefaultShell : null;
+    final defaultShellLabel = tr(
+      'workspace.label.systemDefaultShell',
+      fallback: 'System default shell',
+    );
     final isSerial = _type == NautermHostType.serial;
 
     final editor = _EditorShell(
@@ -2306,10 +2377,9 @@ class _HostEditorContentState extends State<_HostEditorContent>
                           DropdownMenuItem<String?>(
                             value: null,
                             child: Text(
-                              tr(
-                                'workspace.label.systemDefaultShell',
-                                fallback: 'System default shell',
-                              ),
+                              defaultShell == null
+                                  ? defaultShellLabel
+                                  : '$defaultShellLabel — ${shellDisplayNameWithVersion(defaultShell)} ($defaultShell)',
                             ),
                           ),
                           for (final shell in _shellOptions)
@@ -2359,7 +2429,7 @@ class _HostEditorContentState extends State<_HostEditorContent>
         ),
         SizedBox(height: 14),
         _WorkspaceFormSection(
-          title: 'General',
+          title: 'common.label.general',
           children: [
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -2414,21 +2484,10 @@ class _HostEditorContentState extends State<_HostEditorContent>
               },
             ),
             SizedBox(height: _workspaceFormFieldGap),
-            _WorkspaceSelect<int?>(
-              label: 'Parent group',
+            _ParentGroupSelect(
+              groups: widget.groups,
               value: _groupId,
-              editable: true,
-              filterable: true,
-              clearable: true,
-              createLabel: 'Create group',
               onCreate: _createGroup,
-              items: [
-                for (final group in widget.groups)
-                  DropdownMenuItem<int?>(
-                    value: group.id,
-                    child: Text(_hostGroupPathLabel(widget.groups, group)),
-                  ),
-              ],
               onChanged: _selectGroup,
             ),
             SizedBox(height: _workspaceFormFieldGap),
@@ -2454,7 +2513,7 @@ class _HostEditorContentState extends State<_HostEditorContent>
           ),
           SizedBox(height: 14),
           _WorkspaceFormSection(
-            title: 'Theme',
+            title: 'common.label.theme',
             children: [
               _HostThemeSelector(
                 selectedTheme: _selectedTheme,
@@ -2473,7 +2532,7 @@ class _HostEditorContentState extends State<_HostEditorContent>
         if (isLocal) ...[
           SizedBox(height: 14),
           _WorkspaceFormSection(
-            title: 'Theme',
+            title: 'common.label.theme',
             children: [
               _GenerateKeyFieldLabel(
                 tr('workspace.host.lightTheme', fallback: 'Light theme'),
@@ -2498,11 +2557,11 @@ class _HostEditorContentState extends State<_HostEditorContent>
           ),
           SizedBox(height: 14),
           _WorkspaceFormSection(
-            title: 'Local',
+            title: 'common.label.local',
             children: [
               _WorkspaceInput(
                 controller: _workDirController,
-                label: 'Work dir',
+                label: tr('workspace.label.workDir', fallback: 'Work dir'),
               ),
             ],
           ),
@@ -2547,13 +2606,17 @@ class _HostEditorContentState extends State<_HostEditorContent>
               if (_identityId == null) ...[
                 SizedBox(height: _workspaceFormFieldGap),
                 _WorkspaceSelect<int?>(
-                  label: 'Password',
+                  label: tr('common.label.password', fallback: 'Password'),
                   value: _identityId,
                   editable: true,
                   filterable: true,
                   clearable: true,
                   obscureText: true,
                   inputController: _passwordController,
+                  clearTooltipKey:
+                      widget.request.initial?.password?.isNotEmpty == true
+                      ? 'workspace.host.credentials.clearSavedPassword'
+                      : null,
                   items: [
                     for (final identity in widget.identities)
                       DropdownMenuItem<int?>(
@@ -2606,7 +2669,10 @@ class _HostEditorContentState extends State<_HostEditorContent>
             ),
             moreChildren: [
               _WorkspaceSelect<int?>(
-                label: 'Startup snippet',
+                label: tr(
+                  'workspace.label.startupSnippet',
+                  fallback: 'Startup snippet',
+                ),
                 value: _startupSnippetId,
                 editable: true,
                 clearable: true,
@@ -2624,7 +2690,7 @@ class _HostEditorContentState extends State<_HostEditorContent>
               ),
               SizedBox(height: _workspaceFormFieldGap),
               _WorkspaceSelect<int?>(
-                label: 'Proxy',
+                label: tr('common.label.proxy', fallback: 'Proxy'),
                 value: _proxyId,
                 editable: true,
                 filterable: true,
@@ -2651,7 +2717,7 @@ class _HostEditorContentState extends State<_HostEditorContent>
               ),
               SizedBox(height: _workspaceFormFieldGap),
               _WorkspaceSelect<String>(
-                label: 'Encoding',
+                label: tr('common.label.encoding', fallback: 'Encoding'),
                 value: _encoding,
                 items: [
                   for (final encoding in _hostEncodingOptions)
@@ -2692,7 +2758,10 @@ class _HostEditorContentState extends State<_HostEditorContent>
                 SizedBox(height: _workspaceFormFieldGap),
                 _WorkspaceInput(
                   controller: _moshServerCommandController,
-                  label: 'Mosh server command',
+                  label: tr(
+                    'workspace.label.moshServerCommand',
+                    fallback: 'Mosh server command',
+                  ),
                   hintText: defaultMoshServerCommand,
                 ),
               ],
@@ -2735,13 +2804,17 @@ class _HostEditorContentState extends State<_HostEditorContent>
               if (_telnetIdentityId == null) ...[
                 SizedBox(height: _workspaceFormFieldGap),
                 _WorkspaceSelect<int?>(
-                  label: 'Password',
+                  label: tr('common.label.password', fallback: 'Password'),
                   value: _telnetIdentityId,
                   editable: true,
                   filterable: true,
                   clearable: true,
                   obscureText: true,
                   inputController: _telnetPasswordController,
+                  clearTooltipKey:
+                      widget.request.initial?.telnetPassword?.isNotEmpty == true
+                      ? 'workspace.host.credentials.clearSavedPassword'
+                      : null,
                   items: [
                     for (final identity in widget.identities)
                       DropdownMenuItem<int?>(
@@ -2754,7 +2827,7 @@ class _HostEditorContentState extends State<_HostEditorContent>
               ],
               SizedBox(height: _workspaceFormFieldGap),
               _WorkspaceSelect<String>(
-                label: 'Encoding',
+                label: tr('common.label.encoding', fallback: 'Encoding'),
                 value: _telnetEncoding,
                 items: [
                   for (final encoding in _hostEncodingOptions)
@@ -3133,36 +3206,36 @@ class _ProtocolFormSection extends StatelessWidget {
           children: [
             LayoutBuilder(
               builder: (context, constraints) {
+                final portLabel = context
+                    .tr(
+                      'workspace.host.protocol.portLabel',
+                      fallback: '{protocol} on {port} port',
+                      args: {'protocol': protocol},
+                    )
+                    .split('{port}');
+                final labelStyle = TextStyle(
+                  color: _text,
+                  fontSize: NautermFontSizes.labelLarge,
+                  fontWeight: NautermFontWeights.semibold,
+                );
                 final protocolControls = <Widget>[
-                  Text(
-                    '$protocol on',
-                    style: TextStyle(
-                      color: _text,
-                      fontSize: NautermFontSizes.labelLarge,
-                      fontWeight: NautermFontWeights.semibold,
-                    ),
-                  ),
+                  if (portLabel.first.trim().isNotEmpty)
+                    Text(portLabel.first.trim(), style: labelStyle),
                   SizedBox(
                     key: ValueKey('protocol-port:$protocol'),
                     width: 64,
                     child: _WorkspaceInput(
                       size: _WorkspaceControlSize.small,
                       controller: portController,
-                      label: 'Port',
+                      label: tr('common.label.port', fallback: 'Port'),
                       floatingLabel: false,
                       clearable: false,
                       keyboardType: TextInputType.number,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     ),
                   ),
-                  Text(
-                    'port',
-                    style: TextStyle(
-                      color: _text,
-                      fontSize: NautermFontSizes.labelLarge,
-                      fontWeight: NautermFontWeights.semibold,
-                    ),
-                  ),
+                  if (portLabel.length > 1 && portLabel.last.trim().isNotEmpty)
+                    Text(portLabel.last.trim(), style: labelStyle),
                 ];
                 final actionsButton = _WorkspaceDropdown<_ProtocolMenuAction>(
                   width: 190,
@@ -3170,7 +3243,7 @@ class _ProtocolFormSection extends StatelessWidget {
                     if (onCreateGroup != null) ...[
                       const NautermContextMenuAction<_ProtocolMenuAction>(
                         value: _ProtocolMenuAction.createGroup,
-                        label: 'Create group',
+                        label: 'workspace.action.createGroup',
                         icon: Icons.dashboard_customize_rounded,
                       ),
                       const NautermContextMenuDivider<_ProtocolMenuAction>(),
@@ -3459,16 +3532,20 @@ class _HostThemeSelector extends StatelessWidget {
         ? tr('common.label.default', fallback: 'Default')
         : selected.theme.name;
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(9),
-        onTap: onOpenGallery,
-        child: TerminalThemePreviewCard(
-          title: title,
-          theme: previewTheme,
-          selected: true,
-          compact: true,
+    return Semantics(
+      label: context.tr('workspace.action.selectTerminalTheme'),
+      button: true,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(9),
+          onTap: onOpenGallery,
+          child: TerminalThemePreviewCard(
+            title: title,
+            theme: previewTheme,
+            selected: true,
+            compact: true,
+          ),
         ),
       ),
     );

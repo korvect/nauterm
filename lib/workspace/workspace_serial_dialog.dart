@@ -122,32 +122,32 @@ class _WorkspaceUpdateToast extends StatelessWidget {
     final message = switch (notice.phase) {
       StartupUpdatePhase.available => tr(
         'update.startup.available.description',
-        fallback: 'Nauterm {version} is available.',
+        fallback: '{appName} {version} is available.',
         args: {'version': notice.version},
       ),
       StartupUpdatePhase.downloading => tr(
         'update.startup.downloading',
-        fallback: 'Downloading Nauterm {version}...',
+        fallback: 'Downloading {appName} {version}...',
         args: {'version': notice.version},
       ),
       StartupUpdatePhase.installing => tr(
         'update.startup.installing',
-        fallback: 'Installing Nauterm {version}...',
+        fallback: 'Installing {appName} {version}...',
         args: {'version': notice.version},
       ),
       StartupUpdatePhase.restartRequired => tr(
         'update.startup.restartRequired',
-        fallback: 'Nauterm {version} is ready. Restart to finish updating.',
+        fallback: '{appName} {version} is ready. Restart to finish updating.',
         args: {'version': notice.version},
       ),
       StartupUpdatePhase.installerLaunched => tr(
         'update.startup.installerLaunched',
-        fallback: 'The Nauterm {version} installer is open.',
+        fallback: 'The {appName} {version} installer is open.',
         args: {'version': notice.version},
       ),
       StartupUpdatePhase.error => tr(
         'update.startup.error',
-        fallback: 'Unable to update Nauterm {version}.',
+        fallback: 'Unable to update {appName} {version}.',
         args: {'version': notice.version},
       ),
     };
@@ -196,7 +196,7 @@ class _WorkspaceUpdateToast extends StatelessWidget {
                         Text(
                           tr(
                             'update.startup.title',
-                            fallback: 'Nauterm update available',
+                            fallback: '{appName} update available',
                           ),
                           style: TextStyle(
                             color: _text,
@@ -261,7 +261,8 @@ class _WorkspaceUpdateToast extends StatelessWidget {
                           restart
                               ? 'settings.update.action.restart'
                               : 'update.startup.action.update',
-                          fallback: restart ? 'Restart Nauterm' : 'Update',
+                          fallback: restart ? 'Restart {appName}' : 'Update',
+                          args: const {'appName': 'Nauterm'},
                         ),
                         primary: true,
                         onPressed: notice.onUpdate,
@@ -353,7 +354,12 @@ class _SerialConnectionDialogState extends State<_SerialConnectionDialog> {
   @override
   Widget build(BuildContext context) => _WorkspaceDialogFrame(
     width: 560,
-    title: Text(tr('common.label.serial', fallback: 'Serial')),
+    title: Text(
+      context.tr(
+        'workspace.serial.dialog.title',
+        fallback: 'Serial connection',
+      ),
+    ),
     content: _SerialConnectionFields(controller: _serialForm),
     actions: [
       _WorkspaceButton(
@@ -471,11 +477,6 @@ class _SerialConnectionFormController extends ChangeNotifier {
       notifyListeners();
       return null;
     }
-  }
-
-  String get portStatusText {
-    if (loadingPorts) return 'Scanning serial devices...';
-    return portListError ?? 'No serial devices found. Enter a path manually.';
   }
 
   @override
@@ -612,7 +613,10 @@ class _SerialConnectionFields extends StatelessWidget {
               controller.portListError != null ||
               controller.ports.isEmpty) ...[
             Text(
-              controller.portStatusText,
+              controller.loadingPorts
+                  ? context.tr('workspace.serial.scanning')
+                  : controller.portListError ??
+                        context.tr('workspace.serial.empty.description'),
               style: TextStyle(
                 color: controller.portListError == null
                     ? _mutedText

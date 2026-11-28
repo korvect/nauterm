@@ -10,7 +10,11 @@ MAC_COMPOSER_ICON="$ROOT_DIR/macos/Runner/Resources/Nauterm.icon"
 WINDOWS_ICON="$ROOT_DIR/windows/runner/resources/app_icon.ico"
 LINUX_ICON="$ROOT_DIR/linux/runner/resources/nauterm.png"
 
-bash "$ROOT_DIR/scripts/ci/verify_app_icons.sh" --generated-only
+set --
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) set -- --allow-missing-python ;;
+esac
+bash "$ROOT_DIR/scripts/ci/verify_app_icons.sh" "$@" --generated-only
 
 mkdir -p \
   "$MAC_APP_ICON_DIR" \
@@ -25,7 +29,7 @@ done
 rm -rf "$MAC_COMPOSER_ICON"
 cp -R "$SOURCE_COMPOSER_ICON" "$MAC_COMPOSER_ICON"
 cp "$GENERATED_ROOT/app_icon.ico" "$WINDOWS_ICON"
-cp "$PNG_DIR/app_icon_512.png" "$LINUX_ICON"
+cp "$PNG_DIR/app_icon_1024.png" "$LINUX_ICON"
 
-bash "$ROOT_DIR/scripts/ci/verify_app_icons.sh"
+bash "$ROOT_DIR/scripts/ci/verify_app_icons.sh" "$@"
 echo "Prepared platform app icons from assets/icons/."

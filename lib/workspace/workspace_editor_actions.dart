@@ -82,12 +82,16 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
     onSaved?.call(saved);
   }
 
-  void _createGroupForEditor(String initialName, ValueChanged<int> onCreated) {
+  void _createGroupForEditor(
+    String initialName,
+    ValueChanged<HostGroup> onCreated, {
+    required bool rootOnly,
+  }) {
     _pushEditor(
-      _GroupEditorRequest(initialName: initialName),
+      _GroupEditorRequest(initialName: initialName, rootOnly: rootOnly),
       onSaved: (saved) {
-        if (saved case HostGroup(id: final id?)) {
-          onCreated(id);
+        if (saved is HostGroup && saved.id != null) {
+          onCreated(saved);
         }
       },
     );
@@ -242,6 +246,8 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
 
     var importedHosts = 0;
     var importedKeys = 0;
+    var reusedKeys = 0;
+    var hostsWithoutKeys = 0;
     var skipped = 0;
     final existingSignatures = <String>{
       for (final host in _hostEntries)
@@ -268,7 +274,11 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
                 publicKey: candidate.publicKey,
               ),
             );
-        if (existing == null) importedKeys++;
+        if (existing == null) {
+          importedKeys++;
+        } else {
+          reusedKeys++;
+        }
         for (final path in [candidate.privatePath, candidate.publicPath]) {
           final normalized = _normalizeImportPath(path);
           if (normalized != null) keyIdsByPath[normalized] = id;
@@ -319,6 +329,9 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
           ),
         );
         importedHosts++;
+        if (protocol != 'telnet' && identityPath != null && keyId == null) {
+          hostsWithoutKeys++;
+        }
       } catch (_) {
         skipped++;
       }
@@ -326,15 +339,22 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
 
     await _loadWorkspaceData();
     if (!mounted) return;
-    final importedParts = [
-      if (importedHosts > 0)
-        '$importedHosts ${importedHosts == 1 ? 'host' : 'hosts'}',
-      if (importedKeys > 0)
-        '$importedKeys ${importedKeys == 1 ? 'key' : 'keys'}',
-    ];
-    final suffix = skipped == 0 ? '' : ' $skipped skipped.';
     _showWorkspaceMessage(
-      'Imported ${importedParts.isEmpty ? '0 items' : importedParts.join(' and ')}.$suffix',
+      [
+        tr(
+          'workspace.import.result.added',
+          args: {'hosts': importedHosts, 'keys': importedKeys},
+        ),
+        if (skipped > 0)
+          tr('workspace.import.result.skipped', args: {'count': skipped}),
+        if (reusedKeys > 0)
+          tr('workspace.import.result.reusedKeys', args: {'count': reusedKeys}),
+        if (hostsWithoutKeys > 0)
+          tr(
+            'workspace.import.result.unconfiguredHostKeys',
+            args: {'count': hostsWithoutKeys},
+          ),
+      ].join(' '),
     );
   }
 
@@ -346,7 +366,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
     }
     final hosts = store.listHosts();
     if (hosts.isEmpty) {
-      _showWorkspaceMessage('No hosts to export.');
+      _showWorkspaceMessage(tr('workspace.export.hosts.empty'));
       return;
     }
     final groups = store.listGroups();
@@ -354,10 +374,14 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
     final csv = buildHostCsv(hosts, groups, tags);
     final location = await getSaveLocation(
       acceptedTypeGroups: [
-        XTypeGroup(label: 'CSV file', extensions: ['csv']),
+        XTypeGroup(
+          label: tr('workspace.import.source.csv.label'),
+          extensions: ['csv'],
+        ),
       ],
       initialDirectory: await _terminalLogExportInitialDirectory(),
       suggestedName: 'nauterm-hosts',
+      confirmButtonText: tr('common.action.export'),
     );
     if (location == null || location.path.trim().isEmpty) return;
     final path = location.path.toLowerCase().endsWith('.csv')
@@ -366,11 +390,15 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
     try {
       await io.File(path).writeAsString(csv, encoding: utf8, flush: true);
       if (mounted) {
-        _showWorkspaceMessage('Exported ${hosts.length} hosts to CSV.');
+        _showWorkspaceMessage(
+          tr('workspace.export.hosts.success', args: {'count': hosts.length}),
+        );
       }
     } on Object catch (error) {
       if (mounted) {
-        _showWorkspaceMessage('Failed to export hosts: $error');
+        _showWorkspaceMessage(
+          tr('workspace.export.hosts.failure', args: {'error': error}),
+        );
       }
     }
   }
@@ -380,10 +408,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
   ) async {
     switch (source) {
       case HostImportSource.csv:
-        final file = await _pickHostImportFile(
-          label: 'Import hosts from CSV',
-          extensions: const ['csv'],
-        );
+        final file = await _pickHostImportFile(const ['csv']);
         return file == null
             ? null
             : HostImportBundle(
@@ -392,20 +417,14 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       case HostImportSource.openSsh:
         return _loadOpenSshDirectory();
       case HostImportSource.putty:
-        final file = await _pickHostImportFile(
-          label: 'Import PuTTY sessions',
-          extensions: const ['reg'],
-        );
+        final file = await _pickHostImportFile(const ['reg']);
         return file == null
             ? null
             : HostImportBundle(
                 hosts: parsePuttyRegistry(await _readImportText(file)),
               );
       case HostImportSource.mobaXterm:
-        final file = await _pickHostImportFile(
-          label: 'Import MobaXterm sessions',
-          extensions: const ['mxtsessions', 'ini'],
-        );
+        final file = await _pickHostImportFile(const ['mxtsessions', 'ini']);
         return file == null
             ? null
             : HostImportBundle(
@@ -416,25 +435,21 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
     }
   }
 
-  Future<io.File?> _pickHostImportFile({
-    required String label,
-    required List<String> extensions,
-  }) {
+  Future<io.File?> _pickHostImportFile(List<String> extensions) {
     return _runExclusiveFilePicker(() async {
       final file = await openFile(
-        acceptedTypeGroups: [XTypeGroup(label: label, extensions: extensions)],
+        acceptedTypeGroups: [XTypeGroup(extensions: extensions)],
       );
       return file == null ? null : io.File(file.path);
     });
   }
 
   Future<HostImportBundle?> _loadOpenSshDirectory() async {
-    var directory = _defaultSshDirectory();
-    if (directory == null) {
-      final path = await _runExclusiveFilePicker(getDirectoryPath);
-      if (path == null) return null;
-      directory = io.Directory(path);
-    }
+    final path = await _runExclusiveFilePicker(
+      () => getDirectoryPath(initialDirectory: _defaultSshDirectory()?.path),
+    );
+    if (path == null) return null;
+    final directory = io.Directory(path);
 
     final config = io.File(
       '${directory.path}${io.Platform.pathSeparator}config',
@@ -459,13 +474,17 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
           host,
     ];
     final keyFiles = <OpenSshImportFile>[];
+    var skippedFiles = 0;
     await for (final entity in directory.list(followLinks: false)) {
       if (entity is! io.File) continue;
       final name = entity.path.split(io.Platform.pathSeparator).last;
       if (_ignoredOpenSshImportFile(name)) continue;
       try {
         final stat = await entity.stat();
-        if (stat.size > 1024 * 1024) continue;
+        if (stat.size > 1024 * 1024) {
+          skippedFiles++;
+          continue;
+        }
         final contents = await _readImportText(entity);
         if (isOpenSshPrivateKey(contents) || isOpenSshPublicKey(contents)) {
           keyFiles.add(
@@ -473,12 +492,13 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
           );
         }
       } catch (_) {
-        // A single unreadable file should not block the rest of ~/.ssh.
+        skippedFiles++;
       }
     }
     return HostImportBundle(
       hosts: _deduplicateImportCandidates(hosts),
       keys: collectOpenSshKeys(keyFiles),
+      skippedFiles: skippedFiles,
     );
   }
 
@@ -686,12 +706,21 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
   }
 
   void _editHost(_HostItem item) {
-    final existing = _dataStore?.getHost(item.id);
-    if (existing == null) {
-      _showWorkspaceMessage('Host is not available.');
+    if (_dataStore == null) {
+      _showWorkspaceMessage(
+        tr(
+          'workspace.host.error.unavailable',
+          fallback: 'Host is not available.',
+        ),
+      );
       return;
     }
-    _openEditor(_HostEditorRequest(initial: existing));
+    _openEditor(
+      _LoadHostEditorRequest(
+        host: item,
+        databasePath: NautermPaths.resolve().databasePath,
+      ),
+    );
   }
 
   Future<void> _saveHost(HostEntry host) async {
@@ -892,7 +921,23 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       throw StateError('Database is not ready.');
     }
     final id = store.saveKey(key);
-    final saved = store.getKey(id) ?? KeyEntry(id: id, name: key.name);
+    // Saving the key already committed. A failed read must not cause the
+    // wizard to retry the insert and create a second copy.
+    KeyEntry? savedEntry;
+    try {
+      savedEntry = store.getKey(id);
+    } on NautermDataException {
+      // The submitted key can populate the editor until the next DB refresh.
+    }
+    final saved =
+        savedEntry ??
+        KeyEntry(
+          id: id,
+          name: key.name,
+          privateKey: key.privateKey,
+          publicKey: key.publicKey,
+          passphrase: key.passphrase,
+        );
     if (!mounted || _editorStack.isEmpty) {
       return;
     }
@@ -951,7 +996,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       '-cert.pub': ?_emptyToNull(key.certificate),
     };
     if (materials.isEmpty) {
-      _showWorkspaceMessage('No key material is available to export.');
+      _showWorkspaceMessage(tr('workspace.keys.export.empty'));
       return;
     }
 
@@ -960,7 +1005,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       final directoryPath = await _runExclusiveFilePicker(
         () => getDirectoryPath(
           initialDirectory: initialDirectory,
-          confirmButtonText: 'Export',
+          confirmButtonText: tr('common.action.export'),
         ),
       );
       if (directoryPath == null || directoryPath.trim().isEmpty) {
@@ -990,12 +1035,19 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       }
       if (mounted) {
         _showWorkspaceMessage(
-          'Exported ${outputs.length} key ${outputs.length == 1 ? 'file' : 'files'} to ${directory.path}.',
+          tr(
+            outputs.length == 1
+                ? 'workspace.keys.export.fileSuccess'
+                : 'workspace.keys.export.filesSuccess',
+            args: {'count': outputs.length, 'path': directory.path},
+          ),
         );
       }
     } on Object catch (error) {
       if (mounted) {
-        _showWorkspaceMessage('Failed to export key: $error');
+        _showWorkspaceMessage(
+          tr('workspace.keys.export.failure', args: {'error': error}),
+        );
       }
     }
   }
@@ -1531,36 +1583,65 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
   }
 
   void _deletePortForward(PortForwardEntry portForward) {
-    unawaited(_confirmAndDeletePortForward(portForward));
+    unawaited(_confirmAndDeletePortForwards([portForward]));
   }
 
-  Future<void> _confirmAndDeletePortForward(
-    PortForwardEntry portForward,
-  ) async {
-    final id = portForward.id;
-    if (id == null) {
-      return;
-    }
-    final confirmed = await _confirmDelete(
-      title: 'Delete Forward?',
-      message: 'Delete "${portForward.name}"? This cannot be undone.',
-    );
-    if (!confirmed) {
-      return;
-    }
-    final store = _dataStore;
-    if (store == null) {
-      return;
-    }
-    FfiPortForwarding.stop(id);
-    _runningPortForwardIds.remove(id);
-    _portForwardStatuses.remove(id);
-    store.deletePortForward(id);
-    _setWorkspaceState(() {
-      _portForwardEntries = [
+  void _deleteSelectedPortForwards(List<_PortForwardItem> selected) {
+    final ids = selected.map((forward) => forward.id).toSet();
+    unawaited(
+      _confirmAndDeletePortForwards([
         for (final entry in _portForwardEntries)
-          if (entry.id != id) entry,
-      ];
+          if (ids.contains(entry.id)) entry,
+      ]),
+    );
+  }
+
+  Future<void> _confirmAndDeletePortForwards(
+    List<PortForwardEntry> forwards,
+  ) async {
+    final targets = {for (final forward in forwards) ?forward.id: forward};
+    final store = _dataStore;
+    if (targets.isEmpty || store == null) return;
+    final single = targets.length == 1;
+    final confirmed = await _confirmDelete(
+      title: single
+          ? 'workspace.dialog.deleteForward'
+          : 'workspace.dialog.deleteForwards',
+      message: single
+          ? 'workspace.dialog.deleteForward.description'
+          : 'workspace.dialog.deleteForwards.description',
+      details: single ? targets.values.single.name : null,
+      messageArgs: {'count': targets.length},
+    );
+    if (!confirmed || !mounted || !identical(_dataStore, store)) return;
+
+    final stoppedIds = <int>{};
+    var deleted = false;
+    try {
+      for (final id in targets.keys) {
+        FfiPortForwarding.stop(id);
+        stoppedIds.add(id);
+      }
+      store.deletePortForwards(targets.keys.toList(growable: false));
+      deleted = true;
+    } on Object catch (error) {
+      _showWorkspaceMessage(error.toString());
+    }
+    _setWorkspaceState(() {
+      _runningPortForwardIds.removeAll(stoppedIds);
+      for (final id in stoppedIds) {
+        _portForwardStatuses.remove(id);
+      }
+      if (deleted) {
+        _portForwardEntries = [
+          for (final entry in _portForwardEntries)
+            if (!targets.containsKey(entry.id)) entry,
+        ];
+        if (_editorRequest case _PortForwardEditorRequest(initial: final entry?)
+            when targets.containsKey(entry.id)) {
+          _editorRequest = null;
+        }
+      }
       _portForwards = _portForwardEntries
           .map(
             (portForward) => _mapPortForward(
@@ -1571,8 +1652,10 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
             ),
           )
           .toList(growable: false);
-      _editorRequest = null;
     });
+    if (deleted) {
+      _itemSelectionControllers[_SidebarSection.portForwarding]!.clear();
+    }
   }
 
   void _togglePortForward(_PortForwardItem item, bool enabled) {
@@ -2001,6 +2084,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       case _ContextMenuActionId.copySshCommand:
       case _ContextMenuActionId.exportToHost:
       case _ContextMenuActionId.exportToFile:
+      case _ContextMenuActionId.copyPublicKey:
         break;
     }
   }
@@ -2026,10 +2110,9 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
     _SnippetPackageItem package,
   ) async {
     final confirmed = await _confirmDelete(
-      title: 'Delete snippet package?',
-      message:
-          'Delete "${package.name}"? Its snippets will be kept without a '
-          'package.',
+      title: 'workspace.dialog.deleteSnippetPackage',
+      message: 'workspace.dialog.deleteSnippetPackage.description',
+      details: package.name,
     );
     if (!confirmed || !mounted) {
       return;
@@ -2078,10 +2161,9 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       return;
     }
     final confirmed = await _confirmDelete(
-      title: 'Delete snippet packages?',
-      message:
-          'Delete ${ids.length} packages? Their snippets will be kept without '
-          'a package.',
+      title: 'workspace.dialog.deleteSnippetPackages',
+      message: 'workspace.dialog.deleteSnippetPackages.description',
+      messageArgs: {'count': ids.length},
     );
     if (!confirmed || !mounted) {
       return;
@@ -2126,8 +2208,9 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
 
   Future<void> _confirmAndDeleteSnippet(_SnippetItem item) async {
     final confirmed = await _confirmDelete(
-      title: 'Delete Snippet?',
-      message: 'Delete "${item.description}"? This cannot be undone.',
+      title: 'workspace.dialog.deleteSnippet',
+      message: 'workspace.dialog.deleteSnippet.description',
+      details: item.description,
     );
     if (!confirmed) {
       return;
@@ -2188,6 +2271,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       case _ContextMenuActionId.copySshCommand:
       case _ContextMenuActionId.exportToHost:
       case _ContextMenuActionId.exportToFile:
+      case _ContextMenuActionId.copyPublicKey:
         break;
     }
   }
@@ -2228,6 +2312,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       case _ContextMenuActionId.copySshCommand:
       case _ContextMenuActionId.exportToHost:
       case _ContextMenuActionId.exportToFile:
+      case _ContextMenuActionId.copyPublicKey:
         break;
     }
   }
@@ -2238,8 +2323,9 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       return;
     }
     final confirmed = await _confirmDelete(
-      title: 'Delete Snippets?',
-      message: 'Delete ${ids.length} snippets? This cannot be undone.',
+      title: 'workspace.dialog.deleteSnippets',
+      message: 'workspace.dialog.deleteSnippets.description',
+      messageArgs: {'count': ids.length},
     );
     if (!confirmed || !mounted) {
       return;
@@ -2276,6 +2362,15 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
     });
   }
 
+  Future<void> _reloadShellHistory() async {
+    final history = await ShellHistoryFileStore(
+      NautermPaths.resolve().shellHistoryFile,
+    ).read();
+    if (mounted) {
+      _setWorkspaceState(() => _shellHistory = history);
+    }
+  }
+
   void _createSnippetFromShellHistory(String command) {
     final script = command.trim();
     if (script.isEmpty) {
@@ -2292,11 +2387,9 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
 
   Future<void> _confirmAndClearShellHistory() async {
     final confirmed = await _confirmDelete(
-      title: 'Clear shell history?',
-      message:
-          'This clears all shell history saved by Nauterm. It does not modify '
-          'history files managed by local or remote shells.',
-      confirmLabel: 'Clear all',
+      title: 'workspace.dialog.clearShellHistory',
+      message: 'workspace.history.clearShell.description',
+      confirmLabel: 'workspace.label.clearAll',
     );
     if (!confirmed || !mounted) {
       return;
@@ -2334,70 +2427,90 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
     });
   }
 
-  Future<void> _deleteTerminalLog(TerminalLogEntry log) async {
-    final confirmed = await _confirmDelete(
-      title: 'Delete terminal history?',
-      message:
-          'This permanently deletes the session metadata and its encrypted '
-          'capture file.',
-    );
-    if (!confirmed) return;
+  Future<void> _deleteTerminalLog(TerminalLogEntry log) =>
+      _deleteFinishedTerminalLogs(only: log);
 
-    _recordingService.ignore(log.id);
-    await _recordingService.closeCapture(log.id);
-    _recordingService.removePending(log.id);
-    _recordingService.removeCaptureReference(log.id);
+  Future<void> _clearTerminalLogs() => _deleteFinishedTerminalLogs();
+
+  Future<void> _deleteFinishedTerminalLogs({TerminalLogEntry? only}) async {
     final store = _terminalLogCaptureStore;
     final dataStore = _dataStore;
-    try {
-      if (store != null && log.captureFile.isNotEmpty) {
-        await store.deleteCapture(log.captureFile);
-      }
-      dataStore?.deleteTerminalLog(log.id);
-      final usage = await store?.diskUsage() ?? 0;
-      if (!mounted) return;
-      _setWorkspaceState(() {
-        _terminalLogs = [
-          for (final entry in _terminalLogs)
-            if (entry.id != log.id) entry,
-        ];
-        _recordingService.removeRecording(log.id);
-        _terminalCaptureDiskUsage = usage;
-        if (_selectedLogId == log.id) _selectedLogId = null;
-      });
-    } on Object catch (error) {
-      if (mounted) {
-        _showWorkspaceMessage('Failed to delete terminal log: $error');
-      }
+    if (store == null ||
+        dataStore == null ||
+        _workspaceModel.terminalLogsDeleting) {
+      return;
     }
-  }
-
-  Future<void> _clearTerminalLogs() async {
-    final confirmed = await _confirmDelete(
-      title: 'Clear all terminal history?',
-      message:
-          'This permanently deletes all session metadata and encrypted capture '
-          'files. Active sessions will stop being recorded.',
-      confirmLabel: 'Clear all',
-    );
-    if (!confirmed) return;
-
+    _workspaceModel.terminalLogsDeleting = true;
+    Set<String> deleted = const {};
     try {
-      _recordingService.stopAllRecordings();
-      await _recordingService.closeAllCaptures();
-      await _terminalLogCaptureStore?.clear();
-      _dataStore?.clearTerminalLogs();
-      if (!mounted) return;
-      _setWorkspaceState(() {
-        _terminalLogs = const [];
-        _recordingService.clearRecordings();
-        _selectedLogId = null;
-        _terminalLogsHasMore = false;
-        _terminalCaptureDiskUsage = 0;
-      });
+      final review = _recordingService.prepareLogDeletion(
+        dataStore,
+        store,
+        only: only,
+      );
+      final finished = review.finished;
+      if (finished.isEmpty) {
+        if (mounted) {
+          _showWorkspaceMessage(
+            tr(
+              review.hasActive
+                  ? 'workspace.logs.delete.closeSessionsFirst'
+                  : 'workspace.logs.delete.noneFinished',
+            ),
+          );
+        }
+        return;
+      }
+      final confirmed = await _confirmDelete(
+        title: only == null
+            ? 'workspace.dialog.deleteFinishedLogs'
+            : 'workspace.dialog.deleteTerminalHistory',
+        message: 'workspace.dialog.deleteFinishedLogs.description',
+        messageArgs: {'count': finished.length},
+        confirmLabel: 'common.action.delete',
+      );
+      if (!confirmed || !mounted || !identical(_dataStore, dataStore)) return;
+
+      final result = await _recordingService.deleteFinishedLogs(
+        dataStore,
+        store,
+        finished,
+        isCurrent: () => mounted && identical(_dataStore, dataStore),
+      );
+      deleted = result.deleted;
+      if (result.cleanupError case final error?) throw error;
     } on Object catch (error) {
       if (mounted) {
-        _showWorkspaceMessage('Failed to clear terminal logs: $error');
+        _showWorkspaceMessage(
+          error.toString(),
+          type: _WorkspaceNotificationType.error,
+        );
+      }
+    } finally {
+      _workspaceModel.terminalLogsDeleting = false;
+      if (mounted && deleted.isNotEmpty) {
+        _setWorkspaceState(() {
+          _terminalLogs = [
+            for (final log in _terminalLogs)
+              if (!deleted.contains(log.id)) log,
+          ];
+          if (deleted.contains(_selectedLogId)) _selectedLogId = null;
+          if (only == null) _terminalLogsHasMore = true;
+        });
+        if (only == null) _loadMoreTerminalLogs(retry: true);
+        try {
+          final usage = await store.diskUsage();
+          if (mounted && identical(_terminalLogCaptureStore, store)) {
+            _setWorkspaceState(() => _terminalCaptureDiskUsage = usage);
+          }
+        } on Object catch (error) {
+          if (mounted) {
+            _showWorkspaceMessage(
+              error.toString(),
+              type: _WorkspaceNotificationType.error,
+            );
+          }
+        }
       }
     }
   }
@@ -2473,8 +2586,14 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       if (mounted) {
         _showWorkspaceMessage(
           format == _TerminalLogExportFormat.readableText
-              ? 'Readable terminal transcript exported.'
-              : 'Raw terminal stream exported.',
+              ? tr(
+                  'workspace.logs.export.readable.success',
+                  fallback: 'Readable terminal transcript exported.',
+                )
+              : tr(
+                  'workspace.logs.export.raw.success',
+                  fallback: 'Raw terminal stream exported.',
+                ),
         );
       }
     } on Object catch (error) {
@@ -2634,7 +2753,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
     } on Object catch (error) {
       if (!controller.isDisposed) {
         controller.write(
-          '\r\nUnable to replay this terminal session: $error\r\n',
+          '\r\n$error\r\n${tr('workspace.logs.replay.retryFromLogs')}\r\n',
         );
       }
       rethrow;
@@ -2747,6 +2866,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       case _ContextMenuActionId.copySshCommand:
       case _ContextMenuActionId.exportToHost:
       case _ContextMenuActionId.exportToFile:
+      case _ContextMenuActionId.copyPublicKey:
         break;
     }
   }
@@ -2785,6 +2905,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       case _ContextMenuActionId.copySshCommand:
       case _ContextMenuActionId.exportToHost:
       case _ContextMenuActionId.exportToFile:
+      case _ContextMenuActionId.copyPublicKey:
         break;
     }
   }
@@ -2863,6 +2984,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       case _ContextMenuActionId.copySshCommand:
       case _ContextMenuActionId.exportToHost:
       case _ContextMenuActionId.exportToFile:
+      case _ContextMenuActionId.copyPublicKey:
         break;
     }
   }
@@ -2953,6 +3075,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       case _ContextMenuActionId.run:
       case _ContextMenuActionId.exportToHost:
       case _ContextMenuActionId.exportToFile:
+      case _ContextMenuActionId.copyPublicKey:
         break;
     }
   }
@@ -2992,8 +3115,9 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
 
   Future<void> _deleteGroup(_GroupItem item) async {
     final confirmed = await _confirmDelete(
-      title: 'Delete Group?',
-      message: 'Delete "${item.name}"? Hosts in this group will be ungrouped.',
+      title: 'workspace.dialog.deleteGroup',
+      message: 'workspace.dialog.deleteGroup.description',
+      details: item.name,
     );
     if (!confirmed) {
       return;
@@ -3042,10 +3166,9 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       return;
     }
     final confirmed = await _confirmDelete(
-      title: 'Delete Groups?',
-      message:
-          'Delete ${targets.length} groups? Hosts in these groups will be '
-          'ungrouped.',
+      title: 'workspace.dialog.deleteGroups',
+      message: 'workspace.dialog.deleteGroups.description',
+      messageArgs: {'count': targets.length},
     );
     if (!confirmed) {
       return;
@@ -3094,8 +3217,9 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
 
   Future<void> _deleteHost(_HostItem item) async {
     final confirmed = await _confirmDelete(
-      title: 'Delete Host?',
-      message: 'Delete "${item.name}"? This cannot be undone.',
+      title: 'workspace.dialog.deleteHost',
+      message: 'workspace.dialog.deleteItem.description',
+      details: item.name,
     );
     if (!confirmed) {
       return;
@@ -3136,8 +3260,9 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       return;
     }
     final confirmed = await _confirmDelete(
-      title: 'Delete Hosts?',
-      message: 'Delete ${targets.length} hosts? This cannot be undone.',
+      title: 'workspace.dialog.deleteHosts',
+      message: 'workspace.dialog.deleteHosts.description',
+      messageArgs: {'count': targets.length},
     );
     if (!confirmed) {
       return;
@@ -3200,6 +3325,7 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
       case _ContextMenuActionId.copySshCommand:
       case _ContextMenuActionId.exportToHost:
       case _ContextMenuActionId.exportToFile:
+      case _ContextMenuActionId.copyPublicKey:
         break;
     }
   }
@@ -3222,16 +3348,42 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
   }
 
   Future<void> _importKnownHosts() async {
-    final file = await _runExclusiveFilePicker(_pickKnownHostsImportFile);
-    if (file == null) {
+    final XFile? file;
+    try {
+      file = await _runExclusiveFilePicker(
+        () => openFile(initialDirectory: _defaultSshDirectory()?.path),
+      );
+    } on Object {
+      if (mounted) {
+        _showWorkspaceMessage(
+          context.tr('workspace.import.filePickerFailed'),
+          type: _WorkspaceNotificationType.error,
+        );
+      }
       return;
     }
+    if (file == null || !mounted) return;
 
     try {
+      final type = await io.FileSystemEntity.type(file.path);
+      if (!mounted) return;
+      if (type != io.FileSystemEntityType.file) {
+        _showWorkspaceMessage(
+          context.tr(
+            'workspace.knownHosts.import.failure',
+            args: {
+              'error': context.tr('workspace.knownHosts.import.fileRequired'),
+            },
+          ),
+          type: _WorkspaceNotificationType.error,
+        );
+        return;
+      }
       final importedText = await file.readAsString();
+      if (!mounted) return;
       final merge = _mergeKnownHostsText(_knownHostsText, importedText);
       if (merge.added == 0) {
-        _showWorkspaceMessage('No new known hosts to import.');
+        _showWorkspaceMessage(context.tr('workspace.knownHosts.import.empty'));
         return;
       }
 
@@ -3244,10 +3396,23 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
         _knownHostsText = merge.text;
       });
       _showWorkspaceMessage(
-        'Imported ${merge.added} known ${merge.added == 1 ? 'host' : 'hosts'}.',
+        context.tr(
+          merge.added == 1
+              ? 'workspace.knownHosts.import.successOne'
+              : 'workspace.knownHosts.import.success',
+          args: {'count': merge.added},
+        ),
       );
-    } catch (error) {
-      _showWorkspaceMessage('Failed to import known hosts: $error');
+    } on Object catch (error) {
+      if (mounted) {
+        _showWorkspaceMessage(
+          context.tr(
+            'workspace.knownHosts.import.failure',
+            args: {'error': error},
+          ),
+          type: _WorkspaceNotificationType.error,
+        );
+      }
     }
   }
 
@@ -3263,51 +3428,6 @@ extension _NautermWorkspaceEditorActions on _NautermWorkspaceState {
     }
   }
 
-  Future<io.File?> _pickKnownHostsImportFile() async {
-    final defaultDirectory = _defaultSshDirectory();
-
-    if (io.Platform.isMacOS) {
-      final script = defaultDirectory == null
-          ? 'POSIX path of (choose file with prompt "Import known_hosts")'
-          : 'POSIX path of (choose file with prompt "Import known_hosts" default location POSIX file "${_escapeAppleScriptString(defaultDirectory.path)}")';
-      final result = await io.Process.run('osascript', ['-e', script]);
-      return _fileFromPickerResult(result);
-    }
-
-    if (io.Platform.isLinux) {
-      final result = await io.Process.run('zenity', [
-        '--file-selection',
-        '--title=Import known_hosts',
-        if (defaultDirectory != null)
-          '--filename=${defaultDirectory.path}${io.Platform.pathSeparator}',
-      ]);
-      return _fileFromPickerResult(result);
-    }
-
-    if (io.Platform.isWindows) {
-      final initialDirectory = defaultDirectory == null
-          ? ''
-          : '\$dialog.InitialDirectory = \'${_escapePowerShellSingleQuoted(defaultDirectory.path)}\'';
-      final result = await io.Process.run('powershell', [
-        '-NoProfile',
-        '-Command',
-        '''
-Add-Type -AssemblyName System.Windows.Forms
-\$dialog = New-Object System.Windows.Forms.OpenFileDialog
-\$dialog.Title = "Import known_hosts"
-${initialDirectory.isEmpty ? '' : initialDirectory}
-if (\$dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
-  \$dialog.FileName
-}
-''',
-      ]);
-      return _fileFromPickerResult(result);
-    }
-
-    _showWorkspaceMessage('Import is not available on this platform.');
-    return null;
-  }
-
   io.Directory? _defaultSshDirectory() {
     final home = io.Platform.isWindows
         ? io.Platform.environment['USERPROFILE']
@@ -3318,26 +3438,6 @@ if (\$dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
 
     final directory = io.Directory('$home${io.Platform.pathSeparator}.ssh');
     return directory.existsSync() ? directory : null;
-  }
-
-  String _escapeAppleScriptString(String value) {
-    return value.replaceAll(r'\', r'\\').replaceAll('"', r'\"');
-  }
-
-  String _escapePowerShellSingleQuoted(String value) {
-    return value.replaceAll("'", "''");
-  }
-
-  io.File? _fileFromPickerResult(io.ProcessResult result) {
-    if (result.exitCode != 0) {
-      return null;
-    }
-
-    final path = result.stdout.toString().trim();
-    if (path.isEmpty) {
-      return null;
-    }
-    return io.File(path);
   }
 
   Future<void> _convertKnownHostToHost(_KnownHostItem item) async {
@@ -3367,8 +3467,9 @@ if (\$dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
 
   Future<void> _deleteKnownHost(_KnownHostItem item) async {
     final confirmed = await _confirmDelete(
-      title: 'Delete Known Host?',
-      message: 'Delete "${item.name}" from known hosts?',
+      title: 'workspace.dialog.deleteKnownHost',
+      message: 'workspace.dialog.deleteKnownHost.description',
+      details: item.name,
     );
     if (!confirmed) {
       return;
@@ -3398,8 +3499,9 @@ if (\$dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
       return;
     }
     final confirmed = await _confirmDelete(
-      title: 'Delete Known Hosts?',
-      message: 'Delete ${lineIndexes.length} entries from known hosts?',
+      title: 'workspace.dialog.deleteKnownHosts',
+      message: 'workspace.dialog.deleteKnownHosts.description',
+      messageArgs: {'count': lineIndexes.length},
     );
     if (!confirmed) {
       return;
@@ -3421,7 +3523,7 @@ if (\$dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
     _setWorkspaceState(() {
       _knownHostsText = updatedText;
     });
-    _showWorkspaceMessage('Known hosts deleted.');
+    _showWorkspaceMessage('workspace.knownHosts.delete.success');
   }
 
   void _handleKeyContextActions(
@@ -3458,6 +3560,7 @@ if (\$dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
       case _ContextMenuActionId.copySshCommand:
       case _ContextMenuActionId.exportToHost:
       case _ContextMenuActionId.exportToFile:
+      case _ContextMenuActionId.copyPublicKey:
         break;
     }
   }
@@ -3511,6 +3614,12 @@ if (\$dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
         }
         unawaited(_exportKeyToFile(key));
         break;
+      case _ContextMenuActionId.copyPublicKey:
+        final publicKey = item.publicKey;
+        if (publicKey != null && publicKey.trim().isNotEmpty) {
+          unawaited(Clipboard.setData(ClipboardData(text: publicKey)));
+        }
+        break;
       case _ContextMenuActionId.delete:
         unawaited(_deleteKey(item));
         break;
@@ -3531,8 +3640,9 @@ if (\$dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
 
   Future<void> _deleteKey(_KeyItem item) async {
     final confirmed = await _confirmDelete(
-      title: 'Delete Key?',
-      message: 'Delete "${item.name}"? This cannot be undone.',
+      title: 'workspace.dialog.deleteKey',
+      message: 'workspace.dialog.deleteCredential.description',
+      details: item.name,
     );
     if (!confirmed) {
       return;
@@ -3555,8 +3665,9 @@ if (\$dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
       return;
     }
     final confirmed = await _confirmDelete(
-      title: 'Delete Keys?',
-      message: 'Delete ${ids.length} keys? This cannot be undone.',
+      title: 'workspace.dialog.deleteKeys',
+      message: 'workspace.dialog.deleteKeys.description',
+      messageArgs: {'count': ids.length},
     );
     if (!confirmed) {
       return;
@@ -3610,6 +3721,7 @@ if (\$dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
       case _ContextMenuActionId.copySshCommand:
       case _ContextMenuActionId.exportToHost:
       case _ContextMenuActionId.exportToFile:
+      case _ContextMenuActionId.copyPublicKey:
         break;
     }
   }
@@ -3674,14 +3786,16 @@ if (\$dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
       case _ContextMenuActionId.copySshCommand:
       case _ContextMenuActionId.exportToHost:
       case _ContextMenuActionId.exportToFile:
+      case _ContextMenuActionId.copyPublicKey:
         break;
     }
   }
 
   Future<void> _deleteIdentity(_IdentityItem item) async {
     final confirmed = await _confirmDelete(
-      title: 'Delete Identity?',
-      message: 'Delete "${item.name}"? This cannot be undone.',
+      title: 'workspace.dialog.deleteIdentity',
+      message: 'workspace.dialog.deleteCredential.description',
+      details: item.name,
     );
     if (!confirmed) {
       return;
@@ -3712,8 +3826,9 @@ if (\$dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
       return;
     }
     final confirmed = await _confirmDelete(
-      title: 'Delete Identities?',
-      message: 'Delete ${ids.length} identities? This cannot be undone.',
+      title: 'workspace.dialog.deleteIdentities',
+      message: 'workspace.dialog.deleteIdentities.description',
+      messageArgs: {'count': ids.length},
     );
     if (!confirmed) {
       return;
@@ -3805,6 +3920,7 @@ if (\$dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
       case _ContextMenuActionId.copySshCommand:
       case _ContextMenuActionId.exportToHost:
       case _ContextMenuActionId.exportToFile:
+      case _ContextMenuActionId.copyPublicKey:
         break;
     }
   }
@@ -3843,6 +3959,7 @@ if (\$dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
       case _ContextMenuActionId.copySshCommand:
       case _ContextMenuActionId.exportToHost:
       case _ContextMenuActionId.exportToFile:
+      case _ContextMenuActionId.copyPublicKey:
         break;
     }
   }
@@ -3857,8 +3974,9 @@ if (\$dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
       return;
     }
     final confirmed = await _confirmDelete(
-      title: 'Delete Proxies?',
-      message: 'Delete ${ids.length} proxies? This cannot be undone.',
+      title: 'workspace.dialog.deleteProxies',
+      message: 'workspace.dialog.deleteProxies.description',
+      messageArgs: {'count': ids.length},
     );
     if (!confirmed) {
       return;
@@ -3885,8 +4003,9 @@ if (\$dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
       return;
     }
     final confirmed = await _confirmDelete(
-      title: 'Delete Proxy?',
-      message: 'Delete "$name"? This cannot be undone.',
+      title: 'workspace.dialog.deleteProxy',
+      message: 'workspace.dialog.deleteProxy.description',
+      details: name,
     );
     if (!confirmed) {
       return;

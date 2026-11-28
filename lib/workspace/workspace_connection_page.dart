@@ -306,7 +306,10 @@ class _PendingHostConnectionPageState
                     if (_invalidPort) ...[
                       const SizedBox(height: 8),
                       Text(
-                        'Port must be between 1 and 65535.',
+                        tr(
+                          'connection.validation.portRange',
+                          fallback: 'Port must be between 1 and 65535.',
+                        ),
                         style: TextStyle(
                           color: const Color(0xffef4444),
                           fontSize: NautermFontSizes.labelMedium,
@@ -590,10 +593,10 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
           ? 'Connection'
           : '${widget.controller.isMoshSession ? 'Mosh' : 'SSH'} ${profile.host}:${profile.port}',
       actionLabel: mode == _ConnectionPageMode.failed
-          ? 'Copy logs'
+          ? context.tr('connection.action.copyLogs', fallback: 'Copy logs')
           : _showLogs
-          ? 'Hide logs'
-          : 'Show logs',
+          ? context.tr('connection.action.hideLogs', fallback: 'Hide logs')
+          : context.tr('connection.action.showLogs', fallback: 'Show logs'),
       onAction: mode == _ConnectionPageMode.failed
           ? () => _copyDiagnostics(diagnostics)
           : () => setState(() => _showLogs = !_showLogs),
@@ -685,7 +688,9 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
     // A rejected response can create a new request for the same form. Keep
     // its node, while still appending each new keyboard-interactive round.
     if (previousPage?.stage == stage &&
-        previousPage?.challengeId == page.challengeId) {
+        (previousPage?.challengeId == page.challengeId ||
+            (challenge?.isRetry == true &&
+                previousPage?.challengeId != null))) {
       _lastProgressPage = page;
       return;
     }
@@ -777,15 +782,15 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
       _ConnectionPageMode.passphrase => _buildPassphraseBody(),
       _ConnectionPageMode.failed => _ConnectionFailureBody(
         key: const ValueKey('failed'),
-        message: status.message ?? 'Connection failed.',
+        message: status.message ?? tr('workspace.description.connectionFailed'),
       ),
       _ConnectionPageMode.exited => _ConnectionFailureBody(
         key: const ValueKey('exited'),
         message:
             status.message ??
             (serialProfile == null
-                ? 'SSH session exited.'
-                : 'Serial session closed.'),
+                ? tr('common.description.sshSessionExited')
+                : tr('common.description.serialSessionClosed')),
         icon: Icons.logout_rounded,
         iconColor: _mutedText,
       ),
@@ -830,7 +835,10 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Unlock FIDO2 security key',
+            context.tr(
+              'connection.auth.securityKeyPin.title',
+              fallback: 'Unlock FIDO2 security key',
+            ),
             style: TextStyle(
               color: _text,
               fontSize: 18,
@@ -839,7 +847,10 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
           ),
           const SizedBox(height: 10),
           Text(
-            'Enter the device PIN to continue SSH authentication.',
+            context.tr(
+              'connection.auth.securityKeyPin.description',
+              fallback: 'Enter the device PIN to continue SSH authentication.',
+            ),
             style: TextStyle(color: _mutedText),
           ),
           const SizedBox(height: 20),
@@ -900,7 +911,7 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
           Align(
             alignment: Alignment.centerLeft,
             child: Text(
-              tr('Public Key'),
+              tr('workspace.label.publicKey', fallback: 'Public Key'),
               style: _connectionBodyStyle.copyWith(fontWeight: FontWeight.w500),
             ),
           ),
@@ -912,7 +923,7 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
             child: _effectiveAuthTab == _ConnectionAuthTab.password
                 ? _WorkspaceInput(
                     controller: _passwordController,
-                    label: 'Password',
+                    label: tr('common.label.password', fallback: 'Password'),
                     size: _WorkspaceControlSize.large,
                     obscureText: _obscurePassword,
                     trailing: _WorkspaceButton(
@@ -930,8 +941,14 @@ class _TerminalConnectionPageState extends State<_TerminalConnectionPage> {
                           ? 24
                           : _WorkspaceControlSize.medium.inputHeight,
                       tooltip: _obscurePassword
-                          ? 'Show password'
-                          : 'Hide password',
+                          ? context.tr(
+                              'common.action.showPassword',
+                              fallback: 'Show password',
+                            )
+                          : context.tr(
+                              'common.action.hidePassword',
+                              fallback: 'Hide password',
+                            ),
                       onPressed: () {
                         setState(() => _obscurePassword = !_obscurePassword);
                       },
@@ -1678,10 +1695,24 @@ class _KeyboardInteractiveFormState extends State<_KeyboardInteractiveForm> {
             if (challenge.name.isNotEmpty) const SizedBox(height: 10),
             Text(challenge.instructions, style: _connectionBodyStyle),
           ],
+          if (challenge.isRetry) ...[
+            if (challenge.name.isNotEmpty || challenge.instructions.isNotEmpty)
+              const SizedBox(height: 10),
+            Text(
+              context.tr(
+                'connection.auth.interactiveRetry',
+                fallback: 'Authentication failed. Try again.',
+              ),
+              style: _connectionBodyStyle.copyWith(
+                color: const Color(0xffd24135),
+              ),
+            ),
+          ],
           for (var index = 0; index < challenge.prompts.length; index++) ...[
             if (index > 0 ||
                 challenge.name.isNotEmpty ||
-                challenge.instructions.isNotEmpty)
+                challenge.instructions.isNotEmpty ||
+                challenge.isRetry)
               const SizedBox(height: 16),
             _WorkspaceInput(
               controller: _controllers[index],
@@ -2490,7 +2521,8 @@ class _HostKeyPrompt extends StatelessWidget {
         SizedBox(height: 28),
         Text(
           tr(
-            'The authenticity of $host is not in Nauterm known_hosts yet. Trust it for this connection only, or save the fingerprint and reconnect.',
+            'workspace.knownHosts.authenticity.description',
+            args: {'host': host},
           ),
           style: _connectionBodyStyle,
         ),

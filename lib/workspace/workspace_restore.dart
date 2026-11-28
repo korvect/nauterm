@@ -31,7 +31,7 @@ extension _NautermWorkspaceRestore on _NautermWorkspaceState {
       workspaceRestoreBehavior,
     )) {
       WorkspaceRestoreLaunchAction.ask => await _askToRestoreWorkspace(
-        unexpectedExit: previous?.cleanShutdown == false,
+        previous!,
       ),
       WorkspaceRestoreLaunchAction.restore => true,
       WorkspaceRestoreLaunchAction.none || null => false,
@@ -51,10 +51,15 @@ extension _NautermWorkspaceRestore on _NautermWorkspaceState {
     await _saveWorkspaceState(cleanShutdown: false, restoreOnNextLaunch: false);
   }
 
-  Future<bool> _askToRestoreWorkspace({required bool unexpectedExit}) async {
+  Future<bool> _askToRestoreWorkspace(
+    NautermWorkspaceStateSnapshot snapshot,
+  ) async {
     final result = await _showWorkspaceDialog<_WorkspaceRecoveryDecision>(
-      builder: (context) =>
-          _WorkspaceRecoveryDialog(unexpectedExit: unexpectedExit),
+      builder: (context) => _WorkspaceRecoveryDialog(
+        unexpectedExit: !snapshot.cleanShutdown,
+        hasSessions: snapshot.hasRestorableSessions,
+        hasForwards: snapshot.activePortForwardUuids.isNotEmpty,
+      ),
     );
     if (result == null || !result.restore) return false;
     if (result.alwaysRestore) {

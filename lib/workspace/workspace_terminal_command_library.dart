@@ -227,6 +227,8 @@ class _TerminalSnippetEditor extends StatefulWidget {
     required this.packages,
     required this.targetLabel,
     required this.targetHostId,
+    required this.isOriginalTerminal,
+    required this.saveAvailable,
     required this.onCreatePackage,
     required this.onCancel,
     required this.onSave,
@@ -236,6 +238,8 @@ class _TerminalSnippetEditor extends StatefulWidget {
   final List<_SnippetPackageItem> packages;
   final String targetLabel;
   final int? targetHostId;
+  final bool Function() isOriginalTerminal;
+  final bool saveAvailable;
   final _CreateRelatedEntry? onCreatePackage;
   final VoidCallback onCancel;
   final Future<void> Function(_SnippetDraft draft) onSave;
@@ -259,6 +263,9 @@ class _TerminalSnippetEditorState extends State<_TerminalSnippetEditor> {
   }
 
   Future<void> _save() async {
+    if (_saving || !widget.saveAvailable || !widget.isOriginalTerminal()) {
+      return;
+    }
     final script = _scriptController.text.trim();
     if (script.isEmpty) {
       setState(() => _error = 'Script is required.');
@@ -289,15 +296,17 @@ class _TerminalSnippetEditorState extends State<_TerminalSnippetEditor> {
         return;
       }
       setState(() {
-        _saving = false;
         _error = 'Failed to save snippet: $error';
       });
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final colors = widget.colors;
+    final isOriginalTerminal = widget.isOriginalTerminal();
     return Expanded(
       child: ColoredBox(
         color: colors.background,
@@ -355,7 +364,7 @@ class _TerminalSnippetEditorState extends State<_TerminalSnippetEditor> {
                     padding: const EdgeInsets.fromLTRB(12, 14, 12, 18),
                     children: [
                       _WorkspaceSelect<int?>(
-                        label: 'Package',
+                        label: tr('common.label.package', fallback: 'Package'),
                         value: _packageId,
                         size: _WorkspaceControlSize.medium,
                         editable: true,
@@ -390,13 +399,16 @@ class _TerminalSnippetEditorState extends State<_TerminalSnippetEditor> {
                       const SizedBox(height: 12),
                       _WorkspaceInput(
                         controller: _descriptionController,
-                        label: 'Description',
+                        label: tr(
+                          'common.label.description',
+                          fallback: 'Description',
+                        ),
                         size: _WorkspaceControlSize.medium,
                       ),
                       const SizedBox(height: 12),
                       _WorkspaceInput(
                         controller: _scriptController,
-                        label: 'Script',
+                        label: tr('common.label.script', fallback: 'Script'),
                         isRequired: true,
                         size: _WorkspaceControlSize.medium,
                         autofocus: true,
@@ -415,7 +427,11 @@ class _TerminalSnippetEditorState extends State<_TerminalSnippetEditor> {
                             const SizedBox(width: 7),
                             Expanded(
                               child: Text(
-                                tr('Available on ${widget.targetLabel}'),
+                                context.tr(
+                                  'workspace.snippets.targets.availableOn',
+                                  fallback: 'Available on {target}',
+                                  args: {'target': widget.targetLabel},
+                                ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
@@ -427,6 +443,16 @@ class _TerminalSnippetEditorState extends State<_TerminalSnippetEditor> {
                               ),
                             ),
                           ],
+                        ),
+                      ],
+                      if (!isOriginalTerminal) ...[
+                        const SizedBox(height: 12),
+                        Text(
+                          context.tr(
+                            'workspace.snippets.targets.selectOriginalPane',
+                            fallback: 'Select the original terminal pane before saving this snippet.',
+                          ),
+                          style: TextStyle(color: colors.muted, fontSize: 11.5),
                         ),
                       ],
                       if (_error != null) ...[
@@ -466,7 +492,12 @@ class _TerminalSnippetEditorState extends State<_TerminalSnippetEditor> {
                       type: _WorkspaceButtonType.primary,
                       variant: _WorkspaceButtonVariant.solid,
                       height: 32,
-                      onPressed: _saving ? null : _save,
+                      onPressed:
+                          _saving ||
+                              !isOriginalTerminal ||
+                              !widget.saveAvailable
+                          ? null
+                          : _save,
                     ),
                   ],
                 ),
@@ -711,14 +742,17 @@ class _TerminalToolPlaceholder extends StatelessWidget {
         fallback: 'Run and manage reusable terminal snippets here.',
       ),
       _TerminalToolPanelMode.shellHistory => tr(
-        'workspace.terminalTools.mode.shellHistory.description',
-        fallback: 'Search and reuse commands from this terminal session.',
+        'workspace.terminalTools.shellHistory.waiting.description',
+        fallback: 'Shell history is available after connecting.',
       ),
       _TerminalToolPanelMode.settings => tr(
         'workspace.terminalTools.mode.settings.description',
         fallback: 'Font controls and terminal theme previews will appear here.',
       ),
-      _TerminalToolPanelMode.ai => '',
+      _TerminalToolPanelMode.ai => tr(
+        'workspace.terminalTools.ai.waiting.description',
+        fallback: 'AI Assistant is available after opening a terminal.',
+      ),
     };
     return Expanded(
       key: ValueKey('terminal-tool-placeholder:${mode.name}'),

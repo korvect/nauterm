@@ -55,7 +55,7 @@ add_subdirectory("runner")
 # Build the Rust FFI library used by the workspace data store and terminal
 # runtime. Release and Profile Flutter builds both use Cargo's release profile.
 find_program(CARGO_EXECUTABLE cargo REQUIRED)
-set(NAUTERM_FFI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../native/nauterm_ffi")
+set(NAUTERM_FFI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../native/nauterm_core")
 find_path(NAUTERM_OPENSSL_DIR
   NAMES "include/openssl/ssl.h"
   PATHS
@@ -120,19 +120,19 @@ install(FILES "${FLUTTER_ICU_DATA_FILE}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}
 install(FILES "${FLUTTER_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
   COMPONENT Runtime)
 
-install(FILES "${NAUTERM_FFI_DIR}/target/debug/nauterm_ffi.dll"
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/../target/debug/nauterm_core.dll"
   DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
   CONFIGURATIONS Debug
   COMPONENT Runtime)
-install(FILES "${NAUTERM_FFI_DIR}/target/debug/ghostty-vt.dll"
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/../target/debug/ghostty-vt.dll"
   DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
   CONFIGURATIONS Debug
   COMPONENT Runtime)
-install(FILES "${NAUTERM_FFI_DIR}/target/release/nauterm_ffi.dll"
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/../target/release/nauterm_core.dll"
   DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
   CONFIGURATIONS Profile;Release
   COMPONENT Runtime)
-install(FILES "${NAUTERM_FFI_DIR}/target/release/ghostty-vt.dll"
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/../target/release/ghostty-vt.dll"
   DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
   CONFIGURATIONS Profile;Release
   COMPONENT Runtime)
