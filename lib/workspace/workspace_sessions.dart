@@ -747,51 +747,75 @@ class _WorkspaceTerminalPaneHeader extends StatelessWidget {
       animation: Listenable.merge(session.controllers.toList(growable: false)),
       builder: (context, _) {
         final status = _workspaceTerminalMonitorStatus(session);
+        const openButtonSize = 22.0;
+        const horizontalPadding = 10.0;
         return Container(
           height: _workspaceMonitorHeaderHeight,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
           decoration: BoxDecoration(
             color: selected
                 ? _blue.withValues(alpha: _workspaceDark ? 0.16 : 0.08)
                 : _card,
             border: Border(bottom: BorderSide(color: _sidebarDivider)),
           ),
-          child: Row(
+          child: Stack(
+            fit: StackFit.expand,
             children: [
-              Icon(
-                LucideIcons.squareTerminal,
-                size: 16,
-                color: selected ? _blue : _mutedText,
-              ),
-              SizedBox(width: 7),
-              Expanded(
-                child: Text(
-                  session.displayTitle(),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: _text,
-                    fontSize: NautermFontSizes.labelMedium,
-                    fontWeight: NautermFontWeights.semibold,
-                    letterSpacing: 0,
+              MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onDoubleTap: onOpen,
+                  child: Padding(
+                    padding: const EdgeInsets.only(
+                      left: horizontalPadding,
+                      right: horizontalPadding + openButtonSize + 4,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          LucideIcons.squareTerminal,
+                          size: 16,
+                          color: selected ? _blue : _mutedText,
+                        ),
+                        const SizedBox(width: 7),
+                        Expanded(
+                          child: Text(
+                            session.displayTitle(),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: _text,
+                              fontSize: NautermFontSizes.labelMedium,
+                              fontWeight: NautermFontWeights.semibold,
+                              letterSpacing: 0,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        _WorkspaceTerminalStatusPill(status: status),
+                      ],
+                    ),
                   ),
                 ),
               ),
-              SizedBox(width: 8),
-              _WorkspaceTerminalStatusPill(status: status),
-              SizedBox(width: 4),
-              _WorkspaceButton(
-                icon: Icons.open_in_new_rounded,
-                tooltip: tr(
-                  'workspace.label.openTerminalTab',
-                  fallback: 'Open terminal tab',
+              Align(
+                alignment: Alignment.centerRight,
+                child: Padding(
+                  padding: const EdgeInsets.only(right: horizontalPadding),
+                  child: _WorkspaceButton(
+                    icon: Icons.open_in_new_rounded,
+                    tooltip: tr(
+                      'workspace.label.openTerminalTab',
+                      fallback: 'Open terminal tab',
+                    ),
+                    variant: _WorkspaceButtonVariant.text,
+                    width: openButtonSize,
+                    height: openButtonSize,
+                    horizontalPadding: 0,
+                    color: selected ? _blue : _mutedText,
+                    onPressed: onOpen,
+                  ),
                 ),
-                variant: _WorkspaceButtonVariant.text,
-                width: 22,
-                height: 22,
-                horizontalPadding: 0,
-                color: selected ? _blue : _mutedText,
-                onPressed: onOpen,
               ),
             ],
           ),

@@ -2391,6 +2391,34 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('overview opens a terminal from its header or open button', (
+    tester,
+  ) async {
+    await tester.pumpWidget(NautermApp(onOpenSettings: () {}));
+    await _openTraditionalLocalTerminal(tester);
+    await _switchToMultiWorkspace(tester);
+
+    final open = find.byTooltip('Open terminal tab');
+    expect(open, findsOneWidget);
+    final headerPadding = tester.getRect(open).centerRight + const Offset(4, 0);
+
+    await tester.tapAt(headerPadding);
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(open, findsOneWidget);
+
+    await _doubleClickWithMouse(tester, headerPadding);
+    expect(open, findsNothing);
+    expect(find.byType(TerminalView), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('workspace-top-tab:workspace')));
+    await tester.pump();
+    await tester.tap(open);
+    await tester.pump();
+    expect(open, findsNothing);
+    expect(find.byType(TerminalView), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('quick connect opens the first shell directly', (
     WidgetTester tester,
   ) async {

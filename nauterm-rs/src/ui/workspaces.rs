@@ -152,6 +152,13 @@ impl Nauterm {
         self.overview = overview && self.data.general.workspace_enabled;
         self.navigate(Page::Sessions, window, cx);
     }
+
+    fn open_overview_terminal(&mut self, id: u64, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(tab) = self.terminals.iter_mut().find(|tab| tab.id == id) {
+            tab.show_sftp = false;
+        }
+        self.show_session(id, false, window, cx);
+    }
     fn select_workspace(&mut self, id: Id, window: &mut Window, cx: &mut Context<Self>) {
         if !self
             .data
@@ -688,6 +695,13 @@ impl Nauterm {
                 status_color.opacity(if self.data.dark { 0.18 } else { 0.10 })
             };
             let title = tab.title(cx);
+            let title_color = if selected { p.accent } else { p.muted };
+            let header_background = if selected {
+                p.surface
+                    .blend(p.accent.opacity(if self.data.dark { 0.16 } else { 0.08 }))
+            } else {
+                p.surface
+            };
             tiles.push(
                 div()
                     .id(("workspace-session", id))
@@ -695,8 +709,7 @@ impl Nauterm {
                     .h(px(tile_height))
                     .flex_shrink_0()
                     .rounded(px(8.))
-                    .border_1()
-                    .border_color(p.border)
+                    .p(px(1.))
                     .overflow_hidden()
                     .flex()
                     .flex_col()
@@ -709,44 +722,38 @@ impl Nauterm {
                     )
                     .child(
                         div()
+                            .id(("workspace-session-header", id))
                             .h(px(34.))
                             .flex_shrink_0()
-                            .px(px(10.))
+                            .pl(px(7.))
+                            .pr(px(4.))
                             .flex()
                             .items_center()
                             .gap(px(7.))
-                            .bg(p.surface)
+                            .bg(header_background)
                             .border_b_1()
                             .border_color(p.border)
+                            .cursor_pointer()
+                            .on_click(cx.listener(move |this, event: &ClickEvent, window, cx| {
+                                if event.click_count() == 2 {
+                                    this.open_overview_terminal(id, window, cx);
+                                }
+                            }))
                             .child(
-                                Button::new(("workspace-session-title", id))
-                                    .xsmall()
-                                    .ghost()
-                                    .text_color(if selected { p.text } else { p.muted })
-                                    .content_start()
+                                crate::assets::icon(IconName::Terminal)
+                                    .with_size(px(16.))
+                                    .text_color(title_color),
+                            )
+                            .child(
+                                div()
                                     .flex_1()
                                     .min_w_0()
-                                    .icon(IconName::Terminal)
-                                    .icon_size(px(16.))
-                                    .raw_label(title)
-                                    .on_click(cx.listener(
-                                        move |this, event: &ClickEvent, window, cx| {
-                                            if event.click_count() >= 2
-                                                && let Some(tab) = this
-                                                    .terminals
-                                                    .iter_mut()
-                                                    .find(|tab| tab.id == id)
-                                            {
-                                                tab.show_sftp = false;
-                                            }
-                                            this.show_session(
-                                                id,
-                                                event.click_count() < 2,
-                                                window,
-                                                cx,
-                                            )
-                                        },
-                                    )),
+                                    .whitespace_nowrap()
+                                    .text_ellipsis()
+                                    .text_size(px(13.))
+                                    .font_weight(FontWeights::SEMIBOLD)
+                                    .text_color(p.text)
+                                    .child(title),
                             )
                             .child(
                                 div()
@@ -769,16 +776,12 @@ impl Nauterm {
                                 Button::new(("workspace-session-open", id))
                                     .xsmall()
                                     .ghost()
-                                    .text_color(if selected { p.text } else { p.muted })
+                                    .text_color(title_color)
                                     .icon(IconName::Maximize2)
                                     .tooltip("workspace.label.openTerminalTab")
                                     .on_click(cx.listener(move |this, _, window, cx| {
-                                        if let Some(tab) =
-                                            this.terminals.iter_mut().find(|tab| tab.id == id)
-                                        {
-                                            tab.show_sftp = false;
-                                        }
-                                        this.show_session(id, false, window, cx)
+                                        cx.stop_propagation();
+                                        this.open_overview_terminal(id, window, cx);
                                     })),
                             ),
                     )
@@ -788,6 +791,18 @@ impl Nauterm {
                             .min_h_0()
                             .min_w_0()
                             .child(self.terminal_tab_element(tab, cx)),
+                    )
+                    .child(
+                        div()
+                            .absolute()
+                            .inset_0()
+                            .rounded(px(8.))
+                            .border(px(if selected { 1.5 } else { 1. }))
+                            .border_color(if selected {
+                                p.accent.opacity(0.72)
+                            } else {
+                                p.border
+                            }),
                     )
                     .into_any_element(),
             );
