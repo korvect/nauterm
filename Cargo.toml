@@ -7,7 +7,7 @@ gpui-pre-linux = { git = "https://github.com/korvect/gpui-pre-linux", rev = "9a0
 gpui-pre-windows = { git = "https://github.com/korvect/gpui-pre-windows", rev = "33821bf8ffbad3eb87a5befda0f2a3fdb05efb91" }
 
 [workspace.package]
-version = "0.4.0"
+version = "0.4.1"
 publish = false
 
 [workspace.dependencies]
