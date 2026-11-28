@@ -58,7 +58,7 @@ cargo clippy -p nauterm_core -p nauterm-rs --all-targets --locked -- -D warnings
 cargo test -p nauterm-rs --locked
 cargo test -p nauterm_core --features terminal-ghostty --locked shell_integration
 cargo test -p nauterm_core --features terminal-ghostty --locked pty::powershell
-make build-rs
+make rs-build
 ```
 
 An opt-in Unix PTY test for an installed or portable PowerShell runs without
@@ -72,7 +72,7 @@ python3 scripts/tests/check_powershell_protocol.py --powershell /path/to/pwsh
 The Linux development host initially had the `libxkbcommon-x11.so.0` runtime
 library but lacked the development linker name. Installing the workflow's
 `libxkbcommon-x11-dev` package resolved the link failure; the user confirmed
-ordinary `make run-rs` now launches. A temporary local linker symlink used
+ordinary `make rs-run` now launches. A temporary local linker symlink used
 earlier is not a packaging solution or a dependency change.
 
 The Linux checks do not establish Windows runtime behavior. The local Windows

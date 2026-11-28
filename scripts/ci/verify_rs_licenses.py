@@ -41,7 +41,7 @@ def verify(project: Path, targets: list, offline: bool) -> None:
         raise RuntimeError(
             "RS license notices are missing: "
             + ", ".join(f"{name} {version}" for name, version in missing)
-            + ". Run make generate-rs-licenses."
+            + ". Run make licenses-generate CLIENT=rs."
         )
     print(f"RS notices cover {len(expected)} runtime packages across {len(targets)} target(s).")
 

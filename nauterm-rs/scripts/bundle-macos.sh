@@ -83,7 +83,7 @@ if [[ -f "$client/assets/licenses/nauterm-rs-rust.json" ]]; then
     --project "$repository" --build-log "$work/build.jsonl" \
     --destination "$app/Contents/Resources/licenses"
 elif [[ "$profile" == release ]]; then
-  echo 'RS Rust license notices are missing. Run make generate-rs-licenses.' >&2
+  echo 'RS Rust license notices are missing. Run make licenses-generate CLIENT=rs.' >&2
   exit 1
 fi
 

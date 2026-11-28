@@ -23,4 +23,4 @@ In the macOS application bundle, this directory is located at
 `Nauterm RS.app/Contents/Resources/licenses` (Finder: Show Package Contents).
 
 The notice inventory can be regenerated from the repository root with
-`make generate-rs-licenses` using the locked Rust dependencies.
+`make licenses-generate CLIENT=rs` using the locked Rust dependencies.

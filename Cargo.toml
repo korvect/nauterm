@@ -35,7 +35,7 @@ incremental = false
 debug = 0
 
 # Dependency workspace profiles are not inherited. Keep GPUI's layout/scene
-# hot paths optimized during `make run-rs`, as in gpui-kit's own dev profile.
+# hot paths optimized during `make rs-run`, as in gpui-kit's own dev profile.
 [profile.dev.package.gpui-pre]
 opt-level = 3
 

@@ -9,7 +9,7 @@ checks from desktop observations; the Windows acceptance work is not complete.
 The local host is Windows 11 Pro x64 (10.0.26300), Visual Studio 2026 Community
 18.11.3, Rust 1.99.1, Zig 0.16.0 and OpenSSL 4 x64.
 
-- `make run-rs` from ordinary Git Bash now loads the VS/OpenSSL environment,
+- `make rs-run` from ordinary Git Bash now loads the VS/OpenSSL environment,
   builds, stages checksummed Mosh plus architecture-matched native runtimes and
   starts `nauterm-rs.exe`. No Python is needed by the Windows launch script.
 - `cargo test -p nauterm_core --features integration-tests,test-credential-store --locked`

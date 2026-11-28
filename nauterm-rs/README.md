@@ -22,7 +22,7 @@ sudo apt-get install -y clang cmake libasound2-dev libclang-dev \
 
 `unable to find library -lxkbcommon-x11` means the development package is
 missing; the installed `libxkbcommon-x11.so.0` runtime alone does not provide
-the linker name. Install `libxkbcommon-x11-dev` before `make run-rs`.
+the linker name. Install `libxkbcommon-x11-dev` before `make rs-run`.
 
 On GNOME Wayland, standard window titlebars use libdecor's GTK plugin.
 The main window retains its product-owned controls. A local Cargo patch in
@@ -32,19 +32,19 @@ to the dependency fork.
 Run these commands from the repository root:
 
 ```sh
-make build-rs
-make run-rs
-make check-rs
+make rs-build
+make rs-run
+make rs-check
 cargo fmt --all --check
 cargo clippy -p nauterm_core -p nauterm-rs --all-targets --locked -- -D warnings
 cargo test -p nauterm-rs --locked
 ```
 
-`make run-rs` creates an application bundle on macOS so AppKit can resolve the
+`make rs-run` creates an application bundle on macOS so AppKit can resolve the
 application identity, compiled icon and bundled frameworks. Mosh libraries are
 staged by the build scripts.
 
-On Linux, `make run-rs` builds a local AppDir under Cargo's target directory and
+On Linux, `make rs-run` builds a local AppDir under Cargo's target directory and
 runs its `AppRun`. It refreshes a hidden user-local desktop entry and icon from
 the same metadata used to build the Rust app and its Linux packages. Wayland
 shells use the development app ID to match the Nauterm RS name and icon, while
@@ -103,26 +103,23 @@ accepts schema 4 snapshots; new snapshots always use the current schema version.
 
 ## Packaging
 
-Run the platform-appropriate targets from the repository root:
+Run these targets from the repository root:
 
 ```sh
-make generate-rs-licenses
+make licenses-generate CLIENT=rs
 
-# macOS: local debug bundle, release bundle/archive, signed Sparkle feed
-make bundle-rs-macos
-make package-rs-macos
-make appcast-rs-macos
+# Release packages for the current platform
+make rs-package
 
-# Linux
-make package-rs-linux-x86_64
-make package-rs-linux-arm64
-
-# Windows
-make package-rs-windows-x86_64
-make package-rs-windows-arm64
+# macOS: local debug bundle and signed Sparkle feed
+make rs-bundle-macos
+make rs-appcast
 ```
 
-Release packages use `DIST_DIR` (default `dist`). The release profile enables
+Packaging defaults to the host architecture. Set `ARCH=arm64` or
+`ARCH=x86_64` to select the architecture explicitly. Release packages use
+`DIST_DIR` (default `dist`). Set `CLEAN_DIST=0` to retain existing packages
+when building on Linux or Windows. The release profile enables
 ThinLTO, one codegen unit and stripped symbols. Platform signing and publishing
 are configured in the [release workflow](../.github/workflows/release-packages.yml).
 

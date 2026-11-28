@@ -79,7 +79,7 @@ expected_hash = sha256(source_data).hexdigest()
 recorded_hash = source_hash_file.read_text(encoding="utf-8").split()[0]
 if recorded_hash != expected_hash:
     raise SystemExit(
-        "Generated app icons are stale. Run `make generate-icons` on macOS."
+        "Generated app icons are stale. Run `make icons-generate` on macOS."
     )
 
 pixel_sizes = (16, 24, 32, 48, 64, 128, 256, 512, 1024)
@@ -192,7 +192,7 @@ def directory_hashes(path: Path) -> dict[str, str]:
 if directory_hashes(source_composer) != directory_hashes(mac_composer):
     raise SystemExit(
         "Prepared macOS Icon Composer resource is stale. "
-        "Run `make prepare-icons`."
+        "Run `make icons-prepare`."
     )
 
 if linux_icon.read_bytes() != generated[1024]:

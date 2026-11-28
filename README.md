@@ -234,31 +234,19 @@ cd nauterm
 flutter pub get
 ```
 
-The repository contains pinned prebuilt Mosh libraries. Select the directory
-for the current platform before running the application.
-
-macOS:
-
-```sh
-export NAUTERM_MOSH_LIB_DIR="$PWD/third_party/nauterm_mosh_ffi/macos-$(uname -m)"
-make run
-```
-
-Linux x86_64:
+Launch Flutter from the repository root. The run target selects the bundled
+Mosh library for the current platform. Set `NAUTERM_MOSH_LIB_DIR` to use a
+different prebuilt library.
 
 ```sh
-export NAUTERM_MOSH_LIB_DIR="$PWD/third_party/nauterm_mosh_ffi/linux-x86_64"
-make run
+make flutter-run
 ```
-
-Developers working on Mosh itself can instead place the `nauterm-mosh`
-workspace next to this repository or set `NAUTERM_MOSH_REPO_DIR` explicitly.
 
 For an isolated test profile, set `NAUTERM_DATA_DIR`. The database, configuration,
 workspace state, logs, and other application files use that directory:
 
 ```sh
-NAUTERM_DATA_DIR=/tmp/nauterm-test make run
+NAUTERM_DATA_DIR=/tmp/nauterm-test make flutter-run
 ```
 
 ### Local build configuration
@@ -297,24 +285,26 @@ token, not a personal API key.
 
 ### Common commands
 
+Run `make help` for the full list of targets and options.
+
 ```sh
 # Run the desktop app
-make run
+make flutter-run
 
 # Build the Rust library explicitly
-make native-debug
-make native-release
+make flutter-build-native
+make flutter-build-native PROFILE=release
 
 # Build packages for the current platform
-make package-current
+make flutter-package
 
 # Regenerate platform icons after editing the canonical sources
-make generate-icons
-make verify-icons
+make icons-generate
+make icons-verify
 ```
 
 The [Nauterm RS client](nauterm-rs/README.md) shares the Rust Cargo workspace and
-core with Flutter. Run `make run-rs`, `make build-rs`, or `make check-rs` from this
+core with Flutter. Run `make rs-run`, `make rs-build`, or `make rs-check` from this
 repository root. Its README covers development, packaging and data directories.
 The clients keep their local databases, configuration, OS credentials and
 workspace state independent. They use the same sync format and default remote
@@ -322,7 +312,9 @@ filename, allowing resources to synchronize through a shared remote target.
 
 Native compilation is integrated into the macOS Xcode, Linux CMake, and Windows
 packaging pipelines. The explicit native targets are mainly useful while
-working directly on the Rust layer.
+working directly on the Rust layer. To build Mosh from source with
+`make flutter-build-native`, place the `nauterm-mosh` workspace next to this
+repository or point `NAUTERM_MOSH_REPO_DIR` at it.
 
 ## Tests and quality checks
 

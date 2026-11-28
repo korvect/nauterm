@@ -211,7 +211,7 @@ jobs:
           NAUTERM_POSTHOG_API_KEY: ${{ vars.NAUTERM_POSTHOG_API_KEY }}
           NAUTERM_POSTHOG_HOST: ${{ vars.NAUTERM_POSTHOG_HOST }}
           SPARKLE_PUBLIC_ED_KEY: ${{ vars.SPARKLE_PUBLIC_ED_KEY }}
-        run: make package-macos-${{ matrix.arch }}
+        run: make flutter-package ARCH=${{ matrix.arch }}
 
       - name: Configure RS macOS signing
         env:
@@ -227,7 +227,7 @@ jobs:
         env:
           NAUTERM_GOOGLE_CLIENT_SECRET: ${{ secrets.NAUTERM_GOOGLE_CLIENT_SECRET }}
           SPARKLE_PUBLIC_ED_KEY: ${{ vars.SPARKLE_PUBLIC_ED_KEY }}
-        run: make package-rs-macos
+        run: make rs-package ARCH=${{ matrix.arch }}
 
       - name: Clean up RS signing credentials
         if: always()
@@ -238,8 +238,8 @@ jobs:
         env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: |
-          bash scripts/ci/generate_sparkle_appcast.sh ${{ matrix.arch }}
-          bash scripts/ci/generate_sparkle_appcast.sh ${{ matrix.arch }} rs
+          make flutter-appcast ARCH=${{ matrix.arch }}
+          make rs-appcast ARCH=${{ matrix.arch }}
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -348,13 +348,13 @@ jobs:
           NAUTERM_GOOGLE_CLIENT_SECRET: ${{ secrets.NAUTERM_GOOGLE_CLIENT_SECRET }}
           NAUTERM_POSTHOG_API_KEY: ${{ vars.NAUTERM_POSTHOG_API_KEY }}
           NAUTERM_POSTHOG_HOST: ${{ vars.NAUTERM_POSTHOG_HOST }}
-        run: make package-linux-${{ matrix.arch }}
+        run: make flutter-package ARCH=${{ matrix.arch }}
 
       - name: Build Linux RS packages
         env:
           CLEAN_DIST: "0"
           NAUTERM_GOOGLE_CLIENT_SECRET: ${{ secrets.NAUTERM_GOOGLE_CLIENT_SECRET }}
-        run: make package-rs-linux-${{ matrix.arch }}
+        run: make rs-package ARCH=${{ matrix.arch }}
 
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

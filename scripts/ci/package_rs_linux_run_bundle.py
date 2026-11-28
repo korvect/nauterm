@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a self-contained development AppDir for `make run-rs`."""
+"""Build a self-contained development AppDir for `make rs-run`."""
 import argparse
 import hashlib
 import json

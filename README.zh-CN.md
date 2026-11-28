@@ -183,28 +183,16 @@ cd nauterm
 flutter pub get
 ```
 
-仓库包含固定版本的预编译 Mosh 库。运行应用前，请选择当前平台对应的目录。
-
-macOS：
+在仓库根目录运行 Flutter 版。启动命令会自动选择当前平台对应的预编译 Mosh 库。可设置 `NAUTERM_MOSH_LIB_DIR` 来使用其他预编译库。
 
 ```sh
-export NAUTERM_MOSH_LIB_DIR="$PWD/third_party/nauterm_mosh_ffi/macos-$(uname -m)"
-make run
+make flutter-run
 ```
-
-Linux x86_64：
-
-```sh
-export NAUTERM_MOSH_LIB_DIR="$PWD/third_party/nauterm_mosh_ffi/linux-x86_64"
-make run
-```
-
-参与 Mosh 本身开发时，可以将 `nauterm-mosh` 工作空间放在本仓库同级目录，或显式设置 `NAUTERM_MOSH_REPO_DIR`。
 
 需要隔离的测试环境时，可以设置 `NAUTERM_DATA_DIR`。数据库、配置、工作区状态、日志等应用文件都会使用该目录：
 
 ```sh
-NAUTERM_DATA_DIR=/tmp/nauterm-test make run
+NAUTERM_DATA_DIR=/tmp/nauterm-test make flutter-run
 ```
 
 ### 本地构建配置
@@ -239,25 +227,27 @@ GitHub 标签构建需要在仓库 Actions Variables 中配置同名的 PostHog 
 
 ### 常用命令
 
+运行 `make help` 查看完整命令和选项。
+
 ```sh
 # 运行桌面应用
-make run
+make flutter-run
 
 # 显式构建 Rust 库
-make native-debug
-make native-release
+make flutter-build-native
+make flutter-build-native PROFILE=release
 
 # 为当前平台构建软件包
-make package-current
+make flutter-package
 
 # 编辑规范图标源后重新生成平台图标
-make generate-icons
-make verify-icons
+make icons-generate
+make icons-verify
 ```
 
-[Nauterm RS 客户端](nauterm-rs/README.md) 与 Flutter 共用 Cargo 工作区和 Rust 底层。在仓库根目录运行 `make run-rs`、`make build-rs` 或 `make check-rs`；开发、打包及数据目录说明见其 README。两端的本地数据库、配置、系统凭据及工作区状态完全独立，但使用相同的同步格式和默认远端文件名，可通过同一远端目标同步资源。
+[Nauterm RS 客户端](nauterm-rs/README.md) 与 Flutter 共用 Cargo 工作区和 Rust 底层。在仓库根目录运行 `make rs-run`、`make rs-build` 或 `make rs-check`；开发、打包及数据目录说明见其 README。两端的本地数据库、配置、系统凭据及工作区状态完全独立，但使用相同的同步格式和默认远端文件名，可通过同一远端目标同步资源。
 
-原生编译已经集成到 macOS Xcode、Linux CMake 和 Windows 打包流程中。显式原生构建目标主要用于直接开发 Rust 层。
+原生编译已经集成到 macOS Xcode、Linux CMake 和 Windows 打包流程中。显式原生构建目标主要用于直接开发 Rust 层。要用 `make flutter-build-native` 从源码构建 Mosh，可将 `nauterm-mosh` 工作空间放在本仓库同级目录，或通过 `NAUTERM_MOSH_REPO_DIR` 指定路径。
 
 ## 测试与质量检查
 
