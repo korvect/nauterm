@@ -2788,7 +2788,7 @@ dependencies = [
 [[package]]
 name = "gpui-base"
 version = "0.11.0"
-source = "git+https://github.com/korvect/gpui-kit?rev=c1d496ba10a829a6747d1cf4453862f03c981854#c1d496ba10a829a6747d1cf4453862f03c981854"
+source = "git+https://github.com/korvect/gpui-kit?rev=cfece14c8e4ae49378f19ccf2c20b5457fadc8d5#cfece14c8e4ae49378f19ccf2c20b5457fadc8d5"
 dependencies = [
  "aho-corasick",
  "anyhow",
@@ -2830,7 +2830,7 @@ dependencies = [
 [[package]]
 name = "gpui-component"
 version = "0.11.0"
-source = "git+https://github.com/korvect/gpui-kit?rev=c1d496ba10a829a6747d1cf4453862f03c981854#c1d496ba10a829a6747d1cf4453862f03c981854"
+source = "git+https://github.com/korvect/gpui-kit?rev=cfece14c8e4ae49378f19ccf2c20b5457fadc8d5#cfece14c8e4ae49378f19ccf2c20b5457fadc8d5"
 dependencies = [
  "anyhow",
  "core-text",
@@ -2876,7 +2876,7 @@ dependencies = [
 [[package]]
 name = "gpui-component-macros"
 version = "0.11.0"
-source = "git+https://github.com/korvect/gpui-kit?rev=c1d496ba10a829a6747d1cf4453862f03c981854#c1d496ba10a829a6747d1cf4453862f03c981854"
+source = "git+https://github.com/korvect/gpui-kit?rev=cfece14c8e4ae49378f19ccf2c20b5457fadc8d5#cfece14c8e4ae49378f19ccf2c20b5457fadc8d5"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -3212,7 +3212,7 @@ dependencies = [
 [[package]]
 name = "gpui-kit"
 version = "0.11.0"
-source = "git+https://github.com/korvect/gpui-kit?rev=c1d496ba10a829a6747d1cf4453862f03c981854#c1d496ba10a829a6747d1cf4453862f03c981854"
+source = "git+https://github.com/korvect/gpui-kit?rev=cfece14c8e4ae49378f19ccf2c20b5457fadc8d5#cfece14c8e4ae49378f19ccf2c20b5457fadc8d5"
 dependencies = [
  "gpui-base",
  "gpui-component",
@@ -3227,7 +3227,7 @@ dependencies = [
 [[package]]
 name = "gpui-kit-assets"
 version = "0.11.0"
-source = "git+https://github.com/korvect/gpui-kit?rev=c1d496ba10a829a6747d1cf4453862f03c981854#c1d496ba10a829a6747d1cf4453862f03c981854"
+source = "git+https://github.com/korvect/gpui-kit?rev=cfece14c8e4ae49378f19ccf2c20b5457fadc8d5#cfece14c8e4ae49378f19ccf2c20b5457fadc8d5"
 dependencies = [
  "anyhow",
  "gpui-pre",
@@ -3411,7 +3411,7 @@ dependencies = [
 [[package]]
 name = "gpui-pre-linux"
 version = "0.3.14"
-source = "git+https://github.com/korvect/gpui-pre-linux?rev=773b9b85abbde930e1c1df27981219ed10066a93#773b9b85abbde930e1c1df27981219ed10066a93"
+source = "git+https://github.com/korvect/gpui-pre-linux?rev=9a0678a59ce53bceb1da9e63d8b7e4f1f7109267#9a0678a59ce53bceb1da9e63d8b7e4f1f7109267"
 dependencies = [
  "accesskit",
  "accesskit_unix",
@@ -3694,7 +3694,7 @@ dependencies = [
 [[package]]
 name = "gpui-pre-windows"
 version = "0.3.14"
-source = "git+https://github.com/korvect/gpui-pre-windows?rev=234f22feef722704192bbc8a2bab2b34e35063ea#234f22feef722704192bbc8a2bab2b34e35063ea"
+source = "git+https://github.com/korvect/gpui-pre-windows?rev=33821bf8ffbad3eb87a5befda0f2a3fdb05efb91#33821bf8ffbad3eb87a5befda0f2a3fdb05efb91"
 dependencies = [
  "accesskit",
  "accesskit_windows",

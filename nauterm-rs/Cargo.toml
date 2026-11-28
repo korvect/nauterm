@@ -12,7 +12,7 @@ window-diagnostics = ["platform-diagnostics", "dep:gpui-profiler"]
 [dependencies]
 nauterm_core = { path = "../native/nauterm_core", default-features = false, features = ["terminal-ghostty"] }
 anyhow = "1"
-gpui-kit = { version = "=0.11.0", git = "https://github.com/korvect/gpui-kit", rev = "c1d496ba10a829a6747d1cf4453862f03c981854" }
+gpui-kit = { version = "=0.11.0", git = "https://github.com/korvect/gpui-kit", rev = "cfece14c8e4ae49378f19ccf2c20b5457fadc8d5" }
 # Enable the pinned core's profiler without selecting Kit's optional Fast backend.
 gpui-profiler = { package = "gpui-pre", version = "=0.3.14", default-features = false, features = ["profiler"], optional = true }
 serde.workspace = true

@@ -3,8 +3,8 @@ members = ["native/nauterm_core", "native/nauterm_cmd_integration", "nauterm-rs"
 resolver = "2"
 
 [patch.crates-io]
-gpui-pre-linux = { git = "https://github.com/korvect/gpui-pre-linux", rev = "773b9b85abbde930e1c1df27981219ed10066a93" }
-gpui-pre-windows = { git = "https://github.com/korvect/gpui-pre-windows", rev = "234f22feef722704192bbc8a2bab2b34e35063ea" }
+gpui-pre-linux = { git = "https://github.com/korvect/gpui-pre-linux", rev = "9a0678a59ce53bceb1da9e63d8b7e4f1f7109267" }
+gpui-pre-windows = { git = "https://github.com/korvect/gpui-pre-windows", rev = "33821bf8ffbad3eb87a5befda0f2a3fdb05efb91" }
 
 [workspace.package]
 version = "0.3.13"
