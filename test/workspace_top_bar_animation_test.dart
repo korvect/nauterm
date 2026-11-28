@@ -183,7 +183,7 @@ void main() {
           ),
         );
         expect(icon.left - rect.left, 8);
-        expect(rect.right - close.right, 8);
+        expect(rect.right - close.right, 6);
         expect(tester.widget<Text>(label).data, title);
         expect(tester.getSize(_chrome(terminal)).width, rect.width);
       }
