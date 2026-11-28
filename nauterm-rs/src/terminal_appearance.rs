@@ -261,6 +261,7 @@ impl Appearance {
             "Consolas",
             "Menlo",
             "DejaVu Sans Mono",
+            #[cfg(not(any(target_os = "windows", target_os = "linux")))]
             "Noto Sans Mono",
             "Liberation Mono",
             "Courier New",
@@ -335,19 +336,19 @@ impl Appearance {
     }
 }
 pub fn platform_family() -> &'static str {
-    #[cfg(any(target_os = "windows", target_os = "linux"))]
-    return crate::fonts::MONO_FAMILY;
+    #[cfg(target_os = "windows")]
+    return "Consolas";
 
     #[cfg(target_os = "macos")]
     return "Menlo";
 
-    #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     "DejaVu Sans Mono"
 }
 
 fn platform_cjk_families<'a>() -> impl Iterator<Item = &'a str> {
     #[cfg(any(target_os = "windows", target_os = "linux"))]
-    let families: [&'a str; _] = crate::fonts::mono_cjk_fallbacks();
+    let families: [&'a str; _] = crate::fonts::cjk_fallbacks();
 
     #[cfg(not(any(target_os = "windows", target_os = "linux")))]
     let families = [];
@@ -610,15 +611,12 @@ mod tests {
     fn cjk_fallback_precedes_platform_fonts_without_duplicates_or_primary_family() {
         let mut appearance = Appearance {
             family: "Menlo".into(),
-            cjk_family: Some(" Noto Sans Mono ".into()),
+            cjk_family: Some(" Consolas ".into()),
             ..Appearance::default()
         };
         let fallbacks = appearance.fallback_families();
-        assert_eq!(fallbacks[0], "Noto Sans Mono");
-        assert_eq!(
-            fallbacks.iter().filter(|f| *f == "Noto Sans Mono").count(),
-            1
-        );
+        assert_eq!(fallbacks[0], "Consolas");
+        assert_eq!(fallbacks.iter().filter(|f| *f == "Consolas").count(), 1);
         assert!(!fallbacks.iter().any(|f| f.eq_ignore_ascii_case("Menlo")));
         appearance.cjk_family = Some("menlo".into());
         let automatic_first = platform_cjk_families()

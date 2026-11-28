@@ -771,11 +771,14 @@ mod tests {
     }
     #[cfg(any(target_os = "windows", target_os = "linux"))]
     #[test]
-    fn bundled_terminal_fonts_are_defaults_and_preserve_explicit_preferences() -> Result<()> {
+    fn terminal_font_defaults_preserve_explicit_preferences() -> Result<()> {
         let mut state = AppState::default();
         Document::new()?.apply(&mut state)?;
-        assert_eq!(state.terminal.resolved_family(), crate::fonts::MONO_FAMILY);
-        let defaults = crate::fonts::mono_cjk_fallbacks();
+        assert_eq!(
+            state.terminal.resolved_family(),
+            crate::terminal_appearance::platform_family()
+        );
+        let defaults = crate::fonts::cjk_fallbacks();
         let families = state.terminal.fallback_families();
         assert!(
             families

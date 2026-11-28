@@ -5,7 +5,7 @@ use gpui_kit::{TextSystem, font, px};
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 mod noto;
 #[cfg(any(target_os = "linux", target_os = "windows"))]
-pub(crate) use noto::{MONO_FAMILY, UI_FAMILY, mono_cjk_fallbacks, weight_alias_family};
+pub(crate) use noto::{UI_FAMILY, cjk_fallbacks, weight_alias_family};
 
 pub(crate) const SYMBOLS_FAMILY: &str = "Symbols Nerd Font";
 const SYMBOLS_DATA: &[u8] = include_bytes!("../../assets/fonts/SymbolsNerdFont-Regular.ttf");
@@ -197,17 +197,11 @@ mod tests {
     fn noto_weights_merge_only_into_available_families() {
         let families = [
             "Noto Sans",
-            "Noto Sans Mono",
             "Noto Sans CJK SC",
             "Noto Sans CJK TC",
             "Noto Sans CJK JP",
             "Noto Sans CJK KR",
             "Noto Sans CJK HK",
-            "Noto Sans Mono CJK SC",
-            "Noto Sans Mono CJK TC",
-            "Noto Sans Mono CJK JP",
-            "Noto Sans Mono CJK KR",
-            "Noto Sans Mono CJK HK",
             "Other Font",
             "Other Font Medium",
         ];

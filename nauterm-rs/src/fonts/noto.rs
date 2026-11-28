@@ -6,19 +6,13 @@ use gpui_kit::{
 use std::borrow::Cow;
 
 pub(crate) const UI_FAMILY: &str = "Noto Sans";
-pub(crate) const MONO_FAMILY: &str = "Noto Sans Mono";
 
-const UI_CJK: [&str; 4] = [
+const CJK_FAMILIES: [&str; 5] = [
     "Noto Sans CJK SC",
     "Noto Sans CJK TC",
     "Noto Sans CJK JP",
     "Noto Sans CJK KR",
-];
-const MONO_CJK: [&str; 4] = [
-    "Noto Sans Mono CJK SC",
-    "Noto Sans Mono CJK TC",
-    "Noto Sans Mono CJK JP",
-    "Noto Sans Mono CJK KR",
+    "Noto Sans CJK HK",
 ];
 
 // Legacy family names in the bundled static faces can expose weights as
@@ -56,8 +50,6 @@ const FACES: &[&[u8]] = &[
     include_bytes!("../../assets/fonts/noto/NotoSans-SemiBold.ttf"),
     include_bytes!("../../assets/fonts/noto/NotoSans-Bold.ttf"),
     include_bytes!("../../assets/fonts/noto/NotoSans-Italic.ttf"),
-    include_bytes!("../../assets/fonts/noto/NotoSansMono-Regular.ttf"),
-    include_bytes!("../../assets/fonts/noto/NotoSansMono-Bold.ttf"),
     include_bytes!("../../assets/fonts/noto/NotoSansCJK-Regular.ttc"),
     include_bytes!("../../assets/fonts/noto/NotoSansCJK-Medium.ttc"),
     include_bytes!("../../assets/fonts/noto/NotoSansCJK-Bold.ttc"),
@@ -67,19 +59,19 @@ pub(super) fn install(cx: &mut App) -> anyhow::Result<()> {
     cx.text_system()
         .add_fonts(FACES.iter().copied().map(Cow::Borrowed).collect())?;
     Root::register_plugin(cx, |_, _| {
-        let families = prefer_locale(UI_CJK, crate::localization::system_locale());
         UiFallbacks(FontFallbacks::from_fonts(
-            families.into_iter().map(str::to_owned).collect(),
+            cjk_fallbacks().into_iter().map(str::to_owned).collect(),
         ))
     });
     Ok(())
 }
 
-pub(crate) fn mono_cjk_fallbacks() -> [&'static str; 4] {
-    prefer_locale(MONO_CJK, crate::localization::system_locale())
+pub(crate) fn cjk_fallbacks() -> [&'static str; 5] {
+    prefer_locale(crate::localization::system_locale())
 }
 
-fn prefer_locale(mut families: [&'static str; 4], locale: &str) -> [&'static str; 4] {
+fn prefer_locale(locale: &str) -> [&'static str; 5] {
+    let mut families = CJK_FAMILIES;
     let mut parts = locale.split(['-', '_', '.', '@']);
     let language = parts.next().unwrap_or_default();
     let preferred = if language.eq_ignore_ascii_case("ja") {
@@ -87,11 +79,13 @@ fn prefer_locale(mut families: [&'static str; 4], locale: &str) -> [&'static str
     } else if language.eq_ignore_ascii_case("ko") {
         3
     } else if language.eq_ignore_ascii_case("zh")
-        && parts.any(|part| {
-            ["Hant", "TW", "HK", "MO"]
-                .iter()
-                .any(|code| part.eq_ignore_ascii_case(code))
-        })
+        && parts
+            .clone()
+            .any(|part| part.eq_ignore_ascii_case("HK") || part.eq_ignore_ascii_case("MO"))
+    {
+        4
+    } else if language.eq_ignore_ascii_case("zh")
+        && parts.any(|part| part.eq_ignore_ascii_case("Hant") || part.eq_ignore_ascii_case("TW"))
     {
         1
     } else {
