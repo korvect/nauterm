@@ -52,7 +52,7 @@ app="$staging/Nauterm RS.app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources/licenses" "$app/Contents/Frameworks"
 python3 "$repository/scripts/stage_rs_mosh.py" --project "$repository" --executable "$executable" --destination "$app/Contents/Frameworks" >&2
 install -m 755 "$executable" "$app/Contents/MacOS/nauterm-rs"
-for localization in "$client"/assets/macos/*.lproj; do
+for localization in "$client"/macos/*.lproj; do
   install -d "$app/Contents/Resources/${localization##*/}"
   install -m 644 "$localization/MainMenu.strings" \
     "$app/Contents/Resources/${localization##*/}/MainMenu.strings"
@@ -65,7 +65,7 @@ xcrun --sdk macosx actool \
   --app-icon Nauterm --output-format human-readable-text \
   --output-partial-info-plist "$work/asset-info.plist" \
   "$repository/assets/icons/Nauterm.icon" >&2
-python3 - "$work/metadata.json" "$client/assets/macos/Info.plist" "$app/Contents/Info.plist" "$build_number" "$work/asset-info.plist" <<'PY'
+python3 - "$work/metadata.json" "$client/macos/Info.plist" "$app/Contents/Info.plist" "$build_number" "$work/asset-info.plist" <<'PY'
 import json, plistlib, sys
 metadata = json.load(open(sys.argv[1], encoding='utf-8'))
 package = next(package for package in metadata['packages'] if package['name'] == 'nauterm-rs')
