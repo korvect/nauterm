@@ -3,6 +3,10 @@ name: Quality Gates
 on:
   workflow_call:
     inputs:
+      client:
+        description: Client to check
+        type: string
+        default: all
       integration:
         description: Run desktop integration tests on all supported operating systems
         required: false
@@ -10,6 +14,14 @@ on:
         default: false
   workflow_dispatch:
     inputs:
+      client:
+        description: Client to check
+        type: choice
+        default: all
+        options:
+          - all
+          - flutter
+          - rust
       integration:
         description: Run desktop integration tests on Linux, macOS, and Windows
         required: true
@@ -51,6 +63,7 @@ jobs:
           bash scripts/ci/check_mosh_abi.sh third_party/nauterm_mosh_ffi/linux-x86_64/libnauterm_mosh_ffi.so
 
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        if: inputs.client != 'rust'
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
@@ -61,13 +74,16 @@ jobs:
           rustup default "$RUST_TOOLCHAIN"
 
       - name: Resolve Flutter dependencies
+        if: inputs.client != 'rust'
         run: flutter pub get
 
       - name: Check Dart formatting
+        if: inputs.client != 'rust'
         continue-on-error: true
         run: dart format --output=none --set-exit-if-changed lib test test_integration
 
       - name: Analyze Flutter
+        if: inputs.client != 'rust'
         continue-on-error: true
         run: flutter analyze --no-pub
 
@@ -75,9 +91,11 @@ jobs:
         run: bash scripts/ci/build_ghostty_linux.sh
 
       - name: Build native library for Flutter tests
+        if: inputs.client != 'rust'
         run: cargo build --manifest-path native/nauterm_core/Cargo.toml --locked --features test-credential-store
 
       - name: Run Flutter unit tests
+        if: inputs.client != 'rust'
         run: flutter test --no-pub
 
       - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
@@ -97,6 +115,7 @@ jobs:
 
   gpui:
     name: GPUI (${{ matrix.os }}, ${{ matrix.arch }})
+    if: inputs.client != 'flutter'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     env:
@@ -226,6 +245,7 @@ jobs:
           arch: amd64
 
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        if: inputs.client != 'rust'
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
@@ -251,6 +271,7 @@ jobs:
         run: ./scripts/ci/setup_windows_openssl.ps1
 
       - name: Resolve Flutter dependencies
+        if: inputs.client != 'rust'
         run: flutter pub get
 
       - name: Build libghostty-vt from release sources
@@ -261,7 +282,9 @@ jobs:
         run: cargo test --manifest-path native/nauterm_core/Cargo.toml --locked --features integration-tests,test-credential-store -- --test-threads=1
 
       - name: Build the native test library
+        if: inputs.client != 'rust'
         run: cargo build --manifest-path native/nauterm_core/Cargo.toml --locked --features test-credential-store
 
       - name: Run Flutter integration tests
+        if: inputs.client != 'rust'
         run: flutter test --no-pub test_integration

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Require matching Flutter and Rust package inventories for each build."""
+"""Verify release package inventories for the requested clients."""
 
 import argparse
 import os
@@ -36,6 +36,7 @@ def main():
     parser.add_argument("directory", type=Path)
     parser.add_argument("version")
     parser.add_argument("build", type=int)
+    parser.add_argument("--client", choices=("all", "flutter", "rust"), default="all")
     parser.add_argument("--platform", choices=PLATFORMS)
     parser.add_argument("--arch", choices=ARCHITECTURES)
     args = parser.parse_args()
@@ -49,6 +50,7 @@ def main():
     tag = os.environ.get("GITHUB_REF_TYPE") == "tag"
     platforms = (args.platform,) if args.platform else PLATFORMS
     architectures = (args.arch,) if args.arch else ARCHITECTURES
+    selected_client = "rs" if args.client == "rust" else args.client
     packages = {
         client: [
             args.directory / name
@@ -57,6 +59,7 @@ def main():
             for name in package_names(client, platform, arch, args.version, args.build, tag)
         ]
         for client in CLIENTS
+        if selected_client in ("all", client)
     }
     missing = [path for paths in packages.values() for path in paths if not path.is_file()]
     if missing:
@@ -69,7 +72,7 @@ def main():
                 stream.write(f"{client}<<PACKAGE_PATHS\n")
                 stream.writelines(f"{path.as_posix()}\n" for path in paths)
                 stream.write("PACKAGE_PATHS\n")
-    print("Flutter and Rust package inventories verified.")
+    print(f"Release package inventories verified for client={args.client}.")
 
 
 if __name__ == "__main__":

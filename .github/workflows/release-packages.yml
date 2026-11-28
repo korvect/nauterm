@@ -3,6 +3,14 @@ name: Release Packages
 on:
   workflow_dispatch:
     inputs:
+      client:
+        description: Client to build
+        type: choice
+        default: all
+        options:
+          - all
+          - flutter
+          - rust
       platform:
         description: Platform to build
         type: choice
@@ -31,6 +39,7 @@ env:
   FLUTTER_VERSION: 3.50.1
   RUST_TOOLCHAIN: 1.99.1
   ZIG_VERSION: 0.17.0
+  RELEASE_CLIENT: ${{ inputs.client || 'all' }}
   NAUTERM_BUILD_NUMBER: ${{ github.run_number }}
   NAUTERM_UPDATE_REPOSITORY: ${{ vars.NAUTERM_UPDATE_REPOSITORY || github.repository }}
   NAUTERM_GITHUB_CLIENT_ID: ${{ vars.NAUTERM_GITHUB_CLIENT_ID }}
@@ -46,6 +55,7 @@ jobs:
   quality-gates:
     uses: ./.github/workflows/quality-gates.yml
     with:
+      client: ${{ inputs.client || 'all' }}
       integration: false
 
   select-builds:
@@ -176,6 +186,7 @@ jobs:
           echo "value=$(awk '/^version: / { split($2, parts, "+"); print parts[1]; exit }' pubspec.yaml)" >> "$GITHUB_OUTPUT"
 
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        if: env.RELEASE_CLIENT != 'rust'
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
@@ -186,6 +197,7 @@ jobs:
           rustup default "$RUST_TOOLCHAIN"
 
       - name: Resolve Flutter dependencies
+        if: env.RELEASE_CLIENT != 'rust'
         run: flutter pub get
 
       - name: Install macOS integration dependencies
@@ -197,14 +209,15 @@ jobs:
         run: cargo test --manifest-path native/nauterm_core/Cargo.toml --locked --features integration-tests,test-credential-store -- --test-threads=1
 
       - name: Build the native test library
-        if: matrix.arch == 'arm64'
+        if: env.RELEASE_CLIENT != 'rust' && matrix.arch == 'arm64'
         run: cargo build --manifest-path native/nauterm_core/Cargo.toml --locked --features test-credential-store
 
       - name: Run Flutter integration tests
-        if: matrix.arch == 'arm64'
+        if: env.RELEASE_CLIENT != 'rust' && matrix.arch == 'arm64'
         run: flutter test --no-pub test_integration
 
-      - name: Build macOS packages
+      - name: Build Flutter macOS packages
+        if: env.RELEASE_CLIENT != 'rust'
         env:
           NAUTERM_SKIP_PUB_GET: "1"
           NAUTERM_GOOGLE_CLIENT_SECRET: ${{ secrets.NAUTERM_GOOGLE_CLIENT_SECRET }}
@@ -214,6 +227,7 @@ jobs:
         run: make flutter-package ARCH=${{ matrix.arch }}
 
       - name: Configure RS macOS signing
+        if: env.RELEASE_CLIENT != 'flutter'
         env:
           NAUTERM_RS_SIGN_CERTIFICATE: ${{ secrets.NAUTERM_RS_SIGN_CERTIFICATE }}
           NAUTERM_RS_SIGN_PASSWORD: ${{ secrets.NAUTERM_RS_SIGN_PASSWORD }}
@@ -224,6 +238,7 @@ jobs:
         run: bash scripts/ci/setup_rs_macos_signing.sh
 
       - name: Build macOS RS package
+        if: env.RELEASE_CLIENT != 'flutter'
         env:
           NAUTERM_GOOGLE_CLIENT_SECRET: ${{ secrets.NAUTERM_GOOGLE_CLIENT_SECRET }}
           NAUTERM_POSTHOG_API_KEY: ${{ vars.NAUTERM_POSTHOG_API_KEY }}
@@ -232,7 +247,7 @@ jobs:
         run: make rs-package ARCH=${{ matrix.arch }}
 
       - name: Clean up RS signing credentials
-        if: always()
+        if: always() && env.RELEASE_CLIENT != 'flutter'
         run: bash scripts/ci/setup_rs_macos_signing.sh cleanup
 
       - name: Generate signed Sparkle appcast
@@ -240,17 +255,22 @@ jobs:
         env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: |
-          make flutter-appcast ARCH=${{ matrix.arch }}
-          make rs-appcast ARCH=${{ matrix.arch }}
+          if [ "$RELEASE_CLIENT" != rust ]; then
+            make flutter-appcast ARCH=${{ matrix.arch }}
+          fi
+          if [ "$RELEASE_CLIENT" != flutter ]; then
+            make rs-appcast ARCH=${{ matrix.arch }}
+          fi
 
       - name: Verify macOS packages
         id: packages
         run: >-
           python3 scripts/ci/verify_release_packages.py dist
           '${{ steps.version.outputs.value }}' "$NAUTERM_BUILD_NUMBER"
-          --platform macos --arch '${{ matrix.arch }}'
+          --platform macos --arch '${{ matrix.arch }}' --client "$RELEASE_CLIENT"
 
       - name: Upload Flutter macOS packages
+        if: env.RELEASE_CLIENT != 'rust'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: nauterm-${{ steps.version.outputs.value }}-macos-${{ matrix.arch }}
@@ -259,6 +279,7 @@ jobs:
           retention-days: ${{ github.event_name == 'push' && 1 || 7 }}
 
       - name: Upload Rust macOS packages
+        if: env.RELEASE_CLIENT != 'flutter'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: nauterm-rs-${{ steps.version.outputs.value }}-macos-${{ matrix.arch }}
@@ -288,7 +309,7 @@ jobs:
           echo "value=$(awk '/^version: / { split($2, parts, "+"); print parts[1]; exit }' pubspec.yaml)" >> "$GITHUB_OUTPUT"
 
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
-        if: matrix.arch == 'x86_64'
+        if: env.RELEASE_CLIENT != 'rust' && matrix.arch == 'x86_64'
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
@@ -298,7 +319,7 @@ jobs:
       # SDK and linux-arm64 engine, so the build runs natively. Verified on
       # ubuntu-24.04-arm.
       - name: Install Flutter (arm64-native via git clone)
-        if: matrix.arch == 'arm64'
+        if: env.RELEASE_CLIENT != 'rust' && matrix.arch == 'arm64'
         run: |
           git clone --depth 1 --branch "${FLUTTER_VERSION}" https://github.com/flutter/flutter.git "$HOME/flutter-sdk"
           export PATH="$HOME/flutter-sdk/bin:$PATH"
@@ -344,18 +365,22 @@ jobs:
           rustup default "$RUST_TOOLCHAIN"
 
       - name: Resolve Flutter dependencies
+        if: env.RELEASE_CLIENT != 'rust'
         run: flutter pub get
 
       - name: Run native integration tests
         run: cargo test --manifest-path native/nauterm_core/Cargo.toml --locked --features integration-tests,test-credential-store -- --test-threads=1
 
       - name: Build the native test library
+        if: env.RELEASE_CLIENT != 'rust'
         run: cargo build --manifest-path native/nauterm_core/Cargo.toml --locked --features test-credential-store
 
       - name: Run Flutter integration tests
+        if: env.RELEASE_CLIENT != 'rust'
         run: flutter test --no-pub test_integration
 
-      - name: Build Linux packages
+      - name: Build Flutter Linux packages
+        if: env.RELEASE_CLIENT != 'rust'
         env:
           NAUTERM_SKIP_PUB_GET: "1"
           NAUTERM_GOOGLE_CLIENT_SECRET: ${{ secrets.NAUTERM_GOOGLE_CLIENT_SECRET }}
@@ -364,6 +389,7 @@ jobs:
         run: make flutter-package ARCH=${{ matrix.arch }}
 
       - name: Build Linux RS packages
+        if: env.RELEASE_CLIENT != 'flutter'
         env:
           CLEAN_DIST: "0"
           NAUTERM_GOOGLE_CLIENT_SECRET: ${{ secrets.NAUTERM_GOOGLE_CLIENT_SECRET }}
@@ -377,9 +403,10 @@ jobs:
         run: >-
           python3 scripts/ci/verify_release_packages.py dist
           '${{ steps.version.outputs.value }}' "$NAUTERM_BUILD_NUMBER"
-          --platform linux --arch '${{ matrix.arch }}'
+          --platform linux --arch '${{ matrix.arch }}' --client "$RELEASE_CLIENT"
 
       - name: Upload Flutter Linux packages
+        if: env.RELEASE_CLIENT != 'rust'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: nauterm-${{ steps.version.outputs.value }}-linux-${{ matrix.arch }}
@@ -388,6 +415,7 @@ jobs:
           retention-days: ${{ github.event_name == 'push' && 1 || 7 }}
 
       - name: Upload Rust Linux packages
+        if: env.RELEASE_CLIENT != 'flutter'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: nauterm-rs-${{ steps.version.outputs.value }}-linux-${{ matrix.arch }}
@@ -423,7 +451,7 @@ jobs:
           "value=$version" >> $env:GITHUB_OUTPUT
 
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
-        if: matrix.arch == 'x86_64'
+        if: env.RELEASE_CLIENT != 'rust' && matrix.arch == 'x86_64'
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
@@ -433,7 +461,7 @@ jobs:
       # bin/flutter self-bootstraps the per-arch Dart SDK and windows-arm64
       # engine, so the build runs natively on windows-11-arm.
       - name: Install Flutter (arm64-native via git clone)
-        if: matrix.arch == 'arm64'
+        if: env.RELEASE_CLIENT != 'rust' && matrix.arch == 'arm64'
         shell: bash
         run: |
           git clone --depth 1 --branch "${FLUTTER_VERSION}" https://github.com/flutter/flutter.git "C:/flutter-sdk"
@@ -454,22 +482,26 @@ jobs:
         run: ./scripts/ci/setup_windows_openssl.ps1 -Arch "${{ matrix.arch }}"
 
       - name: Resolve Flutter dependencies
+        if: env.RELEASE_CLIENT != 'rust'
         run: flutter pub get
 
       - name: Run native integration tests
         run: cargo test --manifest-path native/nauterm_core/Cargo.toml --locked --features integration-tests,test-credential-store -- --test-threads=1
 
       - name: Build the native test library
+        if: env.RELEASE_CLIENT != 'rust'
         run: cargo build --manifest-path native/nauterm_core/Cargo.toml --locked --features test-credential-store
 
       - name: Run Flutter integration tests
+        if: env.RELEASE_CLIENT != 'rust'
         run: flutter test --no-pub test_integration
 
       - name: Install Windows packaging dependencies
         shell: pwsh
         run: choco install innosetup -y --no-progress
 
-      - name: Build Windows package
+      - name: Build Flutter Windows package
+        if: env.RELEASE_CLIENT != 'rust'
         shell: pwsh
         env:
           NAUTERM_SKIP_PUB_GET: "1"
@@ -479,6 +511,7 @@ jobs:
         run: ./scripts/ci/package_windows.ps1 -Arch '${{ matrix.arch }}'
 
       - name: Build Windows RS packages
+        if: env.RELEASE_CLIENT != 'flutter'
         shell: pwsh
         env:
           CLEAN_DIST: "0"
@@ -494,9 +527,10 @@ jobs:
         run: >-
           python scripts/ci/verify_release_packages.py dist
           '${{ steps.version.outputs.value }}' "$env:NAUTERM_BUILD_NUMBER"
-          --platform windows --arch '${{ matrix.arch }}'
+          --platform windows --arch '${{ matrix.arch }}' --client "$env:RELEASE_CLIENT"
 
       - name: Upload Flutter Windows packages
+        if: env.RELEASE_CLIENT != 'rust'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: nauterm-${{ steps.version.outputs.value }}-windows-${{ matrix.arch }}
@@ -505,6 +539,7 @@ jobs:
           retention-days: ${{ github.event_name == 'push' && 1 || 7 }}
 
       - name: Upload Rust Windows packages
+        if: env.RELEASE_CLIENT != 'flutter'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: nauterm-rs-${{ steps.version.outputs.value }}-windows-${{ matrix.arch }}
@@ -514,7 +549,11 @@ jobs:
 
   release:
     name: Publish GitHub release
-    if: startsWith(github.ref, 'refs/tags/')
+    if: >-
+      startsWith(github.ref, 'refs/tags/') &&
+      (inputs.client || 'all') == 'all' &&
+      (inputs.platform || 'all') == 'all' &&
+      (inputs.arch || 'all') == 'all'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
