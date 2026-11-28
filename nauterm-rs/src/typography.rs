@@ -29,28 +29,6 @@ const fn ui_weight(reference: u16, macos: bool) -> FontWeight {
     })
 }
 
-#[cfg(any(target_os = "linux", target_os = "windows"))]
-pub(crate) fn ui_label_text(
-    text: gpui_kit::SharedString,
-    window: &gpui_kit::Window,
-) -> gpui_kit::AnyElement {
-    use gpui_kit::{IntoElement, StyledText};
-
-    let mut style = window.text_style();
-    if text.is_empty()
-        || style.font_family != crate::fonts::UI_FAMILY
-        || style.font_weight != FontWeights::MEDIUM
-    {
-        return text.into_any_element();
-    }
-
-    style.font_weight = FontWeights::CONTROL_LABEL;
-    let run = style.to_run(text.len());
-    StyledText::new(text)
-        .with_runs(vec![run])
-        .into_any_element()
-}
-
 /// Settings has its own reference text scale. Apply it after a control's size
 /// preset so form text does not depend on control or parent defaults.
 #[derive(Clone, Copy)]

@@ -13,11 +13,6 @@ pub fn apply_theme(dark: bool, window: &mut gpui_kit::Window, cx: &mut gpui_kit:
     );
     let p = Palette::new(dark);
     Theme::update(cx, |theme| {
-        #[cfg(any(target_os = "linux", target_os = "windows"))]
-        {
-            theme.font_family = crate::fonts::UI_FAMILY.into();
-            theme.mono_font_family = crate::terminal_appearance::platform_family().into();
-        }
         theme.colors.background = p.surface.into();
         theme.colors.foreground = p.text.into();
         theme.colors.primary = p.accent.into();

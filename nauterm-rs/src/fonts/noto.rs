@@ -1,11 +1,4 @@
-//! Fonts shared by the Windows and Linux clients.
-use gpui_kit::{
-    App, Context, Div, Empty, FontFallbacks, IntoElement, Render, Stateful, Styled, Window,
-    base::{Root, RootPlugin},
-};
-use std::borrow::Cow;
-
-pub(crate) const UI_FAMILY: &str = "Noto Sans";
+//! Family aliases and locale ordering for system-installed Noto fonts.
 
 const CJK_FAMILIES: [&str; 5] = [
     "Noto Sans CJK SC",
@@ -15,11 +8,11 @@ const CJK_FAMILIES: [&str; 5] = [
     "Noto Sans CJK HK",
 ];
 
-// Legacy family names in the bundled static faces can expose weights as
-// separate families. Keep the corresponding typographic family in the picker.
+// Installed faces can expose weights as separate families. Group those
+// entries when their regular family is also installed.
 const WEIGHT_ALIASES: &[(&str, &str)] = &[
-    ("Noto Sans Medium", UI_FAMILY),
-    ("Noto Sans SemiBold", UI_FAMILY),
+    ("Noto Sans Medium", "Noto Sans"),
+    ("Noto Sans SemiBold", "Noto Sans"),
     ("Noto Sans CJK SC Medium", "Noto Sans CJK SC"),
     ("Noto Sans CJK TC Medium", "Noto Sans CJK TC"),
     ("Noto Sans CJK JP Medium", "Noto Sans CJK JP"),
@@ -42,28 +35,6 @@ pub(super) fn merge_weight_aliases(names: &mut Vec<String>) {
     names.retain(|name| {
         weight_alias_family(name).is_none_or(|family| !available_families.contains(&family))
     });
-}
-
-const FACES: &[&[u8]] = &[
-    include_bytes!("../../assets/fonts/noto/NotoSans-Regular.ttf"),
-    include_bytes!("../../assets/fonts/noto/NotoSans-Medium.ttf"),
-    include_bytes!("../../assets/fonts/noto/NotoSans-SemiBold.ttf"),
-    include_bytes!("../../assets/fonts/noto/NotoSans-Bold.ttf"),
-    include_bytes!("../../assets/fonts/noto/NotoSans-Italic.ttf"),
-    include_bytes!("../../assets/fonts/noto/NotoSansCJK-Regular.ttc"),
-    include_bytes!("../../assets/fonts/noto/NotoSansCJK-Medium.ttc"),
-    include_bytes!("../../assets/fonts/noto/NotoSansCJK-Bold.ttc"),
-];
-
-pub(super) fn install(cx: &mut App) -> anyhow::Result<()> {
-    cx.text_system()
-        .add_fonts(FACES.iter().copied().map(Cow::Borrowed).collect())?;
-    Root::register_plugin(cx, |_, _| {
-        UiFallbacks(FontFallbacks::from_fonts(
-            cjk_fallbacks().into_iter().map(str::to_owned).collect(),
-        ))
-    });
-    Ok(())
 }
 
 pub(crate) fn cjk_fallbacks() -> [&'static str; 5] {
@@ -94,18 +65,4 @@ fn prefer_locale(locale: &str) -> [&'static str; 5] {
     // Han code points are shared, so the matching regional glyph comes first.
     families[..=preferred].rotate_right(1);
     families
-}
-
-struct UiFallbacks(FontFallbacks);
-
-impl Render for UiFallbacks {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        Empty
-    }
-}
-
-impl RootPlugin for UiFallbacks {
-    fn style(&self, surface: &mut Stateful<Div>, _: &mut Window, _: &mut App) {
-        surface.text_style().font_fallbacks = Some(self.0.clone());
-    }
 }

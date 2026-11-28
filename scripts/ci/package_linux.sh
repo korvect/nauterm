@@ -93,7 +93,7 @@ if [ "$CLIENT" = rs ]; then
   mkdir -p "$BUNDLE_DIR"
   install -m755 "$RS_EXECUTABLE" "$BUNDLE_DIR/$BINARY_NAME"
   python3 scripts/stage_rs_mosh.py --project . --executable "$RS_EXECUTABLE" --destination "$BUNDLE_DIR"
-  python3 scripts/package_rs_notices.py --project . --build-log "$RS_BUILD_LOG" --destination "$BUNDLE_DIR/licenses" --include-noto
+  python3 scripts/package_rs_notices.py --project . --build-log "$RS_BUILD_LOG" --destination "$BUNDLE_DIR/licenses"
   cp LICENSE "$BUNDLE_DIR/LICENSE"
   rm "$RS_BUILD_LOG"
 else

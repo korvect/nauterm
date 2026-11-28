@@ -99,14 +99,7 @@ impl RenderOnce for Text {
             TextSource::Message(source) => message(cx, &source),
             TextSource::Translated(text) => text,
         };
-        #[cfg(any(target_os = "linux", target_os = "windows"))]
-        {
-            crate::typography::ui_label_text(text, _window)
-        }
-        #[cfg(not(any(target_os = "linux", target_os = "windows")))]
-        {
-            text.into_any_element()
-        }
+        text.into_any_element()
     }
 }
 pub fn label(cx: &App, source: &str) -> SharedString {

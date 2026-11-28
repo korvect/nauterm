@@ -164,18 +164,6 @@ pub fn bundled() -> Result<Arc<Catalog>, String> {
                         "MIT",
                         include_str!("../../../assets/licenses/manual/nerd-fonts-LICENSE"),
                     ),
-                    #[cfg(any(target_os = "linux", target_os = "windows"))]
-                    (
-                        "Noto Sans",
-                        "OFL-1.1",
-                        include_str!("../../assets/licenses/manual/noto-sans-OFL.txt"),
-                    ),
-                    #[cfg(any(target_os = "linux", target_os = "windows"))]
-                    (
-                        "Noto Sans CJK",
-                        "OFL-1.1",
-                        include_str!("../../assets/licenses/manual/noto-cjk-OFL.txt"),
-                    ),
                     (
                         "libghostty-vt",
                         "MIT",

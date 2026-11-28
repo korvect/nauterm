@@ -173,7 +173,7 @@ fn main() -> anyhow::Result<()> {
         gpui_kit::init(cx);
         cx.set_app_identity(&application_id(), APPLICATION_NAME);
         if let Err(error) = fonts::install(cx) {
-            eprintln!("Could not load bundled fonts: {error}");
+            eprintln!("Could not load terminal symbols: {error}");
         }
         components::overlay::init(cx);
         cx.on_app_quit(move |_| {

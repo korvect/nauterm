@@ -5,7 +5,7 @@ use gpui_kit::{TextSystem, font, px};
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 mod noto;
 #[cfg(any(target_os = "linux", target_os = "windows"))]
-pub(crate) use noto::{UI_FAMILY, cjk_fallbacks, weight_alias_family};
+pub(crate) use noto::{cjk_fallbacks, weight_alias_family};
 
 pub(crate) const SYMBOLS_FAMILY: &str = "Symbols Nerd Font";
 const SYMBOLS_DATA: &[u8] = include_bytes!("../../assets/fonts/SymbolsNerdFont-Regular.ttf");
@@ -16,10 +16,7 @@ pub(crate) fn install(cx: &mut gpui_kit::App) -> anyhow::Result<()> {
     #[cfg(target_os = "macos")]
     macos::register(SYMBOLS_DATA)?;
     cx.text_system()
-        .add_fonts(vec![std::borrow::Cow::Borrowed(SYMBOLS_DATA)])?;
-    #[cfg(any(target_os = "linux", target_os = "windows"))]
-    noto::install(cx)?;
-    Ok(())
+        .add_fonts(vec![std::borrow::Cow::Borrowed(SYMBOLS_DATA)])
 }
 
 /// Font settings use standard numeric weights, independently of UI role aliases.

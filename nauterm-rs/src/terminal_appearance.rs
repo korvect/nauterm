@@ -261,7 +261,6 @@ impl Appearance {
             "Consolas",
             "Menlo",
             "DejaVu Sans Mono",
-            #[cfg(not(any(target_os = "windows", target_os = "linux")))]
             "Noto Sans Mono",
             "Liberation Mono",
             "Courier New",
