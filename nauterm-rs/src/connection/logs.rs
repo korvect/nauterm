@@ -323,12 +323,6 @@ struct Document {
     scroll: ScrollHandle,
     selection_color: Rgba,
 }
-impl IntoElement for Document {
-    type Element = Self;
-    fn into_element(self) -> Self {
-        self
-    }
-}
 impl Element for Document {
     type RequestLayoutState = ();
     type PrepaintState = ();

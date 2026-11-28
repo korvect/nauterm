@@ -1207,9 +1207,7 @@ impl Terminal {
                             if layered {
                                 use crate::terminal_graphics::Layer;
                                 graphics::paint(&graphics, Layer::BelowBackground, bounds, window);
-                                window.paint_layer(bounds, |window| {
-                                    scene.paint_background(bounds, window)
-                                });
+                                window.paint_layer(|window| scene.paint_background(bounds, window));
                                 graphics::paint(&graphics, Layer::BelowText, bounds, window);
                             } else {
                                 scene.paint_background(bounds, window);
@@ -1225,7 +1223,7 @@ impl Terminal {
                                 scene.paint_text(bounds, window, cx);
                             };
                             if layered {
-                                window.paint_layer(bounds, paint_text);
+                                window.paint_layer(paint_text);
                             } else {
                                 paint_text(window);
                             }
@@ -1236,7 +1234,7 @@ impl Terminal {
                                 window,
                             );
                             if !predicted.text.is_empty() {
-                                window.paint_layer(bounds, |window| {
+                                window.paint_layer(|window| {
                                     prediction::Paint {
                                         text: &predicted.text,
                                         start: predicted.start,
@@ -1273,7 +1271,7 @@ impl Terminal {
                                     line.paint(position, height, TextAlign::Left, None, window, cx);
                             }
                             if let Some(rect) = cursor {
-                                window.paint_layer(rect, |window| {
+                                window.paint_layer(|window| {
                                     renderer::paint_cursor(
                                         rect,
                                         frame.cursor_shape,

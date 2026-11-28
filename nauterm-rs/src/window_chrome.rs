@@ -119,7 +119,7 @@ impl Drop for FullscreenTrafficLightObserver {
         for observer in &self.observers {
             // SAFETY: Each token was returned by addObserverForName and belongs
             // to this notification center.
-            unsafe { self.center.removeObserver(&**observer) };
+            unsafe { self.center.removeObserver(observer) };
         }
     }
 }

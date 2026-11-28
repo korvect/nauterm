@@ -16,12 +16,6 @@ struct CursorRegion<E: Element> {
     content: E,
     cursor: CursorStyle,
 }
-impl<E: Element> IntoElement for CursorRegion<E> {
-    type Element = Self;
-    fn into_element(self) -> Self {
-        self
-    }
-}
 impl<E: Element> Element for CursorRegion<E> {
     type RequestLayoutState = E::RequestLayoutState;
     type PrepaintState = (E::PrepaintState, Hitbox);

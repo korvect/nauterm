@@ -15,12 +15,6 @@ impl TableFrame {
         }
     }
 }
-impl IntoElement for TableFrame {
-    type Element = Self;
-    fn into_element(self) -> Self {
-        self
-    }
-}
 impl Element for TableFrame {
     type RequestLayoutState = <AnyElement as Element>::RequestLayoutState;
     type PrepaintState = <AnyElement as Element>::PrepaintState;
@@ -88,7 +82,7 @@ impl Element for TableFrame {
         // MUST have a later layer: Scene batches Quad before Path at equal
         // draw order, regardless of their insertion order within a layer.
         let control = radius * (1. - 0.552_284_8);
-        window.paint_layer(bounds, |window| {
+        window.paint_layer(|window| {
             for (corner, sx, sy) in [
                 (bounds.origin, 1., 1.),
                 (point(bounds.right(), bounds.top()), -1., 1.),
@@ -110,7 +104,7 @@ impl Element for TableFrame {
                 }
             }
         });
-        window.paint_layer(bounds, |window| {
+        window.paint_layer(|window| {
             let mut border = outline(bounds, self.palette.border, BorderStyle::Solid);
             border.background = self.palette.border.opacity(0.).into();
             border.corner_radii = Corners::all(radius);

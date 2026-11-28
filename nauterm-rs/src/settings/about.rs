@@ -411,16 +411,18 @@ impl Render for Panel {
                             "settings.label.currentPlatformArchitecture",
                             model::platform(),
                         ))
-                        .child(self.row(
-                            "settings.label.repositoryUrl",
-                            "https://github.com/korvect/nauterm",
-                            Button::new("about-github-repository")
-                                .outline()
-                                .label("settings.label.openGithub")
-                                .on_click(|_, _, cx| {
-                                    cx.open_url("https://github.com/korvect/nauterm")
-                                }),
-                        )),
+                        .child(
+                            self.row(
+                                "settings.label.repositoryUrl",
+                                "https://github.com/korvect/nauterm",
+                                Button::new("about-github-repository")
+                                    .outline()
+                                    .label("settings.label.openGithub")
+                                    .on_click(|_, _, cx| {
+                                        cx.open_url("https://github.com/korvect/nauterm")
+                                    }),
+                            ),
+                        ),
                     cx,
                 ),
             )

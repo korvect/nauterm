@@ -208,12 +208,6 @@ fn scroll_maximum(handle: &ScrollHandle, axes: Point<bool>) -> Point<Pixels> {
         if axes.y { maximum.y } else { px(0.) },
     )
 }
-impl<E: Element> IntoElement for ScrollElement<E> {
-    type Element = Self;
-    fn into_element(self) -> Self {
-        self
-    }
-}
 impl<E: Element> Element for ScrollElement<E> {
     type RequestLayoutState = E::RequestLayoutState;
     type PrepaintState = (E::PrepaintState, Vec<Bar>, Hitbox);

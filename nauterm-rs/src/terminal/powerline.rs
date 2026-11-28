@@ -1,6 +1,7 @@
 //! Cell-sized Powerline sprites, matching the Flutter terminal painter.
-//! Tessellate with the row cache; painting only translates the cached vertices.
+//! Cache the GPUI path at the cell's current paint origin.
 use super::*;
+use std::sync::Mutex;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Glyph {
@@ -56,7 +57,7 @@ impl Glyph {
             Self::Chevron(_) | Self::Diagonal(_) | Self::Round { outline: true, .. }
         )
     }
-    fn build(self, cell: Size<Pixels>, thickness: Pixels) -> Option<Path<Pixels>> {
+    fn build(self, cell: Size<Pixels>, thickness: Pixels, origin: Point<Pixels>) -> Option<Path> {
         if cell.width <= px(0.) || cell.height <= px(0.) {
             return None;
         }
@@ -163,6 +164,7 @@ impl Glyph {
                 );
             }
         }
+        path.translate(origin);
         path.build().ok()
     }
 }
@@ -172,23 +174,38 @@ pub(super) fn supports(text: &str) -> bool {
 }
 
 pub(super) struct Prepared {
-    path: Path<Pixels>,
+    glyph: Glyph,
+    cell: Size<Pixels>,
+    thickness: Pixels,
+    path: Mutex<(Point<Pixels>, Path)>,
     color: u32,
 }
 impl Prepared {
     pub fn new(text: &str, cell: Size<Pixels>, size: f32, color: u32) -> Option<Self> {
+        let glyph = Glyph::from_text(text)?;
+        let thickness = px((size / 14.).round().max(1.));
+        let origin = Point::default();
         Some(Self {
-            path: Glyph::from_text(text)?.build(cell, px((size / 14.).round().max(1.)))?,
+            glyph,
+            cell,
+            thickness,
+            path: Mutex::new((origin, glyph.build(cell, thickness, origin)?)),
             color,
         })
     }
-    pub fn paint(&self, origin: Point<Pixels>, window: &mut Window) {
-        let mut path = self.path.clone();
-        path.bounds.origin += origin;
-        for vertex in &mut path.vertices {
-            vertex.xy_position += origin;
+
+    fn path_at(&self, origin: Point<Pixels>) -> Option<Path> {
+        let mut cached = self.path.lock().unwrap();
+        if cached.0 != origin {
+            *cached = (origin, self.glyph.build(self.cell, self.thickness, origin)?);
         }
-        window.paint_path(path, rgb(self.color));
+        Some(cached.1.clone())
+    }
+
+    pub fn paint(&self, origin: Point<Pixels>, window: &mut Window) {
+        if let Some(path) = self.path_at(origin) {
+            window.paint_path(path, rgb(self.color));
+        }
     }
 }
 
@@ -197,14 +214,29 @@ mod tests {
     use super::*;
     use core::prelude::v1::test;
 
+    fn painted_bounds(glyph: &Prepared, origin: Point<Pixels>) -> Bounds<ScaledPixels> {
+        let path = PaintedPath::new(
+            glyph.path_at(origin).unwrap(),
+            1.,
+            ContentMask {
+                bounds: Bounds::new(point(px(-100.), px(-100.)), size(px(200.), px(200.))),
+            },
+            rgb(glyph.color).into(),
+        );
+        assert!(path.tile_count() > 0);
+        let mut paints = Vec::new();
+        path.append_to(&mut paints, &mut Vec::new(), &mut Vec::new());
+        paints[0].bounds
+    }
+
     #[test]
-    fn reference_sprites_tessellate_at_narrow_wide_and_fractional_cell_sizes() {
+    fn reference_sprites_render_at_narrow_wide_and_fractional_cell_sizes() {
         for code in (0xe0b0..=0xe0bf).chain([0xe0d2, 0xe0d4]) {
             let text = char::from_u32(code).unwrap().to_string();
             for (width, height) in [(8., 18.), (18., 18.), (7.5, 17.25)] {
                 let glyph =
                     Prepared::new(&text, size(px(width), px(height)), 13., 0xff6600).unwrap();
-                assert!(!glyph.path.vertices.is_empty(), "{code:x}");
+                let bounds = painted_bounds(&glyph, Point::default());
                 // Miter joins can extend up to 2px beyond a 1px stroke's
                 // centerline; filled sprites must stay inside the cell.
                 let margin = if Glyph::from_text(&text).unwrap().outline() {
@@ -213,17 +245,11 @@ mod tests {
                     0.001
                 };
                 assert!(
-                    glyph.path.vertices.iter().all(|vertex| {
-                        let x = f32::from(vertex.xy_position.x);
-                        let y = f32::from(vertex.xy_position.y);
-                        x.is_finite()
-                            && y.is_finite()
-                            && x >= -margin
-                            && x <= width + margin
-                            && y >= -margin
-                            && y <= height + margin
-                    }),
-                    "{code:x}"
+                    bounds.left().0 >= -margin
+                        && bounds.top().0 >= -margin
+                        && bounds.right().0 <= width + margin
+                        && bounds.bottom().0 <= height + margin,
+                    "{code:x}: {bounds:?}"
                 );
             }
         }
@@ -242,10 +268,10 @@ mod tests {
     #[test]
     fn triangle_fills_the_cell_and_preserves_the_separator_color() {
         let glyph = Prepared::new("\u{e0b0}", size(px(8.), px(18.)), 13., 0x123456).unwrap();
-        assert_eq!(
-            glyph.path.bounds,
-            Bounds::new(point(px(0.), px(0.)), size(px(8.), px(18.)))
-        );
+        for origin in [Point::default(), point(px(10.5), px(20.25))] {
+            let expected = Bounds::new(origin, size(px(8.), px(18.))).scale(1.);
+            assert_eq!(painted_bounds(&glyph, origin), expected);
+        }
         assert_eq!(glyph.color, 0x123456);
     }
 }

@@ -1,8 +1,8 @@
 //! Single-line caption tracking applied after native text shaping. Shaping
 //! characters separately loses kerning, fallback runs and fractional advances.
 use gpui_kit::{
-    App, Bounds, Element, ElementId, GlobalElementId, InspectorElementId, IntoElement, LayoutId,
-    LineLayout, Pixels, ShapedLine, SharedString, Style, TextAlign, Window, size,
+    App, Bounds, Element, ElementId, GlobalElementId, InspectorElementId, LayoutId, LineLayout,
+    Pixels, ShapedLine, SharedString, Style, TextAlign, Window, size,
 };
 use std::{collections::BTreeMap, sync::Arc};
 
@@ -47,13 +47,6 @@ fn tracked_layout(line: &LineLayout, spacing: Pixels) -> LineLayout {
         descent: line.descent,
         runs,
         len: line.len,
-    }
-}
-
-impl IntoElement for TrackedText {
-    type Element = Self;
-    fn into_element(self) -> Self {
-        self
     }
 }
 

@@ -13,12 +13,6 @@ impl FittingLabel {
         }
     }
 }
-impl IntoElement for FittingLabel {
-    type Element = Self;
-    fn into_element(self) -> Self {
-        self
-    }
-}
 impl Element for FittingLabel {
     type RequestLayoutState = (Pixels, Pixels);
     type PrepaintState = AnyElement;

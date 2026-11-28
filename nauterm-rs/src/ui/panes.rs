@@ -1,7 +1,7 @@
 use super::*;
 use crate::pane_tree::{Node, Pane, SplitAxis};
-use gpui_kit::component::Selectable;
 use gpui_kit::base::ElementExt;
+use gpui_kit::component::Selectable;
 
 pub(super) struct SplitDrag {
     tab: u64,

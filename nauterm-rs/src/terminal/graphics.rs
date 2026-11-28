@@ -169,7 +169,7 @@ pub(super) fn paint(
         if destination.is_empty() {
             continue;
         }
-        window.paint_layer(destination, |window| {
+        window.paint_layer(|window| {
             let _ = window.paint_image(
                 destination,
                 rect(image.geometry.image),

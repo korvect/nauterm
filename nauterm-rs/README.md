@@ -25,9 +25,7 @@ missing; the installed `libxkbcommon-x11.so.0` runtime alone does not provide
 the linker name. Install `libxkbcommon-x11-dev` before `make rs-run`.
 
 On GNOME Wayland, standard window titlebars use libdecor's GTK plugin.
-The main window retains its product-owned controls. A local Cargo patch in
-`third_party/gpui-pre-linux` contains the backend integration pending migration
-to the dependency fork.
+The main window retains its product-owned controls.
 
 Run these commands from the repository root:
 
@@ -68,9 +66,11 @@ interaction verification is manual.
 - The Cargo workspace shares one lockfile, release version and `target/`
   directory. Repeated dependency versions are declared in the root
   `Cargo.toml`; member crates retain their required features.
-- GPUI Kit is pinned in this client's `Cargo.toml` to the `v0.8.1` branch of
-  [korvect/gpui-kit](https://github.com/korvect/gpui-kit/tree/v0.8.1).
-  Foundation changes belong in that fork.
+- GPUI Kit is pinned in this client's `Cargo.toml` to the `v0.11.0-nauterm`
+  branch of [korvect/gpui-kit](https://github.com/korvect/gpui-kit/tree/v0.11.0-nauterm).
+  The fork carries the shared interaction extensions. The workspace
+  `Cargo.toml` pins the [Linux](https://github.com/korvect/gpui-pre-linux)
+  and [Windows](https://github.com/korvect/gpui-pre-windows) GPUI backend forks.
 - [Product components](src/components/README.md) provide shared behavior with
   separate workspace, settings and terminal skins. Settings, including AI and
   Sync & Backup, retain their RS-specific page layouts.

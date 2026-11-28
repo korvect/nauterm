@@ -347,11 +347,11 @@ pub fn platform_family() -> &'static str {
 
 fn platform_cjk_families<'a>() -> impl Iterator<Item = &'a str> {
     #[cfg(any(target_os = "windows", target_os = "linux"))]
-    let families = crate::fonts::mono_cjk_fallbacks();
+    let families: [&'a str; _] = crate::fonts::mono_cjk_fallbacks();
 
     #[cfg(not(any(target_os = "windows", target_os = "linux")))]
     let families = [];
-    families.into_iter().map(|family| -> &'a str { family })
+    families.into_iter()
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
